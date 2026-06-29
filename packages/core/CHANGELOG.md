@@ -1,5 +1,79 @@
 # @mastra/core
 
+## 1.48.0-alpha.4
+
+### Patch Changes
+
+- Bring `InngestAgent` (Inngest-backed durable agent) to parity with `DurableAgent` for per-call execution options, abort handling, idle-aware resume, and `generate()`. ([#18615](https://github.com/mastra-ai/mastra/pull/18615))
+
+  `InngestAgent.stream()` and `resume()` now accept the same execution-option surface as `DurableAgent`, including `stopWhen`, `activeTools`, `structuredOutput`, `versions`, `system`, `disableBackgroundTasks`, `tracingOptions`, `actor`, `transform`, `prepareStep`, `isTaskComplete`, `delegation`, function-form `requireToolApproval`, and the lifecycle callbacks `onAbort` / `onIterationComplete`. Closure-shaped options (`prepareStep`, `transform`, function-form `isTaskComplete` / `requireToolApproval`, `stopWhen` callbacks) continue to work in-process; they degrade after a worker hop the same way they do for in-memory `DurableAgent`.
+
+  ```ts
+  const result = await inngestAgent.stream(messages, {
+    runId: 'run-1',
+    abortSignal: controller.signal,
+    stopWhen: stepCountIs(5),
+    onIterationComplete: ({ iteration }) => console.log('done', iteration),
+  });
+
+  // Cancel a live run from the caller
+  result.abort();
+
+  // Resume and drive the run to completion in a single call
+  await inngestAgent.resume({ runId: 'run-1', resumeData, untilIdle: true });
+
+  // Durable equivalents of Agent.generate / resumeGenerate
+  const out = await inngestAgent.generate(messages, { runId: 'run-2' });
+  const resumed = await inngestAgent.resumeGenerate({ runId: 'run-2', resumeData });
+  ```
+
+  `@mastra/core` re-exports `globalRunRegistry` and `runResumeDurableStreamUntilIdle` from `@mastra/core/agent/durable` so durable-agent integrations can share the same registry and idle-wrapper plumbing.
+
+- Amazon Bedrock models now appear under their own `amazon-bedrock/<model>` provider in the model picker instead of the `mastracode/amazon-bedrock/<model>` namespace. Bedrock is resolved through a dedicated Amazon Bedrock gateway that authenticates with the AWS credential chain (SigV4) and surfaces models from the public models.dev catalog. Saved model selections using the previous `mastracode/amazon-bedrock/...` IDs are still resolved at runtime, so existing config keeps working. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+- Fixed custom model gateways being overridden by default gateways. GatewayManager now deduplicates gateways by ID (first-wins) so custom gateways take precedence over defaults. Narrowed the auth-availability check to only swallow expected missing-credential errors instead of all errors, so real gateway failures surface during debugging. ([#18602](https://github.com/mastra-ai/mastra/pull/18602))
+
+## 1.48.0-alpha.3
+
+### Patch Changes
+
+- Fixed thread metadata being lost when a processor or working memory writes to it during an agent run. The thread is re-saved when the run finishes, and it was using a stale in-memory snapshot that overwrote any metadata written mid-run via updateThread. The agent now re-reads the latest persisted thread before that save, so mid-run metadata is preserved. Affects all storage backends (Postgres, LibSQL, and others). Fixes #16216. ([#18152](https://github.com/mastra-ai/mastra/pull/18152))
+
+- Fix in-memory workflow storage `getWorkflowRunById` returning `null` when `workflowName` is omitted. `workflowName` is optional in the storage contract and the pg/libsql adapters match by `runId` alone when it is not provided, but the in-memory store always compared `workflow_name === workflowName`, which never matched for an undefined name. It now matches by `runId`, only filters by `workflowName` when provided, and returns the most recent run for parity with the persistent adapters. Closes #18585. ([#18586](https://github.com/mastra-ai/mastra/pull/18586))
+
+- Fixed 'Type instantiation is excessively deep' (TS2589) errors that occurred when defining workflows with Zod schemas. Workflow and step type inference is now significantly faster and no longer causes TypeScript to crash or report depth errors. ([#18608](https://github.com/mastra-ai/mastra/pull/18608))
+
+- Updated dependencies [[`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2-alpha.0
+
+## 1.48.0-alpha.2
+
+### Patch Changes
+
+- Reduce repeated schema work during sub-agent tool conversion for more stable memory usage. ([#18566](https://github.com/mastra-ai/mastra/pull/18566))
+
+## 1.48.0-alpha.1
+
+### Patch Changes
+
+- fix: prevent partial gateway sync from corrupting provider registry ([#18545](https://github.com/mastra-ai/mastra/pull/18545))
+
+- Fixed notification signal delivery to idle threads not including ifIdle with streamOptions. When GitHub notifications or heartbeats wake an idle agent thread, the request context (containing model selection) was missing, causing 'No model selected' errors. Added getNotificationStreamOptions callback to AgentNotificationConfig so the notification dispatcher can resolve stream options for deferred notifications. ([#18549](https://github.com/mastra-ai/mastra/pull/18549))
+
+## 1.48.0-alpha.0
+
+### Minor Changes
+
+- Added optional `maxSteps` to `ScorerJudgeConfig` and `GoalConfig`, letting callers control the internal judge agent's agentic-loop iteration limit instead of relying on the implicit default of 5. Also fixed judge agent not receiving Mastra registration, which caused the observer's API key resolution to fail silently. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+- Added optional `maxSteps` to `ScorerJudgeConfig`, letting callers control the internal judge agent's agentic-loop iteration limit instead of relying on the implicit default of 5. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866))
+
+- Fixed find_files and grep tools to always exclude .git directory contents — the .git directory is now skipped at the traversal boundary in both tools since its internals are never useful and waste tokens. Also fixed pipe-separated exclude patterns in find_files (e.g. ".git|node_modules") to work correctly, matching tree's -I flag behavior. ([#18548](https://github.com/mastra-ai/mastra/pull/18548))
+
 ## 1.47.0
 
 ### Minor Changes

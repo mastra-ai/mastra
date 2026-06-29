@@ -1,6 +1,0 @@
-- navigation:
-    - list:
-        - listitem:
-            - link "Workflows":
-                - /url: /workflows
-                - img

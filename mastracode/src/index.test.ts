@@ -5,6 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
 
 vi.mock('@mastra/core/llm', () => ({
+  MastraModelGateway: class {},
   GatewayRegistry: {
     getInstance: vi.fn(() => ({
       syncGateways: vi.fn(),

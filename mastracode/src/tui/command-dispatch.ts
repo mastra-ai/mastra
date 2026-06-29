@@ -8,6 +8,7 @@ import {
   handleHelpCommand,
   handleCostCommand,
   handleYoloCommand,
+  handleVoiceCommand,
   handleThinkCommand,
   handlePermissionsCommand,
   handleNameCommand,
@@ -182,6 +183,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'yolo':
       handleYoloCommand(ctx);
+      return true;
+    case 'voice':
+      handleVoiceCommand(ctx);
       return true;
     case 'settings':
       await handleSettingsCommand(ctx);

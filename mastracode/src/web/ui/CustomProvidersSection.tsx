@@ -1,14 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
+import type { CustomProviderInfo } from '../../shared/api/types';
+import {
+  useCustomProvidersQuery,
+  useRemoveCustomProvider,
+  useSaveCustomProvider,
+} from '../../shared/hooks/use-custom-providers';
 import { PlusIcon } from './icons';
-
-interface CustomProviderInfo {
-  id: string;
-  name: string;
-  url: string;
-  hasApiKey: boolean;
-  models: string[];
-}
 
 interface DraftState {
   /** id of the provider being edited, or '' for a brand-new one. */
@@ -27,32 +25,24 @@ const EMPTY_DRAFT: DraftState = { editingId: '', name: '', url: '', apiKey: '', 
  * state — these are user-global endpoint definitions (name + base URL + optional
  * key + model list). Keys are write-only; the server reports only their presence.
  */
-export function CustomProvidersSection({ baseUrl = '' }: { baseUrl?: string }) {
-  const [providers, setProviders] = useState<CustomProviderInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+export function CustomProvidersSection() {
+  const providersQuery = useCustomProvidersQuery();
+  const saveMutation = useSaveCustomProvider();
+  const removeMutation = useRemoveCustomProvider();
+
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftState | null>(null);
 
-  const load = async () => {
-    try {
-      const res = await fetch(`${baseUrl}/api/web/config/custom-providers`);
-      if (!res.ok) throw new Error(`Failed to load custom providers (${res.status})`);
-      const data = (await res.json()) as { providers: CustomProviderInfo[] };
-      setProviders(data.providers ?? []);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
+  const providers = providersQuery.data ?? [];
+  const loading = providersQuery.isPending;
+  const busy = saveMutation.isPending || removeMutation.isPending;
+  const queryError = providersQuery.error instanceof Error ? providersQuery.error.message : null;
+  const error = draftError ?? queryError;
+
+  const startAdd = () => {
+    setDraftError(null);
+    setDraft({ ...EMPTY_DRAFT });
   };
-
-  useEffect(() => {
-    void load();
-  }, [baseUrl]);
-
-  const startAdd = () => setDraft({ ...EMPTY_DRAFT });
   const startEdit = (p: CustomProviderInfo) =>
     setDraft({ editingId: p.id, name: p.name, url: p.url, apiKey: '', models: p.models.join(', ') });
 
@@ -61,51 +51,35 @@ export function CustomProvidersSection({ baseUrl = '' }: { baseUrl?: string }) {
     const name = draft.name.trim();
     const url = draft.url.trim();
     if (!name || !url) {
-      setError('Name and URL are required.');
+      setDraftError('Name and URL are required.');
       return;
     }
     const models = draft.models
       .split(',')
       .map(m => m.trim())
       .filter(Boolean);
-    setBusy(true);
+    const apiKey = draft.apiKey.trim();
+    setDraftError(null);
     try {
-      const res = await fetch(`${baseUrl}/api/web/config/custom-providers`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          url,
-          apiKey: draft.apiKey.trim() || undefined,
-          models,
-          previousId: draft.editingId || undefined,
-        }),
+      await saveMutation.mutateAsync({
+        name,
+        url,
+        models,
+        ...(apiKey ? { apiKey } : {}),
+        ...(draft.editingId ? { previousId: draft.editingId } : {}),
       });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Failed to save provider (${res.status})`);
-      }
       setDraft(null);
-      await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setDraftError(e instanceof Error ? e.message : String(e));
     }
   };
 
   const remove = async (id: string) => {
-    setBusy(true);
+    setDraftError(null);
     try {
-      const res = await fetch(`${baseUrl}/api/web/config/custom-providers/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error(`Failed to remove provider (${res.status})`);
-      await load();
+      await removeMutation.mutateAsync({ id });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setDraftError(e instanceof Error ? e.message : String(e));
     }
   };
 

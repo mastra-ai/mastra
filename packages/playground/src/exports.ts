@@ -10,8 +10,7 @@ export {
 } from './lib/framework';
 
 export { PlaygroundQueryClient } from './lib/tanstack-query';
-
-export { usePlaygroundStore } from '@mastra/playground-ui';
+export { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 export { useTheme, type Theme, type ResolvedTheme } from '@mastra/playground-ui/components/ThemeProvider';
 
 export { isWorkspaceV1Supported } from '@mastra/playground-ui/utils';

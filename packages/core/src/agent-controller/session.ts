@@ -3441,6 +3441,13 @@ export class Session<TState = unknown> {
    * Resume a suspended tool call through the active thread subscription.
    * Re-supplies the shared run budget so the resumed run doesn't stop mid-task
    * on the agent's small default maxSteps.
+   *
+   * Interactive builtins (`ask_user`, `request_access`) are exempted from the
+   * approval re-check on resume: their resume schema is `z.string()` /
+   * `z.array(z.string())` which cannot carry the `{ approved }` field the
+   * approval gate demands, so re-entering the approval branch would always
+   * reject the answer. The caller already handled approval (setForTool policy,
+   * yolo mode, or a prior explicit approval gate).
    */
   async resumeToolCall({
     resumeData,
@@ -3478,6 +3485,15 @@ export class Session<TState = unknown> {
 
     try {
       const resourceId = this.identity.getResourceId();
+      const sharedOptions = this.machinery.buildSharedRunOptions();
+      // Interactive builtins suspend to collect user input, not for approval.
+      // The resume data is the user's answer (a bare string), which the approval
+      // re-check would reject because it cannot carry an `{ approved }` field.
+      // Exempt these tools so the answer reaches the model as-is.
+      const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
+      if (isInteractive) {
+        sharedOptions.requireToolApproval = false;
+      }
       await agent.sendStreamResume({
         threadId,
         resourceId,
@@ -3485,7 +3501,7 @@ export class Session<TState = unknown> {
         toolCallId,
         resumeData,
         streamOptions: {
-          ...this.machinery.buildSharedRunOptions(),
+          ...sharedOptions,
           memory: { thread: threadId, resource: resourceId },
           abortSignal: this.run.ensureAbortController().signal,
           requestContext,
