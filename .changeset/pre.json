@@ -163,5 +163,18 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.1.1"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260627-011213",
+    "busy-lions-boil",
+    "clear-cougars-decide",
+    "cool-singers-peel",
+    "cozy-bottles-melt",
+    "fix-qdrant-ts-expect-error-18572",
+    "green-birds-knock",
+    "huge-maps-kick",
+    "inngest-observe-replay",
+    "legal-dots-kick",
+    "solid-bees-shave",
+    "subagent-schema-cache"
+  ]
 }
