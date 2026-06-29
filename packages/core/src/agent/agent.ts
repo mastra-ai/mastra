@@ -23,7 +23,7 @@ import type {
   ScoringSamplingConfig,
 } from '../evals';
 import { runScorer } from '../evals/hooks';
-import { EventEmitterPubSub } from '../events/event-emitter';
+
 import type { PubSub } from '../events/pubsub';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
@@ -42,7 +42,6 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig 
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
-import { Mastra as MastraClass } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -81,7 +80,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, SkillInput } from '../skills/types';
-import { InMemoryStore } from '../storage';
+
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
@@ -405,16 +404,6 @@ export class Agent<
   #originalModel: DynamicArgument<MastraModelConfig | ModelWithRetries[], TRequestContext> | ModelFallbacks;
   maxRetries?: number;
   #mastra?: Mastra;
-  /**
-   * Lazily-created Mastra used as a fallback when the agent isn't attached to
-   * a user-supplied Mastra. The agent's prepare-stream workflow runs on the
-   * evented engine, which requires a pubsub for event dispatch — so a bare
-   * `new Agent(...)` (common in unit tests and small scripts) still needs *some*
-   * Mastra. This one carries an in-process EventEmitterPubSub + InMemoryStore;
-   * workers are started on first use. Cleared when `__registerMastra` attaches
-   * a real Mastra later.
-   */
-  #ephemeralMastra?: Mastra;
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
@@ -2998,13 +2987,6 @@ export class Agent<
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
 
-    // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish.
-    if (this.#ephemeralMastra) {
-      void this.#ephemeralMastra.stopWorkers().catch(() => {});
-      this.#ephemeralMastra = undefined;
-    }
-
     // Propagate logger to workspace if it's a direct instance (not a factory function)
     if (this.#workspace && typeof this.#workspace !== 'function') {
       this.#workspace.__setLogger(this.logger);
@@ -3177,12 +3159,11 @@ export class Agent<
     const observabilityContext = resolveObservabilityContext(rest);
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
-    // Title generation runs the same evented agentic loop as `#execute` — make
-    // sure the LLM has the effective Mastra (real or ephemeral) so its inner
-    // workflows can dispatch events. Idempotent.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    llm.__registerMastra(effectiveMastra);
-    await effectiveMastra.startWorkers();
+    // Register Mastra on the LLM (if any) so the inner agentic loop has access
+    // for storage/observability. Idempotent.
+    if (this.#mastra) {
+      llm.__registerMastra(this.#mastra);
+    }
 
     let userContent: string;
 
@@ -6139,8 +6120,7 @@ export class Agent<
    * @internal
    */
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
     const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
 
     if (!existingSnapshot) {
@@ -6286,27 +6266,6 @@ export class Agent<
         executionResourceId,
       },
     });
-  }
-
-  /**
-   * Lazily build (and cache) an ephemeral Mastra. The agent's prepare-stream
-   * workflow runs on the evented engine, which requires `mastra.pubsub` to
-   * dispatch events — so a `new Agent(...)` that isn't wired into a Mastra
-   * still needs *some* Mastra. Workers are started once and reused for every
-   * subsequent call on this agent. `__registerMastra(real)` tears it down.
-   */
-  async #getOrCreateEphemeralMastra(): Promise<Mastra> {
-    if (this.#ephemeralMastra) {
-      return this.#ephemeralMastra;
-    }
-    const ephemeral = new MastraClass({
-      logger: false,
-      storage: new InMemoryStore(),
-      pubsub: new EventEmitterPubSub(),
-    });
-    await ephemeral.startWorkers();
-    this.#ephemeralMastra = ephemeral;
-    return ephemeral;
   }
 
   /**
@@ -6654,68 +6613,18 @@ export class Agent<
         agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub, scope),
     });
 
-    // The prepare-stream workflow runs on the evented engine and needs a
-    // pubsub-equipped Mastra to dispatch events. If the agent isn't attached
-    // to one, fall back to a lazily-created ephemeral Mastra (see field doc).
-    // The same Mastra is registered on the LLM so the agentic loop inside
-    // `capabilities.llm.stream(...)` inherits it.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    // Idempotent: the LLM was already given this.#mastra (or undefined) in
-    // getLLM; re-register so the ephemeral case takes effect.
-    llm.__registerMastra(effectiveMastra);
-
-    const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
-    const executionRunId = randomUUID();
-
-    if (useEventedExecution) {
-      // Evented engine path: needs pubsub workers and internal workflow registration.
-      // Ensure the evented engine's workers are running on the effective Mastra.
-      // Users who just do `new Mastra({ agents })` without calling startWorkers
-      // would otherwise hang here — events would publish but no worker would
-      // consume them. startWorkers is idempotent.
-      await effectiveMastra?.startWorkers();
-      // Register as internal so the evented engine's event processor can resolve
-      // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
-      // We pick the runId up front and register run-scoped (not unscoped), so
-      // concurrent or nested agent invocations never resolve each other's
-      // closure-bound instance. __registerInternalWorkflow also calls
-      // __registerMastra under the hood, which wires the pubsub `createRun` needs.
-      effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
-    } else {
-      // Direct execution path (default): register Mastra for storage/observability
-      // but skip pubsub workers and internal workflow registration (not needed
-      // without events). Avoids requestContext serialisation loss.
-      executionWorkflow.__registerMastra(effectiveMastra);
+    // Register Mastra (if any) on the workflow for storage/observability access.
+    // The agent's prepare-stream workflow runs in-process via the default
+    // execution engine, so no pubsub workers or internal workflow registration
+    // are needed.
+    if (this.#mastra) {
+      executionWorkflow.__registerMastra(this.#mastra);
     }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-    try {
-      const run = await executionWorkflow.createRun({ runId: executionRunId });
-      const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
-      return result;
-    } finally {
-      if (useEventedExecution) {
-        // The WEP's terminal event handlers (processWorkflowEnd / processWorkflowFail /
-        // processWorkflowSuspend) unregister the internal workflow after all events for
-        // this run have been fully processed. This safety-net covers the exceptional path
-        // where run.start() throws before a terminal event is published (e.g. subscription
-        // setup failure). In the normal case the WEP already unregistered, so this is a no-op.
-        effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
-        // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
-        // but the evented engine's `EventedRun.start` still writes the initial 'running' row
-        // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
-        // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
-        // a real failure in the surrounding run.
-        try {
-          await executionWorkflow.deleteWorkflowRunById(executionRunId);
-        } catch (err) {
-          this.logger.debug('Failed to clean up internal execution-workflow run row', {
-            runId: executionRunId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    }
+    const run = await executionWorkflow.createRun();
+    const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+    return result;
   }
 
   /**
@@ -7241,7 +7150,7 @@ export class Agent<
         id: 'AGENT_GENERATE_MALFORMED_RESULT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
+        text: 'Execution workflow produced a result without getFullOutput',
       });
     }
 
@@ -8186,7 +8095,7 @@ export class Agent<
         id: 'AGENT_GENERATE_MALFORMED_RESULT',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
+        text: 'Execution workflow produced a result without getFullOutput',
       });
     }
 

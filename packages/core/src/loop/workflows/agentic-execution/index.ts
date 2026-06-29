@@ -1,6 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
+import { createWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -78,8 +78,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     _internal,
     ...rest,
   });
-
-  const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
 
   return createWorkflow({
     id: AGENTIC_EXECUTION_WORKFLOW_ID,
