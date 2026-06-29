@@ -165,7 +165,7 @@ console.log(response.text)
     defaultValue: 'false',
   },
   {
-    name: 'readOnlyRootfs',
+    name: 'readonlyRootfs',
     type: 'boolean',
     description: 'Mount the container root filesystem as read-only.',
     isOptional: true,
@@ -345,15 +345,19 @@ Apple container CLI options can be passed through the constructor:
 ```typescript
 const sandbox = new AppleContainerSandbox({
   image: 'node:22-slim',
+  volumes: {
+    '/Users/me/project': '/workspace',
+  },
   cpus: 2,
   memory: '2G',
   platform: 'linux/arm64',
-  readOnlyRootfs: true,
+  readonlyRootfs: true,
   tmpfs: ['/tmp:rw,size=256m'],
 })
 ```
 
 These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
+When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
 
 ## Reconnection
 

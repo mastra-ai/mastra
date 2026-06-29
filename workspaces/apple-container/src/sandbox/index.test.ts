@@ -85,7 +85,7 @@ describe('AppleContainerSandbox', () => {
       arch: 'arm64',
       os: 'linux',
       rosetta: true,
-      readOnlyRootfs: true,
+      readonlyRootfs: true,
       ssh: true,
       init: true,
       virtualization: true,
@@ -302,6 +302,36 @@ describe('AppleContainerSandbox', () => {
 
     expect(runner.run).toHaveBeenNthCalledWith(1, ['inspect', 'apple-test']);
     expect(runner.run).toHaveBeenNthCalledWith(2, ['delete', '--force', 'apple-test']);
+  });
+
+  it('throws when stop fails unexpectedly', async () => {
+    const runner = createRunner([
+      inspectResult('running'),
+      { success: false, exitCode: 3, stderr: 'permission denied' },
+    ]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await expect(sandbox.stop()).rejects.toMatchObject({
+      name: 'SandboxExecutionError',
+      exitCode: 3,
+      stderr: 'permission denied',
+    });
+    expect(sandbox.status).toBe('error');
+  });
+
+  it('throws when destroy fails unexpectedly', async () => {
+    const runner = createRunner([
+      inspectResult('running'),
+      { success: false, exitCode: 4, stderr: 'delete failed' },
+    ]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await expect(sandbox.destroy()).rejects.toMatchObject({
+      name: 'SandboxExecutionError',
+      exitCode: 4,
+      stderr: 'delete failed',
+    });
+    expect(sandbox.status).toBe('error');
   });
 
   it('surfaces inspect JSON parse errors with CLI output', async () => {

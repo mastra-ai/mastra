@@ -22,7 +22,7 @@ export interface AppleContainerProviderConfig {
   arch?: string;
   os?: string;
   rosetta?: boolean;
-  readOnlyRootfs?: boolean;
+  readonlyRootfs?: boolean;
   ssh?: boolean;
   init?: boolean;
   virtualization?: boolean;
@@ -114,7 +114,7 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
         description: 'Enable Rosetta in the container',
         default: false,
       },
-      readOnlyRootfs: {
+      readonlyRootfs: {
         type: 'boolean',
         description: 'Mount the container root filesystem as read-only',
         default: false,

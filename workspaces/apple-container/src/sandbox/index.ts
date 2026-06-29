@@ -108,7 +108,7 @@ export interface AppleContainerSandboxOptions extends Omit<MastraSandboxOptions,
   /** Enable Rosetta in the container. */
   rosetta?: boolean;
   /** Mount the container root filesystem as read-only. */
-  readOnlyRootfs?: boolean;
+  readonlyRootfs?: boolean;
   /** Forward the host SSH agent socket. */
   ssh?: boolean;
   /** Enable Apple's init process in the container. */
@@ -164,7 +164,7 @@ export class AppleContainerSandbox extends MastraSandbox {
   private readonly _arch?: string;
   private readonly _os?: string;
   private readonly _rosetta: boolean;
-  private readonly _readOnlyRootfs: boolean;
+  private readonly _readonlyRootfs: boolean;
   private readonly _ssh: boolean;
   private readonly _init: boolean;
   private readonly _virtualization: boolean;
@@ -206,7 +206,7 @@ export class AppleContainerSandbox extends MastraSandbox {
     this._arch = options.arch;
     this._os = options.os;
     this._rosetta = options.rosetta ?? false;
-    this._readOnlyRootfs = options.readOnlyRootfs ?? false;
+    this._readonlyRootfs = options.readonlyRootfs ?? false;
     this._ssh = options.ssh ?? false;
     this._init = options.init ?? true;
     this._virtualization = options.virtualization ?? false;
@@ -269,7 +269,7 @@ export class AppleContainerSandbox extends MastraSandbox {
 
     const result = await this._runner.run(['stop', this.containerId]);
     if (!result.success && !isMissingContainerMessage(result.stderr)) {
-      this.logger.warn(`${LOG_PREFIX} Failed to stop container ${this.containerId}: ${result.stderr}`);
+      this._assertSuccess(result, `stop Apple container ${this.containerId}`);
     }
   }
 
@@ -286,7 +286,7 @@ export class AppleContainerSandbox extends MastraSandbox {
 
     const result = await this._runner.run(['delete', '--force', this.containerId]);
     if (!result.success && !isMissingContainerMessage(result.stderr)) {
-      this.logger.warn(`${LOG_PREFIX} Failed to delete container ${this.containerId}: ${result.stderr}`);
+      this._assertSuccess(result, `delete Apple container ${this.containerId}`);
     }
   }
 
@@ -447,7 +447,7 @@ export class AppleContainerSandbox extends MastraSandbox {
     if (this._arch) args.push('--arch', this._arch);
     if (this._os) args.push('--os', this._os);
     if (this._rosetta) args.push('--rosetta');
-    if (this._readOnlyRootfs) args.push('--read-only');
+    if (this._readonlyRootfs) args.push('--read-only');
     if (this._ssh) args.push('--ssh');
     if (this._init) args.push('--init');
     if (this._virtualization) args.push('--virtualization');

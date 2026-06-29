@@ -59,7 +59,7 @@ await workspace.destroy();
 | `arch`            | `string`                     | Image architecture when selecting multi-arch images.               |
 | `os`              | `string`                     | Operating system when selecting multi-platform images.             |
 | `rosetta`         | `boolean`                    | Enable Rosetta in the container.                                   |
-| `readOnlyRootfs`  | `boolean`                    | Start the container with a read-only root filesystem.              |
+| `readonlyRootfs`  | `boolean`                    | Start the container with a read-only root filesystem.              |
 | `ssh`             | `boolean`                    | Forward the host SSH agent socket.                                 |
 | `init`            | `boolean`                    | Enable Apple's init process in the container.                      |
 | `virtualization`  | `boolean`                    | Expose virtualization capabilities to the container.               |
@@ -79,6 +79,8 @@ await workspace.destroy();
 | `onStop`          | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox stops.                    |
 | `onDestroy`       | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox is destroyed.             |
 | `instructions`    | `string \| (opts) => string` | Override or extend the default workspace sandbox instructions.     |
+
+When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
 
 ## Editor provider
 
