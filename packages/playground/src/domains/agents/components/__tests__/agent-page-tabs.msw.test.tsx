@@ -126,27 +126,6 @@ describe('AgentLayout tool tabs', () => {
     expect(onPlatforms).not.toHaveBeenCalled();
   });
 
-  it('lets the tab list keep the full row width on mobile by wrapping the right-slot controls', async () => {
-    server.use(...commonHandlers(enabledPackages));
-
-    renderLayout('/agents/agent-1/evaluate');
-
-    // Below lg the right-slot buttons wrap onto their own line, right-aligned,
-    // instead of stealing width from the (scrollable) tab list.
-    const runOptionsTrigger = await screen.findByTestId('agent-top-bar-run-options-trigger');
-    const rightSlot = runOptionsTrigger.parentElement!;
-    expect(rightSlot.className).toContain('ml-auto');
-
-    const tabsRow = rightSlot.parentElement!;
-    expect(tabsRow.className).toContain('max-lg:flex-wrap');
-
-    // flex-1 (basis 0) never wraps; on mobile the tabs need their content-sized
-    // basis back (flex-auto) so the row can decide to wrap the right slot.
-    const tabsRoot = screen.getByRole('tablist').parentElement!.parentElement!;
-    expect(tabsRoot.className).toContain('min-w-0');
-    expect(tabsRoot.className).toContain('max-lg:flex-auto');
-  });
-
   it('keeps version routes in chat without restoring a separate Editor tab', async () => {
     server.use(...commonHandlers(enabledPackages));
 

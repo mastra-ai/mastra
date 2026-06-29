@@ -1,4 +1,4 @@
-import type { StoredAgentResponse } from '@mastra/client-js';
+import type { AgentVersionResponse, StoredAgentResponse } from '@mastra/client-js';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -74,6 +74,13 @@ const storedAgentResponse = {
   requestContextSchema: { type: 'object', properties: {} },
 } satisfies StoredAgentResponse;
 
+// The version editor loads the active version (version-1) when opened. Serve it
+// with the same draft instructions so the panel renders the agent's prompt.
+const activeVersionDetail = {
+  ...versionsForAgent.versions[1],
+  instructions: storedAgentResponse.instructions,
+} satisfies AgentVersionResponse;
+
 const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
   ({ children, to, href, ...props }, ref) => (
     <a ref={ref} href={to ?? href} {...props}>
@@ -128,6 +135,9 @@ function registerMemoryHandlers() {
     http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json({ ...systemPackages, cmsEnabled: true })),
     http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json(storedAgentResponse)),
     http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () => HttpResponse.json(versionsForAgent)),
+    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/:versionId`, () =>
+      HttpResponse.json(activeVersionDetail),
+    ),
     http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(semanticRecallConfig)),
     http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabledStatus)),
@@ -292,7 +302,7 @@ describe('MemorySidebar', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open versions' }));
 
-    expect(await screen.findByRole('heading', { name: 'Versions' })).not.toBeNull();
+    expect(await screen.findByRole('combobox', { name: /switch chef agent version/i })).not.toBeNull();
     expect(screen.getByText('You are a test chef agent.')).not.toBeNull();
     expect(screen.queryByTestId('memory-sidebar-thread-layer')).toBeNull();
     expect(screen.queryByTestId('memory-sidebar-card')).toBeNull();
@@ -407,25 +417,7 @@ describe('MemorySidebar', () => {
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(2));
   });
 
-  it('renders the timeline panel context window from the OM record instead of message markers', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
-      http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),
-      http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessages)),
-    );
-
-    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
-
-    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
-    act(() => openPanel());
-
-    await screen.findByTestId('memory-sidebar-om-detail-subpanel');
-
-    expect(await screen.findByText('14.2/30k')).not.toBeNull();
-    expect(await screen.findByText('4.5/6k')).not.toBeNull();
-  });
-
-  it('renders both Messages and Observations progress bars in the open OM panel', async () => {
+  it('renders Messages and Observations progress bars from the OM record context window', async () => {
     server.use(
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
       http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),

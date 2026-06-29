@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentChatShell } from '../agent-chat-shell';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { builderDisabled, observationalMemory, rbacDisabledAuth, threadMessages } from './fixtures/memory-panel';
+import { AgentSidebarViewProvider } from '@/domains/agents/context/agent-sidebar-view-context';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
@@ -60,17 +61,19 @@ function renderShell(onOM = vi.fn(), onMessages = vi.fn()) {
                 <Route
                   path="/agents/:agentId/chat/:threadId"
                   element={
-                    <MemoryTimelineProvider>
-                      <AgentChatShell
-                        agentId="agent-1"
-                        view="chat"
-                        leftSlot={<div data-testid="left-slot" />}
-                        leftDrawerLabel="Open threads and memory"
-                        browserOverlay={null}
-                      >
-                        <div data-testid="agent-chat" />
-                      </AgentChatShell>
-                    </MemoryTimelineProvider>
+                    <AgentSidebarViewProvider>
+                      <MemoryTimelineProvider>
+                        <AgentChatShell
+                          agentId="agent-1"
+                          view="chat"
+                          leftSlot={<div data-testid="left-slot" />}
+                          leftDrawerLabel="Open threads and memory"
+                          browserOverlay={null}
+                        >
+                          <div data-testid="agent-chat" />
+                        </AgentChatShell>
+                      </MemoryTimelineProvider>
+                    </AgentSidebarViewProvider>
                   }
                 />
               </Routes>

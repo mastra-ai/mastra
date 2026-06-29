@@ -2,7 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
-import type * as AgentsContext from '../../context';
+import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
@@ -57,8 +57,8 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-vi.mock('../../context', async () => {
-  const actual = await vi.importActual<typeof AgentsContext>('../../context');
+vi.mock('../../context/memory-timeline-context', async () => {
+  const actual = await vi.importActual<typeof MemoryTimelineContext>('../../context/memory-timeline-context');
 
   return {
     ...actual,
@@ -169,16 +169,17 @@ describe('resizable service layouts', () => {
     await waitFor(() => expect(resizeLeftPanel).toHaveBeenCalledWith('300px'));
   });
 
-  it('renders a resizable right slot when rightSlot is provided on desktop', () => {
+  it('hosts the right slot in a floating drawer instead of a resizable panel on desktop', () => {
     render(
       <AgentLayout agentId="chef-agent" leftSlot={<div>threads</div>} rightSlot={<div>memory studio</div>}>
         <div>chat</div>
       </AgentLayout>,
     );
 
-    const rightPanel = screen.getByTestId('panel-right-slot');
-    expect(rightPanel.className).toContain('min-w-0');
-    expect(rightPanel.textContent).toContain('memory studio');
+    // The right slot is no longer a resizable side panel — it now lives in a
+    // floating drawer, so its content renders without a `panel-right-slot`.
+    expect(screen.queryByTestId('panel-right-slot')).toBeNull();
+    expect(screen.getByText('memory studio')).not.toBeNull();
   });
 
   it('keeps the workflow panel group shrinkable when side slots are present', () => {

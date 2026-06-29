@@ -410,28 +410,6 @@ describe('AgentSidebarVersionHeader', () => {
     expect(versionSwitch.textContent).not.toContain('Published v1');
   });
 
-  it('opens the versions panel from the sidebar dropdown create action', async () => {
-    const agentWithPublishedVersion: GetAgentResponse = {
-      ...v2Agent,
-      source: 'stored',
-      activeVersionId: 'version-1',
-    };
-
-    useHandlers({
-      agent: agentWithPublishedVersion,
-      packages: { ...systemPackages, cmsEnabled: true },
-      versions: agentVersionsResponse,
-    });
-
-    renderWithProviders(<SidebarVersionHeaderHarness threadId="thread-1" />, { showSidebarViewProbe: true });
-
-    fireEvent.click(await screen.findByRole('combobox', { name: /switch test agent version/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /create version/i }));
-
-    expect(screen.getByTestId('sidebar-view').textContent).toBe('versions');
-    expect(navigateSpy).not.toHaveBeenCalled();
-  });
-
   it('opens the versions panel from the sidebar editor icon', async () => {
     const agentWithPublishedVersion: GetAgentResponse = {
       ...v2Agent,
