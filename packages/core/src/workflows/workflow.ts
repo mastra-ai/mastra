@@ -669,6 +669,156 @@ export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   } as Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 }
 
+/** Walks a dotted path on an object. `''` or `'.'` returns the root unchanged. */
+function traverseMappingPath(root: unknown, path: string, errorLabel: string): unknown {
+  if (path === '' || path === '.') return root;
+  const parts = path.split('.');
+  let value: any = root;
+  for (const part of parts) {
+    if (typeof value === 'object' && value !== null) {
+      value = value[part];
+    } else {
+      throw new Error(`Invalid path ${path} in ${errorLabel}`);
+    }
+  }
+  return value;
+}
+
+const TEMPLATE_PLACEHOLDER = /\$\{([^}]*)\}/g;
+
+const TEMPLATE_NAMESPACES = ['inputData', 'initData', 'state', 'requestContext', 'stepResults'] as const;
+type TemplateScope = (typeof TEMPLATE_NAMESPACES)[number];
+
+/** Common error-message prefix so every template diagnostic points at the exact placeholder. */
+function describeBadPlaceholder(template: string, idx: number, rawExpr: string): string {
+  return `Template placeholder #${idx} (\${${rawExpr}}) in '${template}'`;
+}
+
+/** Split a placeholder body `scope.path.with.dots` into its leading scope and the dotted remainder. */
+function parseTemplatePlaceholder(rawExpr: string): { scope: string; rest: string } {
+  const dot = rawExpr.indexOf('.');
+  return {
+    scope: dot === -1 ? rawExpr : rawExpr.slice(0, dot),
+    rest: dot === -1 ? '' : rawExpr.slice(dot + 1),
+  };
+}
+
+/**
+ * Validates a `{ template }` source's syntax at workflow-definition time.
+ * Throws if any placeholder is empty, whitespace-padded, references an unknown
+ * namespace, or is a malformed `stepResults.<stepId>.<path>` shape.
+ *
+ * Run-time concerns (does the step actually exist, does the path resolve, is
+ * the value a primitive) stay in {@link resolveTemplate}.
+ */
+function validateTemplate(template: string): void {
+  let idx = 0;
+  for (const match of template.matchAll(TEMPLATE_PLACEHOLDER)) {
+    idx++;
+    const rawExpr = match[1] ?? '';
+    if (rawExpr.length === 0 || rawExpr !== rawExpr.trim()) {
+      throw new Error(
+        `${describeBadPlaceholder(template, idx, rawExpr)} has empty or whitespace-padded contents. ` +
+          `Use \${<scope>.<path>} with no surrounding whitespace.`,
+      );
+    }
+    const { scope, rest } = parseTemplatePlaceholder(rawExpr);
+    if (scope === 'stepResults') {
+      const innerDot = rest.indexOf('.');
+      const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
+      const subPath = innerDot === -1 ? '' : rest.slice(innerDot + 1);
+      if (!stepId || !subPath) {
+        throw new Error(
+          `${describeBadPlaceholder(template, idx, rawExpr)} must be of the form \${stepResults.<stepId>.<path>}.`,
+        );
+      }
+      continue;
+    }
+    if (scope === 'requestContext') {
+      if (!rest) {
+        throw new Error(
+          `${describeBadPlaceholder(template, idx, rawExpr)} requires a request-context key — use \${requestContext.<key>}.`,
+        );
+      }
+      continue;
+    }
+    if ((TEMPLATE_NAMESPACES as readonly string[]).includes(scope)) continue;
+    throw new Error(
+      `${describeBadPlaceholder(template, idx, rawExpr)} references unknown namespace "${scope}". ` +
+        `Use one of: ${TEMPLATE_NAMESPACES.join(', ')}.`,
+    );
+  }
+}
+
+/**
+ * Coerces a resolved placeholder value to a string. Primitives are stringified
+ * the normal way; objects/arrays throw with a hint pointing at the offending
+ * placeholder (since `String({})` → `"[object Object]"` is almost never what
+ * the caller meant). `null`/`undefined` render as empty.
+ */
+function stringifyTemplateValue(v: unknown, template: string, idx: number, rawExpr: string): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') {
+    throw new Error(
+      `${describeBadPlaceholder(template, idx, rawExpr)} resolved to an object/array. ` +
+        `Drill into a primitive path (e.g. \${${rawExpr}.someField}) or stringify the value in a preceding step.`,
+    );
+  }
+  return String(v);
+}
+
+/**
+ * Resolves `${<scope>.<path>}` placeholders against the implicit namespaces
+ * available in a step's execute context. See the `.map()` overload signature
+ * for the full list of accepted scopes (`inputData`, `initData`, `state`,
+ * `requestContext`, `stepResults.<stepId>`).
+ */
+function resolveTemplate(template: string, ctx: any): string {
+  let idx = 0;
+  return template.replace(TEMPLATE_PLACEHOLDER, (_match, rawExpr: string) => {
+    idx++;
+    return resolveTemplatePlaceholder(rawExpr, template, idx, ctx);
+  });
+}
+
+function resolveTemplatePlaceholder(rawExpr: string, template: string, idx: number, ctx: any): string {
+  // validateTemplate(template) is called at definition time so we know the
+  // raw expr is well-formed (non-empty, no surrounding whitespace, known
+  // scope). Runtime only cares about path-resolution + value coercion.
+  const { scope, rest } = parseTemplatePlaceholder(rawExpr);
+  const label = describeBadPlaceholder(template, idx, rawExpr);
+  switch (scope as TemplateScope) {
+    case 'inputData':
+      return stringifyTemplateValue(traverseMappingPath(ctx.inputData, rest, label), template, idx, rawExpr);
+    case 'initData':
+      return stringifyTemplateValue(traverseMappingPath(ctx.getInitData(), rest, label), template, idx, rawExpr);
+    case 'state':
+      return stringifyTemplateValue(traverseMappingPath(ctx.state, rest, label), template, idx, rawExpr);
+    case 'requestContext':
+      return stringifyTemplateValue(ctx.requestContext.get(rest), template, idx, rawExpr);
+    case 'stepResults': {
+      const innerDot = rest.indexOf('.');
+      const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
+      const subPath = innerDot === -1 ? '' : rest.slice(innerDot + 1);
+      const stepResult = ctx.getStepResult(stepId);
+      if (stepResult === null) {
+        throw new Error(
+          `${label} references stepResults.${stepId} but step "${stepId}" has no successful output ` +
+            `(not run yet, not registered, or failed).`,
+        );
+      }
+      return stringifyTemplateValue(traverseMappingPath(stepResult, subPath, label), template, idx, rawExpr);
+    }
+    default:
+      // validateTemplate guarantees this branch is unreachable for well-formed
+      // workflows; this is a safety net for templates that bypassed validation
+      // (e.g. constructed programmatically and pushed into stepFlow).
+      throw new Error(
+        `${label} references unknown namespace "${scope}". Use one of: ${TEMPLATE_NAMESPACES.join(', ')}.`,
+      );
+  }
+}
+
 /**
  * Builds a runnable step from a `.map()` mapping config or mapping function.
  *
@@ -710,6 +860,11 @@ export function createMappingStep(
           continue;
         }
 
+        if (typeof m.template === 'string') {
+          result[key] = resolveTemplate(m.template, ctx);
+          continue;
+        }
+
         if (m.requestContextPath) {
           result[key] = requestContext.get(m.requestContextPath);
           continue;
@@ -729,22 +884,7 @@ export function createMappingStep(
                 : m.step,
             );
 
-        if (m.path === '.') {
-          result[key] = stepResult;
-          continue;
-        }
-
-        const pathParts = m.path.split('.');
-        let value: any = stepResult;
-        for (const part of pathParts) {
-          if (typeof value === 'object' && value !== null) {
-            value = value[part];
-          } else {
-            throw new Error(`Invalid path ${m.path} in step ${m?.step?.id ?? 'initData'}`);
-          }
-        }
-
-        result[key] = value;
+        result[key] = traverseMappingPath(stepResult, m.path, `step ${m?.step?.id ?? 'initData'}`);
       }
       return result;
     },
@@ -2091,6 +2231,17 @@ export class Workflow<
                 requestContextPath: string;
                 schema: PublicSchema<any>;
               }
+            /**
+             * String template with `${<scope>.<path>}` placeholders. Resolved at
+             * run time against the step's execution context.
+             *
+             * Scopes: `inputData`, `initData`, `state`, `requestContext`,
+             * `stepResults.<stepId>`. Paths are dotted (`a.b.c`). Whitespace
+             * inside placeholders is not allowed (`${ inputData.x }` errors at
+             * workflow-definition time). Renders `null`/`undefined` as `''`;
+             * throws on objects/arrays.
+             */
+            | { template: string }
             | DynamicMapping<TPrevSchema, any>;
         }
       | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
@@ -2103,6 +2254,17 @@ export class Workflow<
       `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`;
 
     const truncate = (s: string) => (s.length > 1000 ? s.slice(0, 1000) + '...\n}' : s);
+
+    // Fail-fast: validate every `{ template }` source at definition time so
+    // malformed placeholders surface here, not at run time.
+    if (typeof mappingConfig === 'object' && mappingConfig !== null) {
+      for (const mapping of Object.values(mappingConfig)) {
+        const m: any = mapping;
+        if (m && typeof m.template === 'string') {
+          validateTemplate(m.template);
+        }
+      }
+    }
 
     if (typeof mappingConfig === 'function') {
       this.stepFlow.push({ type: 'mapping', id: mappingId, mapConfig: mappingConfig as any });
@@ -2139,6 +2301,8 @@ export class Workflow<
             requestContextPath: m.requestContextPath,
             schema: m.schema,
           };
+        } else if (typeof m.template === 'string') {
+          a[key] = { template: m.template };
         } else if (m.initData) {
           // Serialize the init-data reference as the workflow id; the live entry
           // (this.stepFlow) keeps the real reference for execution. Stringifying

@@ -31,13 +31,15 @@ export const weatherReportWorkflow = createWorkflow({
   }),
 })
   .tool(weatherTool)
-  .map(async ({ inputData }) => ({
-    prompt:
-      `Current weather for ${inputData.location}: ` +
-      `${inputData.conditions}, ${inputData.temperature}°C (feels like ${inputData.feelsLike}°C), ` +
-      `humidity ${inputData.humidity}%, wind ${inputData.windSpeed} km/h (gusts ${inputData.windGust} km/h). ` +
-      `Write a structured weather report.`,
-  }))
+  .map({
+    prompt: {
+      template:
+        'Current weather for ${inputData.location}: ' +
+        '${inputData.conditions}, ${inputData.temperature}°C (feels like ${inputData.feelsLike}°C), ' +
+        'humidity ${inputData.humidity}%, wind ${inputData.windSpeed} km/h (gusts ${inputData.windGust} km/h). ' +
+        'Write a structured weather report.',
+    },
+  })
   .agent(weatherReporterAgent, {
     structuredOutput: { schema: weatherReportSchema },
   })
