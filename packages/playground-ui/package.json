@@ -53,6 +53,56 @@
         "default": "./dist/utils/*.cjs.js"
       }
     },
+    "./domains/*": {
+      "import": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.es.js"
+      },
+      "require": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.cjs.js"
+      }
+    },
+    "./ee/*": {
+      "import": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.es.js"
+      },
+      "require": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.cjs.js"
+      }
+    },
+    "./primitives/*": {
+      "import": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.es.js"
+      },
+      "require": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.cjs.js"
+      }
+    },
+    "./resize/*": {
+      "import": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.es.js"
+      },
+      "require": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.cjs.js"
+      }
+    },
+    "./store/*": {
+      "import": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.es.js"
+      },
+      "require": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.cjs.js"
+      }
+    },
     "./hooks/*": {
       "import": {
         "types": "./dist/hooks/*.d.ts",

@@ -13,8 +13,11 @@ vi.mock('../badges/tool-approval-buttons', () => ({
   ToolApprovalButtons: mockToolApprovalButtons,
 }));
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: () => null,
+}));
+
+vi.mock('@mastra/playground-ui/icons/AgentIcon', () => ({
   AgentIcon: () => null,
 }));
 

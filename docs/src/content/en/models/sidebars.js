@@ -618,6 +618,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/subconscious',
+          label: 'Subconscious',
+        },
+        {
+          type: 'doc',
           id: 'providers/submodel',
           label: 'submodel',
         },
