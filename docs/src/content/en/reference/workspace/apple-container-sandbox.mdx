@@ -359,6 +359,21 @@ const sandbox = new AppleContainerSandbox({
 These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
 When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
 
+## Security model
+
+`AppleContainerSandbox` runs local containers through the host Apple `container` service. Treat constructor options as trusted server-side configuration:
+
+- `volumes`, `mounts`, and `publishedSockets` can expose host paths to containerized code.
+- `ssh` forwards the host SSH agent socket.
+- `capAdd` and `virtualization` can expand what containerized code can do.
+- `containerBinary` is a constructor-only escape hatch for trusted code and is not part of the serializable editor provider schema.
+
+Use the narrowest mounts and capabilities your workload needs. Existing containers are only reconnected when they carry Mastra ownership labels for the sandbox ID.
+
+## Limitations
+
+`AppleContainerSandbox` implements foreground workspace command execution with `executeCommand()`. It does not yet expose a `SandboxProcessManager` for background processes or LSP sessions.
+
 ## Reconnection
 
 `AppleContainerSandbox` reconnects by inspecting a container with the configured name. When `start()` is called:

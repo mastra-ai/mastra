@@ -37,7 +37,6 @@ export type AppleContainerProviderConfig = Pick<
   | 'workingDir'
   | 'timeout'
   | 'deleteOnDestroy'
-  | 'containerBinary'
 >;
 
 export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProviderConfig> = {
@@ -46,6 +45,7 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
   description: 'Local OCI Linux container sandbox powered by Apple container',
   configSchema: {
     type: 'object',
+    additionalProperties: false,
     properties: {
       image: {
         type: 'string',
@@ -185,12 +185,71 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
         description: 'Delete the Apple container on destroy',
         default: true,
       },
-      containerBinary: {
-        type: 'string',
-        description: 'Path or name for the Apple container CLI',
-        default: 'container',
-      },
     },
   },
-  createSandbox: config => new AppleContainerSandbox(config as AppleContainerSandboxOptions),
+  createSandbox: config => {
+    const {
+      image,
+      name,
+      command,
+      env,
+      volumes,
+      mounts,
+      network,
+      publishedPorts,
+      publishedSockets,
+      cpus,
+      memory,
+      platform,
+      arch,
+      os,
+      rosetta,
+      readonlyRootfs,
+      ssh,
+      init,
+      virtualization,
+      capAdd,
+      capDrop,
+      tmpfs,
+      dns,
+      dnsSearch,
+      noDns,
+      labels,
+      workingDir,
+      timeout,
+      deleteOnDestroy,
+    } = config;
+
+    return new AppleContainerSandbox({
+      image,
+      name,
+      command,
+      env,
+      volumes,
+      mounts,
+      network,
+      publishedPorts,
+      publishedSockets,
+      cpus,
+      memory,
+      platform,
+      arch,
+      os,
+      rosetta,
+      readonlyRootfs,
+      ssh,
+      init,
+      virtualization,
+      capAdd,
+      capDrop,
+      tmpfs,
+      dns,
+      dnsSearch,
+      noDns,
+      labels,
+      workingDir,
+      timeout,
+      deleteOnDestroy,
+    });
+  },
 };

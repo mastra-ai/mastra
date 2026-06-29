@@ -27,6 +27,8 @@ const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const DEFAULT_IMAGE = 'node:22-slim';
 const DEFAULT_COMMAND = ['sleep', 'infinity'];
 const DEFAULT_WORKING_DIR = '/workspace';
+const APPLE_CONTAINER_CLI_GRACE_TIMEOUT_MS = 10_000;
+const APPLE_CONTAINER_TIMEOUT_EXIT_CODE = 124;
 
 export interface AppleContainerCliResult {
   success: boolean;
@@ -63,11 +65,18 @@ export class DefaultAppleContainerCommandRunner implements AppleContainerCommand
 }
 
 interface AppleContainerInspectResult {
-  status?: string;
-  networks?: Array<Record<string, unknown>>;
+  id?: string;
+  status?:
+    | string
+    | {
+        state?: string;
+        networks?: Array<Record<string, unknown>>;
+      };
   configuration?: {
     id?: string;
     hostname?: string;
+    labels?: Record<string, string>;
+    networks?: Array<Record<string, unknown>>;
     resources?: {
       cpus?: number;
       memoryInBytes?: number;
@@ -250,15 +259,16 @@ export class AppleContainerSandbox extends MastraSandbox {
   private async _startContainer(): Promise<void> {
     const existing = await this._inspectContainer();
     if (existing) {
+      this._assertMastraOwned(existing);
       this._containerId = existing.configuration?.id ?? this._containerName;
       if (!isRunning(existing)) {
-        const result = await this._runner.run(['start', this.containerId]);
+        const result = await this._runCli(['start', this.containerId]);
         this._assertSuccess(result, `start Apple container ${this.containerId}`);
       }
       return;
     }
 
-    const result = await this._runner.run(this._buildRunArgs());
+    const result = await this._runCli(this._buildRunArgs());
     this._assertSuccess(result, `create Apple container ${this._containerName}`);
     this._containerId = this._containerName;
   }
@@ -268,8 +278,9 @@ export class AppleContainerSandbox extends MastraSandbox {
     if (!existing || !isRunning(existing)) {
       return;
     }
+    this._assertMastraOwned(existing);
 
-    const result = await this._runner.run(['stop', this.containerId]);
+    const result = await this._runCli(['stop', this.containerId]);
     if (!result.success && !isMissingContainerMessage(result.stderr)) {
       this._assertSuccess(result, `stop Apple container ${this.containerId}`);
     }
@@ -285,8 +296,9 @@ export class AppleContainerSandbox extends MastraSandbox {
     if (!existing) {
       return;
     }
+    this._assertMastraOwned(existing);
 
-    const result = await this._runner.run(['delete', '--force', this.containerId]);
+    const result = await this._runCli(['delete', '--force', this.containerId]);
     if (!result.success && !isMissingContainerMessage(result.stderr)) {
       this._assertSuccess(result, `delete Apple container ${this.containerId}`);
     }
@@ -299,7 +311,10 @@ export class AppleContainerSandbox extends MastraSandbox {
   ): Promise<CommandResult> {
     await this.ensureRunning();
 
-    const fullCommand = args.length > 0 ? [command, ...args].map(shellQuote).join(' ') : command;
+    const commandTimeout = options.timeout ?? this._timeout;
+    const hasCommandTimeout = Number.isFinite(commandTimeout) && commandTimeout > 0;
+    const fullCommand = buildShellCommand(command, args);
+    const shellCommand = hasCommandTimeout ? buildTimeoutShellCommand(fullCommand, commandTimeout) : fullCommand;
     const env = { ...this._env, ...options.env };
     const cliArgs = [
       'exec',
@@ -309,23 +324,30 @@ export class AppleContainerSandbox extends MastraSandbox {
       this.containerId,
       'sh',
       '-lc',
-      fullCommand,
+      shellCommand,
     ];
 
     const result = await this._runner.run(cliArgs, {
-      timeout: options.timeout ?? this._timeout,
+      timeout: hasCommandTimeout ? commandTimeout + APPLE_CONTAINER_CLI_GRACE_TIMEOUT_MS : undefined,
       abortSignal: options.abortSignal,
       onStdout: options.onStdout,
       onStderr: options.onStderr,
       maxRetainedBytes: options.maxRetainedBytes,
     });
 
-    return { ...result, command: fullCommand, args };
+    return {
+      ...result,
+      ...(result.exitCode === APPLE_CONTAINER_TIMEOUT_EXIT_CODE && { timedOut: true, killed: true }),
+      command: fullCommand,
+      args,
+    };
   }
 
   async getInfo(): Promise<SandboxInfo> {
     const inspect = this._containerId ? await this._inspectContainer() : undefined;
     const resources = inspect?.configuration?.resources;
+    const appleContainerStatus = inspect ? getContainerState(inspect) : undefined;
+    const networks = inspect ? getContainerNetworks(inspect) : undefined;
 
     return {
       id: this.id,
@@ -344,8 +366,8 @@ export class AppleContainerSandbox extends MastraSandbox {
         containerId: this.containerId,
         image: this._image,
         workingDir: this._workingDir,
-        ...(inspect?.status && { appleContainerStatus: inspect.status }),
-        ...(inspect?.networks && { networks: inspect.networks }),
+        ...(appleContainerStatus && { appleContainerStatus }),
+        ...(networks && { networks }),
       },
     };
   }
@@ -402,7 +424,7 @@ export class AppleContainerSandbox extends MastraSandbox {
   }
 
   private async _inspectContainer(): Promise<AppleContainerInspectResult | undefined> {
-    const result = await this._runner.run(['inspect', this.containerId]);
+    const result = await this._runCli(['inspect', this.containerId]);
     if (!result.success) {
       if (isMissingContainerMessage(result.stderr)) return undefined;
       this._assertSuccess(result, `inspect Apple container ${this.containerId}`);
@@ -467,6 +489,23 @@ export class AppleContainerSandbox extends MastraSandbox {
       result.stderr,
     );
   }
+
+  private _assertMastraOwned(inspect: AppleContainerInspectResult): void {
+    if (isMastraOwned(inspect, this.id)) return;
+    throw new SandboxExecutionError(
+      `Refusing to manage Apple container ${this.containerId} because it is not labeled as Mastra sandbox ${this.id}`,
+      1,
+      JSON.stringify(inspect),
+      '',
+    );
+  }
+
+  private _runCli(args: string[], options: AppleContainerCommandRunnerOptions = {}): Promise<AppleContainerCliResult> {
+    return this._runner.run(args, {
+      timeout: this._timeout,
+      ...options,
+    });
+  }
 }
 
 export function runAppleContainerCli(
@@ -491,7 +530,7 @@ class AppleContainerCliProcess extends ProcessHandle {
 
   constructor(binary: string, args: string[], options: AppleContainerCommandRunnerOptions = {}) {
     super({
-      maxRetainedBytes: options.maxRetainedBytes ?? Infinity,
+      maxRetainedBytes: options.maxRetainedBytes,
       onStdout: options.onStdout,
       onStderr: options.onStderr,
     });
@@ -631,6 +670,22 @@ function sanitizeContainerName(name: string): string {
   return /^[a-zA-Z0-9]/.test(sanitized) ? sanitized : `c-${sanitized}`;
 }
 
+function buildShellCommand(command: string, args: string[]): string {
+  return args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+}
+
+function buildTimeoutShellCommand(command: string, timeoutMs: number): string {
+  const timeoutSeconds = formatTimeoutSeconds(timeoutMs);
+  return `timeout ${timeoutSeconds}s sh -lc ${shellQuote(command)}; code=$?; case "$code" in 124|137|143) exit ${APPLE_CONTAINER_TIMEOUT_EXIT_CODE};; *) exit "$code";; esac`;
+}
+
+function formatTimeoutSeconds(timeoutMs: number): string {
+  return Math.max(timeoutMs / 1000, 0.001)
+    .toFixed(3)
+    .replace(/0+$/, '')
+    .replace(/\.$/, '');
+}
+
 function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;
@@ -649,7 +704,20 @@ function envFlags(env: Record<string, string | undefined>): string[] {
 }
 
 function isRunning(inspect: AppleContainerInspectResult): boolean {
-  return inspect.status === 'running';
+  return getContainerState(inspect) === 'running';
+}
+
+function getContainerState(inspect: AppleContainerInspectResult): string | undefined {
+  return typeof inspect.status === 'string' ? inspect.status : inspect.status?.state;
+}
+
+function getContainerNetworks(inspect: AppleContainerInspectResult): Array<Record<string, unknown>> | undefined {
+  return (typeof inspect.status === 'object' ? inspect.status.networks : undefined) ?? inspect.configuration?.networks;
+}
+
+function isMastraOwned(inspect: AppleContainerInspectResult, sandboxId: string): boolean {
+  const labels = inspect.configuration?.labels;
+  return labels?.['mastra.sandbox'] === 'true' && labels['mastra.sandbox.id'] === sandboxId;
 }
 
 function isMissingContainerMessage(message: string): boolean {

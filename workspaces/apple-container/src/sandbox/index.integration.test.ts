@@ -28,6 +28,14 @@ describe.skipIf(!hasAppleContainerCli)('AppleContainerSandbox integration', () =
     return sandbox;
   }
 
+  function inspectContainerState(containerId: string): string {
+    const inspect = spawnSync('container', ['inspect', containerId], { encoding: 'utf8' });
+    expect(inspect.status, inspect.stderr).toBe(0);
+
+    const [container] = JSON.parse(inspect.stdout) as Array<{ status?: string | { state?: string } }>;
+    return typeof container.status === 'string' ? container.status : (container.status?.state ?? 'unknown');
+  }
+
   afterEach(async () => {
     await Promise.allSettled(sandboxes.splice(0).map(sandbox => sandbox._destroy()));
   });
@@ -48,6 +56,7 @@ describe.skipIf(!hasAppleContainerCli)('AppleContainerSandbox integration', () =
     await sandbox._start();
     await sandbox._stop();
     expect(sandbox.status).toBe('stopped');
+    expect(inspectContainerState(sandbox.containerId)).toBe('stopped');
 
     await sandbox._start();
     const result = await sandbox.executeCommand('pwd');
@@ -68,6 +77,19 @@ describe.skipIf(!hasAppleContainerCli)('AppleContainerSandbox integration', () =
     const result = await second.executeCommand('printf reconnected');
     expect(second.status).toBe('running');
     expect(result.stdout).toBe('reconnected');
+  }, 120_000);
+
+  it('cleans up timed-out commands inside the Apple container', async () => {
+    const sandbox = createSandbox();
+
+    await sandbox._start();
+    const result = await sandbox.executeCommand('sleep', ['30'], { timeout: 100 });
+    const pgrep = await sandbox.executeCommand("pgrep -af '[s]leep 30'", [], { timeout: 5_000 });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(124);
+    expect(result.timedOut).toBe(true);
+    expect(pgrep.success).toBe(false);
   }, 120_000);
 
   it('deletes the Apple container on destroy', async () => {
