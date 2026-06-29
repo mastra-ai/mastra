@@ -3490,8 +3490,7 @@ export class Session<TState = unknown> {
       // The resume data is the user's answer (a bare string), which the approval
       // re-check would reject because it cannot carry an `{ approved }` field.
       // Exempt these tools so the answer reaches the model as-is.
-      const isInteractive =
-        suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
+      const isInteractive = suspension.toolName === 'ask_user' || suspension.toolName === 'request_access';
       if (isInteractive) {
         sharedOptions.requireToolApproval = false;
       }
