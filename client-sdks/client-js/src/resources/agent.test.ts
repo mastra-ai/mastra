@@ -1800,6 +1800,59 @@ describe('Agent Voice Resource', () => {
     expect(versionedAgent).toBeInstanceOf(Agent);
   });
 
+  it('should list suspended runs with suspendedAt as an ISO string', async () => {
+    const suspendedAt = new Date('2026-06-12T10:00:00.000Z');
+    mockFetchResponse({
+      runs: [
+        {
+          runId: 'run-123',
+          status: 'suspended',
+          threadId: 'thread-123',
+          resourceId: 'resource-123',
+          suspendedAt: suspendedAt.toISOString(),
+          toolCalls: [
+            { toolCallId: 'tool-call-123', toolName: 'findUserTool', args: { name: 'Dero' }, requiresApproval: true },
+          ],
+        },
+      ],
+      total: 1,
+    });
+
+    const result = await agent.listSuspendedRuns();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      `${clientOptions.baseUrl}/api/agents/test-agent/suspended-runs`,
+      expect.objectContaining({
+        headers: expect.objectContaining(clientOptions.headers),
+      }),
+    );
+    expect(result.total).toBe(1);
+    expect(result.runs[0]!.runId).toBe('run-123');
+    expect(result.runs[0]!.suspendedAt).toBe(suspendedAt.toISOString());
+    expect(result.runs[0]!.toolCalls[0]!.requiresApproval).toBe(true);
+  });
+
+  it('should pass suspended-run filters as query params', async () => {
+    mockFetchResponse({ runs: [], total: 0 });
+
+    const fromDate = new Date('2026-01-01T00:00:00.000Z');
+    await agent.listSuspendedRuns({
+      threadId: 'thread-123',
+      resourceId: 'resource-123',
+      fromDate,
+      perPage: 5,
+      page: 1,
+    });
+
+    const requestedUrl = new URL((global.fetch as any).mock.calls[0][0]);
+    expect(requestedUrl.pathname).toBe('/api/agents/test-agent/suspended-runs');
+    expect(requestedUrl.searchParams.get('threadId')).toBe('thread-123');
+    expect(requestedUrl.searchParams.get('resourceId')).toBe('resource-123');
+    expect(requestedUrl.searchParams.get('fromDate')).toBe(fromDate.toISOString());
+    expect(requestedUrl.searchParams.get('perPage')).toBe('5');
+    expect(requestedUrl.searchParams.get('page')).toBe('1');
+  });
+
   it('should get available speakers', async () => {
     const mockResponse = [{ voiceId: 'speaker1' }];
     mockFetchResponse(mockResponse);
