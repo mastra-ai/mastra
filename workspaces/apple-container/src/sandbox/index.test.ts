@@ -1,6 +1,7 @@
 import { SandboxExecutionError } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
+import { appleContainerSandboxProvider } from '../provider';
 import { AppleContainerSandbox, runAppleContainerCli } from './index';
 import type { AppleContainerCliResult, AppleContainerCommandRunner, AppleContainerCommandRunnerOptions } from './index';
 
@@ -53,6 +54,10 @@ function inspectResult(status: string, id = 'container-123'): Partial<AppleConta
   };
 }
 
+function missingContainerResult(): Partial<AppleContainerCliResult> {
+  return { success: false, exitCode: 1, stderr: 'container not found' };
+}
+
 describe('AppleContainerSandbox', () => {
   it('uses default identity and instructions', () => {
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner: createRunner() });
@@ -65,10 +70,7 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('creates a long-lived Apple container when none exists', async () => {
-    const runner = createRunner([
-      { success: false, exitCode: 1, stderr: 'container not found' },
-      { stdout: 'created\n' },
-    ]);
+    const runner = createRunner([missingContainerResult(), { stdout: 'created\n' }]);
     const sandbox = new AppleContainerSandbox({
       id: 'apple-test',
       image: 'python:3.12-slim',
@@ -163,7 +165,7 @@ describe('AppleContainerSandbox', () => {
 
   it('keeps status in sync when plain lifecycle methods are called', async () => {
     const runner = createRunner([
-      { success: false, exitCode: 1, stderr: 'container not found' },
+      missingContainerResult(),
       {},
       inspectResult('running'),
       {},
@@ -193,12 +195,35 @@ describe('AppleContainerSandbox', () => {
     expect(sandbox.containerId).toBe('existing-id');
   });
 
-  it('executes commands with env, cwd, timeout, streaming and retained output options', async () => {
+  it('reconnects to an existing running container without restarting it', async () => {
+    const runner = createRunner([inspectResult('running', 'existing-id')]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox._start();
+
+    expect(runner.run).toHaveBeenCalledOnce();
+    expect(runner.run).toHaveBeenCalledWith(['inspect', 'apple-test']);
+    expect(sandbox.containerId).toBe('existing-id');
+    expect(sandbox.status).toBe('running');
+  });
+
+  it('throws when reconnecting to a stopped container fails', async () => {
     const runner = createRunner([
-      { success: false, exitCode: 1, stderr: 'container not found' },
-      {},
-      { stdout: 'hello\n' },
+      inspectResult('stopped', 'existing-id'),
+      { success: false, exitCode: 5, stderr: 'start failed' },
     ]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await expect(sandbox.start()).rejects.toMatchObject({
+      name: 'SandboxExecutionError',
+      exitCode: 5,
+      stderr: 'start failed',
+    });
+    expect(sandbox.status).toBe('error');
+  });
+
+  it('executes commands with env, cwd, timeout, streaming and retained output options', async () => {
+    const runner = createRunner([missingContainerResult(), {}, { stdout: 'hello\n' }]);
     const onStdout = vi.fn();
     const sandbox = new AppleContainerSandbox({
       id: 'apple-test',
@@ -247,7 +272,7 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('quotes the command before executing through the shell', async () => {
-    const runner = createRunner([{ success: false, exitCode: 1, stderr: 'container not found' }, {}, {}]);
+    const runner = createRunner([missingContainerResult(), {}, {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await sandbox._start();
@@ -270,7 +295,7 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('preserves shell command strings when no args are provided', async () => {
-    const runner = createRunner([{ success: false, exitCode: 1, stderr: 'container not found' }, {}, {}]);
+    const runner = createRunner([missingContainerResult(), {}, {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await sandbox._start();
@@ -294,6 +319,27 @@ describe('AppleContainerSandbox', () => {
     expect(runner.run).toHaveBeenNthCalledWith(2, ['stop', 'apple-test']);
   });
 
+  it('does not stop when the container is already stopped or missing', async () => {
+    const stoppedRunner = createRunner([inspectResult('stopped')]);
+    const missingRunner = createRunner([missingContainerResult()]);
+
+    await new AppleContainerSandbox({ id: 'apple-stopped', runner: stoppedRunner }).stop();
+    await new AppleContainerSandbox({ id: 'apple-missing', runner: missingRunner }).stop();
+
+    expect(stoppedRunner.run).toHaveBeenCalledOnce();
+    expect(missingRunner.run).toHaveBeenCalledOnce();
+  });
+
+  it('ignores a missing container race while stopping', async () => {
+    const runner = createRunner([inspectResult('running'), missingContainerResult()]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox.stop();
+
+    expect(sandbox.status).toBe('stopped');
+    expect(runner.run).toHaveBeenNthCalledWith(2, ['stop', 'apple-test']);
+  });
+
   it('deletes existing containers on destroy by default', async () => {
     const runner = createRunner([inspectResult('running'), {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
@@ -301,6 +347,26 @@ describe('AppleContainerSandbox', () => {
     await sandbox.destroy();
 
     expect(runner.run).toHaveBeenNthCalledWith(1, ['inspect', 'apple-test']);
+    expect(runner.run).toHaveBeenNthCalledWith(2, ['delete', '--force', 'apple-test']);
+  });
+
+  it('does not delete when the container is missing', async () => {
+    const runner = createRunner([missingContainerResult()]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox.destroy();
+
+    expect(sandbox.status).toBe('destroyed');
+    expect(runner.run).toHaveBeenCalledOnce();
+  });
+
+  it('ignores a missing container race while deleting', async () => {
+    const runner = createRunner([inspectResult('running'), missingContainerResult()]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox.destroy();
+
+    expect(sandbox.status).toBe('destroyed');
     expect(runner.run).toHaveBeenNthCalledWith(2, ['delete', '--force', 'apple-test']);
   });
 
@@ -344,9 +410,21 @@ describe('AppleContainerSandbox', () => {
     });
   });
 
+  it('throws when inspect fails for an unexpected reason', async () => {
+    const runner = createRunner([{ success: false, exitCode: 7, stderr: 'container service unavailable' }]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await expect(sandbox.start()).rejects.toMatchObject({
+      name: 'SandboxExecutionError',
+      exitCode: 7,
+      stderr: 'container service unavailable',
+    });
+    expect(sandbox.status).toBe('error');
+  });
+
   it('throws SandboxExecutionError when create fails', async () => {
     const runner = createRunner([
-      { success: false, exitCode: 1, stderr: 'container not found' },
+      missingContainerResult(),
       { success: false, exitCode: 2, stderr: 'bad image' },
     ]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
@@ -357,6 +435,43 @@ describe('AppleContainerSandbox', () => {
       stderr: 'bad image',
     });
     expect(sandbox.status).toBe('error');
+  });
+});
+
+describe('appleContainerSandboxProvider', () => {
+  it('describes the Apple container sandbox provider', () => {
+    expect(appleContainerSandboxProvider.id).toBe('apple-container');
+    expect(appleContainerSandboxProvider.name).toBe('Apple Container Sandbox');
+    expect(appleContainerSandboxProvider.description).toContain('Apple container');
+  });
+
+  it('creates an AppleContainerSandbox from serializable config', () => {
+    const sandbox = appleContainerSandboxProvider.createSandbox({
+      image: 'node:22-slim',
+      env: { NODE_ENV: 'test' },
+      readonlyRootfs: true,
+      containerBinary: 'container',
+    });
+
+    expect(sandbox).toBeInstanceOf(AppleContainerSandbox);
+  });
+
+  it('exposes schema entries for lifecycle, command, and runtime options', () => {
+    expect((appleContainerSandboxProvider.configSchema as any)?.properties).toEqual(
+      expect.objectContaining({
+        image: expect.any(Object),
+        command: expect.any(Object),
+        env: expect.any(Object),
+        volumes: expect.any(Object),
+        workingDir: expect.any(Object),
+        timeout: expect.any(Object),
+        deleteOnDestroy: expect.any(Object),
+        containerBinary: expect.any(Object),
+        readonlyRootfs: expect.any(Object),
+        capAdd: expect.any(Object),
+        capDrop: expect.any(Object),
+      }),
+    );
   });
 });
 
@@ -390,6 +505,33 @@ describe('runAppleContainerCli', () => {
     expect(result.stderrTruncated).toBe(true);
     expect(result.stdoutDroppedBytes).toBe(6);
     expect(result.stderrDroppedBytes).toBe(6);
+  });
+
+  it('times out and marks the command as killed', async () => {
+    const result = await runAppleContainerCli(process.execPath, ['-e', 'setTimeout(() => {}, 1000);'], {
+      timeout: 10,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.timedOut).toBe(true);
+    expect(result.killed).toBe(true);
+  });
+
+  it('aborts a running command', async () => {
+    const controller = new AbortController();
+    const resultPromise = runAppleContainerCli(process.execPath, ['-e', 'setTimeout(() => {}, 1000);'], {
+      abortSignal: controller.signal,
+    });
+
+    controller.abort();
+
+    const result = await resultPromise;
+    expect(result.success).toBe(false);
+    expect(result.killed).toBe(true);
+  });
+
+  it('validates retained output limits with the shared process handle rules', () => {
+    expect(() => runAppleContainerCli(process.execPath, ['--version'], { maxRetainedBytes: -1 })).toThrow(RangeError);
   });
 
   it('rejects with SandboxExecutionError when the CLI binary is missing', async () => {

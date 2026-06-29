@@ -9,6 +9,9 @@
  */
 
 import { spawn } from 'node:child_process';
+import type { ChildProcessByStdio } from 'node:child_process';
+import type { Readable } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
@@ -18,9 +21,8 @@ import type {
   ProviderStatus,
   SandboxInfo,
 } from '@mastra/core/workspace';
-import { MastraSandbox, SandboxExecutionError } from '@mastra/core/workspace';
+import { MastraSandbox, ProcessHandle, SandboxExecutionError } from '@mastra/core/workspace';
 
-const LOG_PREFIX = '[AppleContainerSandbox]';
 const DEFAULT_COMMAND_TIMEOUT_MS = 300_000;
 const DEFAULT_IMAGE = 'node:22-slim';
 const DEFAULT_COMMAND = ['sleep', 'infinity'];
@@ -402,9 +404,8 @@ export class AppleContainerSandbox extends MastraSandbox {
   private async _inspectContainer(): Promise<AppleContainerInspectResult | undefined> {
     const result = await this._runner.run(['inspect', this.containerId]);
     if (!result.success) {
-      if (!isMissingContainerMessage(result.stderr)) {
-        this.logger.debug(`${LOG_PREFIX} inspect failed for ${this.containerId}: ${result.stderr}`);
-      }
+      if (isMissingContainerMessage(result.stderr)) return undefined;
+      this._assertSuccess(result, `inspect Apple container ${this.containerId}`);
       return undefined;
     }
 
@@ -473,97 +474,152 @@ export function runAppleContainerCli(
   args: string[],
   options: AppleContainerCommandRunnerOptions = {},
 ): Promise<AppleContainerCliResult> {
-  const startedAt = Date.now();
+  const handle = new AppleContainerCliProcess(binary, args, options);
+  return handle.wait() as Promise<AppleContainerCliResult>;
+}
 
-  return new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
-    let stdoutDroppedBytes = 0;
-    let stderrDroppedBytes = 0;
-    let settled = false;
-    let killed = false;
-    let timedOut = false;
+class AppleContainerCliProcess extends ProcessHandle {
+  readonly pid: string;
+  exitCode: number | undefined;
 
-    const child = spawn(binary, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+  private readonly child: ChildProcessByStdio<null, Readable, Readable>;
+  private readonly waitPromise: Promise<AppleContainerCliResult>;
+  private readonly startedAt = Date.now();
+  private killed = false;
+  private timedOut = false;
+  private forceKillTimeout: NodeJS.Timeout | undefined;
+
+  constructor(binary: string, args: string[], options: AppleContainerCommandRunnerOptions = {}) {
+    super({
+      maxRetainedBytes: options.maxRetainedBytes ?? Infinity,
+      onStdout: options.onStdout,
+      onStderr: options.onStderr,
     });
 
-    const finish = (exitCode: number): void => {
-      if (settled) return;
-      settled = true;
-      resolve({
+    this.child = spawn(binary, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    this.pid = this.child.pid ? String(this.child.pid) : `${binary}:${args.join(' ')}`;
+
+    let settled = false;
+    const stdoutDecoder = new StringDecoder();
+    const stderrDecoder = new StringDecoder();
+    let stdoutDecoderEnded = false;
+    let stderrDecoderEnded = false;
+    let timeout: NodeJS.Timeout | undefined;
+    const onAbort = (): void => {
+      void this.kill();
+    };
+
+    const flushStdout = (): void => {
+      if (stdoutDecoderEnded) return;
+      stdoutDecoderEnded = true;
+      const data = stdoutDecoder.end();
+      if (data) this.emitStdout(data);
+    };
+    const flushStderr = (): void => {
+      if (stderrDecoderEnded) return;
+      stderrDecoderEnded = true;
+      const data = stderrDecoder.end();
+      if (data) this.emitStderr(data);
+    };
+
+    const finish = (exitCode: number): AppleContainerCliResult => {
+      this.exitCode = exitCode;
+      return {
         success: exitCode === 0,
         exitCode,
-        stdout,
-        stderr,
-        executionTimeMs: Date.now() - startedAt,
-        killed,
-        timedOut,
-        ...(stdoutDroppedBytes > 0 && { stdoutTruncated: true, stdoutDroppedBytes }),
-        ...(stderrDroppedBytes > 0 && { stderrTruncated: true, stderrDroppedBytes }),
+        stdout: this.stdout,
+        stderr: this.stderr,
+        executionTimeMs: Date.now() - this.startedAt,
+        killed: this.killed,
+        timedOut: this.timedOut,
+      };
+    };
+
+    const cleanup = (): void => {
+      if (timeout) clearTimeout(timeout);
+      if (this.forceKillTimeout) clearTimeout(this.forceKillTimeout);
+      options.abortSignal?.removeEventListener('abort', onAbort);
+    };
+
+    this.waitPromise = new Promise((resolve, reject) => {
+      const settle = (callback: () => void): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        callback();
+      };
+
+      this.child.stdout.on('data', (chunk: Buffer) => {
+        const data = stdoutDecoder.write(chunk);
+        if (data) this.emitStdout(data);
       });
-    };
+      this.child.stderr.on('data', (chunk: Buffer) => {
+        const data = stderrDecoder.write(chunk);
+        if (data) this.emitStderr(data);
+      });
 
-    const kill = (): void => {
-      if (child.killed) return;
-      killed = true;
-      child.kill('SIGTERM');
-      setTimeout(() => {
-        if (!settled && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-      }, 1000).unref();
-    };
+      this.child.stdout.on('end', flushStdout);
+      this.child.stderr.on('end', flushStderr);
 
-    let timeout: NodeJS.Timeout | undefined;
-    if (options.timeout && options.timeout > 0) {
-      timeout = setTimeout(() => {
-        timedOut = true;
-        kill();
-      }, options.timeout);
-    }
+      this.child.on('error', error => {
+        settle(() => {
+          flushStdout();
+          flushStderr();
+          reject(
+            error instanceof Error && 'code' in error && error.code === 'ENOENT'
+              ? new SandboxExecutionError(`Apple container CLI not found: ${binary}`, 127, this.stdout, error.message)
+              : error,
+          );
+        });
+      });
 
-    const onAbort = (): void => kill();
+      this.child.on('close', code => {
+        settle(() => {
+          flushStdout();
+          flushStderr();
+          resolve(finish(code ?? (this.killed ? 137 : 1)));
+        });
+      });
+    });
+
+    timeout =
+      options.timeout && options.timeout > 0
+        ? setTimeout(() => {
+            this.timedOut = true;
+            void this.kill();
+          }, options.timeout)
+        : undefined;
     if (options.abortSignal) {
       if (options.abortSignal.aborted) {
-        kill();
+        void this.kill();
       } else {
         options.abortSignal.addEventListener('abort', onAbort, { once: true });
       }
     }
+  }
 
-    child.stdout?.on('data', (chunk: Buffer) => {
-      const data = chunk.toString('utf8');
-      const retained = appendRetainedOutput(stdout, stdoutDroppedBytes, data, options.maxRetainedBytes);
-      stdout = retained.output;
-      stdoutDroppedBytes = retained.droppedBytes;
-      options.onStdout?.(data);
-    });
+  async wait(): Promise<AppleContainerCliResult> {
+    return this.waitPromise;
+  }
 
-    child.stderr?.on('data', (chunk: Buffer) => {
-      const data = chunk.toString('utf8');
-      const retained = appendRetainedOutput(stderr, stderrDroppedBytes, data, options.maxRetainedBytes);
-      stderr = retained.output;
-      stderrDroppedBytes = retained.droppedBytes;
-      options.onStderr?.(data);
-    });
+  async kill(): Promise<boolean> {
+    if (this.exitCode !== undefined || this.child.killed) return false;
+    this.killed = true;
+    this.child.kill('SIGTERM');
+    this.forceKillTimeout = setTimeout(() => {
+      if (this.exitCode === undefined && this.child.exitCode === null && this.child.signalCode === null) {
+        this.child.kill('SIGKILL');
+      }
+    }, 1000);
+    this.forceKillTimeout.unref();
+    return true;
+  }
 
-    child.on('error', error => {
-      if (settled) return;
-      settled = true;
-      if (timeout) clearTimeout(timeout);
-      options.abortSignal?.removeEventListener('abort', onAbort);
-      reject(
-        error instanceof Error && 'code' in error && error.code === 'ENOENT'
-          ? new SandboxExecutionError(`Apple container CLI not found: ${binary}`, 127, stdout, error.message)
-          : error,
-      );
-    });
-
-    child.on('close', code => {
-      if (timeout) clearTimeout(timeout);
-      options.abortSignal?.removeEventListener('abort', onAbort);
-      finish(code ?? (killed ? 137 : 1));
-    });
-  });
+  async sendStdin(): Promise<void> {
+    throw new Error('Apple container CLI runner does not support stdin');
+  }
 }
 
 function generateId(): string {
@@ -578,39 +634,6 @@ function sanitizeContainerName(name: string): string {
 function shellQuote(arg: string): string {
   if (/^[a-zA-Z0-9._\-\/=:@]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;
-}
-
-function appendRetainedOutput(
-  currentOutput: string,
-  currentDroppedBytes: number,
-  chunk: string,
-  maxRetainedBytes: number | undefined,
-): { output: string; droppedBytes: number } {
-  if (maxRetainedBytes === undefined || maxRetainedBytes === Infinity) {
-    return { output: currentOutput + chunk, droppedBytes: currentDroppedBytes };
-  }
-  if (maxRetainedBytes <= 0) {
-    return { output: '', droppedBytes: currentDroppedBytes + Buffer.byteLength(chunk) };
-  }
-
-  let output = currentOutput + chunk;
-  let outputBytes = Buffer.byteLength(output);
-  if (outputBytes <= maxRetainedBytes) {
-    return { output, droppedBytes: currentDroppedBytes };
-  }
-
-  let droppedBytes = currentDroppedBytes;
-  while (output.length > 0 && outputBytes > maxRetainedBytes) {
-    const firstCodePoint = output.codePointAt(0);
-    if (firstCodePoint === undefined) break;
-    const firstChar = String.fromCodePoint(firstCodePoint);
-    output = output.slice(firstChar.length);
-    const byteLength = Buffer.byteLength(firstChar);
-    outputBytes -= byteLength;
-    droppedBytes += byteLength;
-  }
-
-  return { output, droppedBytes };
 }
 
 function envFlags(env: Record<string, string | undefined>): string[] {

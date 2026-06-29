@@ -6,38 +6,39 @@ import type { SandboxProvider } from '@mastra/core/editor';
 import { AppleContainerSandbox } from './sandbox';
 import type { AppleContainerSandboxOptions } from './sandbox';
 
-export interface AppleContainerProviderConfig {
-  image?: string;
-  name?: string;
-  command?: string[];
-  env?: Record<string, string>;
-  volumes?: Record<string, string>;
-  mounts?: string[];
-  network?: string;
-  publishedPorts?: string[];
-  publishedSockets?: string[];
-  cpus?: number | string;
-  memory?: string;
-  platform?: string;
-  arch?: string;
-  os?: string;
-  rosetta?: boolean;
-  readonlyRootfs?: boolean;
-  ssh?: boolean;
-  init?: boolean;
-  virtualization?: boolean;
-  capAdd?: string[];
-  capDrop?: string[];
-  tmpfs?: string[];
-  dns?: string[];
-  dnsSearch?: string[];
-  noDns?: boolean;
-  labels?: Record<string, string>;
-  workingDir?: string;
-  timeout?: number;
-  deleteOnDestroy?: boolean;
-  containerBinary?: string;
-}
+export type AppleContainerProviderConfig = Pick<
+  AppleContainerSandboxOptions,
+  | 'image'
+  | 'name'
+  | 'command'
+  | 'env'
+  | 'volumes'
+  | 'mounts'
+  | 'network'
+  | 'publishedPorts'
+  | 'publishedSockets'
+  | 'cpus'
+  | 'memory'
+  | 'platform'
+  | 'arch'
+  | 'os'
+  | 'rosetta'
+  | 'readonlyRootfs'
+  | 'ssh'
+  | 'init'
+  | 'virtualization'
+  | 'capAdd'
+  | 'capDrop'
+  | 'tmpfs'
+  | 'dns'
+  | 'dnsSearch'
+  | 'noDns'
+  | 'labels'
+  | 'workingDir'
+  | 'timeout'
+  | 'deleteOnDestroy'
+  | 'containerBinary'
+>;
 
 export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProviderConfig> = {
   id: 'apple-container',
