@@ -38,12 +38,23 @@
     "explorations/**",
     ".github/scripts",
     "templates/**",
-    "**/examples/**",
     "**/_examples/**",
     ".claude/skills/**/assets/**/package.json",
     "e2e-tests/**/template/package.json"
   ],
   "packageRules": [
+    {
+      "description": "Disable all dependency updates in examples (Renovate previously ignored these via ignorePaths)",
+      "matchFileNames": ["examples/**/package.json"],
+      "enabled": false
+    },
+    {
+      "description": "Keep zod in examples in sync with the catalog to prevent version collision with workspace-linked @mastra packages (TS2589/OOM)",
+      "matchFileNames": ["examples/**/package.json"],
+      "matchPackageNames": ["zod"],
+      "enabled": true,
+      "groupName": "Schema"
+    },
     {
       "matchDepTypes": ["engines"],
       "enabled": false
