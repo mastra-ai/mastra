@@ -10,10 +10,21 @@ export type {
   VoiceTurnCompleteHook,
   AgentReplyGeneratorOptions,
 } from './bridge';
-export { createWorkflowReplyGenerator, unwrapStepText } from './workflow-generator';
-export type { WorkflowReplyGeneratorOptions } from './workflow-generator';
+export {
+  createWorkflowReplyGenerator,
+  pipeAgentReplyToWriter,
+  unwrapStepText,
+  unwrapStepToolCall,
+} from './workflow-generator';
+export type { WorkflowReplyGeneratorOptions, AgentReplyStreamLike } from './workflow-generator';
 export { createLiveKitWorker } from './worker';
-export type { CreateLiveKitWorkerOptions, ResolveMastraAgentArgs, SessionStartArgs } from './worker';
+export type {
+  CreateLiveKitWorkerOptions,
+  ResolveMastraAgentArgs,
+  SessionStartArgs,
+  VoiceCallEndArgs,
+  VoiceCallEndHook,
+} from './worker';
 export { runLiveKitWorker, resolveWorkerEntryPath } from './run';
 export type { RunLiveKitWorkerOptions } from './run';
 export { startVoiceCallObservability } from './observability';

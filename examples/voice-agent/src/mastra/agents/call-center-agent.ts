@@ -1,7 +1,4 @@
 import { Agent } from '@mastra/core/agent';
-import { LibSQLVector } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
-import { z } from 'zod';
 import {
   bookAppointment,
   cancelAppointment,
@@ -10,7 +7,7 @@ import {
   rescheduleAppointment,
 } from '../tools/call-center-tools';
 import { checkServiceArea, finalizeIntake } from '../tools/intake-tools';
-import { voiceAgentDbUrl } from '../db';
+import { callCenterMemory } from '../memory';
 import { workspaceContextProcessor } from '../processors/workspace-context';
 
 export const callCenterAgent = new Agent({
@@ -46,7 +43,11 @@ Memory and pace, because this is a live call:
 At the END of the call, once you have everything, call finalizeIntake exactly once with the scenario ("lead", "inspection", or "callback") and the collected fields. It reconciles and submits the record and returns a reference number to read back — or it tells you what is still missing or that the address is out of area, which you must resolve before saying goodbye. Existing-customer scheduling handled with the booking tools does not need finalizeIntake.
 
 Stay warm and professional. If a request is outside trades work, scheduling, or accounts, offer to take a callback.`,
-  model: 'openai/gpt-5-mini',
+  // Fast, NON-reasoning model for the voice loop — time-to-first-token is what the caller hears.
+  // A reasoning model (e.g. gpt-5-mini) spends several seconds "thinking" before it speaks on
+  // every turn and every tool round-trip, which dominates conversational latency. Uses
+  // OPENAI_API_KEY; swap for another fast model (e.g. a Gemini Flash) if you prefer.
+  model: 'openai/gpt-4.1-mini',
   tools: {
     lookupCustomer,
     checkAvailability,
@@ -58,66 +59,8 @@ Stay warm and professional. If a request is outside trades work, scheduling, or 
   },
   // Deterministic per-turn tenant context, injected before the model runs (mock "Firebase").
   inputProcessors: [workspaceContextProcessor],
-  // Three layers of memory, scoped to the caller (`resource`) so they carry across calls:
-  //   1. working memory — the structured fields collected during THIS call (see schema below)
-  //   2. semantic recall — pulls the most relevant snippets of PRIOR calls into context
-  //   3. observational memory — accumulates durable facts about the caller in the background
-  // Storage is inherited from the Mastra instance; the vector index for semantic recall has to
-  // be passed explicitly. Both live in the same `voice-agent.db` file (see ../db).
-  memory: new Memory({
-    // Semantic recall needs a vector index + an embedder. We reuse the OpenAI router that
-    // already serves the agent model, so the example runs with just OPENAI_API_KEY. The
-    // embedding is one small, LRU-cached network call per turn; if you need to shave that
-    // round-trip, swap in a local embedder (e.g. `@mastra/fastembed`).
-    vector: new LibSQLVector({ id: 'voice-agent-recall', url: voiceAgentDbUrl }),
-    embedder: 'openai/text-embedding-3-small',
-    options: {
-      lastMessages: 20,
-      // Cross-call recall for returning callers. Kept deliberately small (topK: 3, tight
-      // message range) because recall runs synchronously before the reply — every extra
-      // hit is latency the caller waits through. `scope: 'resource'` searches all of this
-      // caller's past calls, not just the current one.
-      semanticRecall: {
-        topK: 3,
-        messageRange: { before: 1, after: 1 },
-        scope: 'resource',
-      },
-      // Durable, free-form facts about the caller, distilled by a background Observer agent
-      // and injected into later calls. This runs OFF the turn's critical path — it never
-      // delays a reply. The default model is Gemini Flash; we point it at the OpenAI model
-      // the example is already set up for. `messageTokens` is lowered far below the 30k
-      // default so the Observer fires within a single short demo call (a live test stalled
-      // at ~1280 tokens against the old 1500 threshold and never distilled); raise it in
-      // production, and route it to a cheap fast model (in a Gemini stack, Flash).
-      observationalMemory: {
-        scope: 'resource',
-        model: 'openai/gpt-5-mini',
-        observation: { messageTokens: 500 },
-      },
-      workingMemory: {
-        enabled: true,
-        scope: 'resource',
-        // Fields are `.nullish()` (accept null and undefined), not `.optional()`: the model
-        // updates the whole working-memory object each turn and emits `null` for fields it
-        // doesn't know yet. A bare `.optional()` boolean rejects that null and drops the write.
-        schema: z.object({
-          callerName: z.string().nullish().describe("The caller's full name"),
-          callerPhone: z.string().nullish().describe("The caller's phone number"),
-          scenario: z
-            .enum(['lead', 'inspection', 'callback', 'existing_job'])
-            .nullish()
-            .describe('Which call path this is'),
-          trade: z.string().nullish().describe('The trade the caller needs, if any'),
-          jobDescription: z.string().nullish().describe('Short description of the work'),
-          propertyAddress: z.string().nullish().describe('Property street address'),
-          zip: z.string().nullish().describe('Property zip code'),
-          serviceAreaConfirmed: z
-            .boolean()
-            .nullish()
-            .describe('Whether the zip was confirmed inside the service area'),
-          notes: z.string().nullish().describe('Anything else worth remembering for next time'),
-        }),
-      },
-    },
-  }),
+  // Three caller-scoped memory layers (working memory, semantic recall, observational memory),
+  // defined once in ../memory and shared with the workflow worker so both entrypoints read and
+  // write the same caller history. Storage is inherited from the Mastra instance.
+  memory: callCenterMemory,
 });

@@ -29,6 +29,11 @@ export interface VoiceTurnContext {
   /**
    * The messages to generate a reply from. With Mastra Memory on, only the messages new since
    * the agent last spoke (history comes from the thread); with memory off, the full session.
+   *
+   * For a workflow / custom generator: pass these straight to a memory-backed `agent.stream(...,
+   * { memory })` inside a step so the agent backfills history from the thread (no duplication). A
+   * stateless workflow that wants the entire transcript every turn should read `chatCtx` instead
+   * (e.g. `chatContextToMessages(chatCtx)`), since there is no thread to backfill from.
    */
   messages: VoiceTurnMessage[];
   /** The raw LiveKit chat context, for generators that want the full transcript or message parts. */
@@ -193,18 +198,20 @@ export interface MastraVoiceAgentOptions {
   /** Request context entries forwarded to generation. */
   requestContext?: RequestContext | Record<string, unknown>;
   /**
-   * Called when the Mastra agent starts a tool call mid-reply (agent generator only). Return a
-   * short phrase (e.g. "Let me look that up.") to speak it while the tool runs; it also appears
-   * in the transcript. Return nothing to stay silent.
+   * Called when the Mastra agent starts a tool call mid-reply. Return a short phrase (e.g. "Let
+   * me look that up.") to speak it while the tool runs; it also appears in the transcript. Return
+   * nothing to stay silent. Applies to the agent generator built here; the workflow generator
+   * takes its own equivalent via `createWorkflowReplyGenerator`.
    */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
   /**
-   * Called once per turn after the reply has finished streaming to text-to-speech (agent
-   * generator only). Runs off the audio path and fire-and-forget — the turn does not await it —
-   * so post-turn memory maintenance, CRM writes, or analytics never delay the caller or the next
-   * turn. The context carries the produced reply ({@link VoiceTurnResult}) and the resolved
-   * `memory` mapping, so this is where a truly non-blocking `memory.updateWorkingMemory(...)`
-   * belongs. A thrown error or rejected promise is logged, not propagated.
+   * Called once per turn after the reply has finished streaming to text-to-speech. Runs off the
+   * audio path and fire-and-forget — the turn does not await it — so post-turn memory
+   * maintenance, CRM writes, or analytics never delay the caller or the next turn. The context
+   * carries the produced reply ({@link VoiceTurnResult}) and the resolved `memory` mapping, so
+   * this is where a truly non-blocking `memory.updateWorkingMemory(...)` belongs. A thrown error
+   * or rejected promise is logged, not propagated. Applies to the agent generator built here; the
+   * workflow generator takes its own via `createWorkflowReplyGenerator`.
    */
   onTurnComplete?: VoiceTurnCompleteHook;
   /** Extra options merged into every `agent.stream()` call (agent generator only). */

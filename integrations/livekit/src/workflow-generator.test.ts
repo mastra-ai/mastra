@@ -1,8 +1,14 @@
+import { WritableStream } from 'node:stream/web';
 import type { ReadableStream } from 'node:stream/web';
 import { llm } from '@livekit/agents';
 import { describe, expect, it, vi } from 'vitest';
 import type { VoiceTurnContext } from './bridge';
-import { createWorkflowReplyGenerator, unwrapStepText } from './workflow-generator';
+import {
+  createWorkflowReplyGenerator,
+  pipeAgentReplyToWriter,
+  unwrapStepText,
+  unwrapStepToolCall,
+} from './workflow-generator';
 
 interface FakeChunk {
   type: string;
@@ -15,12 +21,20 @@ interface FakeChunk {
  * so cancellation can be exercised; `throwError` makes the fullStream throw after the chunks.
  */
 function fakeWorkflow(chunks: FakeChunk[], opts: { result?: unknown; park?: boolean; throwError?: Error } = {}) {
-  const cancel = vi.fn(async () => {});
-  const stream = vi.fn((_args: { inputData: unknown; tracingContext?: unknown }) => ({
+  // When parked, the stream stays open after the last chunk until `cancel` releases it — modeling
+  // a real run that ends when `run.cancel()` tears it down on barge-in.
+  let releasePark: () => void = () => {};
+  const cancel = vi.fn(async () => {
+    releasePark();
+  });
+  const stream = vi.fn((_args: { inputData: unknown; tracingContext?: unknown; requestContext?: unknown }) => ({
     fullStream: (async function* () {
       for (const chunk of chunks) yield chunk;
       if (opts.throwError) throw opts.throwError;
-      if (opts.park) await new Promise<void>(() => {});
+      if (opts.park)
+        await new Promise<void>(resolve => {
+          releasePark = resolve;
+        });
     })(),
     result: Promise.resolve(opts.result),
   }));
@@ -28,6 +42,11 @@ function fakeWorkflow(chunks: FakeChunk[], opts: { result?: unknown; park?: bool
   const workflow = { id: 'wf', createRun } as unknown as Parameters<typeof createWorkflowReplyGenerator>[0]['workflow'];
   return { workflow, createRun, stream, cancel };
 }
+
+const toolCallOutput = (toolCallId: string, toolName: string, args?: unknown): FakeChunk => ({
+  type: 'workflow-step-output',
+  payload: { output: { type: 'tool-call', payload: { toolCallId, toolName, args } }, stepName: 'generateResponse' },
+});
 
 function turnContext(overrides: Partial<VoiceTurnContext> = {}): VoiceTurnContext {
   return {
@@ -67,6 +86,71 @@ describe('unwrapStepText', () => {
     expect(unwrapStepText({ type: 'tool-call', payload: {} })).toBeUndefined();
     expect(unwrapStepText(42)).toBeUndefined();
     expect(unwrapStepText(undefined)).toBeUndefined();
+  });
+});
+
+describe('unwrapStepToolCall', () => {
+  it('unwraps a tool-call chunk (agent fullStream piped to writer)', () => {
+    expect(
+      unwrapStepToolCall({ type: 'tool-call', payload: { toolCallId: 't1', toolName: 'lookup', args: { q: 1 } } }),
+    ).toEqual({
+      toolCallId: 't1',
+      toolName: 'lookup',
+      args: { q: 1 },
+    });
+  });
+
+  it('returns undefined for text and unrelated shapes', () => {
+    expect(unwrapStepToolCall('hello')).toBeUndefined();
+    expect(unwrapStepToolCall({ type: 'text-delta', payload: { text: 'x' } })).toBeUndefined();
+    expect(unwrapStepToolCall({ type: 'tool-call', payload: { toolName: 'lookup' } })).toBeUndefined();
+    expect(unwrapStepToolCall(undefined)).toBeUndefined();
+  });
+});
+
+describe('pipeAgentReplyToWriter', () => {
+  const fakeAgentStream = (chunks: FakeChunk[]) => ({
+    fullStream: (async function* () {
+      for (const c of chunks) yield c;
+    })(),
+  });
+
+  it('forwards only text-delta and tool-call chunks and returns the accumulated text', async () => {
+    const written: FakeChunk[] = [];
+    const writer = new WritableStream<unknown>({
+      write: c => {
+        written.push(c as FakeChunk);
+      },
+    });
+    const stream = fakeAgentStream([
+      { type: 'text-start' },
+      { type: 'text-delta', payload: { text: 'Hello ' } },
+      { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'lookup', args: { q: 1 } } },
+      { type: 'reasoning-delta', payload: { text: 'thinking' } },
+      { type: 'text-delta', payload: { text: 'world' } },
+      { type: 'finish' },
+    ]);
+    const text = await pipeAgentReplyToWriter(stream, writer);
+    expect(text).toBe('Hello world');
+    expect(written.map(c => c.type)).toEqual(['text-delta', 'tool-call', 'text-delta']);
+    // The forwarded chunks are exactly what the workflow generator unwraps on the read side.
+    expect(unwrapStepText(written[0])).toBe('Hello ');
+    expect(unwrapStepToolCall(written[1])).toEqual({ toolCallId: 't1', toolName: 'lookup', args: { q: 1 } });
+  });
+
+  it('skips empty text deltas', async () => {
+    const written: FakeChunk[] = [];
+    const writer = new WritableStream<unknown>({
+      write: c => {
+        written.push(c as FakeChunk);
+      },
+    });
+    const stream = fakeAgentStream([
+      { type: 'text-delta', payload: { text: '' } },
+      { type: 'text-delta', payload: { text: 'Hi' } },
+    ]);
+    expect(await pipeAgentReplyToWriter(stream, writer)).toBe('Hi');
+    expect(written).toHaveLength(1);
   });
 });
 
@@ -156,5 +240,65 @@ describe('createWorkflowReplyGenerator', () => {
     const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}) });
     const result = await generate(turnContext());
     await expect(readAll(result!)).rejects.toThrow('boom');
+  });
+
+  it('threads requestContext into run.stream when present', async () => {
+    const { workflow, stream } = fakeWorkflow([stepOutput('ok')]);
+    const requestContext = { get: () => undefined } as unknown as VoiceTurnContext['requestContext'];
+    const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}) });
+    await readAll((await generate(turnContext({ requestContext })))!);
+    expect(stream).toHaveBeenCalledWith(expect.objectContaining({ requestContext }));
+  });
+
+  it('surfaces tool calls and speaks toolFeedback filler from fullStream tool-call outputs', async () => {
+    const toolFeedback = vi.fn(({ toolName }: { toolName: string }) =>
+      toolName === 'lookup' ? 'One moment.' : undefined,
+    );
+    const { workflow } = fakeWorkflow([toolCallOutput('t1', 'lookup', { q: 1 }), stepOutput('Found it.')]);
+    const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}), toolFeedback });
+    const result = await generate(turnContext());
+    // Filler is enqueued before the reply text, with a trailing space added.
+    expect(await readAll(result!)).toEqual(['One moment. ', 'Found it.']);
+    expect(toolFeedback).toHaveBeenCalledWith({ toolCallId: 't1', toolName: 'lookup', args: { q: 1 } });
+  });
+
+  it('fires onTurnComplete with the produced text and surfaced tool calls', async () => {
+    const onTurnComplete = vi.fn();
+    const { workflow } = fakeWorkflow([toolCallOutput('t1', 'lookup'), stepOutput('Hello '), stepOutput('world')]);
+    const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}), onTurnComplete });
+    await readAll((await generate(turnContext()))!);
+    await vi.waitFor(() => expect(onTurnComplete).toHaveBeenCalledTimes(1));
+    expect(onTurnComplete.mock.calls[0]![0].result).toEqual({
+      text: 'Hello world',
+      toolCalls: [{ toolCallId: 't1', toolName: 'lookup', args: undefined }],
+      interrupted: false,
+    });
+  });
+
+  it('fires onTurnComplete with interrupted: true on barge-in', async () => {
+    const onTurnComplete = vi.fn();
+    const { workflow } = fakeWorkflow([stepOutput('Hello ')], { park: true });
+    const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}), onTurnComplete });
+    const result = await generate(turnContext());
+    const reader = result!.getReader();
+    expect((await reader.read()).value).toBe('Hello ');
+    await reader.cancel();
+    await vi.waitFor(() => expect(onTurnComplete).toHaveBeenCalledTimes(1));
+    expect(onTurnComplete.mock.calls[0]![0].result.interrupted).toBe(true);
+    expect(onTurnComplete.mock.calls[0]![0].result.text).toBe('Hello ');
+  });
+
+  it('logs and swallows a throwing onTurnComplete hook without breaking the turn', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const onTurnComplete = vi.fn(() => {
+      throw new Error('hook boom');
+    });
+    const { workflow } = fakeWorkflow([stepOutput('Hello')]);
+    const generate = createWorkflowReplyGenerator({ workflow, workflowInput: () => ({}), onTurnComplete });
+    expect(await readAll((await generate(turnContext()))!)).toEqual(['Hello']);
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith('@mastra/livekit: onTurnComplete hook threw', expect.any(Error)),
+    );
+    warn.mockRestore();
   });
 });

@@ -2,6 +2,7 @@ import { defineAgent, InferenceRunner, voice } from '@livekit/agents';
 import type { JobContext, JobProcess, VAD } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
+import type { MastraMemory } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import type { Workflow } from '@mastra/core/workflows';
 import { createMastraVoiceAgent } from './bridge';
@@ -43,6 +44,33 @@ export interface SessionStartArgs {
   agent: MastraVoiceAgent;
   metadata: LiveKitSessionMetadata;
 }
+
+/** Context handed to {@link CreateLiveKitWorkerOptions.onCallEnd} when the call ends. */
+export interface VoiceCallEndArgs {
+  /** Resolved memory mapping for the call (thread/resource), or `false` if memory was disabled. */
+  memory: MastraVoiceAgentMemory | false;
+  /**
+   * The `Memory` instance backing the call, or `null`. On the agent path it's the agent's
+   * (storage-equipped) memory; on the workflow/custom path it's the resolved `memoryInstance`. Use
+   * it for end-of-call maintenance — e.g. flush observational memory off the audio path.
+   */
+  memoryInstance: MastraMemory | null;
+  /** Dispatch metadata for the call. */
+  metadata: LiveKitSessionMetadata;
+  /** Request context for the call, if any. */
+  requestContext?: RequestContext;
+  /** The LiveKit room name. */
+  roomName: string;
+  /** The LiveKit job context, for advanced teardown needs. */
+  ctx: JobContext;
+}
+
+/**
+ * Fired once when the call ends. Runs off the audio path inside LiveKit's shutdown grace window,
+ * and — unlike the per-turn {@link MastraVoiceAgentOptions.onTurnComplete} — it is AWAITED, so the
+ * work completes before the worker process exits. A thrown error is logged, not propagated.
+ */
+export type VoiceCallEndHook = (args: VoiceCallEndArgs) => void | Promise<void>;
 
 export interface CreateLiveKitWorkerOptions {
   /** The Mastra instance whose agents handle voice sessions. */
@@ -97,15 +125,40 @@ export interface CreateLiveKitWorkerOptions {
    * Pass `false` to disable, or a function to customize.
    */
   memory?: false | ((args: ResolveMastraAgentArgs & { roomName: string }) => MastraVoiceAgentMemory | false);
-  /** Spoken while a Mastra tool call runs. See {@link MastraVoiceAgentOptions.toolFeedback}. */
+  /**
+   * The `Memory` instance used to bootstrap the call thread and persist the greeting on the
+   * workflow / custom-generator path, where there is no agent to source it from. Ignored on the
+   * agent path (the resolved agent's own memory is used). Pass the same `Memory` your workflow
+   * steps read and write through, so the saved thread is one faithful transcript (the up-front
+   * thread + the persisted greeting + every turn the steps write). If the `Memory` has no
+   * `storage` of its own, this worker's Mastra storage is injected into it (same as
+   * `agent.getMemory()` does), so a `Memory` that relies on the Mastra instance for storage works.
+   */
+  memoryInstance?:
+    | MastraMemory
+    | ((args: ResolveMastraAgentArgs) => MastraMemory | undefined | Promise<MastraMemory | undefined>);
+  /**
+   * Spoken while a Mastra tool call runs. Works on both the agent and workflow paths; on the
+   * workflow path it fires only for tool calls the reply step surfaces to its `writer` (use
+   * `pipeAgentReplyToWriter`). See {@link MastraVoiceAgentOptions.toolFeedback}.
+   */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
   /**
-   * Fired once per turn after the reply has streamed to text-to-speech (agent path only), off
-   * the audio path and fire-and-forget. Use it to fully background post-turn memory maintenance
-   * — e.g. a non-blocking `memory.updateWorkingMemory(...)` — so it never adds to the caller's
-   * latency. See {@link MastraVoiceAgentOptions.onTurnComplete}.
+   * Fired once per turn after the reply has streamed to text-to-speech, off the audio path and
+   * fire-and-forget. Works on both the agent and workflow paths. Use it to fully background
+   * post-turn memory maintenance — e.g. a non-blocking `memory.updateWorkingMemory(...)` — so it
+   * never adds to the caller's latency. See {@link MastraVoiceAgentOptions.onTurnComplete}.
    */
   onTurnComplete?: VoiceTurnCompleteHook;
+  /**
+   * Fired once when the call ends (participant disconnects / job shuts down), via LiveKit's
+   * shutdown callback — entirely off the audio path, when latency no longer matters. Unlike
+   * `onTurnComplete`, it is AWAITED within LiveKit's shutdown grace window, so end-of-call work
+   * completes before the process exits. The ideal place to flush observational memory once for the
+   * whole call (instead of paying for it inline per turn). Keep it to a few seconds so it fits the
+   * grace window; a thrown error is logged, not propagated. See {@link VoiceCallEndArgs}.
+   */
+  onCallEnd?: VoiceCallEndHook;
   /** Static greeting spoken when the session starts. */
   greeting?: string;
   /**
@@ -210,6 +263,33 @@ function resolveMemory(
   if (mastraAgent && !mastraAgent.hasOwnMemory()) return false;
   const thread = args.metadata.threadId ?? roomName;
   return { thread, resource: args.metadata.resourceId ?? thread };
+}
+
+// The Memory instance backing thread bootstrap + greeting persistence. With an agent it comes
+// from the agent; on the workflow/custom-generator path there is no agent, so it comes from the
+// `memoryInstance` option (instance or resolver). Returns null when unavailable — bootstrap and
+// greeting persistence are then skipped and the generator owns persistence.
+export async function resolveMemoryInstance(
+  options: Pick<CreateLiveKitWorkerOptions, 'memoryInstance' | 'mastra'>,
+  mastraAgent: MastraAgent | undefined,
+  args: ResolveMastraAgentArgs,
+  requestContext: RequestContext | undefined,
+): Promise<MastraMemory | null> {
+  if (mastraAgent) return (await mastraAgent.getMemory({ requestContext })) ?? null;
+  const resolver = options.memoryInstance;
+  if (!resolver) return null;
+  const instance = typeof resolver === 'function' ? await resolver(args) : resolver;
+  if (!instance) return null;
+  // Mirror Agent.getMemory: a Memory built without its own `storage` relies on the Mastra
+  // instance for one. The agent path gets that via getMemory(); on the workflow/custom-generator
+  // path we wire it here, so the worker's direct thread bootstrap + greeting persistence have a
+  // storage provider instead of throwing "Memory requires a storage provider".
+  instance.__registerMastra(options.mastra);
+  if (!instance.hasOwnStorage) {
+    const storage = options.mastra.getStorage();
+    if (storage) instance.setStorage(storage);
+  }
+  return instance;
 }
 
 export function buildTurnHandling(
@@ -332,6 +412,8 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           workflowInput: turnCtx => mapInput({ ...turnCtx, metadata }),
           replyStep: options.replyStep,
           resultText: options.resultText,
+          toolFeedback: options.toolFeedback,
+          onTurnComplete: options.onTurnComplete,
         });
       } else {
         mastraAgent = await resolveMastraAgent(options, args);
@@ -356,10 +438,11 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       }
 
       const memory = resolveMemory(options, mastraAgent, args, roomName);
-      // The memory instance comes from the resolved agent. With a workflow/custom generator
-      // there is no agent here, so up-front thread bootstrap and greeting persistence are
-      // skipped — the generator owns persistence (e.g. saveMessages inside a step).
-      const memoryInstance = memory && mastraAgent ? await mastraAgent.getMemory({ requestContext }) : null;
+      // The memory instance backs up-front thread bootstrap and greeting persistence. With an
+      // agent it comes from the agent; on the workflow/custom-generator path it comes from the
+      // `memoryInstance` option. When neither is available it stays null and the generator owns
+      // persistence (e.g. saveMessages inside a step).
+      const memoryInstance = memory ? await resolveMemoryInstance(options, mastraAgent, args, requestContext) : null;
       if (memory && memoryInstance) {
         try {
           await ensureVoiceCallThread({
@@ -391,6 +474,20 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       if (voiceObs) {
         ctx.addShutdownCallback(async () => {
           voiceObs.finalize();
+        });
+      }
+
+      // End-of-call hook: runs after the caller hangs up, awaited within LiveKit's shutdown grace
+      // window so the work finishes before the process exits. Registered up front (like the
+      // observability finalizer) so it still fires if session start fails. Errors are logged.
+      if (options.onCallEnd) {
+        const onCallEnd = options.onCallEnd;
+        ctx.addShutdownCallback(async () => {
+          try {
+            await onCallEnd({ memory, memoryInstance, metadata, requestContext, roomName, ctx });
+          } catch (error) {
+            console.warn('@mastra/livekit: onCallEnd hook threw', error);
+          }
         });
       }
 

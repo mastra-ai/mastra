@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit';
 import { recordContact } from './backend';
 import { mastra } from './index';
+import { flushObservationalMemory } from './memory';
 
 export default createLiveKitWorker({
   mastra,
@@ -50,6 +51,14 @@ export default createLiveKitWorker({
       tools: result.toolCalls.map(t => t.toolName),
       interrupted: result.interrupted,
     });
+  },
+  // End-of-call hook: after the caller hangs up, distill the call into durable observational
+  // memory ONCE, off the audio path (awaited within LiveKit's shutdown window). This is the
+  // non-blocking home for OM — rather than paying for it inline on a turn. `observe()` still
+  // respects the `messageTokens` threshold, so a long enough call flushes here even if the inline
+  // processor's last check was just under it.
+  onCallEnd: async ({ memory }) => {
+    await flushObservationalMemory(memory);
   },
 });
 
