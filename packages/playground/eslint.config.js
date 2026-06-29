@@ -766,6 +766,34 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   ]),
 );
 
+const PLAYGROUND_UI_ROOT_IMPORT_MESSAGE =
+  'Import from an exact @mastra/playground-ui subpath instead of the root barrel.';
+
+const restrictedPlaygroundUiRootSelectors = [
+  {
+    selector: 'ImportDeclaration[source.value="@mastra/playground-ui"]',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector: 'ExportNamedDeclaration[source.value="@mastra/playground-ui"]',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector: 'ExportAllDeclaration[source.value="@mastra/playground-ui"]',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="vi"][callee.property.name="mock"] > Literal[value="@mastra/playground-ui"]:first-child',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="vi"][callee.property.name="importActual"] > Literal[value="@mastra/playground-ui"]:first-child',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+];
+
 // Enforce the playground testing contract (packages/playground/AGENTS.md + the
 // `playground-msw-tests` skill): drive the real @mastra/client-js + React Query
 // stack and ONLY mock the network. Mocking our own data hooks/services/auth
@@ -940,7 +968,11 @@ export default [
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      'no-restricted-syntax': ['error', ...restrictedPlaygroundUiBarrelImportSpecifiers],
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedPlaygroundUiRootSelectors,
+        ...restrictedPlaygroundUiBarrelImportSpecifiers,
+      ],
     },
   },
   {
@@ -948,6 +980,7 @@ export default [
     rules: {
       'no-restricted-syntax': [
         'error',
+        ...restrictedPlaygroundUiRootSelectors,
         ...restrictedPlaygroundUiBarrelImportSpecifiers,
         ...restrictedTestMockSelectors,
       ],
