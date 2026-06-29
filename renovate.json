@@ -49,7 +49,7 @@
       "enabled": false
     },
     {
-      "description": "Only allow zod updates in examples (kept in sync with the catalog to prevent version collision with workspace-linked @mastra packages that caused TS2589/OOM)",
+      "description": "Allow zod updates in examples (kept in sync with the catalog to prevent version collision with workspace-linked @mastra packages that caused TS2589/OOM)",
       "matchFileNames": ["examples/**/package.json"],
       "matchPackageNames": ["zod"],
       "enabled": true,
@@ -178,6 +178,13 @@
       "matchFileNames": ["**/package.json", "!examples/**", "!docs/**"],
       "matchSourceUrls": ["https://github.com/vercel/ai"],
       "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "groupName": "AI SDK Examples",
+      "description": "Allow all AI SDK update types in examples",
+      "matchFileNames": ["examples/**/package.json"],
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "enabled": true
     },
     {
       "groupName": "Assistant UI",
