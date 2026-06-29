@@ -16,6 +16,9 @@ function createRunner(
   return {
     run: vi.fn(async (args: string[], options?: AppleContainerCommandRunnerOptions) => {
       const response = queue.shift();
+      if (response === undefined) {
+        throw new Error(`Unexpected runner invocation: ${JSON.stringify(args)}`);
+      }
       const resolved = typeof response === 'function' ? response(args, options) : response;
       return cliResult(resolved);
     }),
