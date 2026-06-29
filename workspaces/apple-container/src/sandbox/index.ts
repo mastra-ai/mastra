@@ -34,6 +34,10 @@ export interface AppleContainerCliResult {
   executionTimeMs: number;
   timedOut?: boolean;
   killed?: boolean;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+  stdoutDroppedBytes?: number;
+  stderrDroppedBytes?: number;
 }
 
 export interface AppleContainerCommandRunnerOptions {
