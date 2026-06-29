@@ -29,5 +29,9 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
     state,
   };
 
-  return buildFullPrompt(promptCtx);
+  const basePrompt = buildFullPrompt(promptCtx);
+  const pluginInstructions = state?.pluginInstructions?.filter(instruction => instruction.trim().length > 0) ?? [];
+  if (pluginInstructions.length === 0) return basePrompt;
+
+  return `${basePrompt}\n\n# Plugin Instructions\n\n${pluginInstructions.join('\n\n')}`;
 }

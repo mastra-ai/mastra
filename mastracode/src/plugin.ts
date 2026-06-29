@@ -110,6 +110,7 @@ export type MastraCodePluginResolvedTool = MastraCodePluginTool & {
 
 export type MastraCodePluginTools = Record<string, MastraCodePluginResolvedTool>;
 export type MastraCodePluginToolEntries = Record<string, MastraCodePluginToolEntry>;
+export type MastraCodePluginInstructions = string | ((context: MastraCodePluginContext) => string | Promise<string>);
 
 export type MastraCodePlugin = {
   id: string;
@@ -117,6 +118,7 @@ export type MastraCodePlugin = {
   version?: string;
   description?: string;
   config?: MastraCodePluginConfigSchema;
+  instructions?: MastraCodePluginInstructions;
   tools?:
     | MastraCodePluginToolEntries
     | ((context: MastraCodePluginContext) => MastraCodePluginToolEntries | Promise<MastraCodePluginToolEntries>);
