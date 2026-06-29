@@ -739,7 +739,7 @@ describe('CoreToolBuilder requestContext merge', () => {
       id: 'slow',
       description: 'always slow',
       inputSchema: z.object({}),
-      execute: () => new Promise(r => setTimeout(r, 5_000)),
+      execute: () => new Promise(() => {}),
     });
 
     const built = new CoreToolBuilder({

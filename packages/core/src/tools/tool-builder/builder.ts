@@ -852,8 +852,10 @@ export class CoreToolBuilder extends MastraBase {
         });
         return await withTimeout(execPromise, options.timeoutMs ?? 0, options.name);
       } catch (err) {
-        // Re-throw timeout errors directly
+        // Re-throw timeout errors directly but still emit telemetry
         if (err instanceof MastraError && (err as any).id === 'TOOL_EXECUTION_TIMEOUT') {
+          toolSpan?.error({ error: err, attributes: { success: false } });
+          logger.trackException(err, { ...logData, ...rest, model: logModelObject, args });
           throw err;
         }
         const mastraError = new MastraError(
