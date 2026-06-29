@@ -1,5 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -12,9 +13,6 @@ import type { CurrentUser } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -61,6 +59,7 @@ const renderPage = (skillId: string) => {
 };
 
 beforeEach(() => {
+  usePlaygroundStore.setState({ requestContext: {} });
   setCurrentUser({ id: 'viewer-1' });
   server.use(
     http.get(`${BASE_URL}/api/stored/skills`, () =>

@@ -72,8 +72,6 @@ const createPublicFileEntries = (sourceDir: string, entryPrefix: string) => {
       const fileName = dirent.name;
       if (
         !/\.(ts|tsx)$/.test(fileName) ||
-        fileName === 'index.ts' ||
-        fileName === 'index.tsx' ||
         fileName.endsWith('.test.ts') ||
         fileName.endsWith('.test.tsx') ||
         fileName.endsWith('.stories.ts') ||
@@ -85,7 +83,10 @@ const createPublicFileEntries = (sourceDir: string, entryPrefix: string) => {
       const file = resolve(currentDir, fileName);
       const entryName = relative(sourceDir, file)
         .replace(/\\/g, '/')
-        .replace(/\.(ts|tsx)$/, '');
+        .replace(/\.(ts|tsx)$/, '')
+        .replace(/(?:^|\/)index$/, '');
+
+      if (!entryName) return;
 
       entries.push([`${entryPrefix}/${entryName}`, file] as const);
     });
