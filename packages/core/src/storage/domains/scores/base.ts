@@ -77,4 +77,25 @@ export abstract class ScoresStorage extends StorageDomain {
       details: { traceId, spanId },
     });
   }
+
+  /**
+   * List all scores sharing a `batchId` (a batch handle stamped across every
+   * per-trace score produced by one batch scoring call). Tenant-scoped via
+   * `filters`. Adapters that have not implemented this throw by default.
+   */
+  async listScoresByBatchId({
+    batchId,
+    pagination: _pagination,
+  }: {
+    batchId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    throw new MastraError({
+      id: 'SCORES_STORAGE_GET_SCORES_BY_BATCH_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { batchId },
+    });
+  }
 }

@@ -198,6 +198,9 @@ export const scoreRowDataSchema = z.object({
   // uses dedicated fields: organizationId (account) + projectId (project scope).
   organizationId: z.string().nullish(),
   projectId: z.string().nullish(),
+  // Batch handle shared across all per-trace scores produced by one batch scoring
+  // call. `runId` stays per-execution; `batchId` groups the batch.
+  batchId: z.string().nullish(),
 
   // Additional ScoreRowData fields
   preprocessStepResult: optionalRecordSchema,

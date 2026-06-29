@@ -406,5 +406,47 @@ export function createScoresTest({
         expect(result.scores[0]?.organizationId).toBe('org-b');
       });
     });
+
+    describe('batchId grouping', () => {
+      it('persists batchId on saved scores', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const { score: saved } = await scoresStorage.saveScore(createSampleScore({ scorerId, batchId: 'batch-1' }));
+        expect(saved.batchId).toBe('batch-1');
+      });
+
+      it('groups scores by batchId while each keeps its own runId', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const batchId = `batch-${randomUUID()}`;
+        await scoresStorage.saveScore(createSampleScore({ scorerId, batchId, runId: 'run-1' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, batchId, runId: 'run-2' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, batchId: `other-${randomUUID()}`, runId: 'run-3' }));
+
+        const result = await scoresStorage.listScoresByBatchId({
+          batchId,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(result.scores).toHaveLength(2);
+        expect(new Set(result.scores.map(s => s.runId))).toEqual(new Set(['run-1', 'run-2']));
+      });
+
+      it('scopes listScoresByBatchId by tenancy', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const batchId = `batch-${randomUUID()}`;
+        await scoresStorage.saveScore(
+          createSampleScore({ scorerId, batchId, organizationId: 'org-a', projectId: 'proj-1' }),
+        );
+        await scoresStorage.saveScore(
+          createSampleScore({ scorerId, batchId, organizationId: 'org-b', projectId: 'proj-1' }),
+        );
+
+        const result = await scoresStorage.listScoresByBatchId({
+          batchId,
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-a', projectId: 'proj-1' },
+        });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]?.organizationId).toBe('org-a');
+      });
+    });
   });
 }

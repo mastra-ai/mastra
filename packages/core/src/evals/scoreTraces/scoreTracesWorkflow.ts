@@ -229,10 +229,14 @@ export async function runScorerOnTarget({
   storage,
   scorer,
   target,
+  batchId,
 }: {
   storage: MastraStorage;
   scorer: MastraScorer;
   target: { traceId: string; spanId?: string };
+  /** Optional batch handle stamped on the persisted score so all scores from one
+   * batch scoring call share a `batchId` (each keeps its own per-execution `runId`). */
+  batchId?: string;
 }) {
   const { trace, span } = await resolveTraceAndSpan({ storage, target });
   const tenancy = getSpanTenancy(span);
@@ -256,6 +260,7 @@ export async function runScorerOnTarget({
     scorerId: scorer.id,
     ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
     ...(tenancy.projectId ? { projectId: tenancy.projectId } : {}),
+    ...(batchId ? { batchId } : {}),
   };
 
   // Legacy score-store emission. This path is being deprecated.

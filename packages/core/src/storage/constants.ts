@@ -133,6 +133,9 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   threadId: { type: 'text', nullable: true },
   organizationId: { type: 'text', nullable: true },
   projectId: { type: 'text', nullable: true },
+  // Batch handle: groups all per-trace scores produced by one batch scoring call.
+  // Each score keeps its own per-execution `runId`; `batchId` is shared across the batch.
+  batchId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
 };

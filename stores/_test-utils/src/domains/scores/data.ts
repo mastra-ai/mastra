@@ -10,6 +10,8 @@ export function createSampleScore({
   spanId,
   organizationId,
   projectId,
+  batchId,
+  runId,
 }: {
   scorerId: string;
   entityId?: string;
@@ -19,6 +21,8 @@ export function createSampleScore({
   spanId?: string;
   organizationId?: string;
   projectId?: string;
+  batchId?: string;
+  runId?: string;
 }): ScoreRowData {
   return {
     id: randomUUID(),
@@ -29,9 +33,10 @@ export function createSampleScore({
     spanId,
     organizationId,
     projectId,
+    batchId,
     createdAt: new Date(),
     updatedAt: new Date(),
-    runId: randomUUID(),
+    runId: runId ?? randomUUID(),
     reason: 'Sample reason',
     preprocessStepResult: {
       text: 'Sample preprocess step result',

@@ -84,7 +84,7 @@ export class ScoresPG extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId'],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -411,6 +411,69 @@ export class ScoresPG extends ScoresStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_SCORES_BY_RUN_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async listScoresByBatchId({
+    batchId,
+    pagination,
+    filters,
+  }: {
+    batchId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    try {
+      const conditions: string[] = [`"batchId" = $1`];
+      const queryParams: any[] = [batchId];
+      let paramIndex = applyTenancyFilters(conditions, queryParams, 2, filters);
+      const whereClause = conditions.join(' AND ');
+
+      const total = await this.#db.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause}`,
+        queryParams,
+      );
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      if (total?.count === '0' || !total?.count) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageForResponse,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const limitValue = perPageInput === false ? Number(total?.count) : perPage;
+      const end = perPageInput === false ? Number(total?.count) : start + perPage;
+
+      const result = await this.#db.client.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...queryParams, limitValue, start],
+      );
+      return {
+        pagination: {
+          total: Number(total?.count) || 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < Number(total?.count),
+        },
+        scores: result.map(transformScoreRow),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_BATCH_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
