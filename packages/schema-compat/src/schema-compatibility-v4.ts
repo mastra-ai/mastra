@@ -611,18 +611,20 @@ export class SchemaCompatLayer {
     if (checks) {
       for (const check of checks) {
         switch (check._zod.def.check) {
+          // `.max(d)` lowers the upper bound, stored as a `less_than` check: the date must be older than `d`.
           case 'less_than':
-            // @ts-expect-error - fix later
-            const minDate = new Date(check._zod.def.value);
-            if (!isNaN(minDate.getTime())) {
-              constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
-            }
-            break;
-          case 'greater_than':
             // @ts-expect-error - fix later
             const maxDate = new Date(check._zod.def.value);
             if (!isNaN(maxDate.getTime())) {
               constraints.push(`Date must be older than ${maxDate.toISOString()} (ISO)`);
+            }
+            break;
+          // `.min(d)` raises the lower bound, stored as a `greater_than` check: the date must be newer than `d`.
+          case 'greater_than':
+            // @ts-expect-error - fix later
+            const minDate = new Date(check._zod.def.value);
+            if (!isNaN(minDate.getTime())) {
+              constraints.push(`Date must be newer than ${minDate.toISOString()} (ISO)`);
             }
             break;
           default:
