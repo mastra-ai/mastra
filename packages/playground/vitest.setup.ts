@@ -12,8 +12,7 @@ import { server } from './src/test/msw-server';
 // it for a plain div that preserves the public API (className, viewPortClassName,
 // viewportRef, children). Tests still see their content; the overlay-scrollbar
 // internals are simply not exercised.
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual('@mastra/playground-ui');
+vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
   const ScrollArea = React.forwardRef<
     HTMLDivElement,
     {
@@ -55,7 +54,7 @@ vi.mock('@mastra/playground-ui', async () => {
     },
   );
   ScrollArea.displayName = 'ScrollArea';
-  return { ...actual, ScrollArea };
+  return { ScrollArea };
 });
 
 // React reads this global to decide whether `act(...)` is supported. Vitest's
