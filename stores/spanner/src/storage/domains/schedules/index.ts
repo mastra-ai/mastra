@@ -167,7 +167,7 @@ export class SchedulesSpanner extends SchedulesStorage {
       await operation.promise();
       this.targetWorkflowIdColumnAvailable = true;
     } catch (error) {
-      this.logger?.warn?.(
+      console.warn(
         'Failed to add target_workflow_id generated column; workflowId filtering will fall back to JSON_VALUE scan',
         error,
       );
@@ -243,7 +243,9 @@ export class SchedulesSpanner extends SchedulesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
@@ -485,7 +487,9 @@ export class SchedulesSpanner extends SchedulesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),

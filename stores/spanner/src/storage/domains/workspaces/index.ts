@@ -90,7 +90,7 @@ export class WorkspacesSpanner extends WorkspacesStorage {
                 )`,
       });
     } catch (error) {
-      this.logger?.warn?.('Failed to clean up stale draft workspaces:', error);
+      console.warn('Failed to clean up stale draft workspaces:', error);
     }
   }
 
@@ -237,7 +237,9 @@ export class WorkspacesSpanner extends WorkspacesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
@@ -389,7 +391,9 @@ export class WorkspacesSpanner extends WorkspacesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),

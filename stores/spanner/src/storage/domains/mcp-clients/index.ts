@@ -80,7 +80,7 @@ export class MCPClientsSpanner extends MCPClientsStorage {
                 )`,
       });
     } catch (error) {
-      this.logger?.warn?.('Failed to clean up stale draft MCP clients:', error);
+      console.warn('Failed to clean up stale draft MCP clients:', error);
     }
   }
 
@@ -234,7 +234,9 @@ export class MCPClientsSpanner extends MCPClientsStorage {
             // the transaction (and its row locks) stay pending on the server
             // until explicitly released. Without this rollback, a failed
             // create() blocks subsequent reads/writes against the same rows.
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
@@ -329,7 +331,9 @@ export class MCPClientsSpanner extends MCPClientsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),

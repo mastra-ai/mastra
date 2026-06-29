@@ -81,7 +81,7 @@ export class SkillsSpanner extends SkillsStorage {
                 )`,
       });
     } catch (error) {
-      this.logger?.warn?.('Failed to clean up stale draft skills:', error);
+      console.warn('Failed to clean up stale draft skills:', error);
     }
   }
 
@@ -258,7 +258,9 @@ export class SkillsSpanner extends SkillsStorage {
             // the transaction (and its row locks) stay pending on the server
             // until explicitly released. Without this rollback, a failed
             // create() blocks subsequent reads/writes against the same rows.
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
@@ -355,7 +357,9 @@ export class SkillsSpanner extends SkillsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),

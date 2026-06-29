@@ -144,7 +144,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
       await operation.promise();
       this.statusColumnAvailable = true;
     } catch (error) {
-      this.logger?.warn?.(
+      console.warn(
         'Failed to add snapshotStatus generated column; status filtering will fall back to JSON_VALUE scan',
         error,
       );
@@ -188,7 +188,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
       try {
         snapshot = JSON.parse(snapshot) as WorkflowRunState;
       } catch (e) {
-        this.logger?.warn?.(`Failed to parse snapshot for workflow ${transformed.workflow_name}:`, e);
+        console.warn(`Failed to parse snapshot for workflow ${transformed.workflow_name}:`, e);
       }
     }
     return {
@@ -251,7 +251,9 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
@@ -368,7 +370,9 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             mergedContext = snapshot.context;
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
@@ -436,7 +440,9 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),

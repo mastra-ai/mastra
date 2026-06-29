@@ -98,7 +98,7 @@ export class AgentsSpanner extends AgentsStorage {
                 )`,
       });
     } catch (error) {
-      this.logger?.warn?.('Failed to clean up stale draft agents:', error);
+      console.warn('Failed to clean up stale draft agents:', error);
     }
   }
 
@@ -295,7 +295,9 @@ export class AgentsSpanner extends AgentsStorage {
             // the transaction (and its row locks) stay pending on the server
             // until explicitly released. Without this rollback, a failed
             // create() blocks subsequent reads/writes against the same rows.
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
@@ -396,7 +398,9 @@ export class AgentsSpanner extends AgentsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(e => {
+              console.warn('Rollback failed', e);
+            });
             throw err;
           }
         }),
