@@ -170,6 +170,7 @@
     "clear-cougars-decide",
     "cool-singers-peel",
     "cozy-bottles-melt",
+    "crisp-geckos-do",
     "fix-inmemory-getworkflowrunbyid-optional-name",
     "fix-qdrant-ts-expect-error-18572",
     "fix-zod-v4-date-constraint-descriptions",
@@ -177,14 +178,19 @@
     "full-numbers-occur",
     "green-birds-knock",
     "huge-maps-kick",
+    "inngest-durable-agent-parity",
     "inngest-observe-replay",
     "legal-dots-kick",
     "light-mails-guess",
+    "many-worlds-switch",
+    "mastracode-amazon-bedrock",
     "mcp-http-url-env-expansion",
     "mcp-stdio-env-expansion",
+    "quick-walls-worry",
     "shy-radios-slide",
     "solid-bees-shave",
     "studio-metrics-vnext-gate",
-    "subagent-schema-cache"
+    "subagent-schema-cache",
+    "two-dancers-jam"
   ]
 }
