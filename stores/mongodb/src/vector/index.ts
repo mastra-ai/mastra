@@ -185,7 +185,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const embeddingField = this.embeddingFieldName;
       const numDimensions = dimension;
 
-      // Create search indexes
+      // Create search indexes.
+      // Note that fast filtering can be done during vector search, but only if
+      // we know the fields at when the index is created.
+      // 'document' is declared as a filter field so documentFilter queries can be
+      // passed directly to $vectorSearch without materialising candidate IDs.
+      // Metadata fields are NOT declared here because they are arbitrary and unknown
+      // at index-creation time. MongoDB can filter metadata fields more efficiently
+      // during the vector search itself if they are declared as filter fields in the
+      // index — this requires a filterFields parameter on createIndex (see
+      // https://github.com/mastra-ai/mastra/issues/18587).
       await collection.createSearchIndex({
         definition: {
           fields: [
@@ -198,6 +207,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             {
               type: 'filter',
               path: '_id',
+            },
+            {
+              type: 'filter',
+              path: 'document',
             },
           ],
         },
@@ -374,22 +387,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const collection = await this.getCollection(indexName, true);
       const indexNameInternal = `${indexName}_vector_index`;
 
-      // Transform the filters using MongoDBFilterTranslator
-      const mongoFilter = this.transformFilter(filter);
-      const documentMongoFilter = documentFilter ? { [this.documentFieldName]: documentFilter } : {};
-
-      // Transform metadata field filters to use dot notation
-      const transformedMongoFilter = this.transformMetadataFilter(mongoFilter);
-
-      // Combine the filters
-      let combinedFilter: any = {};
-      if (Object.keys(transformedMongoFilter).length > 0 && Object.keys(documentMongoFilter).length > 0) {
-        combinedFilter = { $and: [transformedMongoFilter, documentMongoFilter] };
-      } else if (Object.keys(transformedMongoFilter).length > 0) {
-        combinedFilter = transformedMongoFilter;
-      } else if (Object.keys(documentMongoFilter).length > 0) {
-        combinedFilter = documentMongoFilter;
-      }
+      // Metadata filter: translate then add 'metadata.' prefix to user-facing field names.
+      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter));
+      const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
 
       const vectorSearch: Document = {
         index: indexNameInternal,
@@ -399,18 +399,29 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         limit: Math.min(10000, topK),
       };
 
-      if (Object.keys(combinedFilter).length > 0) {
-        // pre-filter for candidate document IDs
+      if (hasMetadataFilter) {
+        // Metadata fields are not declared as filter fields in the vectorSearch index,
+        // so they cannot be passed directly to $vectorSearch. Materialise matching _ids
+        // via $match first, then filter by _id inside $vectorSearch.
+        // Declaring metadata fields as filter fields at index-creation time would allow
+        // passing the filter directly and avoid this materialisation step — see the
+        // planned filterFields parameter on createIndex.
+        // https://github.com/mastra-ai/mastra/issues/18587
         const candidateIds = await collection
-          .aggregate([{ $match: combinedFilter }, { $project: { _id: 1 } }])
+          .aggregate([{ $match: metadataFilter }, { $project: { _id: 1 } }])
           .map(doc => doc._id)
           .toArray();
 
-        if (candidateIds.length > 0) {
-          vectorSearch.filter = { _id: { $in: candidateIds } };
-        } else {
-          return [];
-        }
+        if (candidateIds.length === 0) return [];
+
+        // 'document' is a declared filter field — combine directly when present.
+        vectorSearch.filter = documentFilter
+          ? { $and: [{ _id: { $in: candidateIds } }, { [this.documentFieldName]: documentFilter }] }
+          : { _id: { $in: candidateIds } };
+      } else if (documentFilter) {
+        // 'document' is a declared filter field in the index — pass directly,
+        // no candidate materialisation needed.
+        vectorSearch.filter = { [this.documentFieldName]: documentFilter };
       }
 
       // Build the aggregation pipeline
@@ -886,13 +897,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
       // Check if the key already has 'metadata.' prefix
       else if (key.startsWith('metadata.')) {
-        // Already prefixed, keep as is but recursively transform the value if it's an object with operators
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          const hasOperator = Object.keys(value).some(k => k.startsWith('$'));
-          transformed[key] = hasOperator ? value : value;
-        } else {
-          transformed[key] = value;
-        }
+        // Already prefixed — keep as-is.
+        transformed[key] = value;
       }
       // Check if this is a known metadata field that needs prefixing
       else if (this.isMetadataField(key)) {
