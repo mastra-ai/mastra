@@ -60,6 +60,7 @@ const IGNORED_PATTERNS = [
 	/\/mastra-platform\/.*/,
 	/\/license\.mdx$/,
 	/\/agents\/networks\.mdx$/,
+	/\/agents\/adding-voice\.mdx$/, // TODO: Remove once page was removed
 ]
 
 function extractDocIds(items: SidebarItem[]): Set<string> {

@@ -1519,8 +1519,8 @@ importers:
         specifier: ^1.1.2
         version: 1.1.2(@docusaurus/theme-common@3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17))(@mdx-js/react@3.1.1(@types/react@19.2.14)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(clsx@2.1.1)(lucide-react@1.21.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/docusaurus-theme':
-        specifier: ^1.1.2
-        version: 1.1.2(00f6de077a5110b40cbe8d044e45e41a)
+        specifier: ^1.1.3
+        version: 1.1.3(00f6de077a5110b40cbe8d044e45e41a)
       '@mdx-js/react':
         specifier: ^3.1.1
         version: 3.1.1(@types/react@19.2.14)(react@19.2.7)
@@ -13757,8 +13757,8 @@ packages:
       react: ^19.0.0
       react-dom: ^19.0.0
 
-  '@mastra/docusaurus-theme@1.1.2':
-    resolution: {integrity: sha512-gsfCt0NtpWUJJknUZlnE0QHwkT3MEy5i+nzr3wD4fDwKP6SXism8F+xHRkqq2JWubHnleb0bz5BAlVvzrj8iNg==}
+  '@mastra/docusaurus-theme@1.1.3':
+    resolution: {integrity: sha512-1bJMYm5DiB0TpmpJNkrAL31J8MxTyST2U00tHXOWPPVO5VVgDDTHEkn2AQB14U6Gs93W/FaWWZ0knI62a+2R3w==}
     peerDependencies:
       '@docusaurus/plugin-content-docs': ^3.9.2
       '@docusaurus/theme-classic': ^3.9.2
@@ -36202,7 +36202,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/docusaurus-theme@1.1.2(00f6de077a5110b40cbe8d044e45e41a)':
+  '@mastra/docusaurus-theme@1.1.3(00f6de077a5110b40cbe8d044e45e41a)':
     dependencies:
       '@docusaurus/plugin-content-docs': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17))(@mdx-js/react@3.1.1(@types/react@19.2.14)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/theme-classic': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(@types/react@19.2.14)(bufferutil@4.1.0)(lightningcss@1.32.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
