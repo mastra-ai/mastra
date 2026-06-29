@@ -37,17 +37,24 @@ const CHANNELS = 1;
  * Returns null if nothing usable is installed.
  */
 export function detectRecorder(): RecorderInfo | null {
+  // Only macOS and Linux are supported; other platforms (e.g. Windows) have no
+  // input backend wired up, so don't advertise a recorder we can't drive.
+  if (process.platform !== 'darwin' && process.platform !== 'linux') {
+    return null;
+  }
   if (process.platform === 'linux') {
     if (commandExists('pw-record')) return { kind: 'pipewire', bin: 'pw-record' };
     if (commandExists('parecord')) return { kind: 'pulse', bin: 'parecord' };
     if (commandExists('arecord')) return { kind: 'alsa', bin: 'arecord' };
   }
-  for (const bin of ['sox', 'rec']) {
+  for (const bin of ['rec', 'sox']) {
     if (commandExists(bin)) {
       return { kind: 'sox', bin };
     }
   }
-  if (commandExists('ffmpeg')) {
+  // ffmpegInputArgs() only knows the macOS avfoundation backend, so only offer
+  // ffmpeg there. Linux falls back to the dedicated recorders above.
+  if (process.platform === 'darwin' && commandExists('ffmpeg')) {
     return { kind: 'ffmpeg', bin: 'ffmpeg' };
   }
   return null;

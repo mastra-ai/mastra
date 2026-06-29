@@ -18,7 +18,7 @@ const TRANSCRIPTION_MODEL = 'whisper-1';
 export class VoiceCredentialError extends Error {
   constructor() {
     super(
-      'Voice input needs an OpenAI API key. Set OPENAI_API_KEY or add one with /login (OpenAI OAuth tokens are not supported for transcription).',
+      'Voice input needs an OpenAI API key. Set OPENAI_API_KEY or add one with /api-keys (OpenAI OAuth tokens are not supported for transcription).',
     );
     this.name = 'VoiceCredentialError';
   }
@@ -26,13 +26,13 @@ export class VoiceCredentialError extends Error {
 
 /**
  * Resolve an OpenAI API key for transcription.
- * Prefers a stored API key, then falls back to the environment variable.
+ * Honors the env-overrides-stored-key contract: OPENAI_API_KEY wins, then the
+ * stored credential is used as a fallback.
  */
 export function resolveOpenAIApiKey(authStorage?: AuthStorage): string | undefined {
-  const stored = authStorage?.getStoredApiKey('openai');
-  if (stored) return stored;
   const fromEnv = process.env.OPENAI_API_KEY?.trim();
-  return fromEnv || undefined;
+  if (fromEnv) return fromEnv;
+  return authStorage?.getStoredApiKey('openai');
 }
 
 /**

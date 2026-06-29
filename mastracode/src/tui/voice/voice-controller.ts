@@ -63,6 +63,10 @@ export class VoiceController {
   private recorder: RecorderInfo | null = null;
   private liveTimer: ReturnType<typeof setTimeout> | null = null;
   private liveInFlight = false;
+  // Whether at least one live partial transcript actually streamed during the
+  // current recording. Lets stop() distinguish "nothing was heard" from "live
+  // text already surfaced", so the capture warning only fires when truly empty.
+  private liveTranscriptEmitted = false;
   private readonly options: VoiceControllerOptions;
 
   constructor(options: VoiceControllerOptions) {
@@ -139,6 +143,7 @@ export class VoiceController {
     try {
       this.recording = new MicRecording(this.recorder);
       this.state = 'recording';
+      this.liveTranscriptEmitted = false;
       this.options.onListeningChange?.(true);
       this.startLiveTranscription();
     } catch {
@@ -171,8 +176,9 @@ export class VoiceController {
     if (!audio) {
       this.state = 'idle';
       // In live mode the partial transcript already shows what was heard; only
-      // warn when nothing streamed in at all.
-      if (!live) this.options.showError('No audio captured.');
+      // warn when nothing streamed in at all. If live mode produced no partials
+      // either, the user still gets the "no audio" feedback.
+      if (!live || !this.liveTranscriptEmitted) this.options.showError('No audio captured.');
       return;
     }
 
@@ -251,6 +257,7 @@ export class VoiceController {
       const text = await transcribeAudio(snapshot, { authStorage: this.options.authStorage });
       // Only apply if we're still recording — a stop() may have raced us.
       if (this.state === 'recording' && text) {
+        this.liveTranscriptEmitted = true;
         this.options.onPartialTranscript?.(text);
       }
     } catch {

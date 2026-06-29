@@ -150,9 +150,18 @@ export class CustomEditor extends Editor {
   // Drives the listening pulse so the prompt indicator animates while recording.
   private voiceListenTimer: ReturnType<typeof setInterval> | null = null;
   private voiceListenPhase = 0;
-  // The trailing dictated run currently rendered greyed-out. Cleared once the
-  // user edits, so dictated text reads as "not written by us" until accepted.
+  // The dictated run currently rendered greyed-out. Cleared once the user edits,
+  // so dictated text reads as "not written by us" until accepted.
   private voiceTranscriptText = '';
+  // Text surrounding the dictated run, captured at the cursor position where
+  // dictation began. Lets live replacements rebuild the input in place instead
+  // of always appending to the end.
+  private voicePrefix = '';
+  private voiceSuffix = '';
+  // True while a dictation session owns the trailing run. Set when listening
+  // starts, cleared on a real user keystroke so late async transcripts that
+  // arrive after the user resumed typing are ignored rather than re-appended.
+  private voiceDictationActive = false;
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
@@ -590,57 +599,92 @@ export class CustomEditor extends Editor {
   }
 
   /**
-   * Insert dictated text at the cursor, falling back to appending if the base
-   * editor does not expose cursor insertion.
+   * Capture the cursor position where dictation begins so the dictated run can be
+   * inserted (and later replaced) in place, even when the cursor sits in the
+   * middle of existing input.
+   */
+  private beginDictation(): void {
+    const offset = this.getCursorOffset();
+    const full = this.getText();
+    this.voicePrefix = full.slice(0, offset);
+    this.voiceSuffix = full.slice(offset);
+    this.voiceTranscriptText = '';
+    this.voiceDictationActive = true;
+  }
+
+  /**
+   * Flatten the editor's {line, col} cursor into a single string offset over the
+   * newline-joined text.
+   */
+  private getCursorOffset(): number {
+    const lines = this.getText().split('\n');
+    const { line, col } = (this as any).getCursor?.() ?? {
+      line: lines.length - 1,
+      col: lines[lines.length - 1]?.length ?? 0,
+    };
+    const clampedLine = Math.min(Math.max(line, 0), lines.length - 1);
+    let offset = 0;
+    for (let i = 0; i < clampedLine; i++) offset += (lines[i]?.length ?? 0) + 1; // +1 for the '\n'
+    return offset + Math.min(Math.max(col, 0), lines[clampedLine]?.length ?? 0);
+  }
+
+  /**
+   * Restore the cursor to a flat string offset over the newline-joined text.
+   * Uses the editor's internal state directly since pi-tui exposes no public
+   * cursor setter.
+   */
+  private setCursorOffset(offset: number): void {
+    const lines = this.getText().split('\n');
+    let remaining = Math.max(offset, 0);
+    let lineIdx = 0;
+    while (lineIdx < lines.length - 1 && remaining > (lines[lineIdx]?.length ?? 0)) {
+      remaining -= (lines[lineIdx]?.length ?? 0) + 1;
+      lineIdx += 1;
+    }
+    const col = Math.min(remaining, lines[lineIdx]?.length ?? 0);
+    const state = (this as any).state;
+    const setCursorCol = (this as any).setCursorCol;
+    if (state && typeof setCursorCol === 'function') {
+      state.cursorLine = lineIdx;
+      setCursorCol.call(this, col);
+    }
+  }
+
+  /**
+   * Insert dictated text at the captured dictation anchor. Used for the final
+   * (non-live) transcript path.
    */
   public insertVoiceTranscript(text: string): void {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const current = this.getText();
-    // Separate dictated text from any existing content so words don't jam together.
-    const needsLeadingSpace = current.length > 0 && !/\s$/.test(current);
-    const payload = needsLeadingSpace ? ` ${trimmed}` : trimmed;
-    if (typeof this.insertTextAtCursor === 'function') {
-      this.insertTextAtCursor(payload);
-    } else {
-      this.setText(current + payload);
-    }
-    // Track the dictated run (accumulating across streamed chunks) so it renders
-    // greyed-out until the user edits it.
-    this.voiceTranscriptText += payload;
-    // Programmatic insertion mutates editor state but does not repaint on its
-    // own, so force a render to show the transcript immediately.
-    this.tui.requestRender();
+    this.applyDictation(trimmed);
   }
 
   /**
    * Replace the current dictated run with a new transcript. Used for live
    * transcription, where each partial result supersedes the previous one as the
-   * user keeps speaking. The dictated run is always a trailing substring of the
-   * text, so we strip it off, append the new transcript, and re-track it.
+   * user keeps speaking.
    */
   public replaceVoiceTranscript(text: string): void {
-    const trimmed = text.trim();
-    const current = this.getText();
-    // Recover the text the user had before dictation began.
-    const base =
-      this.voiceTranscriptText.length > 0 && current.endsWith(this.voiceTranscriptText)
-        ? current.slice(0, current.length - this.voiceTranscriptText.length)
-        : current;
+    // The user resumed typing before this async result arrived; honor their edit
+    // rather than clobbering it with a stale partial.
+    if (!this.voiceDictationActive) return;
+    this.applyDictation(text.trim());
+  }
 
-    if (!trimmed) {
-      // setText() places the cursor at the end of the new text by default.
-      this.setText(base);
-      this.voiceTranscriptText = '';
-      this.tui.requestRender();
-      return;
-    }
-
-    const needsLeadingSpace = base.length > 0 && !/\s$/.test(base);
-    const payload = needsLeadingSpace ? ` ${trimmed}` : trimmed;
-    const next = base + payload;
-    this.setText(next);
+  /**
+   * Rebuild the input as prefix + dictated payload + suffix, keeping the dictated
+   * run anchored at the cursor position where dictation began and leaving the
+   * cursor just after the dictated text.
+   */
+  private applyDictation(trimmed: string): void {
+    const needsLeadingSpace = this.voicePrefix.length > 0 && !/\s$/.test(this.voicePrefix);
+    const payload = trimmed ? (needsLeadingSpace ? ` ${trimmed}` : trimmed) : '';
     this.voiceTranscriptText = payload;
+    this.setText(this.voicePrefix + payload + this.voiceSuffix);
+    this.setCursorOffset(this.voicePrefix.length + payload.length);
+    // Programmatic insertion mutates editor state but does not repaint on its
+    // own, so force a render to show the transcript immediately.
     this.tui.requestRender();
   }
 
@@ -733,6 +777,7 @@ export class CustomEditor extends Editor {
     if (listening === this.voiceListening) return;
     this.voiceListening = listening;
     if (listening) {
+      this.beginDictation();
       this.voiceListenPhase = 0;
       this.voiceListenTimer ??= setInterval(() => {
         this.voiceListenPhase += 1;
@@ -822,8 +867,11 @@ export class CustomEditor extends Editor {
     }
 
     // Any genuine keystroke means the user is editing — stop greying the
-    // dictated text so it now reads as their own input.
+    // dictated text so it now reads as their own input, and end the dictation
+    // session so any late async transcript that arrives after this edit is
+    // ignored instead of clobbering the user's input.
     this.voiceTranscriptText = '';
+    this.voiceDictationActive = false;
 
     if (matchesKey(data, 'ctrl+v') || matchesKey(data, 'alt+v')) {
       this.handleExplicitPaste();

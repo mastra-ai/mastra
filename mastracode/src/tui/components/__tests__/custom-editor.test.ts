@@ -555,35 +555,49 @@ describe('CustomEditor voice push-to-talk', () => {
     expect(hook.stopRecording).toHaveBeenCalledTimes(1);
   });
 
-  it('inserts the transcript and requests a render so it shows immediately', () => {
+  it('inserts the transcript text and requests a render so it shows immediately', () => {
     const requestRender = vi.fn();
     const editor = new CustomEditor({ requestRender } as any, {} as any);
+    let text = '';
+    editor.getText = vi.fn(() => text);
+    mocks.editorSetText.mockImplementation((next: string) => {
+      text = next;
+    });
 
     editor.insertVoiceTranscript('hello world');
 
-    expect((editor as any).insertTextAtCursor ?? mocks.editorSetText).toBeDefined();
+    expect(mocks.editorSetText).toHaveBeenCalledWith('hello world');
+    expect(text).toBe('hello world');
     expect(requestRender).toHaveBeenCalled();
   });
 
   it('separates dictated text from existing content with a leading space', () => {
     const requestRender = vi.fn();
     const editor = new CustomEditor({ requestRender } as any, {} as any);
-    editor.getText = vi.fn(() => 'foo');
+    let text = 'foo';
+    editor.getText = vi.fn(() => text);
+    mocks.editorSetText.mockImplementation((next: string) => {
+      text = next;
+    });
 
+    // Listening captures the cursor anchor (end of "foo") as the dictation point.
+    editor.setVoiceListening(true);
     editor.insertVoiceTranscript('bar');
 
-    expect(mocks.editorSetText).toHaveBeenCalledWith('foo bar');
+    expect(text).toBe('foo bar');
   });
 
   it('replaces the dictated run with each live partial instead of appending', () => {
     const requestRender = vi.fn();
     const editor = new CustomEditor({ requestRender } as any, {} as any);
-    // Track the editor text so replaceVoiceTranscript can recover the base.
     let text = 'note: ';
     editor.getText = vi.fn(() => text);
     mocks.editorSetText.mockImplementation((next: string) => {
       text = next;
     });
+
+    // Anchor dictation after the existing "note: " prefix.
+    editor.setVoiceListening(true);
 
     editor.replaceVoiceTranscript('hello');
     expect(text).toBe('note: hello');
@@ -591,6 +605,28 @@ describe('CustomEditor voice push-to-talk', () => {
     // A fuller partial supersedes the previous one, keeping the base intact.
     editor.replaceVoiceTranscript('hello world');
     expect(text).toBe('note: hello world');
+  });
+
+  it('ignores a late partial transcript after the user resumes typing', () => {
+    const requestRender = vi.fn();
+    const editor = new CustomEditor({ requestRender } as any, {} as any);
+    let text = '';
+    editor.getText = vi.fn(() => text);
+    mocks.editorSetText.mockImplementation((next: string) => {
+      text = next;
+    });
+
+    editor.setVoiceListening(true);
+    editor.replaceVoiceTranscript('hello');
+    expect(text).toBe('hello');
+
+    // User edits — the dictation session is no longer active.
+    mocks.matchesKey.mockReturnValue(false);
+    editor.handleInput('x');
+
+    // A stale partial that arrives afterward must not clobber the user's input.
+    editor.replaceVoiceTranscript('hello world');
+    expect(text).not.toBe('hello world');
   });
 
   it('drives a listening animation timer while recording', () => {
