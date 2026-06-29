@@ -338,7 +338,7 @@ function MetricsContent() {
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>
                 This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse, DuckDB, or Spanner.
+                persistent metrics, switch the observability storage to ClickHouse, DuckDB, Postgres v-next, or Spanner.
               </Notice.Message>
             </Notice>
           )}
