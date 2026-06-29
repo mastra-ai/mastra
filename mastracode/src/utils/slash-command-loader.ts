@@ -139,6 +139,7 @@ export async function scanCommandDirectory(dirPath: string, rootDir?: string): P
 export async function loadCustomCommands(
   projectDir?: string,
   configDirName = DEFAULT_CONFIG_DIR,
+  extraCommandDirs: string[] = [],
 ): Promise<SlashCommandMetadata[]> {
   // Use a Map so later (higher priority) sources override earlier ones with the same name
   const commandMap = new Map<string, SlashCommandMetadata>();
@@ -186,11 +187,16 @@ export async function loadCustomCommands(
     addCommands(claudeProjectCommands);
   }
 
-  // 6. Load from mastra project directory <configDirName>/commands (highest priority)
+  // 6. Load from mastra project directory <configDirName>/commands
   if (projectDir) {
     const mastraProjectDir = path.join(projectDir, configDirName, 'commands');
     const mastraProjectCommands = await scanCommandDirectory(mastraProjectDir);
     addCommands(mastraProjectCommands);
+  }
+
+  // 7. Load from active plugin command directories (highest priority)
+  for (const commandsDir of extraCommandDirs) {
+    addCommands(await scanCommandDirectory(commandsDir));
   }
 
   return Array.from(commandMap.values());

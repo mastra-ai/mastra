@@ -138,16 +138,18 @@ export default defineMastraCodePlugin({
   name: ${JSON.stringify(pluginName)},
   description: 'A Mastra Code tool plugin.',
   tools: {
-    example_tool: createTool({
-      id: 'example_tool',
-      description: 'Echo a message from the scaffolded plugin.',
-      inputSchema: z.object({
-        message: z.string(),
+    example_tool: {
+      tool: createTool({
+        id: 'example_tool',
+        description: 'Echo a message from the scaffolded plugin.',
+        inputSchema: z.object({
+          message: z.string(),
+        }),
+        execute: async context => {
+          return { message: context.message };
+        },
       }),
-      execute: async context => {
-        return { message: context.message };
-      },
-    }),
+    },
   },
 });
 `;

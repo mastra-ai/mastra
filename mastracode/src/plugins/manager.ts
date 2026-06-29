@@ -66,6 +66,14 @@ export class PluginManager {
     return this.pluginTools[toolName]?.mastracode?.render;
   }
 
+  getPluginSkillPaths(): string[] {
+    return this.loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.skillPaths ?? []) : []));
+  }
+
+  getPluginCommandPaths(): string[] {
+    return this.loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.commandPaths ?? []) : []));
+  }
+
   private updatePluginTools(nextTools: ReturnType<typeof collectActivePluginTools>): void {
     for (const name of Object.keys(this.rawPluginTools)) {
       if (!(name in nextTools)) {

@@ -7,7 +7,10 @@ import type {
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValues,
   MastraCodePluginContext,
+  MastraCodePluginTool,
+  MastraCodePluginToolEntries,
   MastraCodePluginTools,
+  MastraCodeToolRenderConfig,
 } from '../plugin.js';
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
@@ -56,10 +59,12 @@ export async function loadPluginRecord(
 
     const configSchema = validatePluginConfigSchema(plugin.config);
     const configValues = resolvePluginConfigValues(configSchema, record.config);
+    const pluginDir = path.dirname(entryPath);
+    const pluginRoot = resolvePluginRoot(record, options);
     const context: MastraCodePluginContext = {
       cwd: options.projectRoot,
       scope: record.scope,
-      pluginDir: path.dirname(entryPath),
+      pluginDir,
       config: configValues,
     };
     const tools = await resolvePluginTools(plugin, context);
@@ -72,6 +77,8 @@ export async function loadPluginRecord(
       status: 'active',
       tools,
       toolNames: Object.keys(tools).sort(),
+      skillPaths: resolveExistingAssetDirs(pluginRoot, 'skills'),
+      commandPaths: resolveExistingAssetDirs(pluginRoot, 'commands'),
       configSchema,
       configValues,
     };
@@ -90,11 +97,21 @@ export async function loadPluginFromEntry(entryPath: string): Promise<MastraCode
   return validatePluginExport(await importPluginModule(entryPath));
 }
 
+export function resolvePluginRoot(record: ScopedInstalledPluginRecord, options: PluginPathOptions): string {
+  return path.isAbsolute(record.path) ? record.path : path.join(getPluginRoot(record.scope, options), record.path);
+}
+
 export function resolvePluginEntryPath(record: ScopedInstalledPluginRecord, options: PluginPathOptions): string {
-  const basePath = path.isAbsolute(record.path)
-    ? record.path
-    : path.join(getPluginRoot(record.scope, options), record.path);
-  return path.resolve(basePath, record.entry);
+  return path.resolve(resolvePluginRoot(record, options), record.entry);
+}
+
+function resolveExistingAssetDirs(pluginRoot: string, dirname: 'skills' | 'commands'): string[] {
+  const dir = path.join(pluginRoot, dirname);
+  try {
+    return fs.statSync(dir).isDirectory() ? [dir] : [];
+  } catch {
+    return [];
+  }
 }
 
 async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> {
@@ -134,11 +151,41 @@ async function resolvePluginTools(
   context: MastraCodePluginContext,
 ): Promise<MastraCodePluginTools> {
   if (!plugin.tools) return {};
-  const tools = typeof plugin.tools === 'function' ? await plugin.tools(context) : plugin.tools;
-  if (!tools || typeof tools !== 'object' || Array.isArray(tools)) {
+  const entries = typeof plugin.tools === 'function' ? await plugin.tools(context) : plugin.tools;
+  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
     throw new Error('Plugin tools function must return an object');
   }
+  return normalizePluginToolEntries(entries);
+}
+
+function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): MastraCodePluginTools {
+  const tools: MastraCodePluginTools = {};
+  for (const [name, entry] of Object.entries(entries)) {
+    if (!isToolEntryObject(entry)) {
+      throw new Error(`Plugin tool "${name}" must be an object with a tool property`);
+    }
+    tools[name] = withRenderConfig(entry.tool, entry.render);
+  }
   return tools;
+}
+
+function isToolEntryObject(
+  entry: MastraCodePluginToolEntries[string],
+): entry is { tool: MastraCodePluginTool; render?: MastraCodeToolRenderConfig } {
+  return (
+    !!entry && typeof entry === 'object' && 'tool' in entry && typeof (entry as { tool?: unknown }).tool === 'object'
+  );
+}
+
+function withRenderConfig(
+  tool: MastraCodePluginTool,
+  render: MastraCodeToolRenderConfig | undefined,
+): MastraCodePluginTools[string] {
+  return Object.assign(tool, {
+    mastracode: {
+      render,
+    },
+  });
 }
 
 function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSchema | undefined {

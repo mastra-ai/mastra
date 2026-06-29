@@ -144,6 +144,20 @@ function applyEffectiveDefaultsToModes(
   });
 }
 
+function addPluginToolsToModeAllowlists(
+  modes: AgentControllerMode[],
+  pluginToolNames: string[],
+): AgentControllerMode[] {
+  if (pluginToolNames.length === 0) return modes;
+  return modes.map(mode => {
+    if (!mode.availableTools) return mode;
+    return {
+      ...mode,
+      availableTools: Array.from(new Set([...mode.availableTools, ...pluginToolNames])),
+    };
+  });
+}
+
 export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
@@ -697,7 +711,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
-  const modes = applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
+  const modes = addPluginToolsToModeAllowlists(
+    applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    Object.keys(pluginTools),
+  );
   const defaultModeId =
     modes.find(mode => mode.metadata?.default === true)?.id ??
     modes.find(mode => mode.id === 'build')?.id ??
@@ -768,6 +785,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       projectPath: project.rootPath,
       projectName: project.name,
       gitBranch: project.gitBranch,
+      pluginSkillPaths: loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.skillPaths ?? []) : [])),
+      pluginCommandPaths: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' ? (plugin.commandPaths ?? []) : [],
+      ),
       yolo: true,
       ...globalInitialState,
       ...config?.initialState,

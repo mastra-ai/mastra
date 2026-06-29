@@ -26,7 +26,7 @@ function writePlugin(pluginDir: string, id: string): void {
     path.join(pluginDir, 'src/index.ts'),
     `import { defineMastraCodePlugin } from 'mastracode/plugin';
 
-export default defineMastraCodePlugin({ id: '${id}', version: '1.2.3', tools: { installed_tool: { id: 'installed_tool' } } });`,
+export default defineMastraCodePlugin({ id: '${id}', version: '1.2.3', tools: { installed_tool: { tool: { id: 'installed_tool' } } } });`,
   );
 }
 
@@ -122,6 +122,7 @@ describe('installLocalPlugin', () => {
       fs.realpathSync(path.resolve('..', 'mastracode')),
     );
     expect(loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json'))).toEqual({
+      disabledPlugins: [],
       plugins: {
         'acme.local': {
           enabled: true,

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { scaffoldPlugin } from '../../src/plugins/scaffold.js';
 import type { McE2ePrepareContext, McE2eScenario } from './types.js';
+import { typeTextSlowly } from './typing-utils.js';
 
 const MASTRACODE_PACKAGE_DIR = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -34,15 +35,51 @@ export default defineMastraCodePlugin({
   name: '${PLUGIN_NAME}',
   description: 'Plugin used by Mastra Code E2E tests.',
   tools: {
-    ${TOOL_NAME}: createTool({
-      id: '${TOOL_NAME}',
-      description: 'Return an E2E plugin lookup result.',
-      inputSchema: z.object({ query: z.string() }),
-      execute: async ({ context }) => ({ query: context.query, source: '${PLUGIN_ID}' }),
-    }),
+    ${TOOL_NAME}: {
+      tool: createTool({
+        id: '${TOOL_NAME}',
+        description: 'Return an E2E plugin lookup result.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async ({ context }) => ({ query: context.query, source: '${PLUGIN_ID}' }),
+      }),
+    },
   },
 });
 `,
+  );
+
+  return pluginDir;
+}
+
+function writeAssetPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
+  const pluginDir = join(projectDir, 'fixtures', 'plugins', 'asset-plugin');
+  const pluginSrcDir = join(pluginDir, 'src');
+  const commandsDir = join(pluginDir, 'commands');
+  const skillDir = join(pluginDir, 'skills', 'e2e-plugin-asset-skill');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  mkdirSync(commandsDir, { recursive: true });
+  mkdirSync(skillDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { defineMastraCodePlugin } from 'mastracode/plugin';
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E asset loading tests.',
+  tools: {},
+});
+`,
+  );
+  writeFileSync(
+    join(commandsDir, 'e2e-plugin-assets.md'),
+    `---\ndescription: E2E plugin bundled command autocomplete description\n---\nE2E plugin bundled command executed.\n\nARGUMENTS: $ARGUMENTS\n`,
+  );
+  writeFileSync(
+    join(skillDir, 'SKILL.md'),
+    `---\nname: e2e-plugin-asset-skill\ndescription: E2E plugin bundled skill autocomplete description\nuser-invocable: true\n---\nE2E plugin bundled skill instructions.\n`,
   );
 
   return pluginDir;
@@ -65,20 +102,19 @@ export default defineMastraCodePlugin({
   name: '${PLUGIN_NAME}',
   description: 'Plugin used by Mastra Code E2E tests.',
   tools: {
-    ${TOOL_NAME}: Object.assign(createTool({
-      id: '${TOOL_NAME}',
-      description: 'Stream progress before returning an E2E plugin lookup result.',
-      inputSchema: z.object({ query: z.string() }),
-      execute: async (input, toolContext) => {
-        await writeToolProgress(toolContext, { event: 'text', text: 'E2E plugin progress visible before completion' });
-        await sleep(1500);
-        return { query: input.query, source: '${PLUGIN_ID}', done: true };
-      },
-    }), {
-      mastracode: {
-        render: { type: 'subagent', agentType: 'e2e-plugin' },
-      },
-    }),
+    ${TOOL_NAME}: {
+      tool: createTool({
+        id: '${TOOL_NAME}',
+        description: 'Stream progress before returning an E2E plugin lookup result.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async (input, toolContext) => {
+          await writeToolProgress(toolContext, { event: 'text', text: 'E2E plugin progress visible before completion' });
+          await sleep(1500);
+          return { query: input.query, source: '${PLUGIN_ID}', done: true };
+        },
+      }),
+      render: { type: 'subagent', agentType: 'e2e-plugin' },
+    },
   },
 });
 `,
@@ -107,12 +143,14 @@ export default defineMastraCodePlugin({
   name: '${PLUGIN_NAME}',
   description: 'Plugin used by Mastra Code E2E hot reload tests.',
   tools: {
-    ${TOOL_NAME}: createTool({
-      id: '${TOOL_NAME}',
-      description: 'Return the current hot reload plugin result.',
-      inputSchema: z.object({ query: z.string() }),
-      execute: async input => ({ query: input.query, result: '${result}' }),
-    }),
+    ${TOOL_NAME}: {
+      tool: createTool({
+        id: '${TOOL_NAME}',
+        description: 'Return the current hot reload plugin result.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async input => ({ query: input.query, result: '${result}' }),
+      }),
+    },
   },
 });
 `,
@@ -481,6 +519,69 @@ export const pluginsBlockedConfigScenario: McE2eScenario = {
     await runtime.waitForScreenText(/tools:\s*\(none\)/i, terminal, 8_000);
 
     terminal.keyCtrlC();
+  },
+};
+
+export const pluginsAssetsLoadingScenario: McE2eScenario = {
+  name: 'plugins-assets-loading',
+  description: 'Loads commands and skills bundled by an installed plugin and exposes them through slash autocomplete.',
+  testName: 'loads bundled plugin commands and skills with autocomplete entries',
+  projectFixture: 'long-branch',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-assets-loading.json',
+  prepare({ projectDir }) {
+    const pluginDir = writeAssetPlugin({ projectDir });
+    writePluginRegistry(projectDir, pluginDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('../../src/plugins/manager.js');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Project: project/i, terminal, 15_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+
+    terminal.submit('/help');
+    await runtime.waitForScreenText(/Custom Commands/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\/\/e2e-plugin-assets/i, terminal, 8_000);
+    await runtime.waitForScreenText(/E2E plugin bundled command autocomplete description/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.sleep(100);
+
+    terminal.submit('/skills');
+    await runtime.waitForScreenText(/e2e-plugin-asset-skill/i, terminal, 10_000);
+    await runtime.waitForScreenText(/E2E plugin bundled skill autocomplete description/i, terminal, 10_000);
+
+    await typeTextSlowly(terminal, '/e2e-plugin-a');
+    await runtime.waitForScreenText(/E2E plugin bundled command autocomplete description/i, terminal, 20_000);
+    runtime.printScreen('plugin command autocomplete', terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/E2E plugin bundled command executed\./i, terminal, 15_000);
+    await runtime.waitForScreenText(/MC plugin bundled command response/i, terminal, 15_000);
+
+    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await typeTextSlowly(terminal, '/skill/e2e-plugin');
+    await runtime.waitForScreenText(/E2E plugin bundled skill autocomplete description/i, terminal, 20_000);
+    runtime.printScreen('plugin skill autocomplete', terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/MC plugin bundled skill response/i, terminal, 15_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const body = JSON.stringify(requests);
+    if (!body.includes('E2E plugin bundled command executed.')) {
+      throw new Error(`Expected plugin bundled command template in AIMock requests: ${body.slice(0, 2000)}`);
+    }
+    if (!body.includes('E2E plugin bundled skill instructions.')) {
+      throw new Error(`Expected plugin bundled skill instructions in AIMock requests: ${body.slice(0, 2000)}`);
+    }
   },
 };
 

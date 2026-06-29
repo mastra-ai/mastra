@@ -30,7 +30,7 @@ describe('plugin loader', () => {
         id: 'acme.loader',
         name: 'Loader Plugin',
         version: '1.0.0',
-        tools: context => ({ echo_tool: { id: 'echo_tool', description: context.cwd } })
+        tools: context => ({ echo_tool: { tool: { id: 'echo_tool', description: context.cwd } } })
       };`,
     );
 
@@ -45,7 +45,7 @@ describe('plugin loader', () => {
       path.join(pluginDir, 'src/index.ts'),
       `export const plugin = {
         id: 'acme.enabled',
-        tools: { enabled_tool: { id: 'enabled_tool', description: 'enabled' } }
+        tools: { enabled_tool: { tool: { id: 'enabled_tool', description: 'enabled' } } }
       };`,
     );
 
@@ -95,7 +95,7 @@ describe('plugin loader', () => {
           enabled: { type: 'boolean', default: true },
           prompt: { type: 'string', default: 'default prompt' }
         },
-        tools: context => ({ configured_tool: { id: 'configured_tool', description: JSON.stringify(context.config) } })
+        tools: context => ({ configured_tool: { tool: { id: 'configured_tool', description: JSON.stringify(context.config) } } })
       };`,
     );
 
@@ -123,6 +123,49 @@ describe('plugin loader', () => {
       configValues: { answerModel: 'chosen-model', enabled: false, prompt: 'default prompt' },
     });
     expect(loaded[0]?.tools.configured_tool?.description).toContain('chosen-model');
+  });
+
+  it('normalizes first-class tool render entries and discovers bundled assets', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'skills', 'helper'), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'skills', 'helper', 'SKILL.md'), '# Helper');
+    fs.mkdirSync(path.join(pluginDir, 'commands'), { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'commands', 'ask.md'), 'Ask template');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.assets',
+        tools: {
+          rendered_tool: {
+            tool: { id: 'rendered_tool', description: 'rendered' },
+            render: { type: 'subagent', agentType: 'assets' }
+          }
+        }
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.assets': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]?.tools.rendered_tool?.mastracode?.render).toEqual({ type: 'subagent', agentType: 'assets' });
+    expect(loaded[0]?.skillPaths).toEqual([path.join(pluginDir, 'skills')]);
+    expect(loaded[0]?.commandPaths).toEqual([path.join(pluginDir, 'commands')]);
   });
 
   it('surfaces load failures without throwing', async () => {
@@ -155,10 +198,13 @@ describe('plugin loader', () => {
     const projectRoot = path.join(tempDir, 'project');
     const firstDir = path.join(tempDir, 'first');
     const secondDir = path.join(tempDir, 'second');
-    writePlugin(path.join(firstDir, 'index.ts'), `export default { id: 'a.first', tools: { same: { id: 'same' } } };`);
+    writePlugin(
+      path.join(firstDir, 'index.ts'),
+      `export default { id: 'a.first', tools: { same: { tool: { id: 'same' } } } };`,
+    );
     writePlugin(
       path.join(secondDir, 'index.ts'),
-      `export default { id: 'b.second', tools: { same: { id: 'same' } } };`,
+      `export default { id: 'b.second', tools: { same: { tool: { id: 'same' } } } };`,
     );
 
     const loaded = await loadPlugins({

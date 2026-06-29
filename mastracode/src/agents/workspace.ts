@@ -85,7 +85,12 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
 }
 
 // Build skill paths dynamically based on configDir and projectPath
-export function buildSkillPaths(projectPath: string, configDir: string, homeDir = os.homedir()): string[] {
+export function buildSkillPaths(
+  projectPath: string,
+  configDir: string,
+  homeDir = os.homedir(),
+  pluginSkillPaths: string[] = [],
+): string[] {
   const mastraCodeLocalSkillsPath = path.join(projectPath, configDir, 'skills');
   const claudeLocalSkillsPath = path.join(projectPath, '.claude', 'skills');
   const agentSkillsLocalPath = path.join(projectPath, '.agents', 'skills');
@@ -100,6 +105,7 @@ export function buildSkillPaths(projectPath: string, configDir: string, homeDir 
     mastraCodeGlobalSkillsPath,
     claudeGlobalSkillsPath,
     agentSkillsGlobalPath,
+    ...pluginSkillPaths,
   ]);
 }
 
@@ -139,7 +145,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   const projectPath = path.resolve(rawProjectPath);
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
-  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir);
+  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];

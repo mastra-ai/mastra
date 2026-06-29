@@ -95,13 +95,21 @@ export type MastraCodePluginContext = {
   config: MastraCodePluginConfigValues;
 };
 
-export type MastraCodePluginTool = (Tool | ToolAction<any, any, any, any, any, any, any>) & {
+export type MastraCodePluginTool = Tool | ToolAction<any, any, any, any, any, any, any>;
+
+export type MastraCodePluginToolEntry = {
+  tool: MastraCodePluginTool;
+  render?: MastraCodeToolRenderConfig;
+};
+
+export type MastraCodePluginResolvedTool = MastraCodePluginTool & {
   mastracode?: {
     render?: MastraCodeToolRenderConfig;
   };
 };
 
-export type MastraCodePluginTools = Record<string, MastraCodePluginTool>;
+export type MastraCodePluginTools = Record<string, MastraCodePluginResolvedTool>;
+export type MastraCodePluginToolEntries = Record<string, MastraCodePluginToolEntry>;
 
 export type MastraCodePlugin = {
   id: string;
@@ -110,8 +118,8 @@ export type MastraCodePlugin = {
   description?: string;
   config?: MastraCodePluginConfigSchema;
   tools?:
-    | MastraCodePluginTools
-    | ((context: MastraCodePluginContext) => MastraCodePluginTools | Promise<MastraCodePluginTools>);
+    | MastraCodePluginToolEntries
+    | ((context: MastraCodePluginContext) => MastraCodePluginToolEntries | Promise<MastraCodePluginToolEntries>);
 };
 
 export function defineMastraCodePlugin<TPlugin extends MastraCodePlugin>(plugin: TPlugin): TPlugin {
