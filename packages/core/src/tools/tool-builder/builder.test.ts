@@ -734,4 +734,45 @@ describe('CoreToolBuilder requestContext merge', () => {
     // With no exec RC, closure RC is used directly
     expect(receivedCtx.requestContext!.get('controller')).toEqual({ controllerId: 'c-1' });
   });
+  it('rejects with TOOL_EXECUTION_TIMEOUT when tool exceeds timeoutMs', async () => {
+    const slowTool = createTool({
+      id: 'slow',
+      description: 'always slow',
+      inputSchema: z.object({}),
+      execute: () => new Promise(r => setTimeout(r, 5_000)),
+    });
+
+    const built = new CoreToolBuilder({
+      originalTool: slowTool,
+      options: {
+        name: 'slow',
+        requestContext: new RequestContext(),
+        timeoutMs: 100,
+      },
+    }).build();
+
+    await expect(built.execute?.({}, {} as any)).rejects.toMatchObject({
+      id: 'TOOL_EXECUTION_TIMEOUT',
+    });
+  }, 3_000);
+
+  it('resolves normally when tool finishes within timeoutMs', async () => {
+    const fastTool = createTool({
+      id: 'fast',
+      description: 'fast',
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+    });
+
+    const built = new CoreToolBuilder({
+      originalTool: fastTool,
+      options: {
+        name: 'fast',
+        requestContext: new RequestContext(),
+        timeoutMs: 2_000,
+      },
+    }).build();
+
+    await expect(built.execute?.({}, {} as any)).resolves.toMatchObject({ ok: true });
+  });
 });

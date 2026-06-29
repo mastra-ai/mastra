@@ -369,6 +369,12 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * browser capabilities for web automation, screenshots, and data extraction.
    */
   browser?: MastraBrowser;
+
+  /**
+   * Max milliseconds a tool execute() may run before rejecting.
+   * 0 or omitted = no timeout (preserves existing behavior).
+   */
+  timeoutMs?: number;
 }
 
 /**

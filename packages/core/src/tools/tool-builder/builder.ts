@@ -43,6 +43,24 @@ import type {
 import { noopObserve } from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
+function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
+  if (!ms || ms <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new MastraError({
+          id: 'TOOL_EXECUTION_TIMEOUT',
+          domain: ErrorDomain.TOOL,
+          category: ErrorCategory.USER,
+          details: { toolName, timeoutMs: ms },
+        }),
+      );
+    }, ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Merge two RequestContexts so non-serializable values survive the evented
  * workflow engine's toJSON/reconstruct cycle.
@@ -822,7 +840,7 @@ export class CoreToolBuilder extends MastraBase {
         }
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
-        return await new Promise((resolve, reject) => {
+        const execPromise = new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
               const result = await execFunction(args, execOptions!, toolSpan);
@@ -832,7 +850,12 @@ export class CoreToolBuilder extends MastraBase {
             }
           });
         });
+        return await withTimeout(execPromise, options.timeoutMs ?? 0, options.name);
       } catch (err) {
+        // Re-throw timeout errors directly
+        if (err instanceof MastraError && (err as any).id === 'TOOL_EXECUTION_TIMEOUT') {
+          throw err;
+        }
         const mastraError = new MastraError(
           {
             id: 'TOOL_EXECUTION_FAILED',
