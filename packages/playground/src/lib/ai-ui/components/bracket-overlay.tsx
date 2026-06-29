@@ -218,7 +218,7 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
       style={{
         top: highlight.top,
         height: highlight.height,
-        border: `3px ${isBufferingState ? 'dashed' : 'solid'} ${color}`,
+        border: `2px ${isBufferingState ? 'dashed' : 'solid'} ${color}`,
         borderRadius: '0.5rem',
         opacity: visible ? 1 : 0,
       }}
@@ -236,11 +236,11 @@ function getStateColor(state: HighlightPosition['state']): string {
       return 'rgba(239, 68, 68, 0.4)';
     case 'disconnected':
       return 'rgba(234, 179, 8, 0.4)';
-    // Buffering states use purple color
+    // Buffering states use a neutral bracket so they don't overpower the message content.
     case 'buffering':
-      return 'rgba(168, 85, 247, 0.4)';
+      return 'rgba(156, 163, 175, 0.45)';
     case 'buffering-complete':
-      return 'rgba(168, 85, 247, 0.4)';
+      return 'rgba(156, 163, 175, 0.45)';
     case 'buffering-failed':
       return 'rgba(239, 68, 68, 0.4)';
     // Activation state uses green — same as sync observation/reflection 'complete'

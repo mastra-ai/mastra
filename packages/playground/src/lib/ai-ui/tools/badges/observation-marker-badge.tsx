@@ -1,5 +1,8 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, CloudCog } from 'lucide-react';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, Eye } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { ObservationRenderer } from './observation-renderer';
 
@@ -76,6 +79,43 @@ const formatExtractedValue = (value: unknown): string => {
 };
 
 const isStructuredExtractedValue = (value: unknown) => typeof value === 'object' && value !== null;
+
+const ObservationIcon = ({ className }: { className?: string }) => <Eye className={className} />;
+
+const MarkerPill = ({
+  children,
+  icon,
+  expanded,
+  onClick,
+  className,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  expanded?: boolean;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+}) => {
+  const content = (
+    <>
+      {onClick && (
+        <Icon>
+          <ChevronDown className={cn('transition-all', expanded ? 'rotate-0' : '-rotate-90')} />
+        </Icon>
+      )}
+      <Badge icon={icon}>{children}</Badge>
+    </>
+  );
+
+  if (!onClick) {
+    return <div className={cn('inline-flex items-center gap-2', className)}>{content}</div>;
+  }
+
+  return (
+    <button onClick={onClick} className={cn('inline-flex items-center gap-2', className)} type="button">
+      {content}
+    </button>
+  );
+};
 
 const ExtractedValuesPanel = ({
   extractedValues,
@@ -189,6 +229,8 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const expandedBgColor = 'bg-green-500/5';
   const expandedBorderColor = 'border-green-500/10';
   const labelColor = 'text-green-600';
+  const bufferExpandedBgColor = 'bg-surface2';
+  const bufferExpandedBorderColor = 'border-border-1';
   const actionLabel = isReflection ? 'Reflecting' : 'Observing';
   const completedLabel = isReflection ? 'Reflected' : 'Observed';
 
@@ -206,7 +248,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
           className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${bgColor} ${textColor} text-xs font-medium my-1`}
         >
           <Loader2 className="w-3 h-3 animate-spin" />
-          <Brain className="w-3 h-3" />
+          {isReflection ? <Brain className="w-3 h-3" /> : <ObservationIcon className="w-3 h-3" />}
           <span>
             {actionLabel}
             {tokensToObserve ? ` ~${formatTokens(tokensToObserve)} tokens` : '...'}
@@ -254,7 +296,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
             className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer`}
           >
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            <Brain className="w-3 h-3" />
+            {isReflection ? <Brain className="w-3 h-3" /> : <ObservationIcon className="w-3 h-3" />}
             <span>
               {completedLabel} {tokensObserved ? formatTokens(tokensObserved) : '?'}→
               {observationTokens ? formatTokens(observationTokens) : '?'} tokens
@@ -409,19 +451,15 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const bufferingLabel = isReflection ? 'Buffering reflection' : 'Buffering observations';
     return (
       <div
-        className="mb-3"
+        className="mt-4 mb-8"
         data-om-badge={cycleId}
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
-        <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-500/10 text-purple-600 text-xs font-medium my-1 border border-dashed border-purple-400/40">
-          <Loader2 className="w-3 h-3 animate-spin" />
-          <CloudCog className="w-3 h-3" />
-          <span>
-            {bufferingLabel}
-            {tokensToBuffer ? ` ~${formatTokens(tokensToBuffer)} tokens` : '...'}
-          </span>
-        </div>
+        <MarkerPill icon={<Loader2 className="animate-spin text-accent6" />}>
+          {bufferingLabel}
+          {tokensToBuffer ? ` ~${formatTokens(tokensToBuffer)} tokens` : '...'}
+        </MarkerPill>
       </div>
     );
   }
@@ -445,28 +483,21 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
 
     return (
       <div
-        className="mb-3"
+        className="mt-4 mb-8"
         data-om-badge={cycleId}
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
       >
-        <div className="my-1">
-          <button
-            onClick={handleToggle}
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer border border-dashed border-green-400/40`}
-          >
-            {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            <CloudCog className="w-3 h-3" />
-            <span>
-              {bufferedLabel} {tokensBuffered ? formatTokens(tokensBuffered) : '?'}→
-              {bufferedTokens ? formatTokens(bufferedTokens) : '?'} tokens
-              {compressionRatio ? ` (-${compressionRatio}x)` : ''}
-            </span>
-          </button>
+        <div>
+          <MarkerPill expanded={isExpanded} onClick={handleToggle} icon={<ObservationIcon className="text-accent6" />}>
+            {bufferedLabel} {tokensBuffered ? formatTokens(tokensBuffered) : '?'}→
+            {bufferedTokens ? formatTokens(bufferedTokens) : '?'} tokens
+            {compressionRatio ? ` (-${compressionRatio}x)` : ''}
+          </MarkerPill>
 
           {isExpanded && (
             <div
-              className={`mt-1 ml-6 p-2 rounded-md ${expandedBgColor} text-xs space-y-1.5 border ${expandedBorderColor}`}
+              className={`mt-2 ml-6 rounded-lg ${bufferExpandedBgColor} p-4 text-xs space-y-2 border ${bufferExpandedBorderColor}`}
             >
               {observations && <ObservationRenderer observations={observations} maxHeight="240px" />}
               <ExtractedValuesPanel
@@ -547,7 +578,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
             className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md ${completeBgColor} ${completeTextColor} text-xs font-medium ${completeHoverBgColor} transition-colors cursor-pointer`}
           >
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            <Brain className="w-3 h-3" />
+            {isReflection ? <Brain className="w-3 h-3" /> : <ObservationIcon className="w-3 h-3" />}
             <span>
               {activatedLabel} {tokensActivated ? formatTokens(tokensActivated) : '?'}→
               {observationTokens ? formatTokens(observationTokens) : '?'} tokens
