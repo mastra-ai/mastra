@@ -74,6 +74,12 @@ export class PluginManager {
     return this.loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.commandPaths ?? []) : []));
   }
 
+  getPluginInstructions(): string[] {
+    return this.loadedPlugins.flatMap(plugin =>
+      plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
+    );
+  }
+
   private updatePluginTools(nextTools: ReturnType<typeof collectActivePluginTools>): void {
     for (const name of Object.keys(this.rawPluginTools)) {
       if (!(name in nextTools)) {

@@ -795,6 +795,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       pluginCommandPaths: loadedPlugins.flatMap(plugin =>
         plugin.status === 'active' ? (plugin.commandPaths ?? []) : [],
       ),
+      pluginInstructions: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
+      ),
       yolo: true,
       ...globalInitialState,
       ...config?.initialState,

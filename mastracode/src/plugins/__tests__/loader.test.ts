@@ -125,7 +125,7 @@ describe('plugin loader', () => {
     expect(loaded[0]?.tools.configured_tool?.description).toContain('chosen-model');
   });
 
-  it('normalizes first-class tool render entries and discovers bundled assets', async () => {
+  it('normalizes first-class tool render entries and discovers bundled assets and instructions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');
     const pluginDir = path.join(tempDir, 'plugin');
@@ -137,6 +137,9 @@ describe('plugin loader', () => {
       path.join(pluginDir, 'src/index.ts'),
       `export default {
         id: 'acme.assets',
+        instructions: context => ` +
+        '`Plugin instruction for ${context.cwd}`' +
+        `,
         tools: {
           rendered_tool: {
             tool: { id: 'rendered_tool', description: 'rendered' },
@@ -164,6 +167,7 @@ describe('plugin loader', () => {
     });
 
     expect(loaded[0]?.tools.rendered_tool?.mastracode?.render).toEqual({ type: 'subagent', agentType: 'assets' });
+    expect(loaded[0]?.instructions).toBe(`Plugin instruction for ${projectRoot}`);
     expect(loaded[0]?.skillPaths).toEqual([path.join(pluginDir, 'skills')]);
     expect(loaded[0]?.commandPaths).toEqual([path.join(pluginDir, 'commands')]);
   });

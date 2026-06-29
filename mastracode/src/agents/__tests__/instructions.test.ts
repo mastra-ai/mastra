@@ -51,4 +51,33 @@ describe('getDynamicInstructions', () => {
       'Include `Co-Authored-By: Mastra Code (anthropic/claude-opus-4-6) <noreply@mastra.ai>` in the message body.',
     );
   });
+
+  it('appends active plugin instructions to the base prompt', async () => {
+    const prompt = await getDynamicInstructions({
+      requestContext: {
+        get: vi.fn(key => {
+          const getState = vi.fn(() => ({
+            projectPath: '/tmp/project',
+            projectName: 'test-project',
+            gitBranch: 'main',
+            pluginInstructions: ['Use the Alexandria reader policy.', 'Prefer plugin-provided workflows.'],
+          }));
+          return key === 'controller'
+            ? {
+                getState,
+                session: {
+                  modeId: 'build',
+                  modelId: 'openai/gpt-5.5',
+                  state: { get: getState },
+                },
+              }
+            : undefined;
+        }),
+      },
+    });
+
+    expect(prompt).toContain('# Plugin Instructions');
+    expect(prompt).toContain('Use the Alexandria reader policy.');
+    expect(prompt).toContain('Prefer plugin-provided workflows.');
+  });
 });

@@ -68,12 +68,14 @@ export async function loadPluginRecord(
       config: configValues,
     };
     const tools = await resolvePluginTools(plugin, context);
+    const instructions = await resolvePluginInstructions(plugin, context);
 
     return {
       ...record,
       name: plugin.name,
       version: plugin.version ?? record.version,
       description: plugin.description,
+      instructions,
       status: 'active',
       tools,
       toolNames: Object.keys(tools).sort(),
@@ -156,6 +158,20 @@ async function resolvePluginTools(
     throw new Error('Plugin tools function must return an object');
   }
   return normalizePluginToolEntries(entries);
+}
+
+async function resolvePluginInstructions(
+  plugin: MastraCodePlugin,
+  context: MastraCodePluginContext,
+): Promise<string | undefined> {
+  if (plugin.instructions === undefined) return undefined;
+  const instructions =
+    typeof plugin.instructions === 'function' ? await plugin.instructions(context) : plugin.instructions;
+  if (typeof instructions !== 'string') {
+    throw new Error('Plugin instructions must be a string');
+  }
+  const trimmed = instructions.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): MastraCodePluginTools {

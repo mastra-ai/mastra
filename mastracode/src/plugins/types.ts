@@ -29,6 +29,7 @@ export type ScopedInstalledPluginRecord = InstalledPluginRecord & {
 export type LoadedPlugin = ScopedInstalledPluginRecord & {
   name?: string;
   description?: string;
+  instructions?: string;
   status: PluginStatus;
   error?: string;
   tools: MastraCodePluginTools;
