@@ -3075,15 +3075,6 @@ export interface ListScheduleTriggersResponse {
 // the top level so the SDK contract stays stable across implementations.
 // ---------------------------------------------------------------------------
 
-/**
- * Broadcast policy for the chunks produced by a heartbeat-driven run.
- *
- * - `live` (default) — pass every chunk through to subscribers
- * - `on-complete` — drop intermediate chunks; replay full text on finish
- * - `never` — drop every chunk (the run still happens server-side)
- */
-export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
-
 /** Attributes rendered onto the signal's XML tag. */
 export type HeartbeatSignalAttributes = Record<string, string | number | boolean | null | undefined>;
 
@@ -3124,7 +3115,6 @@ export interface Heartbeat {
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
   providerOptions?: Record<string, unknown>;
-  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   lastRun?: ScheduleRunSummary;
   createdAt: number;
@@ -3152,7 +3142,6 @@ export interface CreateHeartbeatInput {
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
   providerOptions?: Record<string, unknown>;
-  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }
 
@@ -3172,7 +3161,6 @@ export interface UpdateHeartbeatOptions {
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
   providerOptions?: Record<string, unknown>;
-  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }
 

@@ -272,25 +272,6 @@ describe('Heartbeats handlers', () => {
         } as any),
       ).rejects.toThrow();
     });
-
-    it('patches broadcast mode and persists to target', async () => {
-      const schedulesStore = (await storage.getStore('schedules'))!;
-      const schedule = makeHeartbeatSchedule();
-      await schedulesStore.createSchedule(schedule);
-
-      const result = await UPDATE_HEARTBEAT_ROUTE.handler({
-        mastra,
-        agentId: 'agent-1',
-        heartbeatId: schedule.id,
-        broadcast: 'on-complete',
-        ...baseCtx(),
-      } as any);
-
-      expect(result.broadcast).toBe('on-complete');
-
-      const updated = await schedulesStore.getSchedule(schedule.id);
-      expect((updated!.target as any).broadcast).toBe('on-complete');
-    });
   });
 
   describe('CREATE_HEARTBEAT_ROUTE', () => {
@@ -313,23 +294,6 @@ describe('Heartbeats handlers', () => {
       const created = await schedulesStore.getSchedule(result.id);
       expect(created).toBeDefined();
       expect(created!.ownerId).toBe('agent-1');
-    });
-
-    it('forwards broadcast mode through to the persisted schedule', async () => {
-      const result = await CREATE_HEARTBEAT_ROUTE.handler({
-        mastra,
-        agentId: 'agent-1',
-        cron: '0 * * * *',
-        prompt: 'Hello',
-        broadcast: 'never',
-        ...baseCtx(),
-      } as any);
-
-      expect(result.broadcast).toBe('never');
-
-      const schedulesStore = (await storage.getStore('schedules'))!;
-      const created = await schedulesStore.getSchedule(result.id);
-      expect((created!.target as any).broadcast).toBe('never');
     });
 
     it('404s when the agent does not exist', async () => {

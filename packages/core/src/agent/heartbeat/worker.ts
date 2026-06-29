@@ -331,14 +331,12 @@ export async function executeHeartbeat(
   }
 
   const effective: HeartbeatEffective = mergeEffective(rowDefaults, prepared);
-  const broadcastMode = effective.broadcast ?? 'live';
 
   // Run-level marker carried on the signal / agent run so consumers
-  // (typing status, AgentChannels broadcast policy, UI badges) can detect
-  // that this run was heartbeat-driven.
+  // (typing status, UI badges) can detect that this run was
+  // heartbeat-driven.
   const heartbeatRunMeta = {
     scheduleId,
-    broadcast: broadcastMode,
     ...(effective.threadId ? { threadId: effective.threadId } : {}),
   };
 
@@ -583,7 +581,6 @@ function buildEffectiveFromTarget(target: Extract<ScheduleTarget, { type: 'heart
     threadId: target.threadId,
     resourceId: target.resourceId,
     prompt: target.prompt,
-    broadcast: target.broadcast,
     signalType: target.signalType,
     tagName: target.tagName,
     attributes: target.attributes,

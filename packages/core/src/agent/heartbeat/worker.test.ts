@@ -121,7 +121,7 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
       type: 'notification',
       tagName: 'heartbeat',
       contents: 'ping',
-      providerOptions: { mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } } },
+      providerOptions: { mastra: { heartbeat: { scheduleId: 'hb_a1', threadId: 't1' } } },
     });
     expect(target).toMatchObject({
       threadId: 't1',
@@ -158,7 +158,7 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     expect(signal.type).toBe('system-reminder');
     expect(signal.tagName).toBe('heartbeat');
     expect(signal.providerOptions).toEqual({
-      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } },
+      mastra: { heartbeat: { scheduleId: 'hb_a1', threadId: 't1' } },
     });
     expect(target.ifActive).toEqual({ behavior: 'deliver', attributes: { source: 'cron' } });
     expect(target.ifIdle).toEqual({ behavior: 'persist', attributes: { kind: 'wake' } });
@@ -216,7 +216,7 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     const [signal] = sendSignal.mock.calls[0]!;
     expect(signal.providerOptions).toEqual({
       openai: { store: true },
-      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } },
+      mastra: { heartbeat: { scheduleId: 'hb_a1', threadId: 't1' } },
     });
   });
 
@@ -252,7 +252,7 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     const call = generate.mock.calls[0] as any[];
     expect(call[0]).toBe('tick');
     expect(call[1].providerOptions).toEqual({
-      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live' } },
+      mastra: { heartbeat: { scheduleId: 'hb_a1' } },
     });
     expect(sendSignal).not.toHaveBeenCalled();
   });

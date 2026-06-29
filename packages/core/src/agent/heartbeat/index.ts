@@ -5,8 +5,6 @@ export {
   HEARTBEAT_SCHEDULE_PREFIX,
   HeartbeatInputSchema,
   HeartbeatOutputSchema,
-  HeartbeatBroadcastModeSchema,
-  type HeartbeatBroadcastMode,
   type HeartbeatInput,
   type HeartbeatOutput,
   type HeartbeatRunStatus,

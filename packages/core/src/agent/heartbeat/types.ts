@@ -2,28 +2,6 @@ import { z } from 'zod/v4';
 import type { AgentSignalAttributes, AgentSignalType } from '../signals';
 import type { AgentSignalActiveBehavior, AgentSignalIdleBehavior } from '../types';
 
-export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
-
-/**
- * Advisory per-heartbeat broadcast policy. Stamped onto the heartbeat
- * signal's `providerOptions.mastra.heartbeat` (and on the threadless
- * `agent.generate` run options) so consumers — channel renderers, Studio
- * UI, observability surfaces — can decide independently whether to honor
- * it.
- *
- * - `live`         consumers should render chunks as they arrive (default)
- * - `on-complete`  consumers should buffer intermediate text deltas and
- *                  only render once the run finishes
- * - `never`        consumers should suppress all rendering for the run
- *
- * Filtering is NEVER applied inside the agent loop or an output processor
- * — it would gate the agent loop itself (tool-calls/results never reach
- * the loop's reducers and tools never execute). All policy lives in
- * consumers; see {@link AgentChannels} for the channel renderer
- * implementation.
- */
-export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
-
 /**
  * Serializable subset of `AgentExecutionOptions` that a heartbeat persists and
  * applies to the woken run. Heartbeat config is JSON-persisted to schedule
@@ -129,13 +107,6 @@ export const HeartbeatInputSchema = z.object({
   providerOptions: z.record(z.string(), z.unknown()).optional(),
   ifActive: HeartbeatIfActiveSchema.optional(),
   ifIdle: HeartbeatIfIdleSchema.optional(),
-  /**
-   * Broadcast mode for the chunks produced by this heartbeat-driven run.
-   * - `live` (default) — pass every chunk through
-   * - `on-complete` — drop intermediate chunks; replay full text on finish
-   * - `never` — drop every chunk (the run still happens server-side)
-   */
-  broadcast: HeartbeatBroadcastModeSchema.optional(),
 });
 
 export type HeartbeatInput = z.infer<typeof HeartbeatInputSchema>;
@@ -170,7 +141,6 @@ export type HeartbeatEffective = {
   threadId?: string;
   resourceId?: string;
   prompt: string;
-  broadcast?: HeartbeatBroadcastMode;
   signalType?: AgentSignalType;
   tagName?: string;
   ifActive?: HeartbeatIfActive;

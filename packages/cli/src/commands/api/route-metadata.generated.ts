@@ -5677,7 +5677,6 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agentId",
       "attributes",
-      "broadcast",
       "cron",
       "id",
       "ifActive",
@@ -5707,7 +5706,6 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "attributes",
-      "broadcast",
       "cron",
       "ifActive",
       "ifIdle",

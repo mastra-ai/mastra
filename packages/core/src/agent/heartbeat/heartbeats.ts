@@ -5,7 +5,7 @@ import type { Mastra } from '../../mastra';
 import type { Schedule } from '../../storage/domains/schedules/base';
 import { computeNextFireAt, validateCron } from '../../workflows/scheduler/cron';
 import type { AgentSignalAttributes, AgentSignalType } from '../signals';
-import type { HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from './types';
+import type { HeartbeatIfActive, HeartbeatIfIdle } from './types';
 import { HEARTBEAT_SCHEDULE_PREFIX } from './types';
 
 type HeartbeatTarget = Extract<Schedule['target'], { type: 'heartbeat' }>;
@@ -88,7 +88,6 @@ export interface Heartbeat {
   providerOptions?: Record<string, unknown>;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
-  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -121,7 +120,6 @@ export interface CreateHeartbeatInput {
   providerOptions?: Record<string, unknown>;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
-  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   /** Schedule lifecycle status. Defaults to `'active'`. */
   status?: 'active' | 'paused';
@@ -139,7 +137,6 @@ export interface UpdateHeartbeatInput {
   providerOptions?: Record<string, unknown>;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
-  broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   status?: 'active' | 'paused';
 }
@@ -253,7 +250,6 @@ export class Heartbeats {
       ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
       ...(input.ifActive ? { ifActive: input.ifActive } : {}),
       ...(input.ifIdle ? { ifIdle: input.ifIdle } : {}),
-      ...(input.broadcast ? { broadcast: input.broadcast } : {}),
     };
 
     const schedule: Schedule = {
@@ -327,7 +323,6 @@ export class Heartbeats {
       ...(patch.providerOptions !== undefined ? { providerOptions: patch.providerOptions } : {}),
       ...(patch.ifActive !== undefined ? { ifActive: patch.ifActive } : {}),
       ...(patch.ifIdle !== undefined ? { ifIdle: patch.ifIdle } : {}),
-      ...(patch.broadcast !== undefined ? { broadcast: patch.broadcast } : {}),
     };
 
     // Recompute the next fire when the cadence changes OR when this patch
@@ -463,7 +458,6 @@ export function toHeartbeat(schedule: Schedule): Heartbeat | null {
     ...(target.providerOptions ? { providerOptions: target.providerOptions } : {}),
     ...(target.ifActive ? { ifActive: target.ifActive } : {}),
     ...(target.ifIdle ? { ifIdle: target.ifIdle } : {}),
-    ...(target.broadcast ? { broadcast: target.broadcast } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,

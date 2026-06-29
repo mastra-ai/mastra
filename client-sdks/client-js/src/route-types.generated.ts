@@ -89724,7 +89724,6 @@ export type GetSchedules_Response = {
                 [key: string]: unknown;
               }
             | undefined;
-          broadcast?: ('live' | 'on-complete' | 'never') | undefined;
           requestContext?:
             | {
                 [key: string]: unknown;
@@ -89856,7 +89855,6 @@ export type GetSchedulesScheduleId_Response = {
               [key: string]: unknown;
             }
           | undefined;
-        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
               [key: string]: unknown;
@@ -90071,7 +90069,6 @@ export type PostSchedulesScheduleIdPause_Response = {
               [key: string]: unknown;
             }
           | undefined;
-        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
               [key: string]: unknown;
@@ -90198,7 +90195,6 @@ export type PostSchedulesScheduleIdResume_Response = {
               [key: string]: unknown;
             }
           | undefined;
-        broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
               [key: string]: unknown;
@@ -90342,7 +90338,6 @@ export type GetHeartbeats_Response = {
           [key: string]: unknown;
         }
       | undefined;
-    broadcast?: ('live' | 'on-complete' | 'never') | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -90453,7 +90448,6 @@ export type GetHeartbeatsHeartbeatId_Response = {
         [key: string]: unknown;
       }
     | undefined;
-  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -90531,7 +90525,6 @@ export type PostHeartbeats_Body = {
         [key: string]: unknown;
       }
     | undefined;
-  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -90613,7 +90606,6 @@ export type PostHeartbeats_Response = {
         [key: string]: unknown;
       }
     | undefined;
-  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -90695,7 +90687,6 @@ export type PatchHeartbeatsHeartbeatId_Body = {
         [key: string]: unknown;
       }
     | undefined;
-  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -90777,7 +90768,6 @@ export type PatchHeartbeatsHeartbeatId_Response = {
         [key: string]: unknown;
       }
     | undefined;
-  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -90913,7 +90903,6 @@ export type PostHeartbeatsHeartbeatIdPause_Response = {
         [key: string]: unknown;
       }
     | undefined;
-  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -91021,7 +91010,6 @@ export type PostHeartbeatsHeartbeatIdResume_Response = {
         [key: string]: unknown;
       }
     | undefined;
-  broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
         [key: string]: unknown;

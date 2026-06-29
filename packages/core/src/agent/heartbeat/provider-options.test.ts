@@ -2,8 +2,8 @@
  * Verifies that `signal.providerOptions.mastra.*` survives onto the transient
  * `data-${type}` chunk that subscribed-thread consumers see.
  *
- * This is the channel AgentChannels uses to decide whether to broadcast a
- * heartbeat-triggered run to the underlying chat platform. We use
+ * This is the channel AgentChannels uses to detect a heartbeat-triggered
+ * run and decide how to render it to the underlying chat platform. We use
  * `providerOptions` (not `attributes`) because `attributes` is serialized as
  * XML attributes on the signal tag and IS shown to the LLM, while
  * `providerOptions.mastra.*` is out-of-band metadata that is stripped before
@@ -67,7 +67,6 @@ describe('signal providerOptions on subscribed thread chunks', () => {
     const runPromise = readWholeRun(iterator);
 
     const heartbeatMetadata = {
-      broadcast: 'on-complete' as const,
       scheduleId: 'hb_agent_thread',
     };
 

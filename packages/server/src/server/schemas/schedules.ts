@@ -10,8 +10,6 @@ const workflowScheduleTargetSchema = z.object({
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
-const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
-
 const signalAttributesSchema = z.record(
   z.string(),
   z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
@@ -44,7 +42,6 @@ const heartbeatScheduleTargetSchema = z.object({
   ifActive: ifActiveSchema.optional(),
   ifIdle: ifIdleSchema.optional(),
   providerOptions: z.record(z.string(), z.unknown()).optional(),
-  broadcast: heartbeatBroadcastModeSchema.optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 

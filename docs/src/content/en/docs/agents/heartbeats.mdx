@@ -124,23 +124,6 @@ await mastra.heartbeats.create({
 
 `providerOptions` are merged into the signal payload on every fire and apply to both threaded and threadless heartbeats.
 
-### Controlling the run's stream
-
-The `broadcast` option controls what happens to the stream chunks produced by a heartbeat run. It applies to both threaded and threadless heartbeats and defaults to `live`.
-
-- `live` (default): pass every chunk through as the run produces it.
-- `on-complete`: drop intermediate chunks and replay the full text once the run finishes.
-- `never`: drop every chunk. The run still happens server-side; nothing is streamed.
-
-```typescript
-await mastra.heartbeats.create({
-  agentId: 'pinger',
-  cron: '0 * * * *',
-  prompt: 'Quiet background check.',
-  broadcast: 'never',
-})
-```
-
 ## Managing heartbeats
 
 Use `mastra.heartbeats` for all heartbeat operations. To scope to a single agent, pass `agentId` to `create` or `list`.

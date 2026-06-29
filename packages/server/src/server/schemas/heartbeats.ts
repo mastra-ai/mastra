@@ -1,15 +1,6 @@
 import { z } from 'zod';
 import { scheduleRunSummarySchema } from './schedules';
 
-/**
- * Broadcast policy for the chunks produced by a heartbeat-driven run.
- *
- * - `live` (default) — pass every chunk through to subscribers
- * - `on-complete` — drop intermediate chunks; replay full text on finish
- * - `never` — drop every chunk (the run still happens server-side)
- */
-export const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
-
 /** Attributes rendered onto the signal's XML tag. */
 const signalAttributesSchema = z.record(
   z.string(),
@@ -65,7 +56,6 @@ export const heartbeatSchema = z.object({
   ifActive: ifActiveSchema.optional(),
   ifIdle: ifIdleSchema.optional(),
   providerOptions: z.record(z.string(), z.unknown()).optional(),
-  broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
@@ -103,7 +93,6 @@ export const createHeartbeatBodySchema = z.object({
   ifActive: ifActiveSchema.optional(),
   ifIdle: ifIdleSchema.optional(),
   providerOptions: z.record(z.string(), z.unknown()).optional(),
-  broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -124,7 +113,6 @@ export const updateHeartbeatBodySchema = z.object({
   ifActive: ifActiveSchema.optional(),
   ifIdle: ifIdleSchema.optional(),
   providerOptions: z.record(z.string(), z.unknown()).optional(),
-  broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 

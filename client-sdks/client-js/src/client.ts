@@ -2348,7 +2348,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Fires a heartbeat manually, out-of-band from the cron schedule. Behaves
-   * like a scheduled fire (honoring `ifActive` / `ifIdle` and `broadcast`) but
+   * like a scheduled fire (honoring `ifActive` / `ifIdle`) but
    * does not advance `nextFireAt`. The returned `claimId` is the trigger row's
    * runId — look it up via `listScheduleTriggers(heartbeatId)`.
    */
