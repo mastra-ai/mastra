@@ -4,7 +4,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ButtonHTMLAttributes, ChangeEvent, PropsWithChildren } from 'react';
+import type { ChangeEvent, PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AddItemDialog } from '../add-item-dialog';
@@ -13,13 +13,7 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-// Thin stubs for playground-ui atoms so this test focuses on the real client + mutation behavior.
-vi.mock('@mastra/playground-ui/components/Button', () => ({
-  Button: ({ variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
-    <button {...props} />
-  ),
-}));
-
+// Thin stub for the heavy Dialog atom so this test focuses on the real client + mutation behavior.
 vi.mock('@mastra/playground-ui/components/Dialog', () => {
   const Dialog = ({ open, children }: PropsWithChildren<{ open: boolean }>) => (open ? <div>{children}</div> : null);
 
