@@ -1926,7 +1926,6 @@ export type ProviderModelsMap = {
     'grok-build-0-1',
     'kimi-k2',
     'kimi-k2-thinking',
-    'kimi-k2-thinking-turbo',
     'kimi-k2.5',
     'kimi-k2.6',
     'kimi-k2.7-code',
