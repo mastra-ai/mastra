@@ -2760,6 +2760,7 @@ body::before {
 .provider-tick {
   flex-shrink: 0;
 }
+.provider-tick.oauth,
 .provider-tick.stored {
   color: var(--green);
 }
@@ -2783,6 +2784,7 @@ body::before {
   border-radius: 999px;
   flex-shrink: 0;
 }
+.provider-pill.oauth,
 .provider-pill.stored {
   background: color-mix(in oklch, var(--green) 18%, transparent);
   color: var(--green);

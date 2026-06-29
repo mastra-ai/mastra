@@ -1,4 +1,4 @@
-import type { HarnessMode } from '@mastra/core/harness';
+import type { AgentControllerMode } from '@mastra/core/agent-controller';
 
 import { createMastraCode } from '../index.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
@@ -30,10 +30,10 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
       disableHooks: false,
     });
 
-    const { harness, mcpManager, signalsPubSub } = result;
+    const { controller, mcpManager, signalsPubSub } = result;
 
     // Default modes (same as createMastraCode defaults)
-    const modes: HarnessMode[] = [
+    const modes: AgentControllerMode[] = [
       { id: 'build', name: 'Build' },
       { id: 'plan', name: 'Plan' },
       { id: 'fast', name: 'Fast' },
@@ -45,8 +45,8 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
       const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
         mcpManager?.disconnect(),
-        harness?.getMastra()?.stopWorkers(),
-        harness?.stopHeartbeats(),
+        controller?.getMastra()?.stopWorkers(),
+        controller?.stopHeartbeats(),
         closeSignalsPubSub?.(),
       ]);
 
@@ -64,7 +64,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
     process.on('SIGINT', handleSignal);
     process.on('SIGTERM', handleSignal);
 
-    await runAcpServer(harness, modes, cleanup);
+    await runAcpServer(controller, modes, cleanup);
   } catch (error) {
     process.stderr.write(`[acp] Fatal error: ${error}\n`);
     // eslint-disable-next-line no-console

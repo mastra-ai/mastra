@@ -47,14 +47,14 @@ function createSession() {
   };
 }
 
-function createHarness(session: ReturnType<typeof createSession>) {
+function createAgentController(session: ReturnType<typeof createSession>) {
   return { session };
 }
 
 describe('createTUIState', () => {
   it('initializes the shared TUI runtime defaults used by chat handlers', () => {
     const session = createSession();
-    const harness = createHarness(session);
+    const controller = createAgentController(session);
     const hookManager = {};
     const analytics = {};
     const authStorage = {};
@@ -62,7 +62,7 @@ describe('createTUIState', () => {
     const workspace = {};
 
     const state = createTUIState({
-      harness: harness as never,
+      controller: controller as never,
       session: session as never,
       hookManager: hookManager as never,
       analytics: analytics as never,
@@ -71,7 +71,7 @@ describe('createTUIState', () => {
       workspace: workspace as never,
     });
 
-    expect(state.harness).toBe(harness);
+    expect(state.controller).toBe(controller);
     expect(state.hookManager).toBe(hookManager);
     expect(state.analytics).toBe(analytics);
     expect(state.authStorage).toBe(authStorage);
@@ -133,6 +133,6 @@ describe('createTUIState', () => {
     expect(state.projectInfo).toEqual({ rootPath: '/tmp/mastra-code-project', gitBranch: 'main' });
 
     expect(state.editor.getModeColor?.()).toBe('#7c3aed');
-    expect(harness.session.mode.resolve).toHaveBeenCalled();
+    expect(controller.session.mode.resolve).toHaveBeenCalled();
   });
 });

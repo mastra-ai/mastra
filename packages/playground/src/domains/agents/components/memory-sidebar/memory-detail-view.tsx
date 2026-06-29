@@ -1,4 +1,6 @@
-import { MemoryStudioPanel, useMemoryThreadMessages, useObservationalMemory } from '@mastra/playground-ui';
+import { MemoryStudioPanel } from '@mastra/playground-ui/domains/memory/components/memory-studio-panel';
+import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { useEffect } from 'react';
 
 import { getObservationWindowTokens } from './lib/observation-window';

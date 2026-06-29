@@ -71,6 +71,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
   providers: Record<string, ProviderConfig>;
   models: Record<string, string[]>;
   attachmentCapabilities: AttachmentCapabilities;
+  failedGateways: string[];
 }> {
   const enabledGateways: MastraModelGatewayInterface[] = [];
 
@@ -83,6 +84,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
   const allProviders: Record<string, ProviderConfig> = {};
   const allModels: Record<string, string[]> = {};
   const allAttachmentCapabilities: AttachmentCapabilities = {};
+  const failedGateways: string[] = [];
 
   const maxRetries = 3;
 
@@ -101,9 +103,10 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
       }
     }
 
-    // If all retries failed, silently skip this gateway — the bundled
-    // registry already contains all model data.
-    if (!providers) continue;
+    if (!providers) {
+      failedGateways.push(getGatewayId(gateway));
+      continue;
+    }
 
     const gatewayId = getGatewayId(gateway);
     // models.dev is a provider registry, not a true gateway - don't prefix its providers
@@ -133,7 +136,12 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
     }
   }
 
-  return { providers: allProviders, models: allModels, attachmentCapabilities: allAttachmentCapabilities };
+  return {
+    providers: allProviders,
+    models: allModels,
+    attachmentCapabilities: allAttachmentCapabilities,
+    failedGateways,
+  };
 }
 
 /**

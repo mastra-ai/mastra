@@ -39,7 +39,7 @@ function createSession({
 }
 
 describe('restoreOMThreadStateForCurrentThread', () => {
-  it('mirrors persisted caveman metadata into harness state for the current thread', async () => {
+  it('mirrors persisted caveman metadata into controller state for the current thread', async () => {
     const session = createSession({ metadata: { cavemanObservations: true }, state: { cavemanObservations: false } });
 
     await restoreOMThreadStateForCurrentThread(session as never);
@@ -49,7 +49,7 @@ describe('restoreOMThreadStateForCurrentThread', () => {
     expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
-  it('mirrors persisted false caveman metadata into harness state for the current thread', async () => {
+  it('mirrors persisted false caveman metadata into controller state for the current thread', async () => {
     const session = createSession({ metadata: { cavemanObservations: false }, state: { cavemanObservations: true } });
 
     await restoreOMThreadStateForCurrentThread(session as never);
@@ -59,7 +59,7 @@ describe('restoreOMThreadStateForCurrentThread', () => {
     expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
-  it('seeds missing thread metadata from the current harness state', async () => {
+  it('seeds missing thread metadata from the current controller state', async () => {
     const session = createSession({ metadata: {}, state: { cavemanObservations: true } });
 
     await restoreOMThreadStateForCurrentThread(session as never);
@@ -68,7 +68,7 @@ describe('restoreOMThreadStateForCurrentThread', () => {
     expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'cavemanObservations', value: true });
   });
 
-  it('seeds missing thread metadata from false current harness state', async () => {
+  it('seeds missing thread metadata from false current controller state', async () => {
     const session = createSession({ metadata: {}, state: { cavemanObservations: false } });
 
     await restoreOMThreadStateForCurrentThread(session as never);
@@ -113,7 +113,7 @@ describe('restoreOMThreadStateForCurrentThread', () => {
     expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
-  it('mirrors persisted observeAttachments metadata into harness state', async () => {
+  it('mirrors persisted observeAttachments metadata into controller state', async () => {
     const session = createSession({ metadata: { observeAttachments: 'auto' }, state: { observeAttachments: true } });
 
     await restoreOMThreadStateForCurrentThread(session as never);
@@ -122,7 +122,7 @@ describe('restoreOMThreadStateForCurrentThread', () => {
     expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
-  it('seeds missing observeAttachments metadata from current harness state', async () => {
+  it('seeds missing observeAttachments metadata from current controller state', async () => {
     const session = createSession({ metadata: {}, state: { observeAttachments: false } });
 
     await restoreOMThreadStateForCurrentThread(session as never);

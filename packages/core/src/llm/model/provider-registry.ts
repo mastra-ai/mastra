@@ -647,7 +647,16 @@ export class GatewayRegistry {
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models, attachmentCapabilities } = await fetchProvidersFromGateways(gateways);
+      const { providers, models, attachmentCapabilities, failedGateways } = await fetchProvidersFromGateways(gateways);
+
+      // If any gateway failed, skip writing to prevent partial results from
+      // overwriting the complete bundled registry. The existing static registry
+      // already contains all provider data, so a partial write would only
+      // remove providers (e.g. writing only Netlify providers when models.dev
+      // is down strips all direct providers like openai, anthropic, etc.).
+      if (failedGateways.length > 0) {
+        return;
+      }
 
       // Get package root for file paths
       const packageRoot = getPackageRoot();

@@ -13,11 +13,13 @@ import { browserProfileProviderMismatchScenario } from './browser-profile-provid
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
+import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
 import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.js';
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
+import { controllerApiConfigScenario } from './controller-api-config.js';
 import { ctrlfQueuedCustomSlashScenario } from './ctrlf-queued-custom-slash.js';
 import { ctrlfQueuedImageFollowupScenario } from './ctrlf-queued-image-followup.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
@@ -40,7 +42,6 @@ import { githubSignalsIncrementalScenario } from './github-signals-incremental.j
 import { githubSignalsNotificationReloadScenario } from './github-signals-notification-reload.js';
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
-import { harnessApiConfigScenario } from './harness-api-config.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
@@ -146,6 +147,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
+  'browser-tool-unavailable': browserToolUnavailableScenario,
   'browserbase-startup-restore': browserbaseStartupRestoreScenario,
   'browser-toggle-attach': browserToggleAttachScenario,
   'browser-wizard-browserbase': browserWizardBrowserbaseScenario,
@@ -174,7 +176,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-notification-reload': githubSignalsNotificationReloadScenario,
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
-  'harness-api-config': harnessApiConfigScenario,
+  'controller-api-config': controllerApiConfigScenario,
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,

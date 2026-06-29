@@ -14,7 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  * uses same-origin streaming requests without CORS.
  *
  * The production build outputs to `dist/web/ui`, which `mastracode web` serves
- * as static files alongside the harness routes. It lives in its own `ui`
+ * as static files alongside the controller routes. It lives in its own `ui`
  * subdirectory so the Vite build (emptyOutDir) doesn't clobber the compiled
  * server entry that tsup emits at `dist/web/server.js`.
  */
