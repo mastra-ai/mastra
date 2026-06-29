@@ -395,7 +395,7 @@ export class ScoresPG extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.#db.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
         [...queryParams, limitValue, start],
       );
       return {
@@ -460,7 +460,7 @@ export class ScoresPG extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.#db.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
         [...queryParams, limitValue, start],
       );
       return {

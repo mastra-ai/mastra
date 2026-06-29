@@ -435,10 +435,9 @@ export class ScoresStorageD1 extends ScoresStorage {
         .select('*')
         .from(fullTableName)
         .where('traceId = ?', traceId)
-        .andWhere('spanId = ?', spanId)
-        .orderBy('createdAt', 'DESC');
+        .andWhere('spanId = ?', spanId);
       applyTenancyFilters(selectQuery, filters);
-      selectQuery.limit(limitValue).offset(start);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });

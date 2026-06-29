@@ -15,11 +15,17 @@ import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
 import { getTableSchema, processResultWithTypeConversion } from '../../db/utils';
 
+/** Escapes a value for safe inclusion in a single-quoted Lance SQL string literal. */
+function lanceStringLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
 /** Builds a trailing SQL AND clause for the multi-tenant scope filters (empty when none). */
 function tenancyClause(filters?: ScoreTenancyFilters): string {
   const parts: string[] = [];
-  if (filters?.organizationId !== undefined) parts.push(`\`organizationId\` = '${filters.organizationId}'`);
-  if (filters?.projectId !== undefined) parts.push(`\`projectId\` = '${filters.projectId}'`);
+  if (filters?.organizationId !== undefined)
+    parts.push(`\`organizationId\` = ${lanceStringLiteral(filters.organizationId)}`);
+  if (filters?.projectId !== undefined) parts.push(`\`projectId\` = ${lanceStringLiteral(filters.projectId)}`);
   return parts.length ? ` AND ${parts.join(' AND ')}` : '';
 }
 
@@ -189,10 +195,10 @@ export class StoreScoresLance extends ScoresStorage {
         conditions.push(`\`entityType\` = '${entityType}'`);
       }
       if (filters?.organizationId !== undefined) {
-        conditions.push(`\`organizationId\` = '${filters.organizationId}'`);
+        conditions.push(`\`organizationId\` = ${lanceStringLiteral(filters.organizationId)}`);
       }
       if (filters?.projectId !== undefined) {
-        conditions.push(`\`projectId\` = '${filters.projectId}'`);
+        conditions.push(`\`projectId\` = ${lanceStringLiteral(filters.projectId)}`);
       }
       const whereClause = conditions.join(' AND ');
 
