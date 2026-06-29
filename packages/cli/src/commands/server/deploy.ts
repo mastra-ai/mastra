@@ -14,6 +14,8 @@ import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
+import { MASTRA_PLATFORM_API_URL } from '../auth/client.js';
+import { getAnalytics, type CLI_ORIGIN } from '../../analytics/index.js';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -322,19 +324,42 @@ async function resolveProject(
 /*  Main deploy action                                                */
 /* ------------------------------------------------------------------ */
 
-export async function serverDeployAction(
-  dir: string | undefined,
-  opts: {
-    org?: string;
-    project?: string;
-    yes?: boolean;
-    config?: string;
-    skipBuild?: boolean;
-    skipPreflight?: boolean;
-    debug?: boolean;
-    envFile?: string;
-  },
-) {
+type ServerDeployOptions = {
+  org?: string;
+  project?: string;
+  yes?: boolean;
+  config?: string;
+  skipBuild?: boolean;
+  skipPreflight?: boolean;
+  debug?: boolean;
+  envFile?: string;
+};
+
+export async function serverDeployAction(dir: string | undefined, opts: ServerDeployOptions) {
+  const analytics = getAnalytics();
+  if (!analytics) {
+    return runServerDeploy(dir, opts);
+  }
+  await analytics.trackCommandExecution({
+    command: 'mastra server deploy',
+    args: {
+      yes: Boolean(opts.yes),
+      skipBuild: Boolean(opts.skipBuild),
+      skipPreflight: Boolean(opts.skipPreflight),
+      hasOrg: Boolean(opts.org),
+      hasProject: Boolean(opts.project),
+      hasEnvFile: Boolean(opts.envFile),
+      hasConfig: Boolean(opts.config),
+      debug: Boolean(opts.debug),
+      headless: Boolean(process.env.MASTRA_API_TOKEN),
+      targetApi: new URL(MASTRA_PLATFORM_API_URL).host,
+    },
+    execution: () => runServerDeploy(dir, opts),
+    origin: process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN | undefined,
+  });
+}
+
+async function runServerDeploy(dir: string | undefined, opts: ServerDeployOptions) {
   const targetDir = resolve(dir || process.cwd());
   // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
   // auto-link to the project that `mastra init --observability` provisioned.

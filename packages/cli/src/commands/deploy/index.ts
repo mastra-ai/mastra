@@ -36,6 +36,8 @@ import {
 } from '../studio/deploy.js';
 import { fetchEnvironments, createEnvironment, type Environment } from '../env/platform-api.js';
 import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
+import { getAnalytics, type CLI_ORIGIN } from '../../analytics/index.js';
+
 
 /**
  * Derive the public studio/server URLs from the environment slug.
@@ -528,6 +530,31 @@ export interface DeployOptions {
 }
 
 export async function unifiedDeployAction(dir: string | undefined, opts: DeployOptions) {
+  const analytics = getAnalytics();
+  if (!analytics) {
+    return runUnifiedDeploy(dir, opts);
+  }
+  await analytics.trackCommandExecution({
+    command: 'mastra deploy',
+    args: {
+      env: opts.env || 'production',
+      yes: Boolean(opts.yes),
+      skipBuild: Boolean(opts.skipBuild),
+      skipPreflight: Boolean(opts.skipPreflight),
+      hasOrg: Boolean(opts.org),
+      hasProject: Boolean(opts.project),
+      hasEnvFile: Boolean(opts.envFile),
+      hasConfig: Boolean(opts.config),
+      debug: Boolean(opts.debug),
+      headless: Boolean(process.env.MASTRA_API_TOKEN),
+      targetApi: new URL(MASTRA_PLATFORM_API_URL).host,
+    },
+    execution: () => runUnifiedDeploy(dir, opts),
+    origin: process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN | undefined,
+  });
+}
+
+async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const targetDir = resolve(dir || process.cwd());
   loadDeployEnvFromDotenv(targetDir);
   
