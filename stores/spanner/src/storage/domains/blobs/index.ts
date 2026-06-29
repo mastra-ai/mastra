@@ -200,7 +200,9 @@ export class BlobsSpanner extends BlobStore {
             }
             await tx.commit();
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),

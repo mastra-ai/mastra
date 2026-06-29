@@ -146,7 +146,9 @@ export class FavoritesSpanner extends FavoritesStorage {
             favoriteCount = (await this.readEntityCount(tx, entityTable, entityId)) ?? 0;
             await tx.commit();
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -205,7 +207,9 @@ export class FavoritesSpanner extends FavoritesStorage {
             favoriteCount = (await this.readEntityCount(tx, entityTable, entityId)) ?? 0;
             await tx.commit();
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -333,7 +337,9 @@ export class FavoritesSpanner extends FavoritesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),

@@ -356,7 +356,9 @@ export class DatasetsSpanner extends DatasetsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -572,7 +574,9 @@ export class DatasetsSpanner extends DatasetsStorage {
               updatedAt: now,
             };
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -672,7 +676,9 @@ export class DatasetsSpanner extends DatasetsStorage {
               updatedAt: now,
             };
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -736,7 +742,9 @@ export class DatasetsSpanner extends DatasetsStorage {
             await this.insertVersionRow(tx, args.datasetId, newVersion, now);
             await tx.commit();
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -1047,7 +1055,9 @@ export class DatasetsSpanner extends DatasetsStorage {
               updatedAt: now,
             }));
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -1110,7 +1120,9 @@ export class DatasetsSpanner extends DatasetsStorage {
             await this.insertVersionRow(tx, input.datasetId, newVersion, now);
             await tx.commit();
           } catch (err) {
-            await tx.rollback();
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
