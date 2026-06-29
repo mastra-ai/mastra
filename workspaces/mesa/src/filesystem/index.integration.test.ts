@@ -33,6 +33,23 @@ function createTestRepoName(): string {
   return `mastra-test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isNotFoundError(error: unknown): boolean {
+  const err =
+    error && typeof error === 'object' ? (error as { code?: unknown; name?: unknown; message?: unknown }) : undefined;
+  const code = typeof err?.code === 'string' ? err.code : undefined;
+  const name = typeof err?.name === 'string' ? err.name : undefined;
+  const message =
+    typeof err?.message === 'string' ? err.message : error instanceof Error ? error.message : String(error);
+
+  return (
+    code === 'ENOENT' ||
+    code === 'NotFound' ||
+    name === 'ENOENT' ||
+    name === 'NotFound' ||
+    /\b(no such|not found|enoent)\b/i.test(message)
+  );
+}
+
 beforeAll(async () => {
   const apiKey = process.env.MESA_API_KEY;
 
@@ -64,7 +81,12 @@ function getMesaTestEnv(): MesaTestEnv {
 
 async function deleteMesaTestRepo(): Promise<void> {
   if (!mesaTestEnv) return;
-  await mesaTestEnv.mesa.repos.delete({ repo: mesaTestEnv.repo }).catch(() => {});
+
+  try {
+    await mesaTestEnv.mesa.repos.delete({ repo: mesaTestEnv.repo });
+  } catch (error) {
+    if (!isNotFoundError(error)) throw error;
+  }
 }
 
 afterAll(async () => {
@@ -138,7 +160,7 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
   }
 
   async destroy(): Promise<void> {
-    await this.filesystem.rmdir(this.root, { recursive: true, force: true }).catch(() => {});
+    await this.filesystem.rmdir(this.root, { recursive: true, force: true });
     await this.filesystem._destroy();
   }
 
@@ -266,7 +288,7 @@ createFilesystemTestSuite({
     return new RootedMesaFilesystem(createMesaFilesystem(), testRoot);
   },
   cleanupFilesystem: async fs => {
-    await fs.rmdir('/', { recursive: true, force: true }).catch(() => {});
+    await fs.rmdir('/', { recursive: true, force: true });
   },
   capabilities: {
     supportsAppend: true,
