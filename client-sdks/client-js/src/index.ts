@@ -15,33 +15,33 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
-export { harnessMessageText } from './resources/harness';
+export { agentControllerMessageText } from './resources/agent-controller';
 export type {
-  HarnessInfo,
-  HarnessMessage,
-  HarnessMessageContent,
-  HarnessEvent,
-  KnownHarnessEvent,
-  OtherHarnessEvent,
-  CreateHarnessSessionResponse,
-  SubscribeHarnessSessionOptions,
-  HarnessSubscription,
-  HarnessSessionState,
-  HarnessSessionSettings,
-  HarnessOMProgress,
-  HarnessModeInfo,
-  HarnessThreadInfo,
-  HarnessTaskSnapshot,
-  HarnessAvailableModel,
-  HarnessWorkspaceStatus,
-  HarnessGoalRecord,
+  AgentControllerInfo,
+  AgentControllerMessage,
+  AgentControllerMessageContent,
+  AgentControllerEvent,
+  KnownAgentControllerEvent,
+  OtherAgentControllerEvent,
+  CreateAgentControllerSessionResponse,
+  SubscribeAgentControllerSessionOptions,
+  AgentControllerSubscription,
+  AgentControllerSessionState,
+  AgentControllerSessionSettings,
+  AgentControllerOMProgress,
+  AgentControllerModeInfo,
+  AgentControllerThreadInfo,
+  AgentControllerTaskSnapshot,
+  AgentControllerAvailableModel,
+  AgentControllerWorkspaceStatus,
+  AgentControllerGoalRecord,
   SendNotificationInput,
   SendNotificationResult,
   PlanResume,
   PermissionPolicy,
   PermissionRules,
   ToolCategory,
-} from './resources/harness';
+} from './resources/agent-controller';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most
 // users interact via `observe` on the tool execution context.

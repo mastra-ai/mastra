@@ -243,7 +243,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : undefined;
 
             const registryEntry = globalRunRegistry.get(runId);
-            const executionAbortSignal = (registryEntry as any)?.abortSignal ?? abortSignal;
+            const executionAbortSignal = registryEntry?.abortSignal ?? abortSignal;
             const baseInputProcessors = registryEntry?.inputProcessors ?? [];
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
@@ -676,7 +676,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // from the registry (the inner try-scoped `executionAbortSignal` is
             // out of scope here).
             const outerRegistryEntry = globalRunRegistry.get(runId);
-            const outerAbortSignal = (outerRegistryEntry as any)?.abortSignal ?? abortSignal;
+            const outerAbortSignal = outerRegistryEntry?.abortSignal ?? abortSignal;
             const isAbort = outerAbortSignal?.aborted === true || lastError.name === 'AbortError';
             if (isAbort) {
               throw lastError;

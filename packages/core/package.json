@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.47.0-alpha.5",
+  "version": "1.48.0-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -69,6 +69,16 @@
       "require": {
         "types": "./dist/agent/message-list/index.d.ts",
         "default": "./dist/agent/message-list/index.cjs"
+      }
+    },
+    "./agent-controller": {
+      "import": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.cjs"
       }
     },
     "./auth": {
