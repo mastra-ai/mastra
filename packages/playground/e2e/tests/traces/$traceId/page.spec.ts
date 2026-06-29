@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
 import { expectBreadcrumbLink, expectCurrentBreadcrumb, expectRouteDocsLink } from '../../__utils__/route-header';
 
@@ -23,69 +24,87 @@ async function mockTraceResponse(page: Page, status: number, body: unknown = { e
   });
 }
 
-test.afterEach(async () => {
-  await resetStorage();
-});
+test.describe('Trace detail page', () => {
+  test.afterEach(async () => {
+    await resetStorage();
+  });
 
-test('shows page title with trace id', async ({ page }) => {
-  await page.goto(`/traces/${FAKE_TRACE_ID}`);
+  test.describe('when the trace detail page is opened', () => {
+    test('shows page title with trace id', async ({ page }) => {
+      await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-  await expect(page).toHaveTitle(/Mastra Studio/);
-  await expectCurrentBreadcrumb(page, 'trace');
-});
+      await expect(page).toHaveTitle(/Mastra Studio/);
+      await expectCurrentBreadcrumb(page, 'trace');
+    });
 
-test('has breadcrumb link pointing back to observability', async ({ page }) => {
-  await page.goto(`/traces/${FAKE_TRACE_ID}`);
+    test('has breadcrumb link pointing back to observability', async ({ page }) => {
+      await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-  await expectBreadcrumbLink(page, 'Traces', '/observability');
-});
+      await expectBreadcrumbLink(page, 'Traces', '/observability');
+    });
 
-test('clicking the Traces breadcrumb navigates to observability', async ({ page }) => {
-  await page.goto(`/traces/${FAKE_TRACE_ID}`);
+    test('has Traces documentation link', async ({ page }) => {
+      await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-  await page.getByLabel('Breadcrumb').getByRole('link', { name: 'Traces' }).click();
-  await expect(page).toHaveURL(/\/observability$/);
-  await expectCurrentBreadcrumb(page, 'Traces');
-});
+      await expectRouteDocsLink(
+        page,
+        'Traces documentation',
+        'https://mastra.ai/en/docs/observability/tracing/overview',
+      );
+    });
+  });
 
-test('has Traces documentation link', async ({ page }) => {
-  await page.goto(`/traces/${FAKE_TRACE_ID}`);
+  test.describe('when the Traces breadcrumb is clicked', () => {
+    test('navigates to observability', async ({ page }) => {
+      await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-  await expectRouteDocsLink(page, 'Traces documentation', 'https://mastra.ai/en/docs/observability/tracing/overview');
-});
+      await page.getByLabel('Breadcrumb').getByRole('link', { name: 'Traces' }).click();
+      await expect(page).toHaveURL(/\/observability$/);
+      await expectCurrentBreadcrumb(page, 'Traces');
+    });
+  });
 
-test('renders without crashing when spanId, tab and scoreId query params are provided on mount', async ({ page }) => {
-  await page.goto(`/traces/${FAKE_TRACE_ID}?spanId=span-x&tab=scoring&scoreId=score-y`);
+  test.describe('when spanId, tab and scoreId query params are provided on mount', () => {
+    test('renders the page shell without crashing', async ({ page }) => {
+      await page.goto(`/traces/${FAKE_TRACE_ID}?spanId=span-x&tab=scoring&scoreId=score-y`);
 
-  // Page shell still renders - the panels themselves depend on server data that may not exist.
-  await expectCurrentBreadcrumb(page, 'trace');
-  await expectBreadcrumbLink(page, 'Traces', '/observability');
-});
+      // Page shell still renders - the panels themselves depend on server data that may not exist.
+      await expectCurrentBreadcrumb(page, 'trace');
+      await expectBreadcrumbLink(page, 'Traces', '/observability');
+    });
+  });
 
-test('shows session-expired state when the trace request returns 401', async ({ page }) => {
-  await mockTraceResponse(page, 401, { error: 'Unauthorized' });
-  await page.goto(`/traces/${FAKE_TRACE_ID}`);
+  test.describe('when the trace request returns 401', () => {
+    test('shows the session-expired state', async ({ page }) => {
+      await mockTraceResponse(page, 401, { error: 'Unauthorized' });
+      await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-  await expect(page.getByText('Session Expired')).toBeVisible();
-  // Shared top area still renders in the error state.
-  await expectBreadcrumbLink(page, 'Traces', '/observability');
-});
+      await expect(page.getByText('Session Expired')).toBeVisible();
+      // Shared top area still renders in the error state.
+      await expectBreadcrumbLink(page, 'Traces', '/observability');
+    });
+  });
 
-test('shows permission-denied state when the trace request returns 403', async ({ page }) => {
-  await mockTraceResponse(page, 403, { error: 'Forbidden' });
-  await page.goto(`/traces/${FAKE_TRACE_ID}`);
+  test.describe('when the trace request returns 403', () => {
+    test('shows the permission-denied state', async ({ page }) => {
+      await mockTraceResponse(page, 403, { error: 'Forbidden' });
+      await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-  await expect(page.getByText('Permission Denied')).toBeVisible();
-  await expect(page.getByText(/You don't have permission to access traces/)).toBeVisible();
-  await expectBreadcrumbLink(page, 'Traces', '/observability');
-});
+      await expect(page.getByText('Permission Denied')).toBeVisible();
+      await expect(page.getByText(/You don't have permission to access traces/)).toBeVisible();
+      await expectBreadcrumbLink(page, 'Traces', '/observability');
+    });
+  });
 
-test('shows generic error state when the trace request fails (non-auth error)', async ({ page }) => {
-  // 404 is non-retryable (per `shouldRetryQuery`/`isNonRetryableError`) and neither 401 nor 403,
-  // so it hits the generic-error branch without waiting on retry backoffs.
-  await mockTraceResponse(page, 404, { error: 'Not found' });
-  await page.goto(`/traces/${FAKE_TRACE_ID}`);
+  test.describe('when the trace request fails with a non-auth error', () => {
+    test('shows the generic error state', async ({ page }) => {
+      // 404 is non-retryable (per `shouldRetryQuery`/`isNonRetryableError`) and neither 401 nor 403,
+      // so it hits the generic-error branch without waiting on retry backoffs.
+      await mockTraceResponse(page, 404, { error: 'Not found' });
+      await page.goto(`/traces/${FAKE_TRACE_ID}`);
 
-  await expect(page.getByText('Failed to load trace')).toBeVisible();
-  await expectBreadcrumbLink(page, 'Traces', '/observability');
+      await expect(page.getByText('Failed to load trace')).toBeVisible();
+      await expectBreadcrumbLink(page, 'Traces', '/observability');
+    });
+  });
 });
