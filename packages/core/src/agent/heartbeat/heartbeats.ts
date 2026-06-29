@@ -313,6 +313,28 @@ export class Heartbeats {
     }
 
     const existingTarget = existing.target as HeartbeatTarget;
+
+    // Threadless heartbeats run `agent.generate` in isolation, so thread-scoped
+    // signal options are meaningless and would be silently ignored on every
+    // fire. `create()` rejects them upfront; mirror that here so `update()`
+    // can't sneak the same invalid state onto a threadless heartbeat after the
+    // fact. `threadId`/`resourceId` are not patchable, so the thread-ness of a
+    // heartbeat is fixed at create time.
+    if (!existingTarget.threadId) {
+      const offenders: string[] = [];
+      if (patch.signalType !== undefined) offenders.push('signalType');
+      if (patch.ifActive !== undefined) offenders.push('ifActive');
+      if (patch.ifIdle !== undefined) offenders.push('ifIdle');
+      if (offenders.length > 0) {
+        throw new MastraError({
+          id: 'HEARTBEATS_THREADLESS_OPTIONS',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `updateHeartbeat: ${offenders.join(', ')} require a threadId.`,
+        });
+      }
+    }
+
     const nextTarget: HeartbeatTarget = {
       ...existingTarget,
       ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),

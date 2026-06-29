@@ -118,6 +118,21 @@ describe('mastra.heartbeats', () => {
     ).rejects.toThrow(/threadId/);
   });
 
+  it('rejects updating thread-only knobs on a threadless heartbeat', async () => {
+    const agent = makeAgent('pinger');
+    const mastra = makeMastra({ pinger: agent });
+
+    const hb = await mastra.heartbeats.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p' });
+
+    await expect(mastra.heartbeats.update(hb.id, { ifIdle: 'wake' } as any)).rejects.toThrow(/threadId/);
+    await expect(mastra.heartbeats.update(hb.id, { ifActive: 'queue' } as any)).rejects.toThrow(/threadId/);
+    await expect(mastra.heartbeats.update(hb.id, { signalType: 'notification' } as any)).rejects.toThrow(/threadId/);
+
+    // A non-thread-scoped patch on the same threadless heartbeat still works.
+    const patched = await mastra.heartbeats.update(hb.id, { prompt: 'changed' });
+    expect(patched.prompt).toBe('changed');
+  });
+
   it('refuses heartbeats when storage lacks the schedules domain', async () => {
     const agent = makeAgent('pinger');
     // Mastra now always backs `new Mastra({})` with an in-memory store (which
