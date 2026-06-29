@@ -4,25 +4,28 @@ permissions:
   contents: read
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'workspaces/**'
-      - 'packages/core/**'
-      - '.github/workflows/test-workspaces.yml'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      head_sha:
+        required: true
+        type: string
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
 
 jobs:
   setup:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     outputs:
       packages: ${{ steps.set-packages.outputs.packages }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
       - id: set-packages
         run: |
           PACKAGES=$(ls -d workspaces/*/ | grep -v '_test-utils' | xargs -I{} basename {} | jq -R -s -c 'split("\n")[:-1]')
@@ -34,9 +37,8 @@ jobs:
 
   test-unit:
     needs: setup
-    # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -46,7 +48,10 @@ jobs:
       matrix:
         package: ${{ fromJson(needs.setup.outputs.packages) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -61,9 +66,8 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
   test-docker:
-    # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -71,9 +75,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [s3, gcs]
+        package: [s3, gcs, azure]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

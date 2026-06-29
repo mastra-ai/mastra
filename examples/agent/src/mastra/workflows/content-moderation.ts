@@ -16,10 +16,11 @@
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import {
-  ProcessorStepSchema,
+  ProcessorStepOutputSchema,
   type ProcessInputArgs,
   type ProcessInputResult,
   type Processor,
+  type ProcessorWorkflow,
 } from '@mastra/core/processors';
 
 import {
@@ -50,7 +51,7 @@ Never include placeholder text like [TODO] or [PLACEHOLDER].
 Avoid excessive repetition in your responses.
 Provide at least a few sentences in your response.`,
 
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 
   // Input processors check user messages before LLM call
   inputProcessors: [piiDetectionProcessor, toxicityCheckProcessor],
@@ -191,8 +192,8 @@ const lengthStep = createStep(new MessageLengthValidator());
  */
 export const advancedModerationWorkflow = createWorkflow({
   id: 'advanced-moderation-workflow',
-  inputSchema: ProcessorStepSchema,
-  outputSchema: ProcessorStepSchema,
+  inputSchema: ProcessorStepOutputSchema,
+  outputSchema: ProcessorStepOutputSchema,
 })
   // Step 1: Basic length validation (sequential)
   .then(lengthStep)
@@ -224,7 +225,7 @@ export const advancedModerationWorkflow = createWorkflow({
   // Step 4: Final language detection (sequential)
   .then(languageStep)
 
-  .commit();
+  .commit() as ProcessorWorkflow;
 
 /**
  * Branching Moderation Workflow
@@ -234,8 +235,8 @@ export const advancedModerationWorkflow = createWorkflow({
  */
 export const branchingModerationWorkflow = createWorkflow({
   id: 'branching-moderation-workflow',
-  inputSchema: ProcessorStepSchema,
-  outputSchema: ProcessorStepSchema,
+  inputSchema: ProcessorStepOutputSchema,
+  outputSchema: ProcessorStepOutputSchema,
 })
   // First do basic validation
   .then(lengthStep)
@@ -268,7 +269,7 @@ export const branchingModerationWorkflow = createWorkflow({
     };
   })
 
-  .commit();
+  .commit() as ProcessorWorkflow;
 
 /**
  * Simple Sequential Workflow
@@ -277,13 +278,13 @@ export const branchingModerationWorkflow = createWorkflow({
  */
 export const contentModerationWorkflow = createWorkflow({
   id: 'content-moderation-processor-workflow',
-  inputSchema: ProcessorStepSchema,
-  outputSchema: ProcessorStepSchema,
+  inputSchema: ProcessorStepOutputSchema,
+  outputSchema: ProcessorStepOutputSchema,
 })
   .then(piiStep)
   .then(toxicityStep)
   .then(profanityStep)
-  .commit();
+  .commit() as ProcessorWorkflow;
 
 /**
  * Agent with Advanced Processor Workflow
@@ -295,7 +296,7 @@ export const agentWithProcessorWorkflow = new Agent({
   name: 'Agent with Processor Workflow',
   instructions: `You are a helpful assistant. Always provide detailed responses.`,
 
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 
   // Use the advanced workflow with parallel processing
   inputProcessors: [advancedModerationWorkflow],
@@ -316,7 +317,7 @@ export const agentWithBranchingWorkflow = new Agent({
   name: 'Agent with Branching Workflow',
   instructions: `You are a helpful assistant.`,
 
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 
   // Use the branching workflow
   inputProcessors: [branchingModerationWorkflow],
@@ -338,5 +339,5 @@ export const simpleAssistantAgent = new Agent({
   id: 'simple-assistant',
   name: 'Simple Assistant',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 });

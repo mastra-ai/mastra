@@ -23,6 +23,12 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       modeDefaults: {},
       activeOmPackId: null,
       omModelOverride: null,
+      observerModelOverride: null,
+      reflectorModelOverride: null,
+      omObservationThreshold: null,
+      omReflectionThreshold: null,
+      omCavemanObservations: null,
+      omObserveAttachments: null,
       subagentModels: {},
     },
     preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
@@ -31,6 +37,14 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     customProviders: [],
     modelUseCounts: {},
     updateDismissedVersion: null,
+    memoryGateway: {},
+    browser: {
+      enabled: false,
+      provider: 'stagehand',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      stagehand: { env: 'LOCAL' },
+    },
     ...overrides,
   };
 }

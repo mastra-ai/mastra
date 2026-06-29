@@ -20,6 +20,7 @@ import xxhash from 'xxhash-wasm';
 
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
+import { buildConnectionStringPoolConfig } from '../shared/pool-config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -119,18 +120,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   constructor(config: PgVectorConfig & { id: string }) {
     try {
       validateConfig('PgVector', config);
-      super({ id: config.id });
+      super({ id: config.id, disableInit: config.disableInit });
 
       this.schema = config.schemaName;
 
       let poolConfig: pg.PoolConfig;
 
       if (isConnectionStringConfig(config)) {
+        // Delegate to the shared helper so an explicit `ssl` option wins over an
+        // `sslmode=`/`ssl=` query param in the connection string, matching
+        // PostgresStore. See https://github.com/mastra-ai/mastra/issues/17307
         poolConfig = {
-          connectionString: config.connectionString,
-          ssl: config.ssl,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          ...buildConnectionStringPoolConfig(config, { max: 20, idleTimeoutMillis: 30000 }),
           connectionTimeoutMillis: 2000,
           ...config.pgPoolOptions,
         };
@@ -233,6 +234,32 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     } catch (error) {
       this.logger.debug('Could not detect vector extension schema', { error });
       return null;
+    }
+  }
+
+  /**
+   * Sets search_path on the client connection so that vector operators (e.g. <=>, vector_cosine_ops)
+   * are resolvable when the pgvector extension is installed in a non-default schema.
+   *
+   * PostgreSQL's default search_path is ("$user", public). If the extension lives in a custom schema
+   * (e.g. "myapp"), operator classes and distance operators won't resolve without this.
+   */
+  private async ensureSearchPath(client: pg.PoolClient) {
+    // Lazily detect extension schema if not yet known
+    if (!this.vectorExtensionSchema) {
+      await this.detectVectorExtensionSchema(client);
+    }
+
+    if (
+      this.vectorExtensionSchema &&
+      this.vectorExtensionSchema !== 'public' &&
+      this.vectorExtensionSchema !== 'pg_catalog'
+    ) {
+      const schemas = new Set<string>();
+      schemas.add(this.vectorExtensionSchema);
+      if (this.schema) schemas.add(this.schema);
+      schemas.add('public');
+      await client.query(`SET search_path TO ${[...schemas].map(s => `"${s}"`).join(', ')}`);
     }
   }
 
@@ -487,6 +514,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     // Vector similarity query
     const client = await this.pool.connect();
     try {
+      // Set search path so vector operators (e.g. <=>) resolve correctly
+      await this.ensureSearchPath(client);
       await client.query('BEGIN');
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
@@ -521,7 +550,31 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
       const scoreExpr = ops.scoreExpr(distanceExpr);
 
-      const query = `
+      // Move ORDER BY and LIMIT inside the CTE for HNSW indexes without filters to enable index usage.
+      // Only safe when minScore won't filter out candidates (minScore <= 0), otherwise the inner LIMIT
+      // cuts off the candidate set before the score threshold is applied, potentially returning fewer rows.
+      // IVFFlat is excluded because with default probes=1, it only searches one cluster and can miss
+      // vectors in other clusters, returning fewer results than expected.
+      const hasFilter = filterQuery.trim().length > 0;
+      const useIndexedOrder = indexInfo.type === 'hnsw' && !hasFilter && minScore <= 0;
+
+      const query = useIndexedOrder
+        ? `
+        WITH vector_scores AS (
+          SELECT
+            vector_id as id,
+            ${scoreExpr} as score,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ORDER BY ${distanceExpr}
+          LIMIT $2
+        )
+        SELECT *
+        FROM vector_scores
+        WHERE score > $1
+        ORDER BY score DESC`
+        : `
         WITH vector_scores AS (
           SELECT
             vector_id as id,
@@ -580,6 +633,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     // Start a transaction
     const client = await this.pool.connect();
     try {
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       await client.query('BEGIN');
 
       // Step 1: If deleteFilter is provided, delete matching vectors first
@@ -812,6 +868,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       throw mastraError;
     }
 
+    // Skip all DDL when init is disabled - caller manages schema/extension/tables/indexes externally
+    if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
+    }
+
     const indexCacheKey = await this.getIndexCacheKey({
       indexName,
       dimension,
@@ -893,16 +954,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
                 requiredVersion: '0.7.0',
               },
             });
-          }
-
-          // Set search path to include both schemas if needed
-          if (
-            this.schema &&
-            this.vectorExtensionSchema &&
-            this.schema !== this.vectorExtensionSchema &&
-            this.vectorExtensionSchema !== 'pg_catalog'
-          ) {
-            await client.query(`SET search_path TO ${this.getSchemaName()}, "${this.vectorExtensionSchema}"`);
           }
 
           // Use the properly qualified vector type (vector or halfvec)
@@ -1085,6 +1136,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         this.describeIndexCache.delete(indexName);
         return;
       }
+
+      // Set search path so vector operator classes (e.g. vector_cosine_ops) resolve correctly
+      await this.ensureSearchPath(client);
 
       // Get the operator class based on vector type and metric
       // pgvector uses different operator classes for vector vs halfvec
@@ -1520,6 +1574,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
 
       client = await this.pool.connect();
+      // Set search path so vector type casts (e.g. ::vector, ::halfvec) resolve correctly
+      await this.ensureSearchPath(client);
+
       const { tableName } = this.getTableName(indexName);
 
       // Get the properly qualified vector type for this index

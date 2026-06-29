@@ -11,10 +11,14 @@ import type {
 import { describe, it, expect } from 'vitest';
 import {
   getTextContentFromMastraDBMessage,
+  getUserMessageFromRunInput,
+  getCombinedSystemPrompt,
   getAssistantMessageFromRunOutput,
   getReasoningFromRunOutput,
+  isScorerRunOutputForAgent,
   createTestMessage,
   createToolInvocation,
+  extractToolCalls,
   extractToolResults,
   extractTrajectory,
   compareTrajectories,
@@ -58,13 +62,169 @@ describe('Scorer Utils', () => {
       const result = getAssistantMessageFromRunOutput(output);
       expect(result).toBe('Assistant response');
     });
+
+    it('should extract assistant text from workflow-style output', () => {
+      expect(getAssistantMessageFromRunOutput({ text: 'Workflow response' })).toBe('Workflow response');
+      expect(getAssistantMessageFromRunOutput({ content: 'Task response' })).toBe('Task response');
+      expect(getAssistantMessageFromRunOutput('String response')).toBe('String response');
+    });
+
+    it('should not extract non-assistant role text from single message output', () => {
+      expect(getAssistantMessageFromRunOutput({ role: 'user', text: 'User text' })).toBeUndefined();
+      expect(getAssistantMessageFromRunOutput({ role: 'user', content: 'User content' })).toBeUndefined();
+    });
+
+    it('should extract assistant text from nested content output', () => {
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { parts: [{ type: 'text', text: 'Nested task response' }] },
+        }),
+      ).toBe('Nested task response');
+
+      expect(
+        getAssistantMessageFromRunOutput({
+          content: { content: { parts: [{ type: 'text', text: 'Nested message response' }] } },
+        }),
+      ).toBe('Nested message response');
+    });
+
+    it('should extract assistant text from model messages', () => {
+      const output = [
+        { role: 'user', content: 'Question' },
+        { role: 'assistant', content: [{ type: 'text', text: 'Model response' }] },
+      ];
+
+      expect(getAssistantMessageFromRunOutput(output)).toBe('Model response');
+    });
   });
 
-  /**
-   * When using a reasoning model, the reasoning text
-   * should be available in the scorer's preprocess function. Currently, there's
-   * no utility function to extract reasoning text from the run output.
-   */
+  describe('isScorerRunOutputForAgent', () => {
+    it('should only match arrays of message-like objects', () => {
+      expect(isScorerRunOutputForAgent([createTestMessage({ role: 'assistant', content: 'Assistant response' })])).toBe(
+        true,
+      );
+      expect(isScorerRunOutputForAgent(['Assistant response'])).toBe(false);
+      expect(isScorerRunOutputForAgent([{ role: 'assistant', content: 'Assistant response' }])).toBe(false);
+      expect(isScorerRunOutputForAgent({ text: 'Workflow response' })).toBe(false);
+    });
+  });
+
+  describe('getUserMessageFromRunInput', () => {
+    it('should extract user text content from agent input', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          createTestMessage({ content: 'User question', role: 'user' }),
+          createTestMessage({ content: 'Assistant response', role: 'assistant' }),
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      const result = getUserMessageFromRunInput(input);
+      expect(result).toBe('User question');
+    });
+
+    it('should extract user text from message parts when the content string is absent', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          {
+            id: 'user-msg-1',
+            role: 'user',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'What is the capital of France?' }],
+            },
+          },
+          {
+            id: 'assistant-msg-1',
+            role: 'assistant',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Paris.' }],
+            },
+          },
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      const result = getUserMessageFromRunInput(input);
+      expect(result).toBe('What is the capital of France?');
+    });
+
+    it('should fall back to parts when the content string is empty', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          {
+            id: 'user-msg-empty-content',
+            role: 'user',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              content: '',
+              parts: [{ type: 'text', text: 'What is the capital of France?' }],
+            },
+          },
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBe('What is the capital of France?');
+    });
+
+    it('should extract user text from workflow-style input', () => {
+      expect(getUserMessageFromRunInput({ prompt: 'Workflow question' })).toBe('Workflow question');
+      expect(getUserMessageFromRunInput('String question')).toBe('String question');
+    });
+
+    it('should extract user text from common non-agent input fields', () => {
+      expect(getUserMessageFromRunInput({ text: 'Text question' })).toBe('Text question');
+      expect(getUserMessageFromRunInput({ content: 'Content question' })).toBe('Content question');
+      expect(getUserMessageFromRunInput({ input: { text: 'Input question' } })).toBe('Input question');
+      expect(getUserMessageFromRunInput({ user: { body: 'User question' } })).toBe('User question');
+    });
+
+    it('should extract user text from model messages', () => {
+      const input = {
+        messages: [
+          { role: 'system', content: 'System prompt' },
+          { role: 'user', content: [{ type: 'text', text: 'Model question' }] },
+        ],
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBe('Model question');
+    });
+
+    it('should extract user text from message text and body fields', () => {
+      expect(getUserMessageFromRunInput({ messages: [{ role: 'user', text: 'Text message question' }] })).toBe(
+        'Text message question',
+      );
+      expect(getUserMessageFromRunInput({ inputMessages: [{ role: 'user', body: 'Body message question' }] })).toBe(
+        'Body message question',
+      );
+    });
+  });
+
+  describe('getCombinedSystemPrompt', () => {
+    it('should include system messages from non-agent message arrays', () => {
+      expect(
+        getCombinedSystemPrompt({
+          messages: [
+            { role: 'system', content: 'System message' },
+            { role: 'user', content: 'User question' },
+          ],
+          inputMessages: [{ role: 'system', text: 'Input system message' }],
+        }),
+      ).toBe('Input system message\n\nSystem message');
+    });
+  });
+
   describe('Reasoning text extraction', () => {
     it('should extract reasoning from content.reasoning field', () => {
       const messageWithReasoning: MastraDBMessage = {
@@ -81,8 +241,6 @@ describe('Scorer Utils', () => {
 
       const output: ScorerRunOutputForAgent = [messageWithReasoning];
 
-      // Currently there's no function to get reasoning - this test documents the missing functionality
-      // We need a getReasoningFromRunOutput function similar to getAssistantMessageFromRunOutput
       const reasoning = getReasoningFromRunOutput(output);
 
       expect(reasoning).toBe('Let me think about this step by step...');
@@ -452,6 +610,147 @@ describe('Scorer Utils', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]?.toolName).toBe('hasResultTool');
+    });
+
+    it('should extract tool results from V2 content.parts when toolInvocations is absent', () => {
+      const output: ScorerRunOutputForAgent = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'weatherTool',
+                  args: { city: 'Seoul' },
+                  result: { temperature: 22 },
+                },
+              },
+              { type: 'text', text: 'The temperature in Seoul is 22°C.' },
+            ],
+            content: 'The temperature in Seoul is 22°C.',
+          } as any,
+          createdAt: new Date(),
+        },
+      ];
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        toolName: 'weatherTool',
+        toolCallId: 'call-1',
+        args: { city: 'Seoul' },
+        result: { temperature: 22 },
+      });
+    });
+
+    it('should prefer toolInvocations over content.parts when both are present', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'legacy-call',
+              toolName: 'legacyTool',
+              args: {},
+              result: { source: 'legacy' },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+      // Inject an extra tool-invocation part that should be ignored
+      (output[0]!.content as any).parts.push({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'parts-call',
+          toolName: 'partsTool',
+          args: {},
+          result: { source: 'parts' },
+        },
+      });
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.toolName).toBe('legacyTool');
+    });
+  });
+
+  describe('extractToolCalls', () => {
+    it('should extract tool calls from legacy toolInvocations', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Checking weather.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'call-1',
+              toolName: 'weatherTool',
+              args: { location: 'Tokyo' },
+              result: { temp: 28 },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['weatherTool']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolName).toBe('weatherTool');
+      expect(toolCallInfos[0]?.toolCallId).toBe('call-1');
+    });
+
+    it('should extract tool calls from V2 content.parts when toolInvocations is absent', () => {
+      const output: ScorerRunOutputForAgent = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'weatherTool',
+                  args: { city: 'Seoul' },
+                  result: { temperature: 22 },
+                },
+              },
+              { type: 'text', text: 'The temperature in Seoul is 22°C.' },
+            ],
+            content: 'The temperature in Seoul is 22°C.',
+          } as any,
+          createdAt: new Date(),
+        },
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['weatherTool']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolName).toBe('weatherTool');
+      expect(toolCallInfos[0]?.toolCallId).toBe('call-1');
+    });
+
+    it('should return empty arrays when output has no tool calls', () => {
+      const output: ScorerRunOutputForAgent = [createTestMessage({ content: 'Hello!', role: 'assistant' })];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toHaveLength(0);
+      expect(toolCallInfos).toHaveLength(0);
     });
   });
 

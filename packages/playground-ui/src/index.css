@@ -1,9 +1,116 @@
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Tokens (:root/html.light + @theme) live in ../theme.css so they also ship raw
+   as @mastra/playground-ui/theme.css. Edit tokens there, not here. */
+@import '../theme.css';
+
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * This package ships no font files. Declare your own `@font-face` rules and
+ * override --font-display / --font-body / --font-mono in :root to apply them.
+ */
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= theme(--breakpoint-3xl)) {
+    max-width: none;
+  }
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+@utility shadow-main-frame {
+  box-shadow: var(--shadow-main-frame);
+}
+
+@utility shadow-dialog {
+  box-shadow: var(--shadow-dialog);
+}
+
+@utility rounded-studio-frame {
+  border-radius: var(--studio-frame-radius, 1.5rem);
+}
+
+@utility rounded-studio-panel {
+  border-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+}
+
+@utility rounded-tr-studio-panel {
+  border-top-right-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+}
+
+@utility bg-sidebar-nav-hover {
+  background-color: var(--sidebar-nav-hover);
+}
+
+@utility bg-sidebar-nav-active {
+  background-color: var(--sidebar-nav-active);
+}
+
+@layer utilities {
+  .shiki-token {
+    color: var(--shiki-light, var(--neutral6));
+    background-color: var(--shiki-light-bg, transparent);
+  }
+
+  .dark .shiki-token {
+    color: var(--shiki-dark, var(--neutral6));
+    background-color: var(--shiki-dark-bg, transparent);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border1);
+  }
+  body {
+    background-color: var(--surface1);
+    color: var(--neutral6);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Design-system scrollbars — thin, themed thumb on a transparent track.
+     Applies app-wide so native OS scrollbars no longer clash with DS surfaces. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--neutral4) 30%, transparent) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--neutral4) 30%, transparent);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--neutral4) 55%, transparent);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
 
 /* your custom layer goes AFTER Tailwind imports */
-@layer components {
-  .time-input::-webkit-calendar-picker-indicator {
+
+@utility wrap-break-word {
+  overflow-wrap: break-word;
+}
+
+@utility time-input {
+  &::-webkit-calendar-picker-indicator {
     @apply cursor-pointer;
     background: url('/icons/clock.svg') no-repeat center;
     background-size: 1em 1em;
@@ -27,4 +134,38 @@
   color: #e6e6e6 !important;
   background-color: #121212 !important;
   border: none !important;
+}
+
+/* Click ripple animation for browser view */
+@keyframes click-ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-click-ripple {
+  animation: click-ripple 300ms ease-out forwards;
+}
+
+/* Temporary highlight for delta-arrived list rows.
+   Same color as the featured / hover state (var(--surface5)), starts fully
+   visible and immediately fades out to transparent over 2s. */
+@keyframes fade-row-highlight {
+  0% {
+    background-color: var(--surface5);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-row-highlight {
+  animation: fade-row-highlight 2000ms ease-out forwards;
 }

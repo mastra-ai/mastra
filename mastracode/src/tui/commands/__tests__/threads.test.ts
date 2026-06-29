@@ -1,11 +1,12 @@
-import type { HarnessMessage, HarnessThread } from '@mastra/core/harness';
+import type { AgentControllerMessage, AgentControllerThread } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleThreadsCommand } from '../threads.js';
+import { askModalQuestion } from '../../modal-question.js';
+import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
 import type { SlashCommandContext } from '../types.js';
 
 const selectorInstances: Array<any> = [];
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
   Spacer: class {
     constructor(public size: number) {}
   },
@@ -17,8 +18,8 @@ vi.mock('../clone.js', () => ({
   resetUIAfterClone: vi.fn(),
 }));
 
-vi.mock('../../components/ask-question-inline.js', () => ({
-  AskQuestionInlineComponent: class {},
+vi.mock('../../modal-question.js', () => ({
+  askModalQuestion: vi.fn(),
 }));
 
 vi.mock('../../components/thread-selector.js', () => ({
@@ -32,7 +33,7 @@ vi.mock('../../components/thread-selector.js', () => ({
   },
 }));
 
-function createThread(id: string, updatedAtIso: string): HarnessThread {
+function createThread(id: string, updatedAtIso: string): AgentControllerThread {
   const updatedAt = new Date(updatedAtIso);
   return {
     id,
@@ -45,7 +46,7 @@ function createThread(id: string, updatedAtIso: string): HarnessThread {
   };
 }
 
-function createMessage(id: string, text: string): HarnessMessage {
+function createMessage(id: string, text: string): AgentControllerMessage {
   return {
     id,
     role: 'user',
@@ -54,8 +55,9 @@ function createMessage(id: string, text: string): HarnessMessage {
   };
 }
 
-function createContext(threads: HarnessThread[]) {
+function createContext(threads: AgentControllerThread[]) {
   const showOverlay = vi.fn();
+  const trackInteractivePrompt = vi.fn();
   const state = {
     pendingNewThread: false,
     projectInfo: { rootPath: '/repo', gitBranch: 'main' },
@@ -66,14 +68,19 @@ function createContext(threads: HarnessThread[]) {
       hideOverlay: vi.fn(),
       requestRender: vi.fn(),
     },
-    chatContainer: { clear: vi.fn() },
+    chatContainer: { clear: vi.fn(), addChild: vi.fn(), invalidate: vi.fn() },
     allToolComponents: [] as any[],
     pendingTools: new Map(),
-    harness: {
-      listThreads: vi.fn(async () => threads),
-      getCurrentThreadId: vi.fn(() => null),
-      getResourceId: vi.fn(() => 'resource-1'),
-      getFirstUserMessagesForThreads: vi.fn(async () => new Map()),
+    session: {
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+      thread: {
+        getId: vi.fn(() => null),
+        list: vi.fn(async () => threads),
+        firstUserMessages: vi.fn(async () => new Map()),
+      },
+      mode: { get: vi.fn(() => 'build') },
+    },
+    controller: {
       setResourceId: vi.fn(),
       switchThread: vi.fn(),
       cloneThread: vi.fn(),
@@ -82,17 +89,20 @@ function createContext(threads: HarnessThread[]) {
 
   const ctx = {
     state,
+    analytics: { trackInteractivePrompt },
     showInfo: vi.fn(),
     showError: vi.fn(),
     renderExistingMessages: vi.fn(),
   } as unknown as SlashCommandContext;
 
-  return { ctx, state, showOverlay };
+  return { ctx, state, showOverlay, trackInteractivePrompt };
 }
 
 describe('handleThreadsCommand thread listing', () => {
   beforeEach(() => {
     selectorInstances.length = 0;
+    vi.mocked(askModalQuestion).mockReset();
+    vi.mocked(askModalQuestion).mockResolvedValue('New thread');
   });
 
   it('drops stale cached previews when a thread has a newer updatedAt', async () => {
@@ -139,7 +149,7 @@ describe('handleThreadsCommand thread listing', () => {
     await commandPromise;
   });
 
-  it('returns only cached previews and never requests uncached ones from the harness', async () => {
+  it('returns only cached previews and never requests uncached ones from the controller', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
     const { ctx, state, showOverlay } = createContext(threads);
     state.threadPreviewCache.set('thread-1', {
@@ -147,7 +157,7 @@ describe('handleThreadsCommand thread listing', () => {
       updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
     });
     state.attemptedThreadPreviewIds.add('thread-1');
-    state.harness.getFirstUserMessagesForThreads = vi.fn(
+    state.session.thread.firstUserMessages = vi.fn(
       async () => new Map([['thread-1', createMessage('message-1', 'slow')]]),
     );
 
@@ -160,7 +170,7 @@ describe('handleThreadsCommand thread listing', () => {
     await expect(selector.options.getMessagePreviews(['thread-1', 'thread-2'])).resolves.toEqual(
       new Map([['thread-1', 'Cached preview']]),
     );
-    expect(state.harness.getFirstUserMessagesForThreads).not.toHaveBeenCalled();
+    expect(state.session.thread.firstUserMessages).not.toHaveBeenCalled();
     expect(state.threadPreviewCache.get('thread-1')).toEqual({
       preview: 'Cached preview',
       updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
@@ -170,5 +180,17 @@ describe('handleThreadsCommand thread listing', () => {
 
     selector.options.onCancel();
     await commandPromise;
+  });
+
+  it('tracks the thread lock prompt when shown', () => {
+    const { ctx, trackInteractivePrompt } = createContext([]);
+
+    showThreadLockPrompt(ctx, 'Locked Thread', 1234, 'thread-locked');
+
+    expect(trackInteractivePrompt).toHaveBeenCalledWith('thread_lock_prompt', {
+      threadId: 'thread-locked',
+      resourceId: 'resource-1',
+      mode: 'build',
+    });
   });
 });

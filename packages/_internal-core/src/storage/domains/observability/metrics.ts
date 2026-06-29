@@ -1,16 +1,32 @@
 import { z } from 'zod/v4';
 import {
+  aggregateResponseFields,
+  aggregationIntervalSchema,
+  aggregationTypeSchema,
+  aggregatedValueField,
+  bucketTimestampField,
+  comparePeriodSchema,
   commonFilterFields,
   contextFields,
-  observabilitySignalFilterFields,
-  tagsField,
+  deltaLimitSchema,
+  deltaInfoSchema,
+  dimensionsField,
+  groupBySchema,
+  deltaCursorSchema,
+  listModeSchema,
+  normalizeObservabilityListArgs,
   paginationArgsSchema,
   paginationInfoSchema,
+  percentileField,
+  percentileBucketValueField,
+  percentilesSchema,
+  refineObservabilityListMode,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
   metadataField,
 } from '../shared';
+import type { AggregationType } from '../shared';
 
 // ============================================================================
 // Field Schemas
@@ -41,6 +57,7 @@ const costMetadField = z.record(z.string(), z.unknown()).nullish().describe('Str
  */
 export const metricRecordSchema = z
   .object({
+    metricId: z.string().nullish().describe('Unique id for this metric event'),
     timestamp: z.date().describe('When the metric was recorded'),
     name: metricNameField,
     value: metricValueField,
@@ -51,6 +68,10 @@ export const metricRecordSchema = z
 
     // Context (entity hierarchy, identity, correlation, deployment, experimentation)
     ...contextFields,
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().nullish().describe('Execution source'),
 
     // Canonical costing fields
     provider: providerField.nullish(),
@@ -60,9 +81,6 @@ export const metricRecordSchema = z
     estimatedCost: estimatedCostField.nullish(),
     costUnit: costUnitField.nullish(),
     costMetadata: costMetadField.nullish(),
-
-    // Filtering
-    tags: tagsField.nullish(),
 
     // User-defined labels used for filtering
     labels: labelsField.default({}),
@@ -118,20 +136,12 @@ export type BatchCreateMetricsArgs = z.infer<typeof batchCreateMetricsArgsSchema
 // Metric Aggregation Schemas
 // ============================================================================
 
-/** Aggregation type schema */
-export const aggregationTypeSchema = z.enum(['sum', 'avg', 'min', 'max', 'count', 'last']);
-export type AggregationType = z.infer<typeof aggregationTypeSchema>;
-
-/** Aggregation interval schema */
-export const aggregationIntervalSchema = z.enum(['1m', '5m', '15m', '1h', '1d']);
-export type AggregationInterval = z.infer<typeof aggregationIntervalSchema>;
-
 /** Schema for metric aggregation configuration */
 export const metricsAggregationSchema = z
   .object({
-    type: aggregationTypeSchema.describe('Aggregation function'),
-    interval: aggregationIntervalSchema.optional().describe('Time bucket interval'),
-    groupBy: z.array(z.string()).optional().describe('Label keys to group by'),
+    type: aggregationTypeSchema,
+    interval: aggregationIntervalSchema.optional(),
+    groupBy: groupBySchema.optional(),
   })
   .describe('Metrics aggregation configuration');
 
@@ -146,10 +156,14 @@ export type MetricsAggregation = z.infer<typeof metricsAggregationSchema>;
 export const metricsFilterSchema = z
   .object({
     ...commonFilterFields,
-    ...observabilitySignalFilterFields,
 
     // Metric identification
     name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),
+
+    /**
+     * @deprecated Use `executionSource` instead.
+     */
+    source: z.string().optional().describe('Filter by execution source'),
 
     // Canonical costing filters
     provider: providerField.optional(),
@@ -175,25 +189,36 @@ export const metricsOrderBySchema = z
   })
   .describe('Order by configuration');
 
-/** Schema for listMetrics operation arguments */
 export const listMetricsArgsSchema = z
   .object({
-    filters: metricsFilterSchema.optional().describe('Optional filters to apply'),
-    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
-    orderBy: metricsOrderBySchema
-      .default({ field: 'timestamp', direction: 'DESC' })
-      .describe('Ordering configuration (defaults to timestamp desc)'),
+    mode: listModeSchema.optional(),
+    filters: metricsFilterSchema.optional(),
+    pagination: paginationArgsSchema.optional(),
+    orderBy: metricsOrderBySchema.optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
+  .strict()
+  .superRefine(refineObservabilityListMode)
+  .transform(value =>
+    normalizeObservabilityListArgs<MetricsFilter, z.output<typeof metricsOrderBySchema>>(value, {
+      orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+    }),
+  )
   .describe('Arguments for listing metrics');
 
 /** Arguments for listing metrics */
 export type ListMetricsArgs = z.input<typeof listMetricsArgsSchema>;
 
 /** Schema for listMetrics operation response */
-export const listMetricsResponseSchema = z.object({
-  pagination: paginationInfoSchema,
-  metrics: z.array(metricRecordSchema),
-});
+export const listMetricsResponseSchema = z
+  .object({
+    pagination: paginationInfoSchema.optional(),
+    delta: deltaInfoSchema.optional(),
+    deltaCursor: deltaCursorSchema.optional(),
+    metrics: z.array(metricRecordSchema),
+  })
+  .describe('Response from listing metrics');
 
 /** Response containing paginated metrics */
 export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;
@@ -202,39 +227,76 @@ export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;
 // OLAP Query Schemas
 // ============================================================================
 
-/** Compare period for aggregate queries with period-over-period comparison */
-export const comparePeriodSchema = z
-  .enum(['previous_period', 'previous_day', 'previous_week'])
-  .describe('Comparison period for aggregate queries');
+/**
+ * Columns eligible for `count_distinct`.
+ *
+ * Restricted to low/medium-cardinality categorical attributes. ID columns are
+ * intentionally excluded — approximate distinct count over near-unique values
+ * converges to the row count and is rarely a useful KPI.
+ */
+export const METRIC_DISTINCT_COLUMNS = [
+  'entityType',
+  'entityName',
+  'parentEntityType',
+  'parentEntityName',
+  'rootEntityType',
+  'rootEntityName',
+  'name',
+  'provider',
+  'model',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'threadId',
+  'resourceId',
+] as const;
+
+export type MetricDistinctColumn = (typeof METRIC_DISTINCT_COLUMNS)[number];
+
+export const distinctColumnSchema = z
+  .enum(METRIC_DISTINCT_COLUMNS)
+  .optional()
+  .describe(
+    "Column to apply count_distinct over (required when aggregation is 'count_distinct'). Restricted to allowlisted metric dimensions.",
+  );
 
 // --- getMetricAggregate ---
+
+const requireDistinctColumnRefinement = {
+  check: (data: { aggregation: AggregationType; distinctColumn?: string | undefined }) =>
+    data.aggregation !== 'count_distinct' || data.distinctColumn !== undefined,
+  options: {
+    message: "distinctColumn is required when aggregation is 'count_distinct'",
+    path: ['distinctColumn'],
+  },
+};
 
 export const getMetricAggregateArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to aggregate'),
-    aggregation: aggregationTypeSchema.describe('Aggregation function'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
-    comparePeriod: comparePeriodSchema.optional().describe('Optional comparison period'),
+    aggregation: aggregationTypeSchema,
+    distinctColumn: distinctColumnSchema,
+    filters: metricsFilterSchema.optional(),
+    comparePeriod: comparePeriodSchema.optional(),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting a metric aggregate');
 
 export type GetMetricAggregateArgs = z.infer<typeof getMetricAggregateArgsSchema>;
 
 export const getMetricAggregateResponseSchema = z.object({
-  value: z.number().nullable().describe('Aggregated value'),
+  ...aggregateResponseFields,
   estimatedCost: z.number().nullable().optional().describe('Aggregated estimated cost from the same filtered row set'),
   costUnit: z
     .string()
     .nullable()
     .optional()
     .describe('Shared cost unit for the aggregated rows, or null when mixed/unknown'),
-  previousValue: z.number().nullable().optional().describe('Value from comparison period'),
   previousEstimatedCost: z
     .number()
     .nullable()
     .optional()
     .describe('Aggregated estimated cost from the comparison period'),
-  changePercent: z.number().nullable().optional().describe('Percentage change from comparison period'),
   costChangePercent: z
     .number()
     .nullable()
@@ -249,10 +311,24 @@ export type GetMetricAggregateResponse = z.infer<typeof getMetricAggregateRespon
 export const getMetricBreakdownArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s) to break down'),
-    groupBy: z.array(z.string()).min(1).describe('Fields to group by'),
-    aggregation: aggregationTypeSchema.describe('Aggregation function'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
+    groupBy: groupBySchema,
+    aggregation: aggregationTypeSchema,
+    distinctColumn: distinctColumnSchema,
+    filters: metricsFilterSchema.optional(),
+    limit: z
+      .number()
+      .int()
+      .positive()
+      .max(1000)
+      .optional()
+      .describe('Maximum number of groups to return (server-side TopK). Required for high-cardinality groupBy.'),
+    orderDirection: sortDirectionSchema
+      .optional()
+      .describe(
+        "Sort direction for the aggregated value (defaults to 'DESC' at the storage layer; pairs with limit for top/bottom-N).",
+      ),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting a metric breakdown');
 
 export type GetMetricBreakdownArgs = z.infer<typeof getMetricBreakdownArgsSchema>;
@@ -260,8 +336,8 @@ export type GetMetricBreakdownArgs = z.infer<typeof getMetricBreakdownArgsSchema
 export const getMetricBreakdownResponseSchema = z.object({
   groups: z.array(
     z.object({
-      dimensions: z.record(z.string(), z.string().nullable()).describe('Dimension values for this group'),
-      value: z.number().describe('Aggregated value for this group'),
+      dimensions: dimensionsField,
+      value: aggregatedValueField,
       estimatedCost: z.number().nullable().optional().describe('Summed estimated cost for this group'),
       costUnit: z
         .string()
@@ -279,11 +355,13 @@ export type GetMetricBreakdownResponse = z.infer<typeof getMetricBreakdownRespon
 export const getMetricTimeSeriesArgsSchema = z
   .object({
     name: z.array(z.string()).nonempty().describe('Metric name(s)'),
-    interval: aggregationIntervalSchema.describe('Time bucket interval'),
-    aggregation: aggregationTypeSchema.describe('Aggregation function'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
-    groupBy: z.array(z.string()).optional().describe('Optional fields to group by'),
+    interval: aggregationIntervalSchema,
+    aggregation: aggregationTypeSchema,
+    distinctColumn: distinctColumnSchema,
+    filters: metricsFilterSchema.optional(),
+    groupBy: groupBySchema.optional(),
   })
+  .refine(requireDistinctColumnRefinement.check, requireDistinctColumnRefinement.options)
   .describe('Arguments for getting metric time series');
 
 export type GetMetricTimeSeriesArgs = z.infer<typeof getMetricTimeSeriesArgsSchema>;
@@ -299,8 +377,8 @@ export const getMetricTimeSeriesResponseSchema = z.object({
         .describe('Shared cost unit for this series, or null when mixed/unknown'),
       points: z.array(
         z.object({
-          timestamp: z.date().describe('Bucket timestamp'),
-          value: z.number().describe('Aggregated value'),
+          timestamp: bucketTimestampField,
+          value: aggregatedValueField,
           estimatedCost: z.number().nullable().optional().describe('Summed estimated cost in this bucket'),
         }),
       ),
@@ -315,9 +393,9 @@ export type GetMetricTimeSeriesResponse = z.infer<typeof getMetricTimeSeriesResp
 export const getMetricPercentilesArgsSchema = z
   .object({
     name: z.string().describe('Metric name'),
-    percentiles: z.array(z.number().min(0).max(1)).describe('Percentile values (0-1)'),
-    interval: aggregationIntervalSchema.describe('Time bucket interval'),
-    filters: metricsFilterSchema.optional().describe('Optional filters'),
+    percentiles: percentilesSchema,
+    interval: aggregationIntervalSchema,
+    filters: metricsFilterSchema.optional(),
   })
   .describe('Arguments for getting metric percentiles');
 
@@ -326,11 +404,11 @@ export type GetMetricPercentilesArgs = z.infer<typeof getMetricPercentilesArgsSc
 export const getMetricPercentilesResponseSchema = z.object({
   series: z.array(
     z.object({
-      percentile: z.number().describe('Percentile value'),
+      percentile: percentileField,
       points: z.array(
         z.object({
-          timestamp: z.date().describe('Bucket timestamp'),
-          value: z.number().describe('Percentile value at this bucket'),
+          timestamp: bucketTimestampField,
+          value: percentileBucketValueField,
         }),
       ),
     }),

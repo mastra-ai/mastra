@@ -1,10 +1,28 @@
-import { Spacer } from '@mariozechner/pi-tui';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { askModalQuestion } from '../modal-question.js';
+import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
+
+const BUILT_IN_SUBAGENT_TYPES: Array<{ id: string; label: string; description: string }> = [
+  {
+    id: 'explore',
+    label: 'Explore',
+    description: 'Read-only codebase exploration',
+  },
+  {
+    id: 'plan',
+    label: 'Plan',
+    description: 'Read-only analysis and planning',
+  },
+  {
+    id: 'execute',
+    label: 'Execute',
+    description: 'Task execution with write access',
+  },
+];
 
 async function showSubagentModelListForScope(
   ctx: SlashCommandContext,
@@ -12,14 +30,14 @@ async function showSubagentModelListForScope(
   agentType: string,
   agentTypeLabel: string,
 ): Promise<void> {
-  const availableModels = await ctx.state.harness.listAvailableModels();
+  const availableModels = await ctx.state.controller.listAvailableModels();
 
   if (availableModels.length === 0) {
     ctx.showInfo('No models available. Check your Mastra configuration.');
     return;
   }
 
-  const currentSubagentModel = await ctx.state.harness.getSubagentModelId({ agentType });
+  const currentSubagentModel = ctx.state.session.subagents.model.get({ agentType });
   const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
   return new Promise(resolve => {
@@ -32,7 +50,7 @@ async function showSubagentModelListForScope(
         ctx.state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         try {
-          await ctx.state.harness.setSubagentModelId({ modelId: model.id, agentType });
+          await ctx.state.session.subagents.model.set({ modelId: model.id, agentType });
           if (scope === 'global') {
             const settings = loadSettings();
             settings.models.subagentModels[agentType] = model.id;
@@ -50,11 +68,7 @@ async function showSubagentModelListForScope(
       },
     });
 
-    ctx.state.ui.showOverlay(selector, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(ctx.state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
     selector.focused = true;
   });
 }
@@ -77,97 +91,60 @@ async function showSubagentScopeThenList(
     },
   ];
 
-  return new Promise<void>(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: `Select scope for ${agentTypeLabel} subagents`,
-        options: scopes.map(s => ({
-          label: s.label,
-          description: s.description,
-        })),
-        formatResult: answer => `${agentTypeLabel} · ${answer}`,
-        onSubmit: async answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          try {
-            const selected = scopes.find(s => s.label === answer);
-            if (selected) {
-              await showSubagentModelListForScope(ctx, selected.scope, agentType, agentTypeLabel);
-            }
-          } catch (err) {
-            ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);
-          }
-          resolve();
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve();
-        },
-      },
-      ctx.state.ui,
-    );
-
-    ctx.state.activeInlineQuestion = questionComponent;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(questionComponent);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: `Select scope for ${agentTypeLabel} subagents`,
+    options: scopes.map(s => ({
+      label: s.label,
+      description: s.description,
+    })),
   });
+
+  try {
+    const selected = scopes.find(s => s.label === answer);
+    if (selected) {
+      await showSubagentModelListForScope(ctx, selected.scope, agentType, agentTypeLabel);
+    }
+  } catch (err) {
+    ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+function getConfiguredSubagentTypes(
+  ctx: SlashCommandContext,
+): Array<{ id: string; label: string; description: string }> {
+  const controllerWithConfig = ctx.state.controller as unknown as {
+    config?: {
+      subagents?: Array<{ id: string; name: string; description: string }>;
+    };
+  };
+  const configuredSubagents = controllerWithConfig.config?.subagents;
+
+  return configuredSubagents && configuredSubagents.length > 0
+    ? configuredSubagents.map(subagent => ({
+        id: subagent.id,
+        label: subagent.name,
+        description: subagent.description,
+      }))
+    : BUILT_IN_SUBAGENT_TYPES;
 }
 
 export async function handleSubagentsCommand(ctx: SlashCommandContext): Promise<void> {
-  const agentTypes = [
-    {
-      id: 'explore',
-      label: 'Explore',
-      description: 'Read-only codebase exploration',
-    },
-    {
-      id: 'plan',
-      label: 'Plan',
-      description: 'Read-only analysis and planning',
-    },
-    {
-      id: 'execute',
-      label: 'Execute',
-      description: 'Task execution with write access',
-    },
-  ];
+  const agentTypes = getConfiguredSubagentTypes(ctx);
 
-  return new Promise<void>(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: 'Select subagent type',
-        options: agentTypes.map(t => ({
-          label: t.label,
-          description: t.description,
-        })),
-        formatResult: answer => `Subagent: ${answer}`,
-        onSubmit: async answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          try {
-            const selected = agentTypes.find(t => t.label === answer);
-            if (selected) {
-              await showSubagentScopeThenList(ctx, selected.id, selected.label);
-            }
-          } catch (err) {
-            ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);
-          }
-          resolve();
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve();
-        },
-      },
-      ctx.state.ui,
-    );
-
-    ctx.state.activeInlineQuestion = questionComponent;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(questionComponent);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: 'Select subagent type',
+    options: agentTypes.map(t => ({
+      label: t.label,
+      description: t.description,
+    })),
   });
+
+  try {
+    const selected = agentTypes.find(t => t.label === answer);
+    if (selected) {
+      await showSubagentScopeThenList(ctx, selected.id, selected.label);
+    }
+  } catch (err) {
+    ctx.showError(`Subagent selection failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }

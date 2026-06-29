@@ -46,6 +46,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       succeededCount: 0,
       failedCount: 0,
       skippedCount: 0,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
       startedAt: null,
       completedAt: null,
       createdAt: now,
@@ -85,9 +87,27 @@ export class ExperimentsInMemory extends ExperimentsStorage {
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
     let experiments = Array.from(this.db.experiments.values());
 
-    // Filter by datasetId if provided
+    // Apply filters
     if (args.datasetId) {
       experiments = experiments.filter(r => r.datasetId === args.datasetId);
+    }
+    if (args.targetType) {
+      experiments = experiments.filter(r => r.targetType === args.targetType);
+    }
+    if (args.targetId) {
+      experiments = experiments.filter(r => r.targetId === args.targetId);
+    }
+    if (args.agentVersion) {
+      experiments = experiments.filter(r => r.agentVersion === args.agentVersion);
+    }
+    if (args.status) {
+      experiments = experiments.filter(r => r.status === args.status);
+    }
+    if (args.filters?.organizationId !== undefined) {
+      experiments = experiments.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);
+    }
+    if (args.filters?.projectId !== undefined) {
+      experiments = experiments.filter(r => (r.projectId ?? null) === args.filters!.projectId);
     }
 
     // Sort by createdAt descending (newest first)
@@ -137,6 +157,9 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      toolMockReport: input.toolMockReport ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
       createdAt: now,
     };
     this.db.experimentResults.set(result.id, result);
@@ -166,6 +189,20 @@ export class ExperimentsInMemory extends ExperimentsStorage {
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
     let results = Array.from(this.db.experimentResults.values()).filter(r => r.experimentId === args.experimentId);
+
+    // Apply filters
+    if (args.traceId) {
+      results = results.filter(r => r.traceId === args.traceId);
+    }
+    if (args.status) {
+      results = results.filter(r => r.status === args.status);
+    }
+    if (args.filters?.organizationId !== undefined) {
+      results = results.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);
+    }
+    if (args.filters?.projectId !== undefined) {
+      results = results.filter(r => (r.projectId ?? null) === args.filters!.projectId);
+    }
 
     // Sort by startedAt ascending (execution order)
     results.sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());

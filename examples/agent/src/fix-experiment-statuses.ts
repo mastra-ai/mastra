@@ -60,9 +60,8 @@ async function fix() {
 
     const hoursAgo = Math.random() * 168; // within last 7 days
     const startedAt = new Date(Date.now() - hoursAgo * 60 * 60 * 1000);
-    const completedAt = newStatus !== 'running'
-      ? new Date(startedAt.getTime() + (Math.random() * 120000 + 5000))
-      : null;
+    const completedAt =
+      newStatus !== 'running' ? new Date(startedAt.getTime() + (Math.random() * 120000 + 5000)) : null;
 
     await experimentsStore.updateExperiment({
       id: exp.id,

@@ -26,8 +26,12 @@ function toDatasetItem(row: DatasetItemRow): DatasetItem {
     id: row.id,
     datasetId: row.datasetId,
     datasetVersion: row.datasetVersion,
+    organizationId: row.organizationId,
+    projectId: row.projectId,
     input: row.input,
     groundTruth: row.groundTruth,
+    expectedTrajectory: row.expectedTrajectory,
+    toolMocks: row.toolMocks,
     requestContext: row.requestContext,
     metadata: row.metadata,
     source: row.source,
@@ -81,6 +85,11 @@ export class DatasetsInMemory extends DatasetsStorage {
       requestContextSchema: input.requestContextSchema,
       targetType: input.targetType,
       targetIds: input.targetIds,
+      scorerIds: input.scorerIds ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
+      candidateKey: input.candidateKey ?? null,
+      candidateId: input.candidateId ?? null,
       version: 0,
       createdAt: now,
       updatedAt: now,
@@ -112,6 +121,8 @@ export class DatasetsInMemory extends DatasetsStorage {
       tags: args.tags !== undefined ? args.tags : existing.tags,
       targetType: args.targetType !== undefined ? args.targetType : existing.targetType,
       targetIds: args.targetIds !== undefined ? args.targetIds : existing.targetIds,
+      scorerIds: args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds,
+      // Tenancy and candidate identity are immutable after creation.
       updatedAt: new Date(),
     } as DatasetRecord;
     this.db.datasets.set(args.id, updated);
@@ -142,7 +153,19 @@ export class DatasetsInMemory extends DatasetsStorage {
   }
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {
-    const datasets = Array.from(this.db.datasets.values());
+    let datasets = Array.from(this.db.datasets.values());
+
+    if (args.filters) {
+      const { organizationId, projectId, candidateKey, candidateId } = args.filters;
+      datasets = datasets.filter(d => {
+        if (organizationId !== undefined && d.organizationId !== organizationId) return false;
+        if (projectId !== undefined && d.projectId !== projectId) return false;
+        if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;
+        if (candidateId !== undefined && d.candidateId !== candidateId) return false;
+        return true;
+      });
+    }
+
     // Sort by createdAt descending (newest first)
     datasets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
@@ -180,10 +203,15 @@ export class DatasetsInMemory extends DatasetsStorage {
       id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      // Tenancy inherited from parent dataset (Option B — never settable per item)
+      organizationId: dataset.organizationId ?? null,
+      projectId: dataset.projectId ?? null,
       validTo: null,
       isDeleted: false,
       input: args.input,
       groundTruth: args.groundTruth,
+      expectedTrajectory: args.expectedTrajectory,
+      toolMocks: args.toolMocks,
       requestContext: args.requestContext,
       metadata: args.metadata,
       source: args.source,
@@ -231,13 +259,19 @@ export class DatasetsInMemory extends DatasetsStorage {
       id: args.id,
       datasetId: args.datasetId,
       datasetVersion: newVersion,
+      // Re-inherit tenancy from parent dataset (handles dataset-level retroactive tenancy backfill)
+      organizationId: dataset.organizationId ?? null,
+      projectId: dataset.projectId ?? null,
       validTo: null,
       isDeleted: false,
-      input: args.input ?? currentRow.input,
-      groundTruth: args.groundTruth ?? currentRow.groundTruth,
-      requestContext: args.requestContext ?? currentRow.requestContext,
-      metadata: args.metadata ?? currentRow.metadata,
-      source: args.source ?? currentRow.source,
+      input: args.input !== undefined ? args.input : currentRow.input,
+      groundTruth: args.groundTruth !== undefined ? args.groundTruth : currentRow.groundTruth,
+      expectedTrajectory:
+        args.expectedTrajectory !== undefined ? args.expectedTrajectory : currentRow.expectedTrajectory,
+      toolMocks: args.toolMocks !== undefined ? args.toolMocks : currentRow.toolMocks,
+      requestContext: args.requestContext !== undefined ? args.requestContext : currentRow.requestContext,
+      metadata: args.metadata !== undefined ? args.metadata : currentRow.metadata,
+      source: args.source !== undefined ? args.source : currentRow.source,
       createdAt: currentRow.createdAt,
       updatedAt: now,
     };
@@ -275,12 +309,21 @@ export class DatasetsInMemory extends DatasetsStorage {
     // T3.9 — close old row
     currentRow.validTo = newVersion;
 
-    // T3.9 — insert tombstone
+    // T3.9 — insert tombstone.
+    // Tenancy is read from the prior current row rather than re-fetched from
+    // the parent dataset (the pattern used by every DB adapter). This is
+    // deliberate and safe: tenancy is immutable post-create on both datasets
+    // and items (see CreateDatasetInput / UpdateDatasetInput in ../../types.ts),
+    // so currentRow.organizationId / currentRow.projectId are guaranteed to
+    // equal dataset.organizationId / dataset.projectId. Keep this branch in
+    // sync with the DB adapters if that invariant ever changes.
     const now = new Date();
     rows.push({
       id,
       datasetId,
       datasetVersion: newVersion,
+      organizationId: currentRow.organizationId ?? null,
+      projectId: currentRow.projectId ?? null,
       validTo: null,
       isDeleted: true,
       input: currentRow.input,
@@ -356,6 +399,15 @@ export class DatasetsInMemory extends DatasetsStorage {
           items.push(toDatasetItem(current));
         }
       }
+    }
+
+    if (args.filters) {
+      const { organizationId, projectId } = args.filters;
+      items = items.filter(item => {
+        if (organizationId !== undefined && item.organizationId !== organizationId) return false;
+        if (projectId !== undefined && item.projectId !== projectId) return false;
+        return true;
+      });
     }
 
     // Filter by search term if specified (case-insensitive partial match on input/groundTruth)
@@ -451,10 +503,15 @@ export class DatasetsInMemory extends DatasetsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        // Tenancy inherited from parent dataset (Option B)
+        organizationId: dataset.organizationId ?? null,
+        projectId: dataset.projectId ?? null,
         validTo: null,
         isDeleted: false,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
+        expectedTrajectory: itemInput.expectedTrajectory,
+        toolMocks: itemInput.toolMocks,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
         source: itemInput.source,
@@ -493,11 +550,15 @@ export class DatasetsInMemory extends DatasetsStorage {
       // Close old row
       currentRow.validTo = newVersion;
 
-      // Insert tombstone
+      // Insert tombstone. See _doDeleteItem above for why it's safe to read
+      // tenancy from the prior current row rather than re-fetching from the
+      // parent dataset (tenancy is immutable post-create on both sides).
       rows.push({
         id: itemId,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        organizationId: currentRow.organizationId ?? null,
+        projectId: currentRow.projectId ?? null,
         validTo: null,
         isDeleted: true,
         input: currentRow.input,

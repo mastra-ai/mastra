@@ -12,6 +12,7 @@ import type {
   ScoreEvent,
   FeedbackEvent,
   AnyExportedSpan,
+  ObservabilityDropEvent,
 } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ObservabilityBus } from './observability-bus';
@@ -51,6 +52,7 @@ function createLogEvent(): LogEvent {
   return {
     type: 'log',
     log: {
+      logId: 'log-bus-test',
       timestamp: new Date(),
       level: 'info',
       message: 'test log message',
@@ -63,6 +65,7 @@ function createMetricEvent(): MetricEvent {
   return {
     type: 'metric',
     metric: {
+      metricId: 'metric-bus-test',
       timestamp: new Date(),
       name: 'mastra_test_counter',
       value: 1,
@@ -75,6 +78,7 @@ function createScoreEvent(): ScoreEvent {
   return {
     type: 'score',
     score: {
+      scoreId: 'score-bus-test',
       timestamp: new Date(),
       traceId: 'trace-1',
       scorerId: 'relevance',
@@ -88,12 +92,26 @@ function createFeedbackEvent(): FeedbackEvent {
   return {
     type: 'feedback',
     feedback: {
+      feedbackId: 'feedback-bus-test',
       timestamp: new Date(),
       traceId: 'trace-1',
       source: 'user',
       feedbackType: 'thumbs',
       value: 1,
     },
+  };
+}
+
+function createDropEvent(): ObservabilityDropEvent {
+  return {
+    type: 'drop',
+    signal: 'log',
+    reason: 'unsupported-storage',
+    count: 2,
+    timestamp: new Date(),
+    exporterName: 'mastra-default-observability-exporter',
+    storageName: 'MockStorage',
+    error: { message: 'Unsupported logs' },
   };
 }
 
@@ -258,6 +276,40 @@ describe('ObservabilityBus', () => {
       expect(onScoreEvent).toHaveBeenCalledWith(event);
     });
 
+    it('should fall back to deprecated addScoreToTrace for exporters without onScoreEvent', () => {
+      const addScoreToTrace = vi.fn();
+      const exporter = createMockExporter({ onScoreEvent: undefined, addScoreToTrace });
+      bus.registerExporter(exporter);
+
+      const event = createScoreEvent();
+      event.score.spanId = 'span-fallback-test';
+      event.score.scorerName = 'Readable Fallback Scorer';
+      event.score.metadata = { source: 'legacy-fallback-test' };
+      bus.emit(event);
+
+      expect(addScoreToTrace).toHaveBeenCalledWith({
+        traceId: event.score.traceId,
+        spanId: 'span-fallback-test',
+        score: 0.85,
+        reason: 'Relevant response',
+        scorerName: 'Readable Fallback Scorer',
+        metadata: { source: 'legacy-fallback-test' },
+      });
+    });
+
+    it('should prefer onScoreEvent over deprecated addScoreToTrace when both are implemented', () => {
+      const onScoreEvent = vi.fn();
+      const addScoreToTrace = vi.fn();
+      const exporter = createMockExporter({ onScoreEvent, addScoreToTrace });
+      bus.registerExporter(exporter);
+
+      const event = createScoreEvent();
+      bus.emit(event);
+
+      expect(onScoreEvent).toHaveBeenCalledWith(event);
+      expect(addScoreToTrace).not.toHaveBeenCalled();
+    });
+
     it('should not fail when exporter has no onScoreEvent handler', () => {
       const exporter = createMockExporter({ onScoreEvent: undefined });
       bus.registerExporter(exporter);
@@ -283,6 +335,140 @@ describe('ObservabilityBus', () => {
       bus.registerExporter(exporter);
 
       bus.emit(createFeedbackEvent());
+    });
+  });
+
+  describe('drop event routing', () => {
+    it('should route drop events to exporters and bridge', () => {
+      const exporterDrop = vi.fn();
+      const bridgeDrop = vi.fn();
+      bus.registerExporter(createMockExporter({ onDroppedEvent: exporterDrop }));
+      bus.registerBridge(createMockBridge({ onDroppedEvent: bridgeDrop }));
+
+      const event = createDropEvent();
+      bus.emitDropEvent(event);
+
+      expect(exporterDrop).toHaveBeenCalledWith(event);
+      expect(bridgeDrop).toHaveBeenCalledWith(event);
+    });
+
+    it('should skip handlers without onDroppedEvent', () => {
+      bus.registerExporter(createMockExporter());
+      bus.registerBridge(createMockBridge());
+
+      expect(() => bus.emitDropEvent(createDropEvent())).not.toThrow();
+    });
+
+    it('should await async drop handlers during flush', async () => {
+      let resolved = false;
+      const onDroppedEvent = vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            setTimeout(() => {
+              resolved = true;
+              resolve();
+            }, 0);
+          }),
+      );
+      bus.registerExporter(createMockExporter({ onDroppedEvent }));
+
+      bus.emitDropEvent(createDropEvent());
+      await bus.flush();
+
+      expect(onDroppedEvent).toHaveBeenCalledTimes(1);
+      expect(resolved).toBe(true);
+    });
+
+    it('should await drop handlers emitted during exporter flush', async () => {
+      const event = createDropEvent();
+      let emitted = false;
+      let dropHandled = false;
+      let flushedAfterDrop = false;
+
+      const emittingExporter = createMockExporter({
+        name: 'emitting-exporter',
+        flush: vi.fn(async () => {
+          if (!emitted) {
+            emitted = true;
+            bus.emitDropEvent(event);
+          }
+        }),
+      });
+      const alertExporter = createMockExporter({
+        name: 'alert-exporter',
+        onDroppedEvent: vi.fn(
+          () =>
+            new Promise<void>(resolve => {
+              setTimeout(() => {
+                dropHandled = true;
+                resolve();
+              }, 0);
+            }),
+        ),
+        flush: vi.fn(async () => {
+          if (dropHandled) {
+            flushedAfterDrop = true;
+          }
+        }),
+      });
+      bus.registerExporter(emittingExporter);
+      bus.registerExporter(alertExporter);
+
+      await bus.flush();
+
+      expect(alertExporter.onDroppedEvent).toHaveBeenCalledWith(event);
+      expect(dropHandled).toBe(true);
+      expect(flushedAfterDrop).toBe(true);
+    });
+
+    it('should drain drop handlers emitted during concurrent exporter flushes', async () => {
+      const event = createDropEvent();
+      let flushCalls = 0;
+      let releaseSecondFlush!: () => void;
+      const secondFlushReady = new Promise<void>(resolve => {
+        releaseSecondFlush = resolve;
+      });
+      let emitted = false;
+      let dropBuffered = false;
+      let flushedAfterDrop = false;
+
+      const emittingExporter = createMockExporter({
+        name: 'emitting-exporter',
+        flush: vi.fn(async () => {
+          flushCalls++;
+          if (flushCalls === 1) {
+            return;
+          }
+
+          await secondFlushReady;
+          if (!emitted) {
+            emitted = true;
+            bus.emitDropEvent(event);
+          }
+        }),
+      });
+      const alertExporter = createMockExporter({
+        name: 'alert-exporter',
+        onDroppedEvent: vi.fn(() => {
+          dropBuffered = true;
+        }),
+        flush: vi.fn(async () => {
+          if (dropBuffered) {
+            flushedAfterDrop = true;
+          }
+        }),
+      });
+      bus.registerExporter(emittingExporter);
+      bus.registerExporter(alertExporter);
+
+      const firstFlush = bus.flush();
+      const secondFlush = bus.flush();
+      await Promise.resolve();
+      releaseSecondFlush();
+      await Promise.all([firstFlush, secondFlush]);
+
+      expect(alertExporter.onDroppedEvent).toHaveBeenCalledWith(event);
+      expect(flushedAfterDrop).toBe(true);
     });
   });
 
@@ -947,6 +1133,194 @@ describe('ObservabilityBus', () => {
 
       await bus.shutdown();
       await bus.flush(); // should not throw
+    });
+  });
+
+  describe('deepClean payload sanitization', () => {
+    it('should deepClean log events before delivering to handlers (defaults)', () => {
+      const onLogEvent = vi.fn();
+      bus.registerExporter(createMockExporter({ onLogEvent }));
+
+      // Circular ref + function should be stripped by deepClean defaults.
+      const circular: any = { name: 'circ' };
+      circular.self = circular;
+      const event: LogEvent = {
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'hello',
+          data: { circular, fn: () => 'nope', ok: 'value' },
+        } as any,
+      };
+
+      bus.emit(event);
+
+      expect(onLogEvent).toHaveBeenCalledTimes(1);
+      const delivered = onLogEvent.mock.calls[0]![0] as LogEvent;
+      // Cleaning replaces the payload object with a sanitized clone.
+      expect(delivered.log).not.toBe(event.log);
+      // JSON-safe (no circular refs, no functions).
+      expect(() => JSON.stringify(delivered)).not.toThrow();
+      const data = (delivered.log as any).data;
+      expect(data.ok).toBe('value');
+      expect(typeof data.fn).not.toBe('function');
+    });
+
+    it('should deepClean metric / score / feedback payloads before delivery', () => {
+      const onMetricEvent = vi.fn();
+      const onScoreEvent = vi.fn();
+      const onFeedbackEvent = vi.fn();
+      bus.registerExporter(createMockExporter({ onMetricEvent, onScoreEvent, onFeedbackEvent }));
+
+      const circular: any = { x: 1 };
+      circular.self = circular;
+
+      bus.emit({
+        type: 'metric',
+        metric: {
+          timestamp: new Date(),
+          name: 'mastra_test_counter',
+          value: 1,
+          labels: { env: 'test' },
+          metadata: { circular },
+        } as any,
+      });
+      bus.emit({
+        type: 'score',
+        score: {
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          scorerId: 'rel',
+          score: 0.5,
+          metadata: { circular },
+        } as any,
+      });
+      bus.emit({
+        type: 'feedback',
+        feedback: {
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          source: 'user',
+          feedbackType: 'thumbs',
+          value: 1,
+          metadata: { circular },
+        } as any,
+      });
+
+      expect(() => JSON.stringify(onMetricEvent.mock.calls[0]![0])).not.toThrow();
+      expect(() => JSON.stringify(onScoreEvent.mock.calls[0]![0])).not.toThrow();
+      expect(() => JSON.stringify(onFeedbackEvent.mock.calls[0]![0])).not.toThrow();
+    });
+
+    it('should pass cleaned events to bridges as well as exporters', () => {
+      const onLogEvent = vi.fn();
+      const bridgeOnLog = vi.fn();
+      bus.registerExporter(createMockExporter({ onLogEvent }));
+      bus.registerBridge(createMockBridge({ onLogEvent: bridgeOnLog } as any));
+
+      const circular: any = {};
+      circular.self = circular;
+
+      bus.emit({
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: 'hi',
+          data: { circular },
+        } as any,
+      });
+
+      expect(() => JSON.stringify(onLogEvent.mock.calls[0]![0])).not.toThrow();
+      expect(() => JSON.stringify(bridgeOnLog.mock.calls[0]![0])).not.toThrow();
+    });
+
+    it('should honor custom serializationOptions for non-tracing signals', async () => {
+      const customBus = new ObservabilityBus({
+        serializationOptions: {
+          maxStringLength: 10,
+          maxArrayLength: 2,
+        },
+      });
+      const onLogEvent = vi.fn();
+      const onMetricEvent = vi.fn();
+      const onScoreEvent = vi.fn();
+      const onFeedbackEvent = vi.fn();
+      customBus.registerExporter(createMockExporter({ onLogEvent, onMetricEvent, onScoreEvent, onFeedbackEvent }));
+
+      const longStr = 'x'.repeat(500);
+
+      customBus.emit({
+        type: 'log',
+        log: {
+          timestamp: new Date(),
+          level: 'info',
+          message: longStr,
+          data: { arr: [1, 2, 3, 4, 5] },
+        } as any,
+      });
+      customBus.emit({
+        type: 'metric',
+        metric: {
+          timestamp: new Date(),
+          name: 'mastra_test_counter',
+          value: 1,
+          labels: { env: 'test' },
+          metadata: { note: longStr },
+        } as any,
+      });
+      customBus.emit({
+        type: 'score',
+        score: {
+          timestamp: new Date(),
+          traceId: 't',
+          scorerId: 's',
+          score: 0.5,
+          reason: longStr,
+        } as any,
+      });
+      customBus.emit({
+        type: 'feedback',
+        feedback: {
+          timestamp: new Date(),
+          traceId: 't',
+          source: 'user',
+          feedbackType: 'comment',
+          value: 1,
+          comment: longStr,
+        } as any,
+      });
+
+      const log = onLogEvent.mock.calls[0]![0] as LogEvent;
+      // Custom maxStringLength applied (longStr is 500 chars, capped to 10
+      // plus a truncation marker — must be drastically shorter than original).
+      expect((log.log as any).message.length).toBeLessThan(longStr.length);
+      // Custom maxArrayLength applied.
+      expect((log.log as any).data.arr.length).toBeLessThanOrEqual(3); // 2 + truncation marker tolerance
+
+      const metric = onMetricEvent.mock.calls[0]![0] as MetricEvent;
+      expect((metric.metric as any).metadata.note.length).toBeLessThan(longStr.length);
+
+      const score = onScoreEvent.mock.calls[0]![0] as ScoreEvent;
+      expect((score.score as any).reason.length).toBeLessThan(longStr.length);
+
+      const feedback = onFeedbackEvent.mock.calls[0]![0] as FeedbackEvent;
+      expect((feedback.feedback as any).comment.length).toBeLessThan(longStr.length);
+
+      await customBus.shutdown();
+    });
+
+    it('should leave tracing events unchanged (already cleaned at span construction)', () => {
+      const onTracingEvent = vi.fn();
+      bus.registerExporter(createMockExporter({ onTracingEvent }));
+
+      const event = createTracingEvent();
+      bus.emit(event);
+
+      // Same reference passes through — bus does not re-clean tracing events.
+      expect(onTracingEvent).toHaveBeenCalledTimes(1);
+      expect(onTracingEvent.mock.calls[0]![0]).toBe(event);
     });
   });
 });

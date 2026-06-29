@@ -24,6 +24,8 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
@@ -204,6 +206,42 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const spans = await this.#db.selectMany<SpanRecord>({
+        tableName: TABLE_SPANS,
+        whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
+        orderBy: 'startedAt ASC',
+      });
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map(span => {
+          const transformed = transformFromSqlRow<SpanRecord>({ tableName: TABLE_SPANS, sqlRow: span });
+          const { input, output, attributes, metadata, tags, links, ...light } = transformed;
+          return light as LightSpanRecord;
+        }),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {

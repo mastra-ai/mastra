@@ -5,6 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # Tools
 
 Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
@@ -63,10 +66,84 @@ export const weatherAgent = new Agent({
   instructions: `
     You are a helpful weather assistant.
     Use the weatherTool to fetch current weather data.`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool },
 })
 ```
+
+## Define schemas
+
+You can define the tool's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        weather: z.string(),
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: toStandardJsonSchema(
+        v.object({
+          location: v.string(),
+        }),
+      ),
+      outputSchema: toStandardJsonSchema(
+        v.object({
+          weather: v.string(),
+        }),
+      ),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { type } from 'arktype'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: type({
+        location: 'string',
+      }),
+      outputSchema: type({
+        weather: 'string',
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Multiple tools
 
@@ -84,7 +161,7 @@ export const weatherAgent = new Agent({
     You are a helpful weather assistant.
     Use the weatherTool to fetch current weather data.
     Use the hazardsTool to provide information about potential weather hazards.`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool, hazardsTool },
 })
 ```
@@ -101,14 +178,14 @@ const writer = new Agent({
   name: 'Writer',
   description: 'Drafts and edits written content',
   instructions: 'You are a skilled writer.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const supervisor = new Agent({
   id: 'supervisor',
   name: 'Supervisor',
   instructions: 'Coordinate the writer to produce content.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   // highlight-next-line
   agents: { writer },
 })
@@ -126,7 +203,7 @@ export const researchAgent = new Agent({
   id: 'research-agent',
   name: 'Research Agent',
   instructions: 'You are a research assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   // highlight-next-line
   workflows: { researchWorkflow },
 })
@@ -164,6 +241,128 @@ export const weatherTool = createTool({
   },
 })
 ```
+
+`toModelOutput` also works on client-side tools passed through `clientTools`. The mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result.
+
+## Transform tool payloads for UI and transcripts
+
+Use `transform` when a tool returns raw data your application needs, but browser-facing streams or user-visible transcript messages should receive a smaller or safer shape. `transform` is separate from `toModelOutput`: `toModelOutput` shapes the payload sent back to the model, while `transform` shapes tool input, output, errors, approval payloads, and suspension payloads for `display` and `transcript` targets.
+
+If a transform is configured and it fails, Mastra doesn't fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
+
+See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
+
+## Run logic around tool calls
+
+Use `hooks` to run custom logic before and after every tool call an agent makes. Hooks apply to all tool sources: assigned tools, memory tools, toolsets, client tools, agent and workflow tools, and [workspace tools](/docs/workspace/overview#tool-hooks). Common uses include logging, auditing, input validation, and blocking specific calls.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  name: 'support-agent',
+  instructions: 'Help users with their questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // highlight-start
+  hooks: {
+    beforeToolCall: ({ toolName, input }) => {
+      console.log(`Running ${toolName}`, input)
+    },
+    afterToolCall: ({ toolName, output, error }) => {
+      console.log(`Finished ${toolName}`, { output, error })
+    },
+  },
+  // highlight-end
+})
+```
+
+`beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely — the agent receives `output` as the tool result:
+
+```typescript
+const guardedAgent = new Agent({
+  name: 'guarded-agent',
+  instructions: 'Run shell commands for the user.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  hooks: {
+    beforeToolCall: ({ toolName, input }) => {
+      const command = (input as { command?: string }).command ?? ''
+      if (toolName === 'execute_command' && command.includes('rm -rf')) {
+        return { proceed: false, output: 'Command blocked by policy.' }
+      }
+    },
+  },
+})
+```
+
+`afterToolCall` runs after the tool finishes, whether it succeeded or failed. On success it receives `output`; if the tool threw, it receives `error` instead and the error is re-thrown after the hook runs.
+
+### Per-execution hooks
+
+Pass `hooks` to `.generate()` or `.stream()` to set hooks for a single execution. Per-execution hooks override matching agent-level hooks:
+
+```typescript
+await supportAgent.generate('Look up the order status', {
+  hooks: {
+    beforeToolCall: ({ toolName }) => {
+      console.log(`This run only: ${toolName}`)
+    },
+  },
+})
+```
+
+Agent-level and per-execution hooks merge per key: passing only `beforeToolCall` at execution time keeps the agent-level `afterToolCall`.
+
+## Streaming
+
+Tools support lifecycle hooks that allow you to monitor different stages of tool execution during streaming. These hooks are particularly useful for logging or analytics.
+
+For generic `writer` API usage, see [Streaming](/guides/concepts/streaming#writer-api).
+
+### Available Hooks
+
+- **onInputStart**: Called when tool call input streaming begins
+- **onInputDelta**: Called for each chunk of input as it streams in
+- **onInputAvailable**: Called when complete input is parsed and validated
+- **onOutput**: Called after the tool successfully executes with the output
+
+For detailed documentation on all lifecycle hooks, see the [createTool() reference](/reference/tools/create-tool#tool-lifecycle-hooks).
+
+### Example: Using `onInputAvailable` and `onOutput`
+
+```typescript
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get weather information',
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  // Called when the complete input is available
+  onInputAvailable: ({ input, toolCallId }) => {
+    console.log(`Weather requested for: ${input.city}`)
+  },
+  execute: async input => {
+    const weather = await fetchWeather(input.city)
+    return weather
+  },
+  // Called after successful execution
+  onOutput: ({ output, toolName }) => {
+    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`)
+  },
+})
+```
+
+### Streaming tool input in UIs
+
+When a model generates a tool call, the arguments arrive incrementally as `tool-call-delta` stream chunks before the final `tool-call` chunk. UIs can listen for the corresponding `tool_input_start`, `tool_input_delta`, and `tool_input_end` events to render tool arguments as they stream in — for example, showing a file path or command immediately rather than waiting for the complete tool call.
+
+Using a partial JSON parser on the accumulated `argsTextDelta` fragments lets you extract usable argument values before the JSON is complete. This enables features like live diff previews for edit tools, streaming file content for write tools, and instant display of search patterns or file paths.
 
 ## Control tool selection
 
@@ -235,6 +434,7 @@ Note that for subagents, you'll see two different identifiers in stream response
 
 - [`createTool` reference](/reference/tools/create-tool)
 - [`Agent.generate()` reference](/reference/agents/generate): Runtime options for tool selection, steps, and callbacks
+- [Background tasks](/docs/agents/background-tasks): Run long-running tools without blocking the agent loop
 - [MCP overview](/docs/mcp/overview)
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries
 - [Tools with structured output](/docs/agents/structured-output#combine-tools-and-structured-output): Model compatibility when combining tools and structured output

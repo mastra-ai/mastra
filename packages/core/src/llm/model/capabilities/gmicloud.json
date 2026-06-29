@@ -1,0 +1,9 @@
+{
+  "attachment": [
+    "anthropic/claude-opus-4.6",
+    "anthropic/claude-opus-4.7",
+    "anthropic/claude-sonnet-4.6",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/kimi-k2.7-code-highspeed"
+  ]
+}

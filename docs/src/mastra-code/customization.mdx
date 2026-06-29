@@ -7,7 +7,7 @@ packages:
 
 # Customization
 
-Mastra Code is designed as a composable library. The [`createMastraCode()`](/reference) factory function accepts configuration overrides, and the returned [`Harness`](https://mastra.ai/reference/harness/harness-class) can drive any frontend, not just the built-in TUI.
+Mastra Code is designed as a composable library. The [`createMastraCode()`](/reference) factory function accepts configuration overrides, and the returned [`AgentController`](https://mastra.ai/reference/agent-controller/agent-controller-class) can drive any frontend, not just the built-in TUI.
 
 ## Programmatic usage
 
@@ -16,26 +16,26 @@ Import `createMastraCode` to bootstrap Mastra Code in your own application:
 ```typescript title="src/custom-agent.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness, mcpManager, authStorage } = createMastraCode({
+const { controller, mcpManager, authStorage } = await createMastraCode({
   cwd: '/path/to/project',
   initialState: {
     yolo: false,
   },
 })
 
-await harness.init()
-await harness.selectOrCreateThread()
+await controller.init()
+await controller.selectOrCreateThread()
 
-harness.subscribe(event => {
+controller.subscribe(event => {
   if (event.type === 'message_update') {
     console.log(event.message.content)
   }
 })
 
-await harness.sendMessage({ content: 'Explain the auth module' })
+await controller.sendMessage({ content: 'Explain the auth module' })
 ```
 
-The `harness` object is a standard `Harness` instance. You can subscribe to events, switch modes, manage threads, and send messages through its API.
+The `controller` object is a standard `AgentController` instance. You can subscribe to events, switch modes, manage threads, and send messages through its API.
 
 ## Custom modes
 
@@ -53,7 +53,7 @@ const reviewAgent = new Agent({
   model: 'anthropic/claude-sonnet-4-6',
 })
 
-const { harness } = createMastraCode({
+const { controller } = await createMastraCode({
   modes: [
     {
       id: 'review',
@@ -66,7 +66,7 @@ const { harness } = createMastraCode({
     {
       id: 'build',
       name: 'Build',
-      defaultModelId: 'anthropic/claude-opus-4-6',
+      defaultModelId: 'anthropic/claude-opus-4-7',
       color: '#7c3aed',
       agent: reviewAgent,
     },
@@ -96,7 +96,7 @@ const deployTool = createTool({
   },
 })
 
-const { harness } = createMastraCode({
+const { controller } = await createMastraCode({
   extraTools: { deploy: deployTool },
 })
 ```
@@ -111,7 +111,7 @@ Override the default Explore/Plan/Execute subagents. Each subagent receives its 
 import { createMastraCode } from 'mastracode'
 import { createTool } from '@mastra/core/tools'
 
-const { harness } = createMastraCode({
+const { controller } = await createMastraCode({
   subagents: [
     {
       id: 'explore',
@@ -138,7 +138,7 @@ Connect to a remote database instead of the default local SQLite:
 ```typescript title="src/custom-storage.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { controller } = await createMastraCode({
   storage: {
     url: 'libsql://my-db.turso.io',
     authToken: 'my-auth-token',
@@ -155,7 +155,7 @@ Replace or extend the default background tasks:
 ```typescript title="src/custom-heartbeats.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { controller } = await createMastraCode({
   heartbeatHandlers: [
     {
       id: 'sync-config',
@@ -168,20 +168,20 @@ const { harness } = createMastraCode({
 })
 ```
 
-Heartbeat handlers run on a fixed interval. They start when `harness.init()` is called and stop when `harness.destroy()` is called.
+Heartbeat handlers run on a fixed interval. They start when `controller.init()` is called and stop when `controller.destroy()` is called.
 
 ## Building a custom TUI
 
-Mastra Code exports the `MastraTUI` class from `mastracode/tui` for building custom terminal interfaces. The TUI is driven by the Harness event system:
+Mastra Code exports the `MastraTUI` class from `mastracode/tui` for building custom terminal interfaces. The TUI is driven by the AgentController event system:
 
 ```typescript title="src/custom-tui.ts"
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { harness, mcpManager, hookManager, authStorage } = createMastraCode()
+const { controller, mcpManager, hookManager, authStorage } = createMastraCode()
 
 const tui = new MastraTUI({
-  harness,
+  controller,
   hookManager,
   authStorage,
   mcpManager,
@@ -192,7 +192,7 @@ const tui = new MastraTUI({
 tui.run()
 ```
 
-The TUI subscribes to harness events and renders messages, tool calls, approvals, and status information in real time.
+The TUI subscribes to controller events and renders messages, tool calls, approvals, and status information in real time.
 
 ## Initial state overrides
 
@@ -201,7 +201,7 @@ Control default behavior through `initialState`:
 ```typescript title="src/custom-state.ts"
 import { createMastraCode } from 'mastracode'
 
-const { harness } = createMastraCode({
+const { controller } = await createMastraCode({
   initialState: {
     yolo: false,
     thinkingLevel: 'high',

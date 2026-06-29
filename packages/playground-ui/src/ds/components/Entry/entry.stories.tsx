@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Entry } from './entry';
-import { Txt } from '../Txt';
 import { Badge } from '../Badge';
+import { Txt } from '../Txt';
+import { Entry } from './entry';
 
 const meta: Meta<typeof Entry> = {
   title: 'DataDisplay/Entry',
@@ -9,7 +9,6 @@ const meta: Meta<typeof Entry> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -54,7 +53,7 @@ export const WithLongContent: Story = {
 
 export const MultipleEntries: Story = {
   render: () => (
-    <div className="flex flex-col gap-4 w-[300px]">
+    <div className="flex flex-col gap-4 w-dropdown-max-height">
       <Entry label="Name">
         <Txt variant="ui-md" className="text-neutral6">
           My Agent

@@ -124,6 +124,70 @@ describe('MessageList.updateToolInvocation', () => {
     expect(unsaved[0]?.id).toBe(msg.id);
   });
 
+  it('should re-save a sealed memory message when its tool invocation completes after response-id rotation', () => {
+    const messageList = new MessageList();
+
+    const sealedMessage = makeAssistantMessage(
+      [
+        {
+          type: 'data-om-status',
+          data: { windows: {} },
+        } as any,
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'tc-sealed',
+            toolName: 'web_search',
+            args: { query: 'hello' },
+          },
+        },
+      ],
+      'sealed-assistant-id',
+    );
+
+    sealedMessage.content.metadata = { mastra: { sealed: true } } as any;
+
+    messageList.add(sealedMessage, 'memory');
+    messageList.drainUnsavedMessages();
+
+    const rotatedMessage = makeAssistantMessage(
+      [
+        {
+          type: 'text',
+          text: 'post-seal continuation',
+        },
+      ],
+      'rotated-assistant-id',
+    );
+    messageList.add(rotatedMessage, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-sealed',
+        toolName: 'web_search',
+        args: {},
+        result: { content: 'search results' },
+      },
+    });
+
+    expect(updated).toBe(true);
+    expect((sealedMessage.content.parts[1] as any).toolInvocation.state).toBe('result');
+    expect((sealedMessage.content.parts[1] as any).toolInvocation.args).toEqual({ query: 'hello' });
+
+    const unsaved = messageList.drainUnsavedMessages();
+    expect(unsaved.map(message => message.id)).toEqual(['sealed-assistant-id', 'rotated-assistant-id']);
+
+    const persistedSealed = unsaved.find(message => message.id === 'sealed-assistant-id');
+    expect((persistedSealed?.content.parts[1] as any).toolInvocation.state).toBe('result');
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages.map(message => message.id)).toEqual(['sealed-assistant-id', 'rotated-assistant-id']);
+    expect((allMessages[1]?.content.parts[0] as any).text).toBe('post-seal continuation');
+  });
+
   it('should not move a response message (already in response source)', () => {
     const messageList = new MessageList();
 
@@ -478,7 +542,7 @@ describe('MessageList.updateToolInvocation', () => {
     expect(part.providerExecuted).toBe(false);
   });
 
-  it('should allow result to override providerMetadata from original call', () => {
+  it('should merge providerMetadata from original call and result', () => {
     const messageList = new MessageList();
 
     const msg = makeAssistantMessage([
@@ -509,6 +573,9 @@ describe('MessageList.updateToolInvocation', () => {
     } as any);
 
     const part = msg.content.parts[0] as any;
-    expect(part.providerMetadata).toEqual({ mastra: { modelOutput: true } });
+    expect(part.providerMetadata).toEqual({
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+      mastra: { modelOutput: true },
+    });
   });
 });

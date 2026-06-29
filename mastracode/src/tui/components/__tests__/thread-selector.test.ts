@@ -1,7 +1,7 @@
-import type { HarnessThread } from '@mastra/core/harness';
+import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockNode {
     children: any[] = [];
     addChild(child: any) {
@@ -64,14 +64,17 @@ vi.mock('@mariozechner/pi-tui', () => {
     Input,
     Spacer,
     Text,
-    fuzzyFilter: (threads: HarnessThread[], query: string, getText: (thread: HarnessThread) => string) =>
-      threads.filter(thread => getText(thread).toLowerCase().includes(query.toLowerCase())),
-    getEditorKeybindings: () => ({
+    fuzzyFilter: (
+      threads: AgentControllerThread[],
+      query: string,
+      getText: (thread: AgentControllerThread) => string,
+    ) => threads.filter(thread => getText(thread).toLowerCase().includes(query.toLowerCase())),
+    getKeybindings: () => ({
       matches: (keyData: string, action: string) => {
-        if (action === 'selectUp') return keyData === 'UP';
-        if (action === 'selectDown') return keyData === 'DOWN';
-        if (action === 'selectConfirm') return keyData === '\r';
-        if (action === 'selectCancel') return keyData === 'ESC';
+        if (action === 'tui.select.up') return keyData === 'UP';
+        if (action === 'tui.select.down') return keyData === 'DOWN';
+        if (action === 'tui.select.confirm') return keyData === '\r';
+        if (action === 'tui.select.cancel') return keyData === 'ESC';
         return false;
       },
     }),
@@ -88,7 +91,7 @@ vi.mock('../../theme.js', () => ({
 
 import { ThreadSelectorComponent } from '../thread-selector.js';
 
-function createThread(id: string, updatedAtOffsetMinutes: number): HarnessThread {
+function createThread(id: string, updatedAtOffsetMinutes: number): AgentControllerThread {
   const updatedAt = new Date(Date.now() - updatedAtOffsetMinutes * 60_000);
   return {
     id,

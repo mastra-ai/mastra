@@ -108,7 +108,7 @@ describe('Vector Resource', () => {
   });
 
   it('should get all indexes', async () => {
-    const mockResponse = { indexes: ['index1', 'index2'] };
+    const mockResponse = ['index1', 'index2'];
     mockFetchResponse(mockResponse);
     const result = await vector.getIndexes();
     expect(result).toEqual(mockResponse);
@@ -143,7 +143,7 @@ describe('Vector Resource', () => {
   });
 
   it('should upsert vectors with metadata and ids', async () => {
-    const mockResponse = ['id1', 'id2'];
+    const mockResponse = { ids: ['id1', 'id2'] };
     mockFetchResponse(mockResponse);
     const result = await vector.upsert({
       indexName: 'test-index',
@@ -174,16 +174,14 @@ describe('Vector Resource', () => {
   });
 
   it('should query vectors with all parameters', async () => {
-    const mockResponse = {
-      results: [
-        {
-          id: 'id1',
-          score: 0.9,
-          metadata: { label: 'a' },
-          vector: [1, 2],
-        },
-      ],
-    };
+    const mockResponse = [
+      {
+        id: 'id1',
+        score: 0.9,
+        metadata: { label: 'a' },
+        vector: [1, 2],
+      },
+    ];
     mockFetchResponse(mockResponse);
     const result = await vector.query({
       indexName: 'test-index',

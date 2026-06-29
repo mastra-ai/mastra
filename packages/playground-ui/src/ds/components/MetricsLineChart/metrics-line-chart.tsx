@@ -10,28 +10,34 @@ export type MetricsLineChartSeries = {
   aggregate?: (data: Record<string, unknown>[]) => { value: string; suffix?: string };
 };
 
+export type MetricsLineChartPointClickHandler = (point: Record<string, unknown>, seriesKey: string) => void;
+
 export function MetricsLineChart({
   data,
   series,
   height = 210,
   yDomain,
+  onPointClick,
 }: {
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
   height?: number;
   yDomain?: [number, number];
+  onPointClick?: MetricsLineChartPointClickHandler;
 }) {
+  const isClickable = typeof onPointClick === 'function';
+
   return (
     <div>
-      <div className="flex flex-wrap w-full items-end gap-4 gap-y-1 mb-4">
+      <div className="flex flex-wrap w-full items-end gap-4 gap-y-1 mb-4 ">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (
             <div key={s.dataKey} className="inline-flex items-baseline gap-2">
-              <div className="size-2 shrink-0 rounded-full translate-y-[-1px]" style={{ backgroundColor: s.color }} />
+              <div className="size-2 shrink-0 rounded-full -translate-y-px" style={{ backgroundColor: s.color }} />
               <span className="text-ui-sm text-neutral3 truncate max-w-24">{s.label}</span>
               {aggregated && (
-                <span className="text-ui-lg text-neutral4">
+                <span className="text-ui-sm text-neutral4">
                   {aggregated.value}
                   {aggregated.suffix && <span className="text-ui-sm text-neutral2"> {aggregated.suffix}</span>}
                 </span>
@@ -43,7 +49,12 @@ export function MetricsLineChart({
       <div style={{ height }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
-            <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+            <CartesianGrid
+              stroke="currentColor"
+              strokeOpacity={0.08}
+              vertical={false}
+              className="text-black dark:text-white"
+            />
             <XAxis
               dataKey="time"
               tick={{ fontSize: 10, fill: LABEL_COLOR, fontFamily: 'var(--font-mono)' }}
@@ -67,6 +78,18 @@ export function MetricsLineChart({
                 stroke={s.color}
                 strokeWidth={2}
                 dot={false}
+                activeDot={
+                  isClickable
+                    ? {
+                        r: 4,
+                        style: { cursor: 'pointer' },
+                        onClick: (_: unknown, payload: unknown) => {
+                          const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
+                          if (datum) onPointClick(datum, s.dataKey);
+                        },
+                      }
+                    : undefined
+                }
                 name={s.label}
               />
             ))}

@@ -1,6 +1,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
@@ -17,6 +17,7 @@ import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
 
+import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
@@ -24,6 +25,31 @@ let isRestarting = false;
 let serverStartTime: number | undefined;
 let requestContextPresetsJson: string | undefined;
 const ON_ERROR_MAX_RESTARTS = 3;
+
+function waitForProcessExit(child: ChildProcess, timeoutMs = 2000): Promise<void> {
+  if (child.exitCode !== null) {
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const done = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      resolve();
+    };
+    child.once('exit', done);
+    if (child.exitCode !== null) {
+      child.removeListener('exit', done);
+      done();
+      return;
+    }
+    timer = setTimeout(() => {
+      child.kill('SIGKILL');
+    }, timeoutMs);
+  });
+}
 
 interface HTTPSOptions {
   key: Buffer;
@@ -47,9 +73,10 @@ type ProcessOptions = {
   publicDir: string;
 };
 
-const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port: number }) => {
+const restartAllActiveWorkflowRuns = async ({ host, port, https }: { host: string; port: number; https?: boolean }) => {
+  const scheme = https ? 'https' : 'http';
   try {
-    await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+    await fetch(`${scheme}://${host}:${port}/__restart-active-workflow-runs`, {
       method: 'POST',
     });
   } catch (error) {
@@ -57,7 +84,7 @@ const restartAllActiveWorkflowRuns = async ({ host, port }: { host: string; port
     // Retry after another second
     await new Promise(resolve => setTimeout(resolve, 1500));
     try {
-      await fetch(`http://${host}:${port}/__restart-active-workflow-runs`, {
+      await fetch(`${scheme}://${host}:${port}/__restart-active-workflow-runs`, {
         method: 'POST',
       });
     } catch {
@@ -116,6 +143,9 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
+        MASTRA_TELEMETRY_COMMAND: 'dev',
+        MASTRA_PROJECT_ROOT: resolve(dotMastraPath, '..'),
+        ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
         ...(startOptions?.https
           ? {
               MASTRA_HTTPS_KEY: startOptions.https.key.toString('base64'),
@@ -140,11 +170,7 @@ const startServer = async (
     if (currentServerProcess.stdout) {
       currentServerProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
-        if (
-          !output.includes('Studio available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on ')
-        ) {
+        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
           process.stdout.write(output);
         }
       });
@@ -153,11 +179,7 @@ const startServer = async (
     if (currentServerProcess.stderr) {
       currentServerProcess.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
-        if (
-          !output.includes('Studio available') &&
-          !output.includes('👨‍💻') &&
-          !output.includes('Mastra API running on ')
-        ) {
+        if (!output.includes('Studio available') && !output.includes('👨‍💻') && !output.includes('Mastra API running')) {
           process.stderr.write(output);
         }
       });
@@ -189,11 +211,12 @@ const startServer = async (
         devLogger.ready(host, port, studioBasePath, apiPrefix, serverStartTime, startOptions.https);
         devLogger.watching();
 
-        await restartAllActiveWorkflowRuns({ host, port });
+        await restartAllActiveWorkflowRuns({ host, port, https: !!startOptions.https });
 
         // Send refresh signal
+        const scheme = startOptions.https ? 'https' : 'http';
         try {
-          await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
+          await fetch(`${scheme}://${host}:${port}${studioBasePath}/__refresh`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -203,7 +226,7 @@ const startServer = async (
           // Retry after another second
           await new Promise(resolve => setTimeout(resolve, 1500));
           try {
-            await fetch(`http://${host}:${port}${studioBasePath}/__refresh`, {
+            await fetch(`${scheme}://${host}:${port}${studioBasePath}/__refresh`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -275,7 +298,8 @@ async function checkAndRestart(
 
   try {
     // Check if hot reload is disabled due to template installation
-    const response = await fetch(`http://${host}:${port}${studioBasePath}/__hot-reload-status`);
+    const scheme = startOptions.https ? 'https' : 'http';
+    const response = await fetch(`${scheme}://${host}:${port}${studioBasePath}/__hot-reload-status`);
     if (response.ok) {
       const status = (await response.json()) as { disabled: boolean; timestamp: string };
       if (status.disabled) {
@@ -309,7 +333,48 @@ async function rebundleAndRestart(
     if (currentServerProcess) {
       devLogger.restarting();
       devLogger.debug('Stopping current server...');
-      currentServerProcess.kill('SIGINT');
+      const serverProcess = currentServerProcess;
+      // Wait for the process to exit before starting a new one
+      await new Promise<void>(resolve => {
+        if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+          resolve();
+          return;
+        }
+
+        let timeout: NodeJS.Timeout | undefined;
+        const handleExit = () => {
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          resolve();
+        };
+
+        serverProcess.once('exit', handleExit);
+
+        try {
+          serverProcess.kill('SIGINT');
+        } catch {
+          if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+            serverProcess.off('exit', handleExit);
+            resolve();
+          }
+          return;
+        }
+
+        timeout = setTimeout(() => {
+          try {
+            serverProcess.kill('SIGKILL');
+          } catch {
+            if (serverProcess.exitCode !== null || serverProcess.signalCode !== null) {
+              serverProcess.off('exit', handleExit);
+              resolve();
+            }
+          }
+        }, 5000);
+      });
+      if (currentServerProcess === serverProcess) {
+        currentServerProcess = undefined;
+      }
     }
 
     const env = await bundler.loadEnvVars();
@@ -368,6 +433,9 @@ export async function dev({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
+  await mkdir(dotMastraPath, { recursive: true });
+  await acquireDevLock(dotMastraPath);
+
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
@@ -415,6 +483,8 @@ export async function dev({
       }),
     );
   }
+
+  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   let httpsOptions: HTTPSOptions | undefined = undefined;
 
@@ -491,7 +561,22 @@ export async function dev({
     }
   });
 
+  let isShuttingDown = false;
   const handleShutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    const forceExit = setTimeout(() => process.exit(0), 3000);
+    forceExit.unref();
+
+    devLogger.shutdown();
+
+    if (currentServerProcess) {
+      currentServerProcess.kill();
+      await waitForProcessExit(currentServerProcess);
+      currentServerProcess = undefined;
+    }
+
     const analytics = getAnalytics();
     if (analytics && serverStartTime) {
       const durationMs = Date.now() - serverStartTime;
@@ -504,23 +589,21 @@ export async function dev({
       await analytics.shutdown();
     }
 
-    devLogger.shutdown();
-
-    if (currentServerProcess) {
-      currentServerProcess.kill();
-    }
-
     watcher
       .close()
       .catch(() => {})
-      .finally(() => process.exit(0));
+      .finally(() => {
+        releaseDevLock(dotMastraPath);
+        clearTimeout(forceExit);
+        process.exit(0);
+      });
   };
 
-  process.on('SIGINT', () => {
+  const onSignal = () => {
     handleShutdown().catch(() => process.exit(0));
-  });
+  };
 
-  process.on('SIGTERM', () => {
-    handleShutdown().catch(() => process.exit(0));
-  });
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
+  process.on('SIGHUP', onSignal);
 }

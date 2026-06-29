@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validateEndpoint } from './types';
+import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -26,6 +26,11 @@ export interface DaytonaS3MountConfig extends FilesystemMountConfig {
   accessKeyId?: string;
   /** AWS secret access key (optional - omit for public buckets) */
   secretAccessKey?: string;
+  /**
+   * Optional prefix (subdirectory) to mount instead of the entire bucket.
+   * Uses s3fs `bucket:/prefix` syntax. Leading/trailing slashes are normalized.
+   */
+  prefix?: string;
   /** Mount as read-only (even if credentials have write access) */
   readOnly?: boolean;
 }
@@ -159,9 +164,16 @@ export async function mountS3(mountPath: string, config: DaytonaS3MountConfig, c
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
   }
 
+  // Build the s3fs bucket argument — supports optional prefix via `bucket:/path` syntax
+  let bucketArg = config.bucket;
+  if (config.prefix) {
+    const normalizedPrefix = validatePrefix(config.prefix);
+    bucketArg = `${config.bucket}:/${normalizedPrefix}`;
+  }
+
   // Run s3fs as the sandbox user (not root) so the FUSE connection is registered
   // in the container's user namespace — allowing fusermount -u to unmount it later.
-  const mountCmd = `s3fs ${shellQuote(config.bucket)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
+  const mountCmd = `s3fs ${shellQuote(bucketArg)} ${quotedMountPath} -o ${mountOptions.join(' -o ')}`;
   logger.debug(`${LOG_PREFIX} Mounting S3:`, hasCredentials ? mountCmd.replace(credentialsPath, '***') : mountCmd);
 
   const result = await run(mountCmd, 60_000);

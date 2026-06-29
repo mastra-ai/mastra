@@ -1,8 +1,8 @@
-import * as HoverCard from '@radix-ui/react-hover-card';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
-import { useLinkComponent } from '@/lib/framework';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export type KeyValueListItemValue = {
@@ -26,10 +26,10 @@ export type KeyValueListProps = {
   labelsAreHidden?: boolean;
   className?: string;
   isLoading?: boolean;
+  LinkComponent?: LinkComponent;
 };
 
-export function KeyValueList({ data, className, labelsAreHidden, isLoading }: KeyValueListProps) {
-  const { Link } = useLinkComponent();
+export function KeyValueList({ data, className, labelsAreHidden, isLoading, LinkComponent: Link }: KeyValueListProps) {
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
     return labelsAreHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
   };
@@ -80,15 +80,25 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading }: Ke
                 </span>
               ) : isValueItemArray ? (
                 value?.map(item => {
-                  return item.path ? (
-                    <RelationWrapper description={item.description} key={item.id}>
-                      <Link href={item.path}>
-                        {item?.name} <ChevronRightIcon />
-                      </Link>
-                    </RelationWrapper>
-                  ) : (
-                    <span key={item.id}>{item?.name}</span>
-                  );
+                  if (item.path && Link) {
+                    return (
+                      <RelationWrapper description={item.description} key={item.id}>
+                        <Link href={item.path}>
+                          {item?.name} <ChevronRightIcon />
+                        </Link>
+                      </RelationWrapper>
+                    );
+                  }
+                  if (item.path) {
+                    return (
+                      <RelationWrapper description={item.description} key={item.id}>
+                        <a href={item.path}>
+                          {item?.name} <ChevronRightIcon />
+                        </a>
+                      </RelationWrapper>
+                    );
+                  }
+                  return <span key={item.id}>{item?.name}</span>;
                 })
               ) : (
                 <>{value ? value : <span className="text-neutral3 text-ui-sm">n/a</span>}</>
@@ -108,19 +118,10 @@ type RelationWrapperProps = {
 
 function RelationWrapper({ description, children }: RelationWrapperProps) {
   return description ? (
-    <HoverCard.Root openDelay={250}>
-      <HoverCard.Trigger asChild>{children}</HoverCard.Trigger>
-      <HoverCard.Portal>
-        <HoverCard.Content
-          className="z-50 w-auto max-w-60 rounded-md bg-surface5 p-2 px-4 text-ui-sm text-neutral5 text-center"
-          sideOffset={5}
-          side="top"
-        >
-          {description}
-          <HoverCard.Arrow className="fill-surface5" />
-        </HoverCard.Content>
-      </HoverCard.Portal>
-    </HoverCard.Root>
+    <HoverCard>
+      <HoverCardTrigger render={React.isValidElement(children) ? (children as React.ReactElement) : undefined} />
+      <HoverCardContent className="max-w-60 text-center">{description}</HoverCardContent>
+    </HoverCard>
   ) : (
     children
   );

@@ -31,7 +31,7 @@ export function DatePicker({ className, classNames, showOutsideDays = true, ...p
         day_range_start: 'day-range-start rounded-l-md',
         day_range_end: 'day-range-end rounded-r-md',
         day_selected: cn(
-          '!bg-accent1 !text-white hover:!bg-accent1/80 focus:!bg-accent1/80 focus:!text-white',
+          'bg-accent1! text-white! hover:bg-accent1/80! focus:bg-accent1/80! focus:text-white!',
           props.mode !== 'range' && 'rounded-md',
         ),
         day_today: 'bg-neutral6/10 text-neutral5',

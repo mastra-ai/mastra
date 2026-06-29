@@ -1,4 +1,5 @@
-node_modules/
+node_modules
+.test-tmp/
 dist/
 test-outputs/
 .vitest-reports/
@@ -13,17 +14,26 @@ test-outputs/
 
 # Dev artifacts
 .dev/db/*
+.pr-review/
 
 .env
+.env.local
+.env.*.local
 
 **/tsconfig.tsbuildinfo
 
 .turbo
+.next
 
 openapi-ts-error*
 
 .mastra
+.sandbox-profiles/
 *.db*
+*.duckdb
+*.duckdb.wal
+*.duckdb*
+*.sqlite*
 memory.db
 memory.db-*
 
@@ -60,4 +70,4 @@ om-reflector-fixture.json
 .notion
 .dev/lima
 .mastracode/
-/packages/core/__recordings__
+.tmp-mc-e2e-vitest/

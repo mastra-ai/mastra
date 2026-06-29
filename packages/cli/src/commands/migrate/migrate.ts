@@ -1,12 +1,17 @@
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import process from 'node:process';
 import * as p from '@clack/prompts';
-import { FileService } from '@mastra/deployer';
 import { execa } from 'execa';
 import pc from 'picocolors';
 
 import { createLogger } from '../../utils/logger.js';
 
+import {
+  findMastraEntryCandidates,
+  resolveMigrateEntryFile,
+  resolveMigratePaths,
+  toDetectedProjectRoot,
+} from './migrate-paths';
 import { MigrateBundler } from './MigrateBundler';
 
 interface MigrationResult {
@@ -14,6 +19,10 @@ interface MigrationResult {
   alreadyMigrated: boolean;
   duplicatesRemoved: number;
   message: string;
+}
+
+function quoteShellArg(value: string): string {
+  return `"${value.replace(/(["\\$`])/gu, '\\$1')}"`;
 }
 
 export async function migrate({
@@ -30,9 +39,44 @@ export async function migrate({
   yes: boolean;
 }) {
   const logger = createLogger(debug);
-  const rootDir = root || process.cwd();
-  const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
+  const { rootDir, mastraDir } = resolveMigratePaths({
+    cwd: process.cwd(),
+    root,
+    dir,
+  });
+  const { checkedPaths, entryFile } = resolveMigrateEntryFile(mastraDir);
   const dotMastraPath = join(rootDir, '.mastra');
+
+  if (!entryFile) {
+    logger.error(pc.red('Error: Could not find Mastra entry file.'));
+    logger.info('');
+    logger.info('Expected one of the following files:');
+    checkedPaths.forEach(path => logger.info(`  - ${path}`));
+    logger.info('');
+    logger.info('This command requires a Mastra entrypoint (src/mastra/index.ts or index.js).');
+    logger.info('If your project is in a custom location (for example in a monorepo), run:');
+    logger.info(pc.cyan('  npx mastra migrate --dir <path/to/src/mastra> --root <path/to/project-root>'));
+    logger.info(pc.cyan('  pnpm exec mastra migrate --dir <path/to/src/mastra> --root <path/to/project-root>'));
+
+    const candidates = findMastraEntryCandidates(rootDir, 5);
+    if (candidates.length > 0) {
+      logger.info('');
+      logger.info('Detected candidate entrypoints under the selected root:');
+      for (const candidate of candidates) {
+        const rootBase = toDetectedProjectRoot(candidate);
+        const suggestedDir = relative(rootBase, candidate).replace(/[\\/]index\.(ts|js)$/u, '');
+        const suggestedRoot = relative(process.cwd(), rootBase) || '.';
+        logger.info(`  - ${candidate}`);
+        logger.info(
+          pc.dim(
+            `    Example: npx mastra migrate --dir ${quoteShellArg(suggestedDir)} --root ${quoteShellArg(suggestedRoot)}`,
+          ),
+        );
+      }
+    }
+
+    process.exit(1);
+  }
 
   p.intro(pc.cyan('Mastra Storage Migration'));
 
@@ -56,9 +100,6 @@ export async function migrate({
   }
 
   try {
-    const fileService = new FileService();
-    const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
-
     const bundler = new MigrateBundler(env);
     bundler.__setLogger(logger);
 
@@ -129,13 +170,13 @@ export async function migrate({
         } else {
           logger.info(pc.green('✓ Migration completed successfully!'));
           if (result.duplicatesRemoved > 0) {
-            logger.info(`  Removed ${result.duplicatesRemoved} duplicate entries.`);
+            logger.info('Removed duplicate entries', { count: result.duplicatesRemoved });
           }
         }
-        logger.info(`  ${result.message}`);
+        logger.info(result.message);
       } else {
         logger.error(pc.red('✗ Migration failed.'));
-        logger.error(`  ${result.message}`);
+        logger.error(result.message);
         process.exit(1);
       }
     } else {
@@ -158,11 +199,11 @@ export async function migrate({
     if (error.code === 'ERR_MODULE_NOT_FOUND' || error.message?.includes('Cannot find module')) {
       logger.error(pc.red('Error: Could not find Mastra entry file.'));
       logger.info('');
-      logger.info('Make sure you have a mastra directory with an index.ts or index.js file.');
-      logger.info(`Expected location: ${mastraDir}`);
+      logger.info('Make sure your Mastra directory has an index.ts or index.js file.');
+      logger.info('Expected location', { path: mastraDir });
       logger.info('');
       logger.info('You can specify a custom directory:');
-      logger.info(pc.cyan('  npx mastra migrate --dir path/to/mastra'));
+      logger.info(pc.cyan('  npx mastra migrate --dir <path/to/src/mastra> --root <path/to/project-root>'));
     } else {
       logger.error(pc.red(`Error: ${error.message}`));
       if (debug) {

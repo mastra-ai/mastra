@@ -78,6 +78,15 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Use \`${MC_TOOLS.SEARCH_CONTENT}\` or \`${MC_TOOLS.FIND_FILES}\` first if you do not yet know where the symbol is.`);
   }
 
+  if (!denied.has(MC_TOOLS.NOTIFICATION_INBOX)) {
+    readTools.push(`
+**${MC_TOOLS.NOTIFICATION_INBOX}** — Inspect and manage notification inbox records
+- Use this when a \`<notification-summary>\` says pending notifications exist.
+- Use \`{ "action": "list", "status": "pending" }\` or \`{ "action": "search", "query": "..." }\` to find notification records for the current thread.
+- Use \`read\` to deliver unread notification signals into the chat and mark them seen; the tool result summarizes the count instead of exposing notification contents.
+- Use \`dismiss\` or \`archive\` only when the user asks or the notification is no longer relevant.`);
+  }
+
   if (readTools.length > 0) {
     sections.push(readTools.join('\n'));
   }
@@ -128,22 +137,57 @@ ${webTools.join(' / ')} — Search the web / extract page content
   // --- Task management tools (all modes) ---
 
   const taskTools: string[] = [];
+  const canUpdateTask = !denied.has('task_update');
+  const canCompleteTask = !denied.has('task_complete');
+  const canCheckTasks = !denied.has('task_check');
+  const canWriteTasks = !denied.has('task_write');
+  const patchToolGuidance =
+    canUpdateTask && canCompleteTask
+      ? '- Prefer task_update or task_complete when changing one existing task.'
+      : canUpdateTask
+        ? '- Prefer task_update when changing one existing task.'
+        : canCompleteTask
+          ? '- Prefer task_complete when marking one existing task completed.'
+          : '- Use task_write with the full task list when changing existing tasks.';
 
-  if (!denied.has('task_write')) {
+  if (canWriteTasks) {
     taskTools.push(`
 **task_write** — Track tasks for complex multi-step work
 - Use when a task requires 3 or more distinct steps or actions.
-- Pass the FULL task list each time (replaces previous list).
+- Use task_write to create the initial task list or replace the whole list after replanning.
+- Each task has: id (stable identifier), content (imperative form), status (pending, in_progress, or completed), activeForm (present continuous form shown during execution).
+- Keep task IDs stable across updates. If you omit IDs, the tool result returns generated IDs.
+${patchToolGuidance}
 - Mark tasks \`in_progress\` BEFORE starting work. Only ONE task should be \`in_progress\` at a time.
-- Mark tasks \`completed\` IMMEDIATELY after finishing each task. Do not batch completions.
-- Each task has: content (imperative form), status (pending|in_progress|completed), activeForm (present continuous form shown during execution).`);
+- Mark tasks \`completed\` IMMEDIATELY after finishing each task. Do not batch completions.`);
   }
 
-  if (!denied.has('task_check')) {
+  if (canUpdateTask) {
+    taskTools.push(`
+**task_update** — Patch one tracked task by ID
+- Use this for targeted changes to one existing task.
+- Provide the task ID and only the fields that changed: content, status, or activeForm.`);
+  }
+
+  if (canCompleteTask) {
+    const idSource = canCheckTasks
+      ? 'Use task_check if you need the current IDs before completing a task.'
+      : canWriteTasks
+        ? 'Use IDs returned by task_write.'
+        : 'Use only task IDs already visible in the current task list.';
+    taskTools.push(`
+**task_complete** — Mark one tracked task completed by ID
+- Use this immediately after finishing a tracked task.
+- ${idSource}`);
+  }
+
+  if (canCheckTasks) {
     taskTools.push(`
 **task_check** — Check completion status of tasks
-- Use this BEFORE deciding you're done with a task to verify all tasks are completed.
-- Returns the number of completed, in progress, and pending tasks.
+- Use this BEFORE finishing tracked work to verify all tasks are completed.
+- Returns a readable status summary plus structured fields: tasks, summary, incompleteTasks, and isError.
+- summary includes total, completed, inProgress, pending, incomplete, hasTasks, and allCompleted.
+- Use summary.allCompleted to decide whether tracked work is complete; if summary.hasTasks is false, no task list is currently tracked.
 - If any tasks remain incomplete, continue working on them.
 - IMPORTANT: Always check task completion before ending work on a complex task.`);
   }
@@ -161,7 +205,7 @@ ${webTools.join(' / ')} — Search the web / extract page content
     sections.push(taskTools.join('\n'));
   }
 
-  // --- Plan submission tool (plan mode) ---
+  // --- Plan tools (plan mode) ---
 
   if (modeId === 'plan' && !denied.has('submit_plan')) {
     sections.push(`
@@ -169,7 +213,16 @@ ${webTools.join(' / ')} — Search the web / extract page content
 - Call this tool when your plan is complete. Do NOT just describe your plan in text — you MUST call this tool.
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
-- Takes two arguments: \`title\` (short descriptive title) and \`plan\` (full plan in markdown).`);
+- Takes one argument: \`path\` (the plan markdown file you wrote under \`.mastracode/plans/\`). Do NOT pass the plan body — it lives in the file.`);
+  }
+
+  if (modeId === 'plan') {
+    sections.push(`
+**Plan file access** — Your plan lives in a markdown file under \`.mastracode/plans/\` (e.g. \`add-dark-mode-toggle.md\`)
+- Use \`write_file\` to create the plan file, \`view\` to read it, and \`string_replace_lsp\` for targeted edits.
+- On first submission: write the plan to the file, then call \`submit_plan\` with its \`path\`.
+- On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with the same \`path\`.
+- If a plan file already exists, you previously submitted it — read it before revising.`);
   }
 
   // --- Subagent tool (all modes) ---

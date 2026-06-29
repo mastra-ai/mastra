@@ -5,10 +5,12 @@
 import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
 
 export interface HelpTextOptions {
-  /** Number of available harness modes (mode commands shown when > 1) */
+  /** Number of available controller modes (mode commands shown when > 1) */
   modes: number;
   /** User-defined custom slash commands */
   customSlashCommands: SlashCommandMetadata[];
+  /** Active direct shell passthrough mode label */
+  shellModeLabel?: string;
 }
 
 interface HelpEntry {
@@ -29,6 +31,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/name', description: 'Rename current thread' },
     { key: '/resource', description: 'Show/switch resource ID' },
     { key: '/skills', description: 'List available skills' },
+    { key: '/skill/<name>', description: 'Activate a skill' },
     { key: '/models', description: 'Switch model pack' },
     { key: '/custom-providers', description: 'Manage custom providers and models' },
     { key: '/subagents', description: 'Configure subagent models' },
@@ -45,8 +48,14 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/login', description: 'Login with OAuth provider' },
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
+    { key: '/browser', description: 'Configure browser automation' },
+    { key: '/api-keys', description: 'Manage provider API keys' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
+    { key: '/observability', description: 'Configure cloud observability' },
+    { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
+    { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
+    { key: '/goal judge', description: 'Set the goal judge model and max attempts' },
   ];
 
   if (modes > 1) {
@@ -63,7 +72,8 @@ function getShortcuts(modes: number): HelpEntry[] {
     { key: 'Ctrl+C', description: 'Interrupt / clear input' },
     { key: 'Ctrl+C×2', description: 'Exit (double-tap)' },
     { key: 'Ctrl+D', description: 'Exit (when editor empty)' },
-    { key: 'Enter', description: 'Send message / queue follow-up' },
+    { key: 'Enter', description: 'Send message' },
+    { key: 'Ctrl+F', description: 'Queue follow-up' },
     { key: 'Ctrl+T', description: 'Toggle thinking blocks' },
     { key: 'Ctrl+E', description: 'Expand/collapse tool outputs' },
     { key: 'Ctrl+Y', description: 'Toggle YOLO mode' },
@@ -106,7 +116,14 @@ export function buildHelpText(options: HelpTextOptions): string {
     sections.push(renderSection('Custom Commands', customEntries));
   }
 
-  sections.push(renderSection('Shell', [{ key: '!<cmd>', description: 'Run a shell command' }]));
+  sections.push(
+    renderSection('Shell', [
+      {
+        key: '!<cmd>',
+        description: `Run a direct shell command (${options.shellModeLabel ?? 'default shell'})`,
+      },
+    ]),
+  );
 
   sections.push(renderSection('Keyboard Shortcuts', getShortcuts(options.modes)));
 

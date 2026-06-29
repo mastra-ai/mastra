@@ -3,8 +3,8 @@
  * Uses pi-tui overlay pattern with search and fuzzy filtering.
  */
 
-import { Box, Container, fuzzyFilter, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, TUI } from '@mariozechner/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
 
@@ -45,6 +45,33 @@ export interface ModelSelectorOptions {
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Build a synthetic "Use: <id>" ModelItem for an arbitrary model id typed by
+ * the user. The provider prefix is parsed from the id; key metadata is
+ * derived from any sibling model that already lives under the same provider
+ * so the API-key prompt still fires for known providers without a key.
+ *
+ * If no sibling is found (truly novel provider), we default `hasApiKey: false`
+ * so the user is still prompted for a key by provider name.
+ */
+export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem {
+  const parts = id.split('/');
+  const provider = parts.length > 1 ? parts[0]! : 'custom';
+  const modelName = parts.length > 1 ? parts.slice(1).join('/') : id;
+  const sibling = models.find(m => m.provider === provider);
+  return {
+    id,
+    provider,
+    modelName,
+    hasApiKey: sibling?.hasApiKey ?? false,
+    apiKeyEnvVar: sibling?.apiKeyEnvVar,
+  };
+}
+
+// =============================================================================
 // ModelSelectorComponent
 // =============================================================================
 
@@ -73,7 +100,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
   constructor(options: ModelSelectorOptions) {
     // Box with padding and background
-    super(2, 1, text => theme.bg('overlayBg', text));
+    super(4, 2, text => theme.bg('overlayBg', text));
 
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
@@ -175,10 +202,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   private makeCustomModelItem(id: string): ModelItem {
-    const parts = id.split('/');
-    const provider = parts.length > 1 ? parts[0]! : 'custom';
-    const modelName = parts.length > 1 ? parts.slice(1).join('/') : id;
-    return { id, provider, modelName, hasApiKey: true };
+    return makeCustomModelItem(id, this.allModels);
   }
 
   private updateList(): void {
@@ -237,26 +261,26 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   handleInput(keyData: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
 
     const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
 
     // Up arrow
-    if (kb.matches(keyData, 'selectUp')) {
+    if (kb.matches(keyData, 'tui.select.up')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === 0 ? totalItems - 1 : this.selectedIndex - 1;
       this.updateList();
       this.tui.requestRender();
     }
     // Down arrow
-    else if (kb.matches(keyData, 'selectDown')) {
+    else if (kb.matches(keyData, 'tui.select.down')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === totalItems - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
       this.tui.requestRender();
     }
     // Enter
-    else if (kb.matches(keyData, 'selectConfirm')) {
+    else if (kb.matches(keyData, 'tui.select.confirm')) {
       if (this.hasCustomItem && this.selectedIndex === 0) {
         const query = this.searchInput.getValue().trim();
         if (query) this.handleSelect(this.makeCustomModelItem(query));
@@ -267,7 +291,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
       }
     }
     // Escape or Ctrl+C
-    else if (kb.matches(keyData, 'selectCancel')) {
+    else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
     }
     // Pass everything else to search input

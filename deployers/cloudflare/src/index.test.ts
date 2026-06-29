@@ -128,5 +128,46 @@ describe('CloudflareDeployer', () => {
         expect(wranglerConfig.alias['other-module']).toBe('./other.js');
       });
     });
+
+    describe('readable-stream stub for Workers compatibility', () => {
+      it('should create readable-stream-stub.mjs that re-exports from node:stream', async () => {
+        deployer = new CloudflareDeployer({ name: 'test-worker' });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const stubPath = join(tempDir, 'output', 'readable-stream-stub.mjs');
+        const stub = await import(stubPath);
+
+        expect(stub.Readable).toBeDefined();
+        expect(stub.Writable).toBeDefined();
+        expect(stub.Duplex).toBeDefined();
+        expect(stub.Transform).toBeDefined();
+        expect(stub.PassThrough).toBeDefined();
+        expect(typeof stub.Readable.from).toBe('function');
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.alias['readable-stream']).toBe('./readable-stream-stub.mjs');
+      });
+
+      it('should allow user to override the readable-stream alias', async () => {
+        deployer = new CloudflareDeployer({
+          name: 'test-worker',
+          alias: {
+            'readable-stream': './custom-stream.js',
+          },
+        });
+        vi.spyOn(deployer, 'loadEnvVars').mockResolvedValue(new Map());
+
+        await deployer.writeFiles(tempDir);
+
+        const wranglerConfigPath = join(tempDir, 'output', 'wrangler.json');
+        const wranglerConfig = JSON.parse(await readFile(wranglerConfigPath, 'utf-8'));
+
+        expect(wranglerConfig.alias['readable-stream']).toBe('./custom-stream.js');
+      });
+    });
   });
 });

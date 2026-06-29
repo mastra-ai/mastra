@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
 
 const MODELSLAB_TTS_URL = 'https://modelslab.com/api/v6/voice/text_to_speech';
 const MODELSLAB_TTS_FETCH_URL = 'https://modelslab.com/api/v6/voice/fetch/';

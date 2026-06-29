@@ -31,4 +31,9 @@ export class NoOpSpan<TType extends SpanType = any> extends BaseSpan<TType> {
   get isValid(): boolean {
     return false;
   }
+
+  // NoOpSpan is never exported, so treat it as always excluded.
+  protected override get alwaysExcluded(): boolean {
+    return true;
+  }
 }

@@ -7,6 +7,7 @@ import {
   calculatePagination,
   TABLE_AGENTS,
   TABLE_AGENT_VERSIONS,
+  TABLE_FAVORITES,
   AGENTS_SCHEMA,
   AGENT_VERSIONS_SCHEMA,
 } from '@mastra/core/storage';
@@ -24,7 +25,7 @@ import type {
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
-import { buildSelectColumns } from '../../db/utils';
+import { buildSelectColumnsWithAlias } from '../../db/utils';
 
 export class AgentsLibSQL extends AgentsStorage {
   #db: LibSQLDB;
@@ -48,12 +49,20 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENTS,
       schema: AGENTS_SCHEMA,
-      ifNotExists: ['status', 'authorId'],
+      ifNotExists: ['status', 'authorId', 'visibility', 'favoriteCount'],
     });
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: AGENT_VERSIONS_SCHEMA,
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat'],
+      ifNotExists: [
+        'mcpClients',
+        'requestContextSchema',
+        'workspace',
+        'skills',
+        'skillsFormat',
+        'browser',
+        'toolProviders',
+      ],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -132,6 +141,7 @@ export class AgentsLibSQL extends AgentsStorage {
           workflows: row.workflows ?? null,
           agents: row.agents ?? null,
           integrationTools: row.integrationTools ?? null,
+          toolProviders: row.toolProviders ?? null,
           inputProcessors: row.inputProcessors ?? null,
           outputProcessors: row.outputProcessors ?? null,
           memory: row.memory ?? null,
@@ -172,14 +182,23 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   /**
-   * Removes stale draft agent records that have no activeVersionId.
+   * Removes stale draft agent records that have no versions at all.
    * These are left behind when createAgent partially fails (inserts thin record
    * but fails to create the version due to schema mismatch).
+   *
+   * A legitimate draft (never published) will have rows in the versions table,
+   * so we must only delete records with zero associated versions.
    */
   async #cleanupStaleDrafts(): Promise<void> {
     try {
       await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_AGENTS}" WHERE status = 'draft' AND activeVersionId IS NULL`,
+        sql: `DELETE FROM "${TABLE_AGENTS}"
+              WHERE status = 'draft'
+                AND activeVersionId IS NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM "${TABLE_AGENT_VERSIONS}"
+                  WHERE "${TABLE_AGENT_VERSIONS}".agentId = "${TABLE_AGENTS}".id
+                )`,
       });
     } catch {
       // Non-critical cleanup, ignore errors
@@ -297,7 +316,9 @@ export class AgentsLibSQL extends AgentsStorage {
       status: row.status as 'draft' | 'published' | 'archived',
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
+      visibility: (row.visibility as 'private' | 'public' | undefined) ?? undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: new Date(row.createdAt as string),
       updatedAt: new Date(row.updatedAt as string),
     };
@@ -330,6 +351,9 @@ export class AgentsLibSQL extends AgentsStorage {
     try {
       const now = new Date();
 
+      // Default visibility to 'private' for owned agents; leave null for unowned/legacy rows
+      const visibility = agent.visibility ?? (agent.authorId ? 'private' : null);
+
       // 1. Create thin agent record with status='draft'
       await this.#db.insert({
         tableName: TABLE_AGENTS,
@@ -338,14 +362,16 @@ export class AgentsLibSQL extends AgentsStorage {
           status: 'draft',
           activeVersionId: null,
           authorId: agent.authorId ?? null,
+          visibility,
           metadata: agent.metadata ?? null,
+          favoriteCount: 0,
           createdAt: now,
           updatedAt: now,
         },
       });
 
       // 2. Extract config fields from the flat input
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+      const { id: _id, authorId: _authorId, visibility: _visibility, metadata: _metadata, ...snapshotConfig } = agent;
 
       // Create version 1 from the config
       const versionId = crypto.randomUUID();
@@ -401,7 +427,7 @@ export class AgentsLibSQL extends AgentsStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status } = updates;
+      const { authorId, activeVersionId, metadata, status, visibility } = updates;
 
       // Build update data for the agent record
       const updateData: Record<string, unknown> = {
@@ -411,6 +437,7 @@ export class AgentsLibSQL extends AgentsStorage {
       if (authorId !== undefined) updateData.authorId = authorId;
       if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
       if (status !== undefined) updateData.status = status;
+      if (visibility !== undefined) updateData.visibility = visibility;
       if (metadata !== undefined) {
         updateData.metadata = { ...existing.metadata, ...metadata };
       }
@@ -475,7 +502,18 @@ export class AgentsLibSQL extends AgentsStorage {
   }
 
   async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      metadata,
+      status,
+      visibility,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -494,18 +532,34 @@ export class AgentsLibSQL extends AgentsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      // Build WHERE conditions
+      // Empty entityIds is short-circuit: no rows possible.
+      if (entityIds && entityIds.length === 0) {
+        return {
+          agents: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Build WHERE conditions (referenced by alias `a`).
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
 
       if (status) {
-        conditions.push('status = ?');
+        conditions.push('a.status = ?');
         queryParams.push(status);
       }
 
       if (authorId !== undefined) {
-        conditions.push('authorId = ?');
+        conditions.push('a.authorId = ?');
         queryParams.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        conditions.push('a.visibility = ?');
+        queryParams.push(visibility);
       }
 
       if (metadata && Object.keys(metadata).length > 0) {
@@ -519,17 +573,43 @@ export class AgentsLibSQL extends AgentsStorage {
               details: { key },
             });
           }
-          conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+          conditions.push(`json_extract(a.metadata, '$.${key}') = ?`);
           queryParams.push(typeof value === 'string' ? value : JSON.stringify(value));
         }
       }
 
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => '?').join(', ');
+        conditions.push(`a.id IN (${placeholders})`);
+        queryParams.push(...entityIds);
+      }
+
+      // Optional LEFT JOIN on favorites for favorited-first ordering / favoritedOnly filter.
+      // favoritedOnly only takes effect when pinFavoritedFor is also provided (no userId
+      // means no rows can match). The handler passes both together, but defend
+      // against direct callers that ask for favoritedOnly without identifying a user.
+      const joinUserId = pinFavoritedFor;
+      const useJoin = Boolean(joinUserId);
+
+      let joinClause = '';
+      const joinParams: InValue[] = [];
+      if (useJoin && joinUserId) {
+        joinClause = `LEFT JOIN "${TABLE_FAVORITES}" s ON s."entityType" = 'agent' AND s."entityId" = a.id AND s."userId" = ?`;
+        joinParams.push(joinUserId);
+        if (favoritedOnly) {
+          conditions.push('s."userId" IS NOT NULL');
+        }
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        conditions.push('1=0');
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get total count
+      // Total count (mirrors join + where, no ORDER BY / LIMIT).
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}" ${whereClause}`,
-        args: queryParams,
+        sql: `SELECT COUNT(*) as count FROM "${TABLE_AGENTS}" a ${joinClause} ${whereClause}`,
+        args: [...joinParams, ...queryParams],
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
@@ -543,11 +623,20 @@ export class AgentsLibSQL extends AgentsStorage {
         };
       }
 
-      // Get paginated results
+      // Compose ORDER BY: favorited-first when JOIN active, then existing field, then id ASC tie-break.
+      const orderByParts: string[] = [];
+      if (useJoin && joinUserId) {
+        orderByParts.push(`(s."userId" IS NOT NULL) DESC`);
+      }
+      orderByParts.push(`a."${field}" ${direction}`);
+      orderByParts.push(`a."id" ASC`);
+      const orderByClause = `ORDER BY ${orderByParts.join(', ')}`;
+
       const limitValue = perPageInput === false ? total : perPage;
+      const selectCols = buildSelectColumnsWithAlias(TABLE_AGENTS, 'a');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_AGENTS)} FROM "${TABLE_AGENTS}" ${whereClause} ORDER BY "${field}" ${direction} LIMIT ? OFFSET ?`,
-        args: [...queryParams, limitValue, offset],
+        sql: `SELECT ${selectCols} FROM "${TABLE_AGENTS}" a ${joinClause} ${whereClause} ${orderByClause} LIMIT ? OFFSET ?`,
+        args: [...joinParams, ...queryParams, limitValue, offset],
       });
 
       const rows = result.rows ?? [];
@@ -597,6 +686,7 @@ export class AgentsLibSQL extends AgentsStorage {
           workflows: input.workflows ?? null,
           agents: input.agents ?? null,
           integrationTools: input.integrationTools ?? null,
+          toolProviders: input.toolProviders ?? null,
           inputProcessors: input.inputProcessors ?? null,
           outputProcessors: input.outputProcessors ?? null,
           memory: input.memory ?? null,
@@ -606,6 +696,7 @@ export class AgentsLibSQL extends AgentsStorage {
           workspace: input.workspace ?? null,
           skills: input.skills ?? null,
           skillsFormat: input.skillsFormat ?? null,
+          browser: input.browser ?? null,
           changedFields: input.changedFields ?? null,
           changeMessage: input.changeMessage ?? null,
           createdAt: now,
@@ -902,6 +993,7 @@ export class AgentsLibSQL extends AgentsStorage {
       workflows: this.parseJson(row.workflows, 'workflows'),
       agents: this.parseJson(row.agents, 'agents'),
       integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
+      toolProviders: this.parseJson(row.toolProviders, 'toolProviders'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),
@@ -911,6 +1003,7 @@ export class AgentsLibSQL extends AgentsStorage {
       workspace: this.parseJson(row.workspace, 'workspace'),
       skills: this.parseJson(row.skills, 'skills'),
       skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      browser: this.parseJson(row.browser, 'browser'),
       changedFields: this.parseJson(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAt as string),

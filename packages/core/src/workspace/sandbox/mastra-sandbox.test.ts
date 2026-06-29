@@ -18,6 +18,9 @@ import type { ProviderStatus } from '../lifecycle';
 import { MastraSandbox } from './mastra-sandbox';
 import type { MastraSandboxOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
+import { ProcessHandle, SandboxProcessManager } from './process-manager';
+import type { SpawnProcessOptions } from './process-manager';
+import type { CommandResult } from './types';
 
 /**
  * Concrete implementation of MastraSandbox WITH mount() method.
@@ -84,6 +87,65 @@ class NonMountableSandbox extends MastraSandbox {
     args?: string[],
   ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     return { exitCode: 0, stdout: `${command} ${args?.join(' ') || ''}`, stderr: '' };
+  }
+}
+
+class ExecuteCommandProcessHandle extends ProcessHandle {
+  readonly pid = 'execute-command-process';
+  exitCode: number | undefined;
+
+  constructor(
+    options: SpawnProcessOptions | undefined,
+    private readonly output: string,
+  ) {
+    super(options);
+  }
+
+  async wait(): Promise<CommandResult> {
+    this.emitStdout(this.output);
+    this.exitCode = 0;
+    return {
+      success: true,
+      exitCode: 0,
+      stdout: this.stdout,
+      stderr: this.stderr,
+      executionTimeMs: 0,
+    };
+  }
+
+  async kill(): Promise<boolean> {
+    this.exitCode = 137;
+    return true;
+  }
+
+  async sendStdin(): Promise<void> {}
+}
+
+class ExecuteCommandProcessManager extends SandboxProcessManager {
+  lastOptions: SpawnProcessOptions | undefined;
+
+  constructor(private readonly output: string) {
+    super();
+  }
+
+  async spawn(_command: string, options?: SpawnProcessOptions): Promise<ProcessHandle> {
+    this.lastOptions = options;
+    return new ExecuteCommandProcessHandle(options, this.output);
+  }
+
+  async list(): Promise<[]> {
+    return [];
+  }
+}
+
+class ProcessBackedSandbox extends MastraSandbox {
+  readonly id = 'test-process-backed-sandbox';
+  readonly name = 'ProcessBackedSandbox';
+  readonly provider = 'test';
+  status: ProviderStatus = 'pending';
+
+  constructor(processes: SandboxProcessManager) {
+    super({ name: 'ProcessBackedSandbox', processes });
   }
 }
 
@@ -404,6 +466,33 @@ describe('MastraSandbox Base Class', () => {
 
       expect(callCount).toBe(1);
       expect(sandbox.status).toBe('running');
+    });
+  });
+
+  describe('Built-in executeCommand', () => {
+    it('retains full command output by default', async () => {
+      const output = 'x'.repeat(1024 * 1024 + 5);
+      const manager = new ExecuteCommandProcessManager(output);
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      const result = await sandbox.executeCommand!('node', ['script.js']);
+
+      expect(result.stdout).toBe(output);
+      expect(result.stdoutTruncated).toBe(false);
+      expect(result.stdoutDroppedBytes).toBe(0);
+      expect(manager.lastOptions?.maxRetainedBytes).toBe(Infinity);
+    });
+
+    it('passes explicit executeCommand retention limits through to spawn', async () => {
+      const manager = new ExecuteCommandProcessManager('abcdef');
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      const result = await sandbox.executeCommand!('node', ['script.js'], { maxRetainedBytes: 3 });
+
+      expect(result.stdout).toBe('def');
+      expect(result.stdoutTruncated).toBe(true);
+      expect(result.stdoutDroppedBytes).toBe(3);
+      expect(manager.lastOptions?.maxRetainedBytes).toBe(3);
     });
   });
 });

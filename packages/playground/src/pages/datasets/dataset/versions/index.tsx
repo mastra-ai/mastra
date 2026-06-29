@@ -1,25 +1,17 @@
-import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  TextAndIcon,
-  Button,
-  useDataset,
-  useDatasetItems,
-  Columns,
-  Column,
-  DatasetCompareVersionToolbar,
-  DatasetCompareVersionsList,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
+import { DatasetCompareVersionToolbar, DatasetCompareVersionsList } from '@/domains/datasets';
+import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -54,6 +46,16 @@ function DatasetCompareVersionsPage() {
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
 
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (error && is403ForbiddenError(error)) {
     return (
       <MainContentLayout>
@@ -67,19 +69,6 @@ function DatasetCompareVersionsPage() {
   if (!datasetId || versionNumbers.length < 2) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
-              <Icon>
-                <Database />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Compare Versions
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
             <p>Select at least two versions to compare.</p>
@@ -96,33 +85,13 @@ function DatasetCompareVersionsPage() {
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    void navigate(`/evaluation/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
+    void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
-            {dataset?.name || datasetId?.slice(0, 8)}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            <Icon>
-              <ScaleIcon />
-            </Icon>
-            Compare Versions
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <MainHeader>
@@ -138,7 +107,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
+              <Button as={Link} to={`/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

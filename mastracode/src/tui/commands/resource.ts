@@ -1,13 +1,14 @@
 import type { SlashCommandContext } from './types.js';
 
 export async function handleResourceCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const { state, harness } = ctx;
+  const { state, controller } = ctx;
+  const { session } = state;
   const sub = args[0]?.trim();
-  const current = harness.getResourceId();
-  const defaultId = harness.getDefaultResourceId();
+  const current = session.identity.getResourceId();
+  const defaultId = session.identity.getDefaultResourceId();
 
   if (!sub) {
-    const knownIds = await harness.getKnownResourceIds();
+    const knownIds = await controller.getKnownResourceIds(session);
     const isOverridden = current !== defaultId;
     const lines = [
       `Current: ${current}${isOverridden ? ` (auto-detected: ${defaultId})` : ''}`,
@@ -31,18 +32,21 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     return;
   }
 
-  harness.setResourceId({ resourceId: newId });
+  await controller.setResourceId(session, { resourceId: newId });
 
   // Try to resume the most recent thread for this resource
-  const threads = await harness.listThreads();
+  const threads = await session.thread.list();
   const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 
   if (latest) {
-    await harness.switchThread({ threadId: latest.id });
+    await session.thread.switch({ threadId: latest.id, emitEvent: false });
     state.chatContainer.clear();
     state.pendingTools.clear();
+    state.pendingTaskToolIds?.clear();
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
+    state.messageComponentsById.clear();
+    state.allShellComponents = [];
     state.pendingNewThread = false;
     await ctx.renderExistingMessages();
     ctx.showInfo(
@@ -53,8 +57,11 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
   } else {
     state.chatContainer.clear();
     state.pendingTools.clear();
+    state.pendingTaskToolIds?.clear();
     state.allToolComponents = [];
     state.allSystemReminderComponents = [];
+    state.messageComponentsById.clear();
+    state.allShellComponents = [];
     state.pendingNewThread = true;
     ctx.showInfo(
       sub === 'reset'

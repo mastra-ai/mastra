@@ -20,6 +20,7 @@ import type {
   SkillVersionSortDirection,
 } from './base';
 import { SkillsStorage } from './base';
+import { skillSnapshotFieldValuesEqual } from './skill-snapshot-field-equal';
 
 export class InMemorySkillsStorage extends SkillsStorage {
   private db: InMemoryDB;
@@ -39,25 +40,26 @@ export class InMemorySkillsStorage extends SkillsStorage {
   // ==========================================================================
 
   async getById(id: string): Promise<StorageSkillType | null> {
-    this.logger.debug(`InMemorySkillsStorage: getById called for ${id}`);
     const config = this.db.skills.get(id);
     return config ? this.deepCopyConfig(config) : null;
   }
 
   async create(input: { skill: StorageCreateSkillInput }): Promise<StorageSkillType> {
     const { skill } = input;
-    this.logger.debug(`InMemorySkillsStorage: create called for ${skill.id}`);
 
     if (this.db.skills.has(skill.id)) {
       throw new Error(`Skill with id ${skill.id} already exists`);
     }
 
     const now = new Date();
+    const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
     const newConfig: StorageSkillType = {
       id: skill.id,
       status: 'draft',
       activeVersionId: undefined,
       authorId: skill.authorId,
+      visibility,
+      favoriteCount: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -65,7 +67,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     this.db.skills.set(skill.id, newConfig);
 
     // Extract config fields from the flat input (everything except record fields)
-    const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+    const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
 
     // Create version 1 from the config
     const versionId = randomUUID();
@@ -90,7 +92,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
 
   async update(input: StorageUpdateSkillInput): Promise<StorageSkillType> {
     const { id, ...updates } = input;
-    this.logger.debug(`InMemorySkillsStorage: update called for ${id}`);
 
     const existingConfig = this.db.skills.get(id);
     if (!existingConfig) {
@@ -98,7 +99,16 @@ export class InMemorySkillsStorage extends SkillsStorage {
     }
 
     // Separate metadata fields from config fields
-    const { authorId, activeVersionId, status, ...configFields } = updates;
+    const { authorId, visibility, activeVersionId, status, ...rawConfigFields } = updates;
+
+    // Filter out undefined keys: callers may spread partial snapshots into
+    // update() and rely on "omit = no change" semantics. Without this, an
+    // undefined value would clobber the latest version's populated field
+    // when spread into newConfig below.
+    const configFields: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawConfigFields)) {
+      if (value !== undefined) configFields[key] = value;
+    }
 
     // Config field names from StorageSkillSnapshotType
     const configFieldNames = [
@@ -111,6 +121,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
       'references',
       'scripts',
       'assets',
+      'files',
       'metadata',
       'tree',
     ];
@@ -122,6 +133,7 @@ export class InMemorySkillsStorage extends SkillsStorage {
     const updatedConfig: StorageSkillType = {
       ...existingConfig,
       ...(authorId !== undefined && { authorId }),
+      ...(visibility !== undefined && { visibility }),
       ...(activeVersionId !== undefined && { activeVersionId }),
       ...(status !== undefined && { status: status as StorageSkillType['status'] }),
       updatedAt: new Date(),
@@ -161,8 +173,10 @@ export class InMemorySkillsStorage extends SkillsStorage {
       const changedFields = configFieldNames.filter(
         field =>
           field in configFields &&
-          JSON.stringify(configFields[field as keyof typeof configFields]) !==
-            JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
+          !skillSnapshotFieldValuesEqual(
+            configFields[field as keyof typeof configFields],
+            latestConfig[field as keyof typeof latestConfig],
+          ),
       );
 
       // Only create a new version if something actually changed
@@ -187,7 +201,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async delete(id: string): Promise<void> {
-    this.logger.debug(`InMemorySkillsStorage: delete called for ${id}`);
     // Idempotent delete
     this.db.skills.delete(id);
     // Also delete all versions for this skill
@@ -195,10 +208,19 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      status,
+      visibility,
+      metadata,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
-
-    this.logger.debug(`InMemorySkillsStorage: list called`);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
     const perPage = normalizePerPage(perPageInput, 100);
@@ -216,9 +238,35 @@ export class InMemorySkillsStorage extends SkillsStorage {
     // Get all skills and apply filters
     let configs = Array.from(this.db.skills.values());
 
+    // Restrict to a set of IDs (used by ?favoritedOnly=true).
+    // An empty array means "no candidates" -> empty result.
+    if (entityIds !== undefined) {
+      if (entityIds.length === 0) {
+        return {
+          skills: [],
+          total: 0,
+          page,
+          perPage: perPageInput === false ? false : perPage,
+          hasMore: false,
+        };
+      }
+      const idSet = new Set(entityIds);
+      configs = configs.filter(config => idSet.has(config.id));
+    }
+
     // Filter by authorId if provided
     if (authorId !== undefined) {
       configs = configs.filter(config => config.authorId === authorId);
+    }
+
+    // Filter by status if provided
+    if (status !== undefined) {
+      configs = configs.filter(config => config.status === status);
+    }
+
+    // Filter by visibility if provided
+    if (visibility !== undefined) {
+      configs = configs.filter(config => config.visibility === visibility);
     }
 
     // Filter by metadata if provided (AND logic) — skills don't have metadata on the record,
@@ -230,8 +278,18 @@ export class InMemorySkillsStorage extends SkillsStorage {
       });
     }
 
-    // Sort filtered configs
-    const sortedConfigs = this.sortConfigs(configs, field, direction);
+    // Optional favorited-first ordering / favorites-only filter.
+    const favoritedIds = pinFavoritedFor ? this.collectFavoritedIdsFor(pinFavoritedFor) : undefined;
+    if (favoritedOnly) {
+      if (favoritedIds) {
+        configs = configs.filter(config => favoritedIds.has(config.id));
+      } else {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        configs = [];
+      }
+    }
+
+    const sortedConfigs = this.sortConfigs(configs, field, direction, favoritedIds);
 
     // Deep clone to avoid mutation
     const clonedConfigs = sortedConfigs.map(config => this.deepCopyConfig(config));
@@ -252,8 +310,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   // ==========================================================================
 
   async createVersion(input: CreateSkillVersionInput): Promise<SkillVersion> {
-    this.logger.debug(`InMemorySkillsStorage: createVersion called for skill ${input.skillId}`);
-
     // Check if version with this ID already exists
     if (this.db.skillVersions.has(input.id)) {
       throw new Error(`Version with id ${input.id} already exists`);
@@ -277,14 +333,11 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async getVersion(id: string): Promise<SkillVersion | null> {
-    this.logger.debug(`InMemorySkillsStorage: getVersion called for ${id}`);
     const version = this.db.skillVersions.get(id);
     return version ? this.deepCopyVersion(version) : null;
   }
 
   async getVersionByNumber(skillId: string, versionNumber: number): Promise<SkillVersion | null> {
-    this.logger.debug(`InMemorySkillsStorage: getVersionByNumber called for skill ${skillId}, v${versionNumber}`);
-
     for (const version of this.db.skillVersions.values()) {
       if (version.skillId === skillId && version.versionNumber === versionNumber) {
         return this.deepCopyVersion(version);
@@ -294,8 +347,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async getLatestVersion(skillId: string): Promise<SkillVersion | null> {
-    this.logger.debug(`InMemorySkillsStorage: getLatestVersion called for skill ${skillId}`);
-
     let latest: SkillVersion | null = null;
     for (const version of this.db.skillVersions.values()) {
       if (version.skillId === skillId) {
@@ -310,8 +361,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   async listVersions(input: ListSkillVersionsInput): Promise<ListSkillVersionsOutput> {
     const { skillId, page = 0, perPage: perPageInput, orderBy } = input;
     const { field, direction } = this.parseVersionOrderBy(orderBy);
-
-    this.logger.debug(`InMemorySkillsStorage: listVersions called for skill ${skillId}`);
 
     // Normalize perPage (false -> MAX_SAFE_INTEGER, 0 -> 0, undefined -> 20)
     const perPage = normalizePerPage(perPageInput, 20);
@@ -348,13 +397,10 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.logger.debug(`InMemorySkillsStorage: deleteVersion called for ${id}`);
     this.db.skillVersions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.logger.debug(`InMemorySkillsStorage: deleteVersionsByParentId called for skill ${entityId}`);
-
     const idsToDelete: string[] = [];
     for (const [id, version] of this.db.skillVersions.entries()) {
       if (version.skillId === entityId) {
@@ -368,8 +414,6 @@ export class InMemorySkillsStorage extends SkillsStorage {
   }
 
   async countVersions(skillId: string): Promise<number> {
-    this.logger.debug(`InMemorySkillsStorage: countVersions called for skill ${skillId}`);
-
     let count = 0;
     for (const version of this.db.skillVersions.values()) {
       if (version.skillId === skillId) {
@@ -397,13 +441,39 @@ export class InMemorySkillsStorage extends SkillsStorage {
     configs: StorageSkillType[],
     field: ThreadOrderBy,
     direction: ThreadSortDirection,
+    favoritedIds?: Set<string>,
   ): StorageSkillType[] {
     return configs.sort((a, b) => {
+      // Compound sort: favorited first, then existing orderBy, then id ASC for stable pagination.
+      if (favoritedIds) {
+        const aFav = favoritedIds.has(a.id) ? 1 : 0;
+        const bFav = favoritedIds.has(b.id) ? 1 : 0;
+        if (aFav !== bFav) return bFav - aFav;
+      }
+
       const aValue = a[field].getTime();
       const bValue = b[field].getTime();
+      if (aValue !== bValue) {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
 
-      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      // Stable tie-break for same `createdAt`/`updatedAt`.
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
+  }
+
+  /**
+   * Collect the set of skill IDs favorited by the given user. Returns an empty
+   * Set when the favorites domain is not wired or the user has no favorites.
+   */
+  private collectFavoritedIdsFor(userId: string): Set<string> {
+    const favorited = new Set<string>();
+    for (const row of this.db.favorites.values()) {
+      if (row.userId === userId && row.entityType === 'skill') {
+        favorited.add(row.entityId);
+      }
+    }
+    return favorited;
   }
 
   private sortVersions(

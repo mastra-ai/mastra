@@ -8,18 +8,27 @@ import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { Step } from '../../../workflows';
+import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
+import type { PrepareStreamRunScope } from './run-scope';
+import {
+  CONVERTED_TOOLS_KEY,
+  INITIAL_SIGNAL_ECHOES_KEY,
+  LOOP_OPTIONS_KEY,
+  MESSAGE_LIST_KEY,
+  PROCESSOR_STATES_KEY,
+} from './run-scope-keys';
 import type { AgentCapabilities, PrepareMemoryStepOutput, PrepareToolsStepOutput } from './schema';
 
 interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
+  threadId?: string;
   runId: string;
   requestContext: RequestContext;
   memory?: MastraMemory;
@@ -28,16 +37,14 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentId: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  /**
-   * Shared processor state map that persists across agent turns.
-   */
-  processorStates?: Map<string, Record<string, unknown>>;
+  runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
 export function createMapResultsStep<OUTPUT = undefined>({
   capabilities,
   options,
   resourceId,
+  threadId: threadIdFromArgs,
   runId,
   requestContext,
   memory,
@@ -46,6 +53,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentId,
   methodType,
   saveQueueManager,
+  runScope,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
   unknown,
@@ -56,25 +64,31 @@ export function createMapResultsStep<OUTPUT = undefined>({
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
   return async ({ inputData, bail, ..._observabilityContext }) => {
-    const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
+
+    // Class instances written to runScope by upstream steps. These never travel
+    // through inputData because the evented engine JSON-serializes step outputs.
+    const messageList = runScope.getOrThrow(MESSAGE_LIST_KEY);
+    const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
 
     const result = {
       ...options,
       agentId,
-      tools: toolsData.convertedTools,
+      tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
       toolChoice: options.toolChoice,
       thread: memoryData.thread,
-      threadId: memoryData.thread?.id,
+      threadId: memoryData.thread?.id ?? threadIdFromArgs,
       resourceId,
       requestContext,
-      messageList: memoryData.messageList,
+      messageList,
       onStepFinish: async (props: any) => {
-        if (options.savePerStep && !memoryConfig?.readOnly) {
+        // When OM is enabled saving per step corrupts things because OM handles its own saving
+        const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
+        if (shouldSavePerStep && !memoryConfig?.readOnly) {
           if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -87,14 +101,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
             threadCreatedByStep = true;
           }
 
-          await capabilities.saveStepMessages({
-            result: props,
-            messageList: memoryData.messageList!,
-            runId,
-          });
-
           if (saveQueueManager && memoryData.thread?.id) {
-            await saveQueueManager.flushMessages(memoryData.messageList!, memoryData.thread.id, memoryConfig);
+            await saveQueueManager.flushMessages(messageList, memoryData.thread.id, memoryConfig);
           }
         }
 
@@ -125,7 +133,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           ...createObservabilityContext({ currentSpan: agentSpan }),
           options: options,
           model: agentModel,
-          messageList: memoryData.messageList,
+          messageList,
         });
 
         // End agent span with tripwire information after fallback completes
@@ -177,6 +185,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ...options.structuredOutput,
         logger: capabilities.logger,
       });
+      if (capabilities.mastra) {
+        structuredProcessor.__registerMastra(capabilities.mastra);
+      }
+      if (options.structuredOutput.useAgent) {
+        structuredProcessor.setAgent(capabilities.agent);
+      }
       effectiveOutputProcessors = effectiveOutputProcessors
         ? [...effectiveOutputProcessors, structuredProcessor]
         : [structuredProcessor];
@@ -192,7 +206,24 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
-    const messageList = memoryData.messageList!;
+    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
+      ? typeof capabilities.llmRequestInputProcessors === 'function'
+        ? await capabilities.llmRequestInputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+          })
+        : options.inputProcessors || capabilities.llmRequestInputProcessors
+      : effectiveInputProcessors;
+
+    // Resolve error processors
+    const effectiveErrorProcessors = capabilities.errorProcessors
+      ? typeof capabilities.errorProcessors === 'function'
+        ? await capabilities.errorProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.errorProcessors,
+          })
+        : options.errorProcessors || capabilities.errorProcessors
+      : options.errorProcessors || [];
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
@@ -200,6 +231,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
+      actor: options.actor,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,
@@ -216,25 +248,70 @@ export function createMapResultsStep<OUTPUT = undefined>({
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
             const modelId = payload.model?.modelId;
-            const isUpstreamError = APICallError.isInstance(payload.error);
+            const error =
+              payload.error instanceof Error
+                ? payload.error
+                : new MastraError(
+                    {
+                      id: 'AGENT_STREAM_ERROR',
+                      text:
+                        payload.error == null
+                          ? 'Agent stream finished with finishReason "error" but no error payload was provided'
+                          : undefined,
+                      domain: ErrorDomain.AGENT,
+                      category: ErrorCategory.SYSTEM,
+                      details: {
+                        runId,
+                        ...(provider && { provider }),
+                        ...(modelId && { modelId }),
+                      },
+                    },
+                    payload.error,
+                  );
+            const isUpstreamError = APICallError.isInstance(error);
 
             if (isUpstreamError) {
-              const providerInfo = provider ? ` from ${provider}` : '';
-              const modelInfo = modelId ? ` (model: ${modelId})` : '';
-              capabilities.logger.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
-                error: payload.error,
+              capabilities.logger.error('Upstream LLM API error', {
+                error,
                 runId,
                 ...(provider && { provider }),
                 ...(modelId && { modelId }),
               });
             } else {
               capabilities.logger.error('Error in agent stream', {
-                error: payload.error,
+                error,
                 runId,
                 ...(provider && { provider }),
                 ...(modelId && { modelId }),
               });
             }
+
+            // End the AGENT_RUN span so the trace is exported.
+            // Without this, the span is orphaned and exporters that wait
+            // for the root span to end (e.g. Datadog) never emit the trace.
+            agentSpan?.error({ error, endSpan: true });
+            return;
+          }
+
+          if (payload.finishReason === 'suspended') {
+            agentSpan?.end({
+              output: {
+                status: 'suspended',
+                reason: payload.suspendReason,
+                toolName: payload.toolName,
+                toolCallId: payload.toolCallId,
+              },
+            });
+            return;
+          }
+
+          if (payload.finishReason === 'aborted') {
+            agentSpan?.end({
+              output: {
+                status: 'aborted',
+                reason: 'abort',
+              },
+            });
             return;
           }
 
@@ -245,10 +322,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (!aborted) {
             try {
-              const outputText = messageList.get.all
-                .core()
-                .map(m => m.content)
-                .join('\n');
+              const outputText =
+                options.structuredOutput?.schema && payload.object != null
+                  ? JSON.stringify(payload.object)
+                  : (payload.text ?? '');
 
               await capabilities.executeOnFinish({
                 result: payload,
@@ -271,7 +348,24 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 error: e,
                 runId,
               });
+
+              const spanError =
+                e instanceof Error
+                  ? e
+                  : new MastraError(
+                      {
+                        id: 'AGENT_ON_FINISH_ERROR',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: { runId },
+                      },
+                      e,
+                    );
+
+              agentSpan?.error({ error: spanError, endSpan: true });
             }
+          } else {
+            agentSpan?.end();
           }
 
           await options?.onFinish?.({
@@ -291,19 +385,29 @@ export function createMapResultsStep<OUTPUT = undefined>({
       activeTools: options.activeTools,
       structuredOutput: options.structuredOutput,
       inputProcessors: effectiveInputProcessors,
+      llmRequestInputProcessors: effectiveLLMRequestInputProcessors,
       outputProcessors: effectiveOutputProcessors,
+      errorProcessors: effectiveErrorProcessors,
       modelSettings: {
-        temperature: 0,
         ...(options.modelSettings || {}),
       },
-      messageList: memoryData.messageList!,
+      messageList,
+      initialSignalEchoes: runScope.get(INITIAL_SIGNAL_ECHOES_KEY),
       maxProcessorRetries: options.maxProcessorRetries,
       // IsTaskComplete scoring for supervisor patterns
       isTaskComplete: options.isTaskComplete,
+      // Native goal config (agent-level): the in-loop goal step judges the
+      // thread's active objective each qualifying iteration.
+      goal: capabilities.agent.__getGoalConfig(),
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
-      processorStates: memoryData.processorStates,
+      processorStates: runScope.get(PROCESSOR_STATES_KEY),
     };
+
+    // Park the assembled (class-instance- and closure-laden) options on the
+    // factory closure's runScope. stream-step reads from here; the workflow
+    // engine never sees these non-JSON-safe refs in step inputs/outputs.
+    runScope.set(LOOP_OPTIONS_KEY, loopOptions as ModelLoopStreamArgs<any, unknown>);
 
     return loopOptions;
   };

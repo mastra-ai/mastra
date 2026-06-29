@@ -1,6 +1,12 @@
+import type { HonoRequest } from 'hono';
 import { describe, expectTypeOf, it } from 'vitest';
+import { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
+import type { MastraAuthProvider } from './auth';
+import { CompositeAuth } from './composite-auth';
+import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
+import type { Middleware } from './index';
 
 /**
  * Type tests for registerApiRoute
@@ -45,19 +51,110 @@ describe('registerApiRoute Type Tests', () => {
       });
     });
 
-    it('should allow accessing requestContext in createHandler', () => {
+    it('should avoid leaking Hono context types from createHandler', () => {
       registerApiRoute('/user-profile', {
         method: 'GET',
         createHandler: async () => {
           return async c => {
-            // requestContext should also be typed in createHandler's returned handler
-            const requestContext = c.get('requestContext');
-            expectTypeOf(requestContext).toEqualTypeOf<RequestContext>();
+            expectTypeOf(c).toBeAny();
 
             return c.json({ ok: true });
           };
         },
       });
     });
+  });
+});
+
+/**
+ * Regression test: CompositeAuth must accept providers whose TUser is narrower
+ * than unknown. When mapUserToResourceId is declared in property position on
+ * MastraAuthProvider<TUser>, strict contravariance rejects such providers
+ * even though the runtime contract is compatible.
+ */
+describe('CompositeAuth TUser variance', () => {
+  it('accepts SimpleAuth providers with a narrower TUser generic', () => {
+    interface CustomUser {
+      sub: string;
+    }
+
+    const typed = new SimpleAuth<CustomUser>({
+      tokens: { example: { sub: '1' } },
+    });
+
+    const _assignable: MastraAuthProvider<unknown> = typed;
+    new CompositeAuth([typed]);
+  });
+});
+
+describe('Auth request compatibility type tests', () => {
+  it('accepts HonoRequest-typed custom auth providers', () => {
+    interface CustomUser {
+      id: string;
+    }
+
+    class HonoAuthProvider extends SimpleAuth<CustomUser> {
+      async authenticateToken(token: string, request: HonoRequest): Promise<CustomUser | null> {
+        request.header('Cookie');
+        return super.authenticateToken(token, request);
+      }
+
+      async authorizeUser(user: CustomUser, request: HonoRequest): Promise<boolean> {
+        request.header('Authorization');
+        return !!user.id;
+      }
+    }
+
+    const provider = new HonoAuthProvider({ tokens: { example: { id: '1' } } });
+    const _assignable: MastraAuthProvider<CustomUser> = provider;
+
+    new Mastra({
+      server: {
+        auth: {
+          authenticateToken: async (_token: string, request: HonoRequest) => {
+            request.header('Cookie');
+            return { id: '1' };
+          },
+        },
+      },
+    });
+  });
+});
+
+describe('CORS type tests', () => {
+  it('accepts global CORS config', () => {
+    new Mastra({
+      server: {
+        cors: {
+          origin: ['https://app.example'],
+          credentials: true,
+        },
+      },
+    });
+  });
+
+  it('accepts route-specific CORS config', () => {
+    registerApiRoute('/webhook', {
+      method: 'POST',
+      handler: async c => c.json({ ok: true }),
+      cors: {
+        origin: ['https://customer-saas.example'],
+        credentials: true,
+      },
+    });
+  });
+});
+
+describe('Middleware type exports', () => {
+  it('supports middleware declared separately', () => {
+    const middleware: Middleware = {
+      path: '/api/*',
+      handler: async (c, next) => {
+        c.req.header('authorization');
+        await next();
+      },
+    };
+
+    expectTypeOf(middleware).toMatchTypeOf<Middleware>();
   });
 });

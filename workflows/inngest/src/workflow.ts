@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
+import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
@@ -50,6 +52,14 @@ export class InngestWorkflow<
   private cronFunction: ReturnType<Inngest['createFunction']> | undefined;
   private readonly flowControlConfig?: InngestFlowControlConfig;
   private readonly cronConfig?: InngestFlowCronConfig<TInput, TState>;
+  /**
+   * Optional override that lets a host (e.g. `createInngestAgent`) provide the
+   * PubSub instance used by workflow steps for publishing chunk/finish events.
+   * When set, the workflow function uses this factory instead of constructing
+   * a fresh `InngestPubSub`. This is what lets `DurableAgent.observe()` see
+   * cached history when the agent wraps its PubSub in a `CachingPubSub`.
+   */
+  #pubsubFactory?: (defaultPubsub: PubSub) => PubSub;
 
   constructor(
     params: InngestWorkflowConfig<
@@ -100,6 +110,52 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
     return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
+  }
+
+  /**
+   * Override the PubSub used inside the durable workflow function. Callers like
+   * `createInngestAgent` use this to route workflow event publishes through the
+   * agent's `CachingPubSub`, so `observe()` can replay cached history.
+   *
+   * The factory receives the workflow's own default `InngestPubSub` (constructed
+   * with this workflow's id) as input. Hosts should wrap that instance rather
+   * than substitute it, so workflow-event channels (which encode the workflow
+   * id) remain workflow-local. Returning a `CachingPubSub` wrapping the default
+   * is the canonical pattern.
+   *
+   * The factory is propagated to every nested `InngestWorkflow` in the step
+   * graph. Nested workflows run as their own Inngest functions and resolve
+   * their own pubsub at runtime; each invocation passes its own workflow-local
+   * default into the same factory, so the host can share cross-workflow state
+   * (e.g. a single agent-scoped cache) without collapsing per-workflow channel
+   * isolation.
+   */
+  __setPubsubFactory(factory: (defaultPubsub: PubSub) => PubSub) {
+    this.#pubsubFactory = factory;
+    const updateNested = (step: StepFlowEntry) => {
+      if (
+        (step.type === 'step' || step.type === 'loop' || step.type === 'foreach') &&
+        step.step instanceof InngestWorkflow
+      ) {
+        step.step.__setPubsubFactory(factory);
+      } else if (step.type === 'parallel' || step.type === 'conditional') {
+        for (const subStep of step.steps) {
+          updateNested(subStep);
+        }
+      }
+    };
+    for (const step of this.executionGraph.steps) {
+      updateNested(step);
+    }
+  }
+
+  /**
+   * Test-only accessor for the configured pubsub factory. Lets tests verify that
+   * a host (e.g. `createInngestAgent`) wired the workflow to its agent pubsub
+   * without having to drive a real Inngest invocation.
+   */
+  __getPubsubFactory(): ((defaultPubsub: PubSub) => PubSub) | undefined {
+    return this.#pubsubFactory;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -204,9 +260,9 @@ export class InngestWorkflow<
         id: `workflow.${this.id}.cron`,
         retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        triggers: { cron: this.cronConfig?.cron ?? '' },
         ...this.flowControlConfig,
       },
-      { cron: this.cronConfig?.cron ?? '' },
       async () => {
         const run = await this.createRun();
         // @ts-expect-error - cron inputData type mismatch
@@ -220,7 +276,7 @@ export class InngestWorkflow<
     return this.cronFunction;
   }
 
-  getFunction() {
+  getFunction(): ReturnType<Inngest['createFunction']> {
     if (this.function) {
       return this.function;
     }
@@ -234,11 +290,11 @@ export class InngestWorkflow<
         id: `workflow.${this.id}`,
         retries: 0,
         cancelOn: [{ event: `cancel.workflow.${this.id}` }],
+        triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
-      { event: `workflow.${this.id}` },
-      async ({ event, step, attempt, publish }) => {
+      async ({ event, step, attempt }) => {
         let {
           inputData,
           initialState,
@@ -258,8 +314,17 @@ export class InngestWorkflow<
           });
         }
 
-        // Create InngestPubSub instance with the publish function from Inngest context
-        const pubsub = new InngestPubSub(this.inngest, this.id, publish);
+        // Create InngestPubSub instance. Publishes go through `inngest.realtime.publish()`
+        // (Inngest SDK v4 client API), which auto-includes the current runId from the
+        // function's async context.
+        //
+        // The default is constructed with `this.id` so workflow-event channels stay
+        // workflow-local (InngestPubSub encodes the workflowId in `workflow:<id>:<runId>`).
+        // Hosts (e.g. `createInngestAgent`) can override via `__setPubsubFactory` to
+        // wrap this default - typically with a `CachingPubSub` so `observe()` can replay
+        // cached history - without disturbing per-workflow channel isolation.
+        const defaultPubsub = new InngestPubSub(this.inngest, this.id);
+        const pubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
 
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));
@@ -279,6 +344,7 @@ export class InngestWorkflow<
             name: `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
+            entityName: this.id,
             input: inputData,
             metadata: {
               resourceId,
@@ -334,9 +400,15 @@ export class InngestWorkflow<
               }
             },
           });
-        } catch (error) {
-          // Re-throw - span will be ended in finalize if we reach it
-          throw error;
+        } catch (executionError) {
+          // Execution threw an exception (not just returned failed status)
+          // Create a failed result to pass to finalize
+          result = {
+            status: 'failed',
+            steps: {},
+            state: initialState ?? {},
+            error: executionError instanceof Error ? executionError : new Error(String(executionError)),
+          } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
 
         // Final step to invoke lifecycle callbacks and end workflow span.
@@ -345,6 +417,17 @@ export class InngestWorkflow<
         let finalizeErrored = false;
         try {
           await step.run(`workflow.${this.id}.finalize`, async () => {
+            // For durable agent workflows, emit error event on failure so the
+            // client's stream can receive the error and close properly.
+            if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
+              const error = result.error instanceof Error ? result.error : new Error(String(result.error));
+              try {
+                await emitErrorEvent(pubsub, inputData.runId, error);
+              } catch (e) {
+                this.logger.debug?.('Failed to emit error event:', e);
+              }
+            }
+
             if (result.status !== 'paused') {
               // Invoke lifecycle callbacks (onFinish and onError)
               await engine.invokeLifecycleCallbacksInternal({
@@ -496,7 +579,7 @@ export class InngestWorkflow<
     });
   }
 
-  getFunctions() {
+  getFunctions(): ReturnType<Inngest['createFunction']>[] {
     return [
       this.getFunction(),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),

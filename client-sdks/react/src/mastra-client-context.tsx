@@ -20,6 +20,11 @@ export interface MastraClientProviderProps {
    * @see https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials
    */
   credentials?: MastraClientCredentials;
+  /**
+   * Custom fetch function for HTTP requests. Useful for adding middleware like auth refresh.
+   * When provided, this overrides the default fetch behavior.
+   */
+  customFetch?: typeof fetch;
 }
 
 export const MastraClientProvider = ({
@@ -28,8 +33,9 @@ export const MastraClientProvider = ({
   headers,
   apiPrefix,
   credentials = 'include',
+  customFetch,
 }: MastraClientProviderProps) => {
-  const client = createMastraClient(baseUrl, headers, apiPrefix, credentials);
+  const client = createMastraClient(baseUrl, headers, apiPrefix, credentials, customFetch);
 
   return <MastraClientContext.Provider value={client}>{children}</MastraClientContext.Provider>;
 };
@@ -65,11 +71,13 @@ const createMastraClient = (
   mastraClientHeaders: Record<string, string> = {},
   apiPrefix?: string,
   credentials: MastraClientCredentials = 'include',
+  customFetch?: typeof fetch,
 ) => {
   return new MastraClient({
     baseUrl: baseUrl || '',
     headers: isLocalUrl(baseUrl) ? { ...mastraClientHeaders, 'x-mastra-dev-playground': 'true' } : mastraClientHeaders,
     apiPrefix,
     credentials,
+    fetch: customFetch,
   });
 };

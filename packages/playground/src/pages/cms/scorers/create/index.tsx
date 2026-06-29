@@ -1,26 +1,12 @@
-import {
-  useLinkComponent,
-  ScorerCreateContent,
-  MainContentLayout,
-  Header,
-  HeaderTitle,
-  Icon,
-} from '@mastra/playground-ui';
-import { GaugeIcon } from 'lucide-react';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { ScorerCreateContent } from '@/domains/scores/components/scorer-create-content';
+import { useLinkComponent } from '@/lib/framework';
 
 function CmsScorersCreatePage() {
   const { navigate, paths } = useLinkComponent();
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <GaugeIcon />
-          </Icon>
-          Create a scorer
-        </HeaderTitle>
-      </Header>
+    <MainContentLayout className="grid-rows-[1fr]">
       <ScorerCreateContent onSuccess={scorer => navigate(paths.scorerLink(scorer.id))} />
     </MainContentLayout>
   );

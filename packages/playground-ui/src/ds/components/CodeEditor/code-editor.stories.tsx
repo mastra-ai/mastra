@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import type { JsonSchema } from '@/lib/json-schema';
-import { CodeEditor } from './code-editor';
 import { TooltipProvider } from '../Tooltip';
+import { CodeEditor } from './code-editor';
+import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof CodeEditor> = {
   title: 'Composite/CodeEditor',
@@ -16,7 +16,6 @@ const meta: Meta<typeof CodeEditor> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     showCopyButton: {
       control: { type: 'boolean' },
@@ -26,6 +25,9 @@ const meta: Meta<typeof CodeEditor> = {
       options: ['json', 'markdown'],
     },
     highlightVariables: {
+      control: { type: 'boolean' },
+    },
+    lineWrapping: {
       control: { type: 'boolean' },
     },
   },
@@ -95,7 +97,7 @@ export const WithoutCopyButton: Story = {
   args: {
     data: { message: 'Hello, World!' },
     showCopyButton: false,
-    className: 'w-[300px]',
+    className: 'w-dropdown-max-height',
   },
 };
 
@@ -120,6 +122,17 @@ export const LargeContent: Story = {
       },
     },
     className: 'w-[600px] max-h-[400px] overflow-auto',
+  },
+};
+
+export const WithoutLineWrapping: Story = {
+  args: {
+    data: {
+      output:
+        'https://example.com/search?q=this-is-a-very-long-url-with-structured-query-parameters-that-should-stay-on-one-line-for-inspection&filter=recent&sort=created_at_desc',
+    },
+    lineWrapping: false,
+    className: 'w-[400px] overflow-x-auto',
   },
 };
 

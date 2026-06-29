@@ -1,0 +1,147 @@
+name: Changed Test Gate
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changed-tests:
+    # This workflow runs PR code in the unprivileged pull_request sandbox, without
+    # secrets or write permissions. Keep PR Triage on pull_request_target for labels.
+    if: ${{ github.repository == 'mastra-ai/mastra' && github.event.pull_request.draft == false }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+
+      - name: Restore changed test files from PR head
+        id: changed_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch "${HEAD_REPO}" "${HEAD_SHA}" --depth=1
+          git diff --name-only --diff-filter=ACMRT "${BASE_SHA}" FETCH_HEAD \
+            | grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs)$|\.test-d\.ts$' \
+            | sort > /tmp/changed-test-files || true
+
+          if [ ! -s /tmp/changed-test-files ]; then
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+
+            if [ "$HEAD_REPO_FULL_NAME" = "$BASE_REPOSITORY" ]; then
+              echo "No changed test files detected for a branch in the base repository."
+              exit 0
+            fi
+
+            case "$AUTHOR_ASSOCIATION" in
+              OWNER|MEMBER|COLLABORATOR)
+                echo "No changed test files detected for an official contributor."
+                exit 0
+                ;;
+              *)
+                echo "::error::No changed test files detected. External contributors should add or update tests."
+                exit 1
+                ;;
+            esac
+          fi
+
+          while IFS= read -r file; do
+            git checkout FETCH_HEAD -- "$file"
+          done < /tmp/changed-test-files
+
+          echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          echo "Changed test files:"
+          cat /tmp/changed-test-files
+        env:
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          BASE_REPOSITORY: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
+          HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup pnpm and Node.js
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        env:
+          TURBO_CACHE: local:rw
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
+
+      - name: Run changed tests against base
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        shell: bash
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: |
+          set -euo pipefail
+          mapfile -t test_files < /tmp/changed-test-files
+
+          vitest_args=(run --passWithNoTests --reporter=dot --silent)
+          root_test_files=()
+          test_status=0
+
+          for file in "${test_files[@]}"; do
+            test_dir=""
+            search_dir="$(dirname "$file")"
+
+            while [ "$search_dir" != "." ] && [ "$search_dir" != "/" ]; do
+              if [ -f "$search_dir/vitest.config.ts" ] || [ -f "$search_dir/vitest.config.mts" ]; then
+                test_dir="$search_dir"
+                break
+              fi
+
+              search_dir="$(dirname "$search_dir")"
+            done
+
+            if [ -n "$test_dir" ]; then
+              relative_file="${file#"$test_dir"/}"
+
+              set +e
+              pnpm --dir "$test_dir" exec vitest "${vitest_args[@]}" "$relative_file"
+              status=$?
+              set -e
+
+              if [ "$status" -ne 0 ]; then
+                test_status="$status"
+              fi
+            else
+              root_test_files+=("$file")
+            fi
+          done
+
+          set +e
+          if [ "${#root_test_files[@]}" -gt 0 ]; then
+            pnpm vitest "${vitest_args[@]}" "${root_test_files[@]}"
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              test_status="$status"
+            fi
+          fi
+          set -e
+
+          if [ "$test_status" -eq 0 ]; then
+            echo "::error::Changed tests passed against the base branch. They should fail before the PR code is applied."
+            exit 1
+          fi
+
+          echo "Changed tests failed against the base branch as expected."

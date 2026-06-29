@@ -14,7 +14,7 @@ export function FieldBlockLabel({ children, name, required, size = 'default', cl
       htmlFor={`input-${name}`}
       className={cn(
         'text-ui-smd text-neutral3 flex justify-between items-center ',
-        '[.horizontal-field-block_&]:grid [.horizontal-field-block_&]:content-start',
+        'in-[.horizontal-field-block]:grid in-[.horizontal-field-block]:content-start',
         {
           'text-ui-md': size === 'bigger',
         },

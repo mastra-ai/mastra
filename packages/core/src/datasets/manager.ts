@@ -87,7 +87,12 @@ export class DatasetsManager {
 
   /**
    * Create a new dataset.
-   * Zod schemas are automatically converted to JSON Schema.
+   *
+   * Accepts Zod schemas for `inputSchema` / `groundTruthSchema` (typed as
+   * `unknown` here); they are normalized to JSON Schema via `zodToJsonSchema`
+   * before being forwarded to the storage-canonical
+   * {@link import('../storage/types.js').CreateDatasetInput} shape. All other
+   * fields mirror `CreateDatasetInput` exactly.
    */
   async create(input: {
     name: string;
@@ -98,6 +103,11 @@ export class DatasetsManager {
     metadata?: Record<string, unknown>;
     targetType?: TargetType;
     targetIds?: string[];
+    scorerIds?: string[];
+    organizationId?: string | null;
+    projectId?: string | null;
+    candidateKey?: string | null;
+    candidateId?: string | null;
   }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();
 
@@ -139,11 +149,24 @@ export class DatasetsManager {
 
   /**
    * List all datasets with pagination.
+   *
+   * Supports optional tenancy and candidate-identity filters. When omitted, all
+   * datasets visible to the configured storage instance are returned.
    */
-  async list(args?: { page?: number; perPage?: number }) {
+  async list(args?: {
+    page?: number;
+    perPage?: number;
+    filters?: {
+      organizationId?: string;
+      projectId?: string;
+      candidateKey?: string;
+      candidateId?: string;
+    };
+  }) {
     const store = await this.#getDatasetsStore();
     return store.listDatasets({
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
+      ...(args?.filters ? { filters: args.filters } : {}),
     });
   }
 

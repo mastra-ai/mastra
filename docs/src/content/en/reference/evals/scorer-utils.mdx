@@ -368,10 +368,10 @@ const trajectory = extractTrajectoryFromTrace(traceData.spans, rootSpanId)
 
 **Parameters:**
 
-- `spans` (`SpanRecord[]`) — Array of span records from a trace query.
-- `rootSpanId` (`string`, optional) — Span ID to use as the starting point. When omitted, uses spans with no parent.
+- `spans` (`SpanRecord[]`): Array of span records from a trace query.
+- `rootSpanId` (`string`, optional): Span ID to use as the starting point. When omitted, uses spans with no parent.
 
-**Returns:** `Trajectory` — Contains `steps: TrajectoryStep[]` with recursive `children` and `totalDurationMs`.
+**Returns:** `Trajectory`: Contains `steps: TrajectoryStep[]` with recursive `children` and `totalDurationMs`.
 
 #### Span type mapping
 

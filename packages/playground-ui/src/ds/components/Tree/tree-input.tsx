@@ -64,10 +64,12 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
       <li
         ref={ref}
         role="treeitem"
+        aria-level={depth + 1}
+        data-tree-item-kind="input"
         className={cn(
           'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
           transitions.colors,
-          'focus-within:outline-none focus-within:ring-1 focus-within:ring-accent1 focus-within:shadow-focus-ring',
+          'focus-within:outline-hidden focus-within:bg-surface4 focus-within:text-neutral6',
           className,
         )}
         style={{ paddingLeft: depth * 12 + 18 }}
@@ -84,7 +86,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onFocus={handleFocus}
-          className="min-w-0 flex-1 border-none bg-transparent text-xs text-neutral5 outline-none placeholder:text-neutral3"
+          className="min-w-0 flex-1 border-none bg-transparent text-xs text-neutral5 outline-hidden placeholder:text-neutral3"
         />
       </li>
     );

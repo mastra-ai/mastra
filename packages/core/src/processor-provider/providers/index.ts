@@ -13,6 +13,7 @@ import { SystemPromptScrubber } from '../../processors/processors/system-prompt-
 import type { SystemPromptScrubberOptions } from '../../processors/processors/system-prompt-scrubber';
 import { TokenLimiterProcessor } from '../../processors/processors/token-limiter';
 import { ToolCallFilter } from '../../processors/processors/tool-call-filter';
+import type { ToolCallFilterOptions } from '../../processors/processors/tool-call-filter';
 import { UnicodeNormalizer } from '../../processors/processors/unicode-normalizer';
 import type { ProcessorProvider, ProcessorPhase } from '../types';
 
@@ -74,10 +75,12 @@ export const toolCallFilterProvider: ProcessorProvider = {
   },
   configSchema: z.object({
     exclude: z.array(z.string()).optional(),
+    filterAfterToolSteps: z.number().optional(),
+    preserveModelOutput: z.boolean().optional(),
   }),
   availablePhases: ['processInput'] as ProcessorPhase[],
   createProcessor(config) {
-    return new ToolCallFilter(config as { exclude?: string[] });
+    return new ToolCallFilter(config as ToolCallFilterOptions);
   },
 };
 

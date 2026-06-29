@@ -5,6 +5,9 @@ packages:
   - "@mastra/core"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # createTool()
 
 The `createTool()` function is used to define custom tools that your Mastra agents can execute. Tools extend an agent's capabilities by allowing it to interact with external systems, perform calculations, or access specific data.
@@ -33,6 +36,108 @@ export const tool = createTool({
   },
 })
 ```
+
+## Define schemas
+
+You can define the tool's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
+
+<Tabs>
+  <TabItem value="zod" label="Zod">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: z.object({
+        location: z.string(),
+      }),
+      outputSchema: z.object({
+        weather: z.string(),
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="valibot" label="Valibot">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import * as v from 'valibot'
+    import { toStandardJsonSchema } from '@valibot/to-json-schema'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: toStandardJsonSchema(
+        v.object({
+          location: v.string(),
+        }),
+      ),
+      outputSchema: toStandardJsonSchema(
+        v.object({
+          weather: v.string(),
+        }),
+      ),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="arktype" label="ArkType">
+    ```typescript title="src/mastra/tools/weather-tool.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { type } from 'arktype'
+
+    export const weatherTool = createTool({
+      id: 'weather-tool',
+      description: 'Fetches weather for a location',
+      inputSchema: type({
+        location: 'string',
+      }),
+      outputSchema: type({
+        weather: 'string',
+      }),
+      execute: async inputData => {
+        // Fetch weather data
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+## Example with strict tool inputs
+
+Set `strict: true` when you want Mastra to ask supported model providers to generate tool arguments that exactly match the tool schema.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'get-weather',
+  description: 'Get weather for a city',
+  strict: true,
+  inputSchema: z.object({
+    city: z.string(),
+    units: z.enum(['metric', 'imperial']),
+  }),
+  execute: async ({ city, units }) => {
+    return {
+      city,
+      units,
+      forecast: 'sunny',
+    }
+  },
+})
+```
+
+Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that don't support strict tool calling, Mastra ignores this option.
 
 ## Example with `toModelOutput`
 
@@ -79,6 +184,50 @@ The tool still returns the full `execute` result to your application, while the 
 - `type: 'text'`
 - `type: 'json'`
 - `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
+
+## Example with `transform`
+
+Use `transform` when the tool should keep raw inputs or outputs for runtime behavior, but display streams or transcript messages should receive a smaller or safer shape.
+
+```typescript title="src/mastra/tools/customer-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const customerTool = createTool({
+  id: 'lookup-customer',
+  description: 'Looks up a customer',
+  inputSchema: z.object({
+    customerId: z.string(),
+    internalPath: z.string(),
+  }),
+  outputSchema: z.object({
+    displayName: z.string(),
+    apiKey: z.string(),
+    debugScore: z.number(),
+  }),
+  execute: async () => {
+    return {
+      displayName: 'Acme',
+      apiKey: 'secret-value',
+      debugScore: 0.97,
+    }
+  },
+  transform: {
+    display: {
+      input: ({ input }) => ({ customerId: input?.customerId }),
+      output: ({ output }) => ({ displayName: output?.displayName }),
+      error: () => ({ message: 'Customer lookup failed' }),
+    },
+    transcript: {
+      input: ({ input }) => ({ customerId: input?.customerId }),
+      output: ({ output }) => ({ displayName: output?.displayName }),
+      error: () => ({ message: 'Customer lookup failed' }),
+    },
+  },
+})
+```
+
+The tool still receives the raw `inputSchema` value and returns the raw `execute` result. Mastra applies `display` transforms to streamed UI payloads and `transcript` transforms to user-visible transcript messages.
 
 ## Example with MCP annotations
 
@@ -135,14 +284,21 @@ export const weatherTool = createTool({
   },
   {
     name: 'inputSchema',
-    type: 'Zod schema',
-    description: "A Zod schema defining the expected input parameters for the tool's `execute` function.",
+    type: 'StandardJSONSchemaV1',
+    description: "A Standard JSON Schema defining the expected input parameters for the tool's `execute` function.",
     isOptional: true,
   },
   {
     name: 'outputSchema',
-    type: 'Zod schema',
-    description: "A Zod schema defining the expected output structure of the tool's `execute` function.",
+    type: 'StandardJSONSchemaV1',
+    description: "A Standard JSON Schema defining the expected output structure of the tool's `execute` function.",
+    isOptional: true,
+  },
+  {
+    name: 'strict',
+    type: 'boolean',
+    description:
+      'When true, Mastra enables strict tool input generation on model adapters that support it. This helps supported providers return arguments that match the tool schema more closely.',
     isOptional: true,
   },
   {
@@ -153,17 +309,24 @@ export const weatherTool = createTool({
     isOptional: true,
   },
   {
-    name: 'suspendSchema',
-    type: 'Zod schema',
+    name: 'transform',
+    type: 'ToolPayloadTransform',
     description:
-      'A Zod schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.',
+      'Optional target-aware transform for tool payloads before they leave runtime for display streams or user-visible transcript messages. Configure `display` and `transcript` transforms for phases such as `input`, `inputDelta`, `output`, `error`, `approval`, `suspend`, and `resume`.',
+    isOptional: true,
+  },
+  {
+    name: 'suspendSchema',
+    type: 'StandardJSONSchemaV1',
+    description:
+      'A Standard JSON Schema defining the structure of the payload passed to `suspend()`. This payload is returned to the client when the tool suspends execution.',
     isOptional: true,
   },
   {
     name: 'resumeSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.',
+      'A Standard JSON Schema defining the expected structure of `resumeData` when the tool is resumed. Used by the agent to extract data from user messages when `autoResumeSuspendedTools` is enabled.',
     isOptional: true,
   },
   {
@@ -182,9 +345,9 @@ export const weatherTool = createTool({
   },
   {
     name: 'requestContextSchema',
-    type: 'Zod schema',
+    type: 'StandardJSONSchemaV1',
     description:
-      'A Zod schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
+      'A Standard JSON Schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
     isOptional: true,
   },
   {
@@ -511,5 +674,5 @@ These annotations follow the [MCP specification](https://spec.modelcontextprotoc
 - [MCP Overview](/docs/mcp/overview)
 - [Using Tools with Agents](/docs/agents/using-tools)
 - [Agent Approval](/docs/agents/agent-approval)
-- [Tool Streaming](/docs/streaming/tool-streaming)
+- [Tool Streaming](/docs/agents/using-tools#streaming)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)

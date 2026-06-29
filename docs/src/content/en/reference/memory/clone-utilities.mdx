@@ -205,8 +205,10 @@ async function manageClones() {
 
   // Have a conversation...
   await agent.generate("Hello! Let's discuss project options.", {
-    threadId: originalThread.id,
-    resourceId: 'user-123',
+    memory: {
+      thread: originalThread.id,
+      resource: 'user-123',
+    },
   })
 
   // Create multiple branches (clones) to explore different paths

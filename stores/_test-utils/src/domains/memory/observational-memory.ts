@@ -184,6 +184,632 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
 
         expect(history.length).toBe(2);
       });
+
+      it('should filter by from date', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Create initial record
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        // Small delay to ensure distinct timestamps
+        await new Promise(r => setTimeout(r, 50));
+        const midpoint = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Create reflection generation after midpoint
+        const second = await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Reflection after midpoint',
+          tokenCount: 100,
+        });
+
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          from: midpoint,
+        });
+
+        expect(history.length).toBe(1);
+        expect(history[0]!.id).toBe(second.id);
+      });
+
+      it('should filter by to date', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Create initial record
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        // Small delay to ensure distinct timestamps
+        await new Promise(r => setTimeout(r, 50));
+        const midpoint = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Create reflection generation after midpoint
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Reflection after midpoint',
+          tokenCount: 100,
+        });
+
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          to: midpoint,
+        });
+
+        expect(history.length).toBe(1);
+        expect(history[0]!.id).toBe(first.id);
+      });
+
+      it('should filter by from and to date combined', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Create initial record
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeStart = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Create 2nd record inside the range
+        const second = await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Reflection in range',
+          tokenCount: 100,
+        });
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeEnd = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Create 3rd record outside the range
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: second,
+          reflection: 'Reflection after range',
+          tokenCount: 100,
+        });
+
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          from: rangeStart,
+          to: rangeEnd,
+        });
+
+        expect(history.length).toBe(1);
+        expect(history[0]!.id).toBe(second.id);
+      });
+
+      it('should support offset', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Create initial record + 3 reflections = 4 records total
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        let current = first;
+        for (let i = 0; i < 3; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        // Offset 2 should skip the 2 newest records (reverse chronological order)
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, { offset: 2 });
+
+        expect(history.length).toBe(2);
+        // Should have the 2 oldest records (generationCount 1 and 0)
+        expect(history[0]!.generationCount).toBe(1);
+        expect(history[1]!.generationCount).toBe(0);
+      });
+
+      it('should support offset with limit', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Create initial record + 3 reflections = 4 records total
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        let current = first;
+        for (let i = 0; i < 3; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        // Offset 1, limit 2: skip newest, take next 2
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, 2, { offset: 1 });
+
+        expect(history.length).toBe(2);
+        expect(history[0]!.generationCount).toBe(2);
+        expect(history[1]!.generationCount).toBe(1);
+      });
+
+      it('should return all records when empty options object is passed', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Reflection 1',
+          tokenCount: 100,
+        });
+
+        const withEmptyOptions = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {});
+        const withoutOptions = await memoryStorage.getObservationalMemoryHistory(null, resourceId);
+
+        expect(withEmptyOptions.length).toBe(2);
+        expect(withEmptyOptions.length).toBe(withoutOptions.length);
+        expect(withEmptyOptions.map(r => r.id)).toEqual(withoutOptions.map(r => r.id));
+      });
+
+      it('should return empty array when from is in the future', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Reflection 1',
+          tokenCount: 100,
+        });
+
+        const futureDate = new Date(Date.now() + 86_400_000); // +1 day
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          from: futureDate,
+        });
+
+        expect(history).toEqual([]);
+      });
+
+      it('should return empty array when to is far in the past', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Reflection 1',
+          tokenCount: 100,
+        });
+
+        const pastDate = new Date('2000-01-01T00:00:00Z');
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          to: pastDate,
+        });
+
+        expect(history).toEqual([]);
+      });
+
+      it('should return empty array when offset exceeds total records', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Reflection 1',
+          tokenCount: 100,
+        });
+
+        // 2 records total, offset 10 should return nothing
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, { offset: 10 });
+
+        expect(history).toEqual([]);
+      });
+
+      it('should treat offset 0 the same as no offset', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        let current = first;
+        for (let i = 0; i < 2; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        const withOffset0 = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          offset: 0,
+        });
+        const withoutOffset = await memoryStorage.getObservationalMemoryHistory(null, resourceId);
+
+        expect(withOffset0.length).toBe(3);
+        expect(withOffset0.map(r => r.id)).toEqual(withoutOffset.map(r => r.id));
+      });
+
+      it('should preserve reverse chronological order when filtering by from', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        await new Promise(r => setTimeout(r, 50));
+        const midpoint = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Create 3 more records after midpoint
+        let current = first;
+        const afterIds: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+          afterIds.push(current.id);
+        }
+
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          from: midpoint,
+        });
+
+        expect(history.length).toBe(3);
+        // Newest first (generationCount descending)
+        expect(history[0]!.generationCount).toBeGreaterThan(history[1]!.generationCount);
+        expect(history[1]!.generationCount).toBeGreaterThan(history[2]!.generationCount);
+      });
+
+      it('should preserve reverse chronological order when using offset', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Create 5 records total
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        let current = first;
+        for (let i = 0; i < 4; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, { offset: 1 });
+
+        expect(history.length).toBe(4);
+        for (let i = 0; i < history.length - 1; i++) {
+          expect(history[i]!.generationCount).toBeGreaterThan(history[i + 1]!.generationCount);
+        }
+      });
+
+      it('should combine from + to + limit correctly', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Record before range
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeStart = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // 3 records inside range
+        let current = first;
+        for (let i = 0; i < 3; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeEnd = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Record after range
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: 'After range',
+          tokenCount: 100,
+        });
+
+        // 3 records in range, but limit to 2
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, 2, {
+          from: rangeStart,
+          to: rangeEnd,
+        });
+
+        expect(history.length).toBe(2);
+        // Should be the 2 newest within the range
+        expect(history[0]!.generationCount).toBe(3);
+        expect(history[1]!.generationCount).toBe(2);
+      });
+
+      it('should combine from + to + offset correctly', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Record before range
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeStart = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // 3 records inside range
+        let current = first;
+        for (let i = 0; i < 3; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeEnd = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Record after range
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: 'After range',
+          tokenCount: 100,
+        });
+
+        // 3 records in range, skip the newest 1
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          from: rangeStart,
+          to: rangeEnd,
+          offset: 1,
+        });
+
+        expect(history.length).toBe(2);
+        // Skipped gen 3 (newest in range), should have gen 2 and gen 1
+        expect(history[0]!.generationCount).toBe(2);
+        expect(history[1]!.generationCount).toBe(1);
+      });
+
+      it('should combine from + to + offset + limit for full pagination', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Record before range
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeStart = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // 4 records inside range (gen 1..4)
+        let current = first;
+        for (let i = 0; i < 4; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        await new Promise(r => setTimeout(r, 50));
+        const rangeEnd = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Record after range
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: current,
+          reflection: 'After range',
+          tokenCount: 100,
+        });
+
+        // 4 records in range (gen 4,3,2,1 in desc order), offset 1, limit 2 => gen 3, gen 2
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, 2, {
+          from: rangeStart,
+          to: rangeEnd,
+          offset: 1,
+        });
+
+        expect(history.length).toBe(2);
+        expect(history[0]!.generationCount).toBe(3);
+        expect(history[1]!.generationCount).toBe(2);
+      });
+
+      it('should work with thread-scoped records (non-null threadId)', async () => {
+        const scopedThreadId = `thread-${randomUUID()}`;
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ threadId: scopedThreadId, resourceId, scope: 'thread' });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        await new Promise(r => setTimeout(r, 50));
+        const midpoint = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        const second = await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'Thread-scoped reflection',
+          tokenCount: 100,
+        });
+
+        // from filter with thread-scoped lookup
+        const fromHistory = await memoryStorage.getObservationalMemoryHistory(scopedThreadId, resourceId, undefined, {
+          from: midpoint,
+        });
+        expect(fromHistory.length).toBe(1);
+        expect(fromHistory[0]!.id).toBe(second.id);
+
+        // to filter with thread-scoped lookup
+        const toHistory = await memoryStorage.getObservationalMemoryHistory(scopedThreadId, resourceId, undefined, {
+          to: midpoint,
+        });
+        expect(toHistory.length).toBe(1);
+        expect(toHistory[0]!.id).toBe(first.id);
+
+        // offset with thread-scoped lookup
+        const offsetHistory = await memoryStorage.getObservationalMemoryHistory(scopedThreadId, resourceId, undefined, {
+          offset: 1,
+        });
+        expect(offsetHistory.length).toBe(1);
+        expect(offsetHistory[0]!.id).toBe(first.id);
+      });
+
+      it('should not return records from a different resource when filtering', async () => {
+        const resourceIdA = `resource-a-${randomUUID()}`;
+        const resourceIdB = `resource-b-${randomUUID()}`;
+
+        // Create records for resource A
+        const firstA = await memoryStorage.initializeObservationalMemory(
+          createSampleOMInput({ resourceId: resourceIdA }),
+        );
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: firstA,
+          reflection: 'Resource A reflection',
+          tokenCount: 100,
+        });
+
+        // Create records for resource B
+        const firstB = await memoryStorage.initializeObservationalMemory(
+          createSampleOMInput({ resourceId: resourceIdB }),
+        );
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: firstB,
+          reflection: 'Resource B reflection',
+          tokenCount: 100,
+        });
+
+        // Query resource A — should only get resource A's records
+        const historyA = await memoryStorage.getObservationalMemoryHistory(null, resourceIdA, undefined, { offset: 0 });
+        expect(historyA.length).toBe(2);
+        expect(historyA.every(r => r.resourceId === resourceIdA)).toBe(true);
+
+        // Query resource B with date filter — should only get resource B's records
+        const pastDate = new Date('2000-01-01T00:00:00Z');
+        const historyB = await memoryStorage.getObservationalMemoryHistory(null, resourceIdB, undefined, {
+          from: pastDate,
+        });
+        expect(historyB.length).toBe(2);
+        expect(historyB.every(r => r.resourceId === resourceIdB)).toBe(true);
+      });
+
+      it('should return empty array when from equals to and no record has that exact timestamp', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        await memoryStorage.initializeObservationalMemory(input);
+
+        // Use a timestamp that definitely doesn't match any record
+        const exactDate = new Date('2099-06-15T12:00:00.000Z');
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          from: exactDate,
+          to: exactDate,
+        });
+
+        expect(history).toEqual([]);
+      });
+
+      it('should handle offset on a single record', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Only 1 record
+        await memoryStorage.initializeObservationalMemory(input);
+
+        // offset 0 on single record returns it
+        const withOffset0 = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          offset: 0,
+        });
+        expect(withOffset0.length).toBe(1);
+
+        // offset 1 on single record returns nothing
+        const withOffset1 = await memoryStorage.getObservationalMemoryHistory(null, resourceId, undefined, {
+          offset: 1,
+        });
+        expect(withOffset1).toEqual([]);
+      });
+
+      it('should paginate correctly using offset + limit across multiple pages', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // Create 6 records total (gen 0..5)
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        let current = first;
+        for (let i = 0; i < 5; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        const pageSize = 2;
+
+        // Page 1: offset 0, limit 2 => gen 5, 4
+        const page1 = await memoryStorage.getObservationalMemoryHistory(null, resourceId, pageSize, { offset: 0 });
+        expect(page1.length).toBe(2);
+        expect(page1[0]!.generationCount).toBe(5);
+        expect(page1[1]!.generationCount).toBe(4);
+
+        // Page 2: offset 2, limit 2 => gen 3, 2
+        const page2 = await memoryStorage.getObservationalMemoryHistory(null, resourceId, pageSize, { offset: 2 });
+        expect(page2.length).toBe(2);
+        expect(page2[0]!.generationCount).toBe(3);
+        expect(page2[1]!.generationCount).toBe(2);
+
+        // Page 3: offset 4, limit 2 => gen 1, 0
+        const page3 = await memoryStorage.getObservationalMemoryHistory(null, resourceId, pageSize, { offset: 4 });
+        expect(page3.length).toBe(2);
+        expect(page3[0]!.generationCount).toBe(1);
+        expect(page3[1]!.generationCount).toBe(0);
+
+        // Page 4: offset 6, limit 2 => empty
+        const page4 = await memoryStorage.getObservationalMemoryHistory(null, resourceId, pageSize, { offset: 6 });
+        expect(page4).toEqual([]);
+
+        // All pages combined should cover all 6 records with no duplicates
+        const allIds = [...page1, ...page2, ...page3].map(r => r.id);
+        expect(new Set(allIds).size).toBe(6);
+      });
+
+      it('should return correct results when limit exceeds available records after offset', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        // 3 records total
+        const first = await memoryStorage.initializeObservationalMemory(input);
+        let current = first;
+        for (let i = 0; i < 2; i++) {
+          current = await memoryStorage.createReflectionGeneration({
+            currentRecord: current,
+            reflection: `Reflection ${i + 1}`,
+            tokenCount: 100,
+          });
+        }
+
+        // offset 2 leaves only 1 record, but limit is 10
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, 10, { offset: 2 });
+        expect(history.length).toBe(1);
+        expect(history[0]!.generationCount).toBe(0);
+      });
+
+      it('should return correct results when limit exceeds available records after date filtering', async () => {
+        const resourceId = `resource-${randomUUID()}`;
+        const input = createSampleOMInput({ resourceId });
+
+        const first = await memoryStorage.initializeObservationalMemory(input);
+
+        await new Promise(r => setTimeout(r, 50));
+        const midpoint = new Date();
+        await new Promise(r => setTimeout(r, 50));
+
+        // Only 1 record after midpoint
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: 'After midpoint',
+          tokenCount: 100,
+        });
+
+        // Limit 100 but only 1 record matches
+        const history = await memoryStorage.getObservationalMemoryHistory(null, resourceId, 100, {
+          from: midpoint,
+        });
+        expect(history.length).toBe(1);
+      });
     });
 
     describe('updateActiveObservations', () => {

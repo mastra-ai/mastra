@@ -14,6 +14,7 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { requireWorkspace, emitWorkspaceMetadata } from './helpers';
+import { startWorkspaceSpan } from './tracing';
 
 const CURSOR_MARKER = '<<<';
 
@@ -101,6 +102,13 @@ export const lspInspectTool = createTool({
     const workspace = requireWorkspace(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.LSP.LSP_INSPECT);
 
+    const span = startWorkspaceSpan(context, workspace, {
+      category: 'filesystem',
+      operation: 'lspInspect',
+      input: { path: filePath, line },
+      attributes: {},
+    });
+
     // Parse cursor position from match
     const cursorPositions = [];
     let searchStart = 0;
@@ -112,12 +120,14 @@ export const lspInspectTool = createTool({
     }
 
     if (cursorPositions.length === 0) {
+      span.end({ success: false });
       return {
         error: `No <<< cursor marker found in match`,
       };
     }
 
     if (cursorPositions.length > 1) {
+      span.end({ success: false });
       return {
         error: `Multiple <<< markers found (found ${cursorPositions.length}, expected 1)`,
       };
@@ -129,6 +139,7 @@ export const lspInspectTool = createTool({
     // Get the LSP manager
     const lspManager = workspace.lsp;
     if (!lspManager) {
+      span.end({ success: false });
       return {
         error: 'LSP is not configured for this workspace. Enable LSP in workspace config to use this tool.',
       };
@@ -152,12 +163,14 @@ export const lspInspectTool = createTool({
     try {
       queryResult = await lspManager.prepareQuery(absolutePath);
     } catch (err) {
+      span.end({ success: false });
       return {
         error: `Failed to initialize LSP client: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
 
     if (!queryResult) {
+      span.end({ success: false });
       return {
         error: `No language server available for files of this type: ${filePath}`,
       };
@@ -291,6 +304,7 @@ export const lspInspectTool = createTool({
       client.notifyClose(absolutePath);
     }
 
+    span.end({ success: !result.error });
     return result;
   },
 });

@@ -1,0 +1,752 @@
+{
+  "meta": {
+    "name": "core-src-voice-aisdk-__tests__-aisdk-voice.e2e",
+    "testFile": "packages/core/src/voice/aisdk/__tests__/aisdk-voice.e2e.test.ts",
+    "testName": "AI SDK Voice Integration Tests",
+    "model": "tts-1",
+    "createdAt": "2026-05-13T22:38:43.341Z"
+  },
+  "recordings": [
+    {
+      "hash": "c05edf5e6b99144d",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "Hello from AI SDK!",
+          "voice": "alloy",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711901830
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb5272b2eb8b9b4-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:23 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "603",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-744664fbfd-4xqx2",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_a8ef5482f7a64b4e8bf6c5d693676bd3"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 24000
+        },
+        "binaryArtifact": {
+          "path": "c05edf5e6b99144d-response-64104cfa0a43.mp3",
+          "contentType": "audio/mpeg",
+          "size": 24000
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "c27b6034c6ec8f57",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "Testing with Nova voice",
+          "voice": "nova",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711904103
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb527390fbbb72c-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:26 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "2245",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-55f9689f99-4snhj",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_738a9f92155b431f8ed60bfb17ac6968"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 29280
+        },
+        "binaryArtifact": {
+          "path": "c27b6034c6ec8f57-response-6aa0a0bbcff3.mp3",
+          "contentType": "audio/mpeg",
+          "size": 29280
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8a47b614e89e5ba8",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "Hello from stream",
+          "voice": "alloy",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711907164
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb5274bfc30b9b4-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:28 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1004",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-55f9689f99-xr7gt",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_10911586162a4139a9b02db4e41a2cfd"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 21600
+        },
+        "binaryArtifact": {
+          "path": "8a47b614e89e5ba8-response-ace1c1c3130d.mp3",
+          "contentType": "audio/mpeg",
+          "size": 21600
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "ca58e1d3824603ce",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "Testing provider options",
+          "voice": "alloy",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711908638
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb527552b09b72c-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:29 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "518",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-79b556ffb-bw54n",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_4de729822e634e79a9745fdddb205d96"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 30720
+        },
+        "binaryArtifact": {
+          "path": "ca58e1d3824603ce-response-0fa68bb12901.mp3",
+          "contentType": "audio/mpeg",
+          "size": 30720
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "8d5a4eabb2757b33",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "This is a transcription test",
+          "voice": "alloy",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711909989
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb5275d9fa4b9b4-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:30 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "476",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-6cf56db848-7t5wl",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_8600e848b5a94edb9c9ade2d219998ae"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 35520
+        },
+        "binaryArtifact": {
+          "path": "8d5a4eabb2757b33-response-ac8d1fa80366.mp3",
+          "contentType": "audio/mpeg",
+          "size": 35520
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "05c91568076b9857",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "method": "POST",
+        "body": {
+          "__binary": true,
+          "contentType": "multipart/form-data; boundary=----formdata-undici-041825929499",
+          "size": 35786,
+          "digest": "faffd20a713f6881"
+        },
+        "timestamp": 1778711911173,
+        "binaryArtifact": {
+          "path": "05c91568076b9857-request-faffd20a713f.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-041825929499",
+          "size": 35786
+        }
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb527650971b72c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 13 May 2026 22:38:31 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "569",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-744664fbfd-4xqx2",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_e60a2a09f6ba4806bcc18a90edc5ba77"
+        },
+        "body": {
+          "text": "This is a transcription test.",
+          "usage": {
+            "type": "duration",
+            "seconds": 2
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "92a3e803eeb77aec",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "method": "POST",
+        "body": {
+          "__binary": true,
+          "contentType": "multipart/form-data; boundary=----formdata-undici-080298187059",
+          "size": 33386,
+          "digest": "f54cfdb9b7a898a0"
+        },
+        "timestamp": 1778711913113,
+        "binaryArtifact": {
+          "path": "92a3e803eeb77aec-request-f54cfdb9b7a8.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-080298187059",
+          "size": 33386
+        }
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb527712ffab72c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 13 May 2026 22:38:33 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "325",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-canary-cb6bc466b-l2m6s",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_c503c07fb1d44935b7e8156e883b5e58"
+        },
+        "body": {
+          "text": "This is a transcription test.",
+          "usage": {
+            "type": "duration",
+            "seconds": 2
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "6014e37fed406cde",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "Testing language option",
+          "voice": "alloy",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711913642
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb527747d76b9b4-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:34 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "988",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-6cf56db848-7fjss",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_ad434e0d1c534cf8b75b5c03e8f8418c"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 29760
+        },
+        "binaryArtifact": {
+          "path": "6014e37fed406cde-response-7b24b050c6bd.mp3",
+          "contentType": "audio/mpeg",
+          "size": 29760
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "d87ed54f2cdeade0",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "method": "POST",
+        "body": {
+          "__binary": true,
+          "contentType": "multipart/form-data; boundary=----formdata-undici-069330933995",
+          "size": 30431,
+          "digest": "473f20c55252454a"
+        },
+        "timestamp": 1778711915164,
+        "binaryArtifact": {
+          "path": "d87ed54f2cdeade0-request-473f20c55252.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-069330933995",
+          "size": 30431
+        }
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb5277dfce6b72c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 13 May 2026 22:38:36 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "705",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-6cf56db848-bwnxk",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_0d6d9fc0a3cc43d4bcbc379c93bcf7fe"
+        },
+        "body": {
+          "task": "transcribe",
+          "language": "english",
+          "duration": 1.4800000190734863,
+          "text": "Testing language option.",
+          "segments": [
+            {
+              "id": 0,
+              "seek": 0,
+              "start": 0,
+              "end": 2,
+              "text": " Testing language option.",
+              "tokens": [50364, 45517, 2856, 3614, 13, 50464],
+              "temperature": 0,
+              "avg_logprob": -0.8489877581596375,
+              "compression_ratio": 0.75,
+              "no_speech_prob": 0.022722527384757996
+            }
+          ],
+          "usage": {
+            "type": "duration",
+            "seconds": 2
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "465ad448709388f5",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "This will be aborted",
+          "voice": "alloy",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711916067
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb527839ebeb9b4-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:37 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1082",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-canary-8589897d7d-6hdw6",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_b60bdc3968f949be95f9912730ad275c"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 23040
+        },
+        "binaryArtifact": {
+          "path": "465ad448709388f5-response-43d026ccfae4.mp3",
+          "contentType": "audio/mpeg",
+          "size": 23040
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "4e3c88b0c9aa0735",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "Testing buffer input",
+          "voice": "alloy",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711917547
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb5278cda6cb72c-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:38 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "985",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-55f9689f99-pxj9z",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_1d2d3c12fd5b42ce899b0b4722890b7d"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 24960
+        },
+        "binaryArtifact": {
+          "path": "4e3c88b0c9aa0735-response-9b0cae3f8ca0.mp3",
+          "contentType": "audio/mpeg",
+          "size": 24960
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "1fb79d229ffd2618",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "method": "POST",
+        "body": {
+          "__binary": true,
+          "contentType": "multipart/form-data; boundary=----formdata-undici-097472351201",
+          "size": 25226,
+          "digest": "00ab792e7cc64c34"
+        },
+        "timestamp": 1778711918907,
+        "binaryArtifact": {
+          "path": "1fb79d229ffd2618-request-00ab792e7cc6.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-097472351201",
+          "size": 25226
+        }
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb5279559e4b9b4-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 13 May 2026 22:38:40 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "911",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-79b556ffb-gk585",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_524ca6d947ec4ef2a6d78cc1511d869a"
+        },
+        "body": {
+          "text": "Testing Buffer Input",
+          "usage": {
+            "type": "duration",
+            "seconds": 2
+          }
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "dc3b9a7c08b76f8f",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/speech",
+        "method": "POST",
+        "body": {
+          "model": "tts-1",
+          "input": "Hello, this is a round trip test using AI SDK voice models",
+          "voice": "nova",
+          "response_format": "mp3"
+        },
+        "timestamp": 1778711920082
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb5279caf51b9b4-BRU",
+          "connection": "keep-alive",
+          "content-type": "audio/mpeg",
+          "date": "Wed, 13 May 2026 22:38:41 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1629",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-5f94974895-zlqf6",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_9aa108f0c94e486b96cb6f3505c2cb41"
+        },
+        "body": {
+          "__binary": true,
+          "contentType": "audio/mpeg",
+          "size": 66720
+        },
+        "binaryArtifact": {
+          "path": "dc3b9a7c08b76f8f-response-7080f9a5ec3a.mp3",
+          "contentType": "audio/mpeg",
+          "size": 66720
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "52841e75df600ed8",
+      "request": {
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "method": "POST",
+        "body": {
+          "__binary": true,
+          "contentType": "multipart/form-data; boundary=----formdata-undici-035814504765",
+          "size": 66986,
+          "digest": "e01e0b15186f5a31"
+        },
+        "timestamp": 1778711922571,
+        "binaryArtifact": {
+          "path": "52841e75df600ed8-request-e01e0b15186f.bin",
+          "contentType": "multipart/form-data; boundary=----formdata-undici-035814504765",
+          "size": 66986
+        }
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fb527ac3f9db72c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 13 May 2026 22:38:43 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "510",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "via": "envoy-router-79b556ffb-bw54n",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-request-id": "req_d5857af98bdd4927bbc01d7a54d4c738"
+        },
+        "body": {
+          "text": "Hello, this is a round-trip test using AISDK voice models.",
+          "usage": {
+            "type": "duration",
+            "seconds": 4
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

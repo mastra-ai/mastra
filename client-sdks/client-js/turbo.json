@@ -1,9 +1,9 @@
 {
-  "$schema": "https://turbo.build/schema.json",
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
     "build:lib": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "@mastra/server#generate:route-types"],
       "inputs": [
         "src/**",
         "tsup.config.ts",

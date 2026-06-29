@@ -1,6 +1,6 @@
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../memory';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
@@ -173,6 +173,50 @@ function inputProcessorTests(version: 'v1' | 'v2') {
         // The processor should have added a message
         expect(result.text).toContain('processed:');
         expect(result.text).toContain('Processor was here!');
+      });
+
+      it('should run processLLMRequest through the explicit LLM request processor path', async () => {
+        if (version === 'v1') return;
+
+        const processor1 = {
+          id: 'input-processor',
+          name: 'Input Processor',
+          processInput: async ({ messages }) => {
+            messages.push(createMessage('Input processor was here'));
+            return messages;
+          },
+        };
+        const processLLMRequest = vi.fn(async ({ prompt }) => {
+          return {
+            prompt: prompt.map(message =>
+              message.role === 'user'
+                ? {
+                    ...message,
+                    content: [{ type: 'text', text: 'Request processor was here' }],
+                  }
+                : message,
+            ),
+          };
+        });
+        const processor2 = {
+          id: 'request-processor',
+          name: 'Request Processor',
+          processLLMRequest,
+        };
+
+        const agentWithProcessors = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'You are a helpful assistant',
+          model: mockModel,
+          inputProcessors: [processor1, processor2],
+        });
+
+        const result = await agentWithProcessors.generate('Hello');
+
+        expect(processLLMRequest).toHaveBeenCalledTimes(1);
+        expect(result.text).toContain('Request processor was here');
+        expect(result.text).not.toContain('Input processor was here');
       });
 
       it('should run multiple processors in order', async () => {

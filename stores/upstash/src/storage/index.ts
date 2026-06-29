@@ -1,12 +1,13 @@
 import { MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { Redis } from '@upstash/redis';
+import { BackgroundTasksUpstash } from './domains/background-tasks';
 import { StoreMemoryUpstash } from './domains/memory';
 import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { StoreMemoryUpstash, ScoresUpstash, WorkflowsUpstash };
+export { BackgroundTasksUpstash, StoreMemoryUpstash, ScoresUpstash, WorkflowsUpstash };
 export type { UpstashDomainConfig } from './db';
 
 /**
@@ -121,11 +122,13 @@ export class UpstashStore extends MastraCompositeStore {
     const scores = new ScoresUpstash({ client: this.redis });
     const workflows = new WorkflowsUpstash({ client: this.redis });
     const memory = new StoreMemoryUpstash({ client: this.redis });
+    const backgroundTasks = new BackgroundTasksUpstash({ client: this.redis });
 
     this.stores = {
       scores,
       workflows,
       memory,
+      backgroundTasks,
     };
   }
 

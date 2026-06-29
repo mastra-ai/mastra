@@ -445,6 +445,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               finishReason: 'stop',
               toolCalls: [],
               text: extractTextFromMessages(messages),
+              usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
             });
             break;
 

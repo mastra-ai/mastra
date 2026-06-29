@@ -5,7 +5,7 @@
  * This is the default filesystem for development and local agents.
  */
 
-import { constants as fsConstants } from 'node:fs';
+import { constants as fsConstants, realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import type { RequestContext } from '../../request-context';
@@ -218,11 +218,49 @@ export class LocalFilesystem extends MastraFilesystem {
   /**
    * Check if an absolute path falls within basePath or any allowed path.
    */
+  private _isWithinRoot(absolutePath: string, root: string): boolean {
+    const relative = nodePath.relative(root, absolutePath);
+    return !relative.startsWith('..') && !nodePath.isAbsolute(relative);
+  }
+
+  private _resolvePathForContainment(absolutePath: string): string | undefined {
+    let currentPath = absolutePath;
+
+    while (true) {
+      try {
+        const realPath = realpathSync(currentPath);
+        if (currentPath === absolutePath) {
+          return realPath;
+        }
+
+        const remainder = nodePath.relative(currentPath, absolutePath);
+        return nodePath.join(realPath, remainder);
+      } catch (error: unknown) {
+        if (!isEnoentError(error)) return undefined;
+      }
+
+      const parentPath = nodePath.dirname(currentPath);
+      if (parentPath === currentPath) {
+        return undefined;
+      }
+      currentPath = parentPath;
+    }
+  }
+
   private _isWithinAnyRoot(absolutePath: string): boolean {
     const roots = [this._basePath, ...this._allowedPaths];
+    if (roots.some(root => this._isWithinRoot(absolutePath, root))) {
+      return true;
+    }
+
+    const resolvedPath = this._resolvePathForContainment(absolutePath);
+    if (!resolvedPath) {
+      return false;
+    }
+
     return roots.some(root => {
-      const relative = nodePath.relative(root, absolutePath);
-      return !relative.startsWith('..') && !nodePath.isAbsolute(relative);
+      const resolvedRoot = this._resolvePathForContainment(root);
+      return resolvedRoot ? this._isWithinRoot(resolvedPath, resolvedRoot) : false;
     });
   }
 
@@ -237,11 +275,45 @@ export class LocalFilesystem extends MastraFilesystem {
 
     if (this._contained) {
       if (!this._isWithinAnyRoot(absolutePath)) {
-        throw new PermissionError(inputPath, 'access');
+        throw new PermissionError(inputPath, this._accessOperationHint(inputPath));
       }
     }
 
     return absolutePath;
+  }
+
+  /**
+   * Build the operation string for a containment-violation `PermissionError`.
+   *
+   * When the caller passed an absolute path, suggest a concrete relative form
+   * only when that suffix names an existing entry under the workspace (e.g.
+   * `/src/app.ts` → `src/app.ts` if `<basePath>/src` exists). Otherwise emit a
+   * soft hint that doesn't lie about specific paths — agents that mistake `/`
+   * for the workspace root learn the workspace is sandboxed without us
+   * inventing a fictitious in-workspace location for `/etc/passwd`.
+   */
+  private _accessOperationHint(inputPath: string): string {
+    if (!nodePath.isAbsolute(inputPath)) return 'access';
+
+    const stripped = inputPath.replace(/^[/\\]+/, '');
+    if (!stripped) return 'access';
+
+    // If the first segment exists under basePath, the LLM almost certainly
+    // meant a workspace-relative path. Suggest the exact form. Reject any
+    // segment that would escape basePath (`.`, `..`) — suggesting those would
+    // just produce another containment failure on the next turn.
+    const firstSegment = stripped.split(/[/\\]/, 1)[0];
+    if (firstSegment && firstSegment !== '.' && firstSegment !== '..') {
+      try {
+        if (realpathSync(nodePath.join(this._basePath, firstSegment))) {
+          return `access (path is outside the workspace; use a relative path like "${stripped}")`;
+        }
+      } catch {
+        // Fall through to the soft hint
+      }
+    }
+
+    return 'access (path is outside the workspace; use a path relative to the workspace root, without a leading "/")';
   }
 
   /**
@@ -274,6 +346,10 @@ export class LocalFilesystem extends MastraFilesystem {
    */
   private async assertPathContained(absolutePath: string): Promise<void> {
     if (!this._contained) return;
+
+    if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
+      return;
+    }
 
     // Resolve symlinks for the target path. If it doesn't exist,
     // there are no symlinks to escape through — nothing to check.
@@ -705,6 +781,15 @@ export class LocalFilesystem extends MastraFilesystem {
       ...result,
       path: this.toRelativePath(absolutePath),
     };
+  }
+
+  async realpath(inputPath: string): Promise<string> {
+    await this.ensureReady();
+    const absolutePath = this.resolvePath(inputPath);
+    await this.assertPathContained(absolutePath);
+
+    const canonicalPath = await fs.realpath(absolutePath);
+    return this.toRelativePath(canonicalPath);
   }
 
   /**

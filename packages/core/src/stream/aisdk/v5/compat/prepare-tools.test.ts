@@ -24,9 +24,10 @@ describe('prepareToolsAndToolChoice', () => {
 
       expect(result.tools).toBeDefined();
       expect(result.tools).toHaveLength(1);
+      // Tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
         args: { search_context_size: 'medium' },
       });
@@ -47,9 +48,10 @@ describe('prepareToolsAndToolChoice', () => {
       });
 
       expect(result.tools).toBeDefined();
+      // Tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider-defined',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
       });
     });
@@ -69,10 +71,35 @@ describe('prepareToolsAndToolChoice', () => {
         targetVersion: 'v3',
       });
 
+      // Tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'tools.web_search_20250305',
+        name: 'search',
         id: 'anthropic.tools.web_search_20250305',
+      });
+    });
+
+    it('should prefer tool.name over ID-derived name for versioned provider tools', () => {
+      // V5 Anthropic tools have name: "web_search" but id: "anthropic.web_search_20250305"
+      // The model-facing name should be "web_search" (from tool.name), not "web_search_20250305"
+      const v5AnthropicTool = {
+        id: 'anthropic.web_search_20250305',
+        type: 'provider-defined',
+        name: 'web_search',
+        args: {},
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { search: v5AnthropicTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'provider',
+        name: 'web_search',
+        id: 'anthropic.web_search_20250305',
       });
     });
 
@@ -93,9 +120,10 @@ describe('prepareToolsAndToolChoice', () => {
 
       expect(result.tools).toBeDefined();
       expect(result.tools).toHaveLength(1);
+      // V6 tools without .name use the user-provided object key
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
         args: { search_context_size: 'medium' },
       });
@@ -118,9 +146,10 @@ describe('prepareToolsAndToolChoice', () => {
       });
 
       expect(result.tools).toHaveLength(1);
+      // V6 tools don't have a .name property, so the user key is used
       expect(result.tools![0]).toMatchObject({
         type: 'provider',
-        name: 'web_search',
+        name: 'search',
         id: 'openai.web_search',
       });
     });
@@ -150,6 +179,56 @@ describe('prepareToolsAndToolChoice', () => {
         type: 'function',
         name: 'testTool',
         description: 'A test tool',
+      });
+    });
+
+    it('should pass strict through for v3 function tools', () => {
+      const strictTool = createTool({
+        id: 'strict-tool',
+        description: 'A strict test tool',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v3',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'strictTool',
+        strict: true,
+      });
+    });
+
+    it('should preserve strict in prepared v2 function tools for downstream router handoff', () => {
+      const strictTool = createTool({
+        id: 'strict-tool-v2',
+        description: 'A strict test tool for v2',
+        strict: true,
+        inputSchema: z.object({
+          query: z.string(),
+        }),
+        execute: async ({ query }) => `Result for: ${query}`,
+      });
+
+      const result = prepareToolsAndToolChoice({
+        tools: { strictTool: strictTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+      });
+
+      expect(result.tools![0]).toMatchObject({
+        type: 'function',
+        name: 'strictTool',
+        strict: true,
       });
     });
 
@@ -340,6 +419,24 @@ describe('prepareToolsAndToolChoice', () => {
         activeTools: undefined,
       });
 
+      expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+    it('should strip tools when toolChoice is "none" even when tools are non-empty (#14459)', () => {
+      // Regression test: workflow tools injected via listWorkflowTools() were still
+      // being serialized in the HTTP request even when toolChoice was set to none.
+      // Gemini rejects requests combining tools + structured output (response_format: json_schema).
+      const workflowTool = createTool({
+        id: 'workflow-tool',
+        description: 'A workflow tool injected by listWorkflowTools()',
+        inputSchema: z.object({ input: z.string() }),
+        execute: async () => ({ result: 'ok' }),
+      });
+      const result = prepareToolsAndToolChoice({
+        tools: { workflowTool },
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
       expect(result.tools).toBeUndefined();
       expect(result.toolChoice).toEqual({ type: 'none' });
     });

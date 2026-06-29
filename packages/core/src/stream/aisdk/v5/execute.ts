@@ -71,8 +71,9 @@ export function execute<OUTPUT = undefined>({
   });
 
   // Determine target version based on model's specificationVersion
-  // V3 models (AI SDK v6) need 'provider' type, V2 models need 'provider-defined'
-  const targetVersion: ModelSpecVersion = model.specificationVersion === 'v3' ? 'v3' : 'v2';
+  // V3 (AI SDK v6) and V4 (AI SDK v7) models need 'provider' type, V2 models need 'provider-defined'
+  const targetVersion: ModelSpecVersion =
+    model.specificationVersion === 'v3' || model.specificationVersion === 'v4' ? 'v3' : 'v2';
 
   const toolsAndToolChoice = prepareToolsAndToolChoice({
     tools,
@@ -87,7 +88,15 @@ export function execute<OUTPUT = undefined>({
       : 'direct'
     : undefined;
 
-  const responseFormat = structuredOutput?.schema ? getResponseFormat(structuredOutput?.schema) : undefined;
+  const responseFormat = structuredOutput?.schema
+    ? getResponseFormat(structuredOutput?.schema, {
+        model: {
+          provider: model.provider,
+          modelId: model.modelId,
+          supportsStructuredOutputs: true,
+        },
+      })
+    : undefined;
 
   let prompt = inputMessages;
 
@@ -99,9 +108,14 @@ export function execute<OUTPUT = undefined>({
     });
   }
 
-  // For processor mode (model provided for structuring agent), inject a custom prompt to inform the main agent about the structured output schema that the structuring agent will use
-  if (structuredOutputMode === 'processor' && responseFormat?.type === 'json' && responseFormat?.schema) {
-    // Add a system message to inform the main agent about what data it needs to generate
+  // For processor mode without agent reuse, inject a custom prompt to inform the main agent
+  // about the structured output schema that the structuring agent will use.
+  if (
+    structuredOutputMode === 'processor' &&
+    responseFormat?.type === 'json' &&
+    responseFormat?.schema &&
+    !structuredOutput?.useAgent
+  ) {
     prompt = injectJsonInstructionIntoMessages({
       messages: inputMessages,
       schema: responseFormat.schema,

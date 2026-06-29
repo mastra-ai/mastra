@@ -85,6 +85,7 @@ async function fixExportBugInDtsFile(dtsFile: string) {
 export default defineConfig({
   entry: ['src/index.ts', 'src/internal.ts', 'src/test.ts'],
   format: ['esm'],
+  target: 'node22',
   clean: true,
   dts: false,
   splitting: true,
@@ -119,5 +120,8 @@ export default defineConfig({
 
       await fixExportBugInDtsFile(dtsFile);
     }
+  },
+  env: {
+    NODE_ENV: 'production',
   },
 });

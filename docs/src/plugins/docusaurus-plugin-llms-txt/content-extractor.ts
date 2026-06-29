@@ -104,6 +104,7 @@ const CLASS_PATTERNS_TO_REMOVE = [
   // Note: tabs/tabs__item preserved for tab label extraction
   // Note: font-mono.*font-bold.*capitalize removed - was catching admonition titles
   /tocCollapsible/,
+  /copy-prompt/,
 ]
 
 // Pre-compiled aria-label patterns

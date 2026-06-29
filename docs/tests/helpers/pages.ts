@@ -23,9 +23,7 @@ export const pages: PageConfig[] = [
   { path: '/docs/observability/overview', name: 'Docs – Observability' },
   { path: '/docs/evals/running-in-ci', name: 'Docs – Evals CI' },
   { path: '/docs/voice/overview', name: 'Docs – Voice' },
-  { path: '/docs/streaming/overview', name: 'Docs – Streaming' },
   { path: '/docs/deployment/overview', name: 'Docs – Deployment' },
-  { path: '/docs/mastra-cloud/overview', name: 'Docs – Mastra Cloud' },
 
   // --- Models ---
   { path: '/models', name: 'Models – Index' },

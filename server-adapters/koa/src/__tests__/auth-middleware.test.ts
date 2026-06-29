@@ -47,7 +47,7 @@ describe('Koa auth middleware helper', () => {
     app.use(createAuthMiddleware({ mastra }));
     app.use(async ctx => {
       if (ctx.path === '/custom/protected') {
-        const user = ctx.state.requestContext.get('user') as { id: string };
+        const user = ctx.state.requestContext.get('mastra__user') as { id: string };
         ctx.body = { userId: user.id };
         return;
       }

@@ -1,9 +1,10 @@
 ---
-title: "Server adapters | Server"
-description: "Manually configure a Mastra server using Hono or Express adapters."
+title: "Server Adapters | Server"
+description: "Manually configure a Mastra server using Express, Hono, Fastify, Koa, or NestJS adapters."
 packages:
   - "@mastra/express"
   - "@mastra/hono"
+  - "@mastra/nestjs"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -23,7 +24,7 @@ Server adapters let you run Mastra with your own HTTP server instead of the Hono
 
 For deployments without custom server requirements, use `mastra build` instead. It configures server setup, registers middleware, and applies deployment settings based on your project configuration. See [Server Configuration](/docs/server/mastra-server).
 
-If you want to use [Studio](/docs/getting-started/studio) with your server adapter, use [`mastra studio`](/reference/cli/mastra#mastra-studio) to only launch the Studio UI.
+If you want to use [Studio](/docs/studio/overview) with your server adapter, use [`mastra studio`](/reference/cli/mastra#mastra-studio) to only launch the Studio UI.
 
 :::
 
@@ -35,6 +36,7 @@ Mastra currently provides these official server adapters:
 - [@mastra/hono](/reference/server/hono-adapter)
 - [@mastra/fastify](/reference/server/fastify-adapter)
 - [@mastra/koa](/reference/server/koa-adapter)
+- [@mastra/nestjs](/reference/server/nestjs-adapter)
 
 You can build your own adapter, read [custom adapters](/docs/server/custom-adapters) for details.
 
@@ -64,6 +66,12 @@ Install the adapter for the framework of your choice.
   <TabItem value="koa" label="Koa">
     ```bash npm2yarn
     npm install @mastra/koa@latest
+    ```
+  </TabItem>
+
+  <TabItem value="nestjs" label="NestJS">
+    ```bash npm2yarn
+    npm install @mastra/nestjs@latest
     ```
   </TabItem>
 </Tabs>
@@ -190,6 +198,41 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     :::info
 
     See the [Koa Adapter](/reference/server/koa-adapter) documentation for full configuration options.
+
+    :::
+  </TabItem>
+
+  <TabItem value="nestjs" label="NestJS">
+    ```typescript title="src/app.module.ts"
+    import { Module } from '@nestjs/common'
+    import { MastraModule } from '@mastra/nestjs'
+    import { mastra } from './mastra'
+
+    @Module({
+      imports: [
+        MastraModule.register({
+          mastra,
+        }),
+      ],
+    })
+    export class AppModule {}
+    ```
+
+    ```typescript title="src/main.ts"
+    import { NestFactory } from '@nestjs/core'
+    import { AppModule } from './app.module'
+
+    async function bootstrap() {
+      const app = await NestFactory.create(AppModule)
+      await app.listen(3000)
+    }
+
+    bootstrap()
+    ```
+
+    :::info
+
+    See the [NestJS Adapter](/reference/server/nestjs-adapter) documentation for full configuration options.
 
     :::
   </TabItem>
@@ -396,7 +439,21 @@ The adapter registers routes for both HTTP and SSE (Server-Sent Events) transpor
 
 ### Serverless mode
 
-For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`:
+For serverless environments like Cloudflare Workers or Vercel Edge, enable stateless mode via `mcpOptions`.
+
+When using the Mastra deployer (the standard `mastra dev` / `mastra build` path), set `mcpOptions` in your server config:
+
+```typescript
+const mastra = new Mastra({
+  server: {
+    mcpOptions: {
+      serverless: true,
+    },
+  },
+})
+```
+
+When manually creating a server adapter, pass `mcpOptions` directly:
 
 ```typescript
 const server = new MastraServer({
@@ -416,6 +473,7 @@ See [MCP](/docs/mcp/overview) for configuration details and how to set up MCP se
 
 - [Hono Adapter](/reference/server/hono-adapter) - Hono-specific setup
 - [Express Adapter](/reference/server/express-adapter) - Express-specific setup
+- [NestJS Adapter](/reference/server/nestjs-adapter) - NestJS-specific setup
 - [Custom Adapters](/docs/server/custom-adapters) - Building adapters for other frameworks
 - [Server Configuration](/docs/server/mastra-server) - Using `mastra build` instead
 - [Authentication](/docs/server/auth) - Configuring auth for your server

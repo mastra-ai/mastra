@@ -17,13 +17,14 @@
 import { test, expect } from '@playwright/test';
 import { setupViewerAuth, setupMockAuth } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Viewer Role', () => {
   test.afterEach(async () => {
     await resetStorage();
   });
 
-  test.describe('Navigation Access', () => {
+  test.describe('when a viewer user navigates the studio', () => {
     // TODO: Re-enable after the viewer RBAC/sidebar expectations are reconciled with
     // the current Observability section behavior: Metrics stays visible, so the
     // section header can still render even when Traces is hidden.
@@ -34,7 +35,7 @@ test.describe('Viewer Role', () => {
       await page.goto('/agents');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Viewer can read agents and workflows
       await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
@@ -55,21 +56,21 @@ test.describe('Viewer Role', () => {
 
       // Navigate to agents
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Navigate to workflows
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
     });
   });
 
-  test.describe('Agents Access - Read Only', () => {
+  test.describe('when a viewer user accesses agents read-only', () => {
     test('viewer can view agents list', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents');
 
       // Should see the agents page
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see agents in the list
       await expect(page.getByText('Weather Agent')).toBeVisible();
@@ -103,7 +104,7 @@ test.describe('Viewer Role', () => {
       await page.goto('/agents');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Viewer should NOT see create agent button
       const createButton = page.getByRole('button', { name: /create agent|new agent|add agent/i });
@@ -122,16 +123,16 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Workflows Access - Read Only', () => {
+  test.describe('when a viewer user accesses workflows read-only', () => {
     test('viewer can view workflows list', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/workflows');
 
       // Should see the workflows page
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.getByRole('row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -141,7 +142,7 @@ test.describe('Viewer Role', () => {
 
       // Click on a workflow
       await page
-        .getByRole('row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -169,7 +170,7 @@ test.describe('Viewer Role', () => {
       await page.goto('/workflows');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Viewer should NOT see create workflow button
       const createButton = page.getByRole('button', { name: /create workflow|new workflow|add workflow/i });
@@ -195,28 +196,15 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Tools Access - No Permission', () => {
+  test.describe('when a viewer user accesses tools without permission', () => {
     test('viewer navigating to tools page handles gracefully', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/tools');
 
-      // Viewer does NOT have tools:read permission
-      // The page might show permission denied or redirect
-      // Either behavior is acceptable for no tools access
-
-      // Wait for page to load with a timeout
-      await page.waitForLoadState('domcontentloaded');
-
-      // Check if we're still on tools page or redirected
-      const currentUrl = page.url();
-
-      if (currentUrl.includes('/tools')) {
-        // If still on tools page, might see permission denied or empty state or the tools list
-        // The heading should be visible either way
-        const heading = page.locator('h1');
-        await expect(heading).toBeVisible({ timeout: 5000 });
-      }
-      // If redirected, that's also acceptable
+      // Viewer does NOT have tools:read permission.
+      // RoutePermissionGuard redirects to the first accessible route (/agents).
+      await page.waitForURL(/\/agents(\/|$)/);
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('viewer cannot access tool execution', async ({ page }) => {
@@ -237,7 +225,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Permission Verification', () => {
+  test.describe('when verifying the viewer permission set', () => {
     test('viewer has correct read-only permissions', async ({ page }) => {
       // Set up viewer with explicit permission verification
       await setupMockAuth(page, {
@@ -247,11 +235,11 @@ test.describe('Viewer Role', () => {
 
       // Viewer can access agents (read)
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Viewer can access workflows (read)
       await page.goto('/workflows');
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
     });
 
     test('viewer sees correct user info', async ({ page }) => {
@@ -260,7 +248,7 @@ test.describe('Viewer Role', () => {
 
       // The viewer user info should be reflected in the UI
       // Page should load successfully
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // User info might be displayed in menu/avatar
       // Verify page loads correctly with viewer auth
@@ -284,7 +272,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Viewer vs Other Roles Comparison', () => {
+  test.describe('when comparing the viewer role to other roles', () => {
     test('viewer has fewer permissions than admin', async ({ page }) => {
       // First, check viewer view
       await setupViewerAuth(page);
@@ -363,7 +351,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Read-Only UI State', () => {
+  test.describe('when the viewer-only UI state is rendered', () => {
     test('viewer sees read-only agent chat with disabled input', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents/weather-agent/chat');
@@ -411,13 +399,13 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Action Buttons Verification', () => {
+  test.describe('when verifying action buttons for a viewer', () => {
     test('action buttons are hidden or disabled on agents page', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // Create/Add buttons should not be visible for viewer
       const createButton = page.getByRole('button', { name: /create|add|new/i });
@@ -429,7 +417,7 @@ test.describe('Viewer Role', () => {
       await page.goto('/workflows');
 
       // Wait for page to load
-      await expect(page.locator('h1')).toHaveText('Workflows');
+      await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Create/Add buttons should not be visible for viewer
       const createButton = page.getByRole('button', { name: /create|add|new/i });

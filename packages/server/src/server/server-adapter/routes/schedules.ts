@@ -1,0 +1,16 @@
+import {
+  GET_SCHEDULE_ROUTE,
+  LIST_SCHEDULES_ROUTE,
+  LIST_SCHEDULE_TRIGGERS_ROUTE,
+  PAUSE_SCHEDULE_ROUTE,
+  RESUME_SCHEDULE_ROUTE,
+} from '../../handlers/schedules';
+import type { ServerRoute } from '.';
+
+export const SCHEDULES_ROUTES: ServerRoute<any, any, any>[] = [
+  LIST_SCHEDULES_ROUTE,
+  GET_SCHEDULE_ROUTE,
+  LIST_SCHEDULE_TRIGGERS_ROUTE,
+  PAUSE_SCHEDULE_ROUTE,
+  RESUME_SCHEDULE_ROUTE,
+];

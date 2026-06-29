@@ -5,6 +5,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { TypeDetector } from '../detection/TypeDetector';
 import { convertDataContentToBase64String } from '../prompt/data-content';
 import { categorizeFileData, createDataUri, imageContentToString } from '../prompt/image-utils';
@@ -18,12 +19,47 @@ import type {
 } from '../state/types';
 import { findToolCallArgs } from '../utils/provider-compat';
 
+function getDisplayTransform(
+  providerMetadata: unknown,
+  phase: 'input-available' | 'output-available' | 'error',
+  fallback: unknown,
+  enabled = true,
+) {
+  if (!enabled) {
+    return fallback;
+  }
+  const transform = getTransformedToolPayload(providerMetadata, 'display', phase);
+  return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
+}
+
+function transformV4ToolInvocationForDisplay(
+  invocation: NonNullable<MastraMessageContentV2['toolInvocations']>[number],
+  providerMetadata: unknown,
+  enabled: boolean,
+) {
+  return {
+    ...invocation,
+    args: getDisplayTransform(providerMetadata, 'input-available', invocation.args, enabled),
+    ...(invocation.state === 'result'
+      ? {
+          result: getDisplayTransform(
+            providerMetadata,
+            'output-available',
+            getDisplayTransform(providerMetadata, 'error', invocation.result, enabled),
+            enabled,
+          ),
+        }
+      : {}),
+  };
+}
+
 /**
- * Filter out data-* parts from MastraMessagePart[] to get V4-compatible parts.
- * Data parts are a Mastra extension for custom streaming data and aren't supported by AI SDK V4.
+ * Cast Mastra parts (including data-* extensions) to the V4 UI parts type.
+ * Data-* parts (e.g. data-tool-call-suspended) are not natively typed in AI SDK V4,
+ * but must be preserved so features like HITL workflow resumption work after a page refresh.
  */
-function filterDataParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
-  return parts.filter((part): part is UIMessageV4Part => !part.type.startsWith('data-'));
+function preserveExtendedParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
+  return parts as UIMessageV4Part[];
 }
 
 /**
@@ -42,6 +78,64 @@ function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
     }
     return true;
   });
+}
+
+function getSignalType(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const type = (signal as Record<string, unknown>).type;
+    return typeof type === 'string' ? type : message.type;
+  }
+
+  return message.type;
+}
+
+function getSignalTagName(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const tagName = (signal as Record<string, unknown>).tagName;
+    if (typeof tagName === 'string') return tagName;
+  }
+
+  const type = getSignalType(message);
+  if (type === 'user') return 'user';
+  if (type === 'reactive') return message.type;
+  return type;
+}
+
+function isUserSignalType(type: string | undefined): boolean {
+  return type === 'user' || type === 'user-message';
+}
+
+function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
+  const signal =
+    message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
+      ? (message.content.metadata.signal as Record<string, unknown>)
+      : {};
+  const metadata =
+    signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
+      ? (signal.metadata as Record<string, unknown>)
+      : {};
+  const attributes =
+    signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : {};
+
+  const type = getSignalType(message) ?? 'signal';
+  const tagName = getSignalTagName(message) ?? type;
+  return {
+    type: type === 'user' ? 'data-user-message' : 'data-signal',
+    data: {
+      id: typeof signal.id === 'string' ? signal.id : message.id,
+      type,
+      tagName,
+      contents: 'contents' in signal ? signal.contents : contents,
+      createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(Object.keys(attributes).length ? { attributes } : {}),
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    },
+  } as MastraMessagePart;
 }
 
 // Re-export for backward compatibility
@@ -64,7 +158,8 @@ export class AIV4Adapter {
   /**
    * Convert MastraDBMessage to AI SDK V4 UIMessage
    */
-  static toUIMessage(m: MastraDBMessage): UIMessageWithMetadata {
+  static toUIMessage(m: MastraDBMessage, options?: { transformToolPayloads?: boolean }): UIMessageWithMetadata {
+    const transformToolPayloads = options?.transformToolPayloads ?? true;
     const experimentalAttachments: UIMessageWithMetadata['experimental_attachments'] = m.content
       .experimental_attachments
       ? [...m.content.experimental_attachments]
@@ -114,7 +209,30 @@ export class AIV4Adapter {
           continue;
         } else if (part.type === 'tool-invocation') {
           // Handle tool invocations with step number logic
-          const toolInvocation = { ...part.toolInvocation };
+          const toolInvocation = {
+            ...part.toolInvocation,
+            args: getDisplayTransform(
+              part.providerMetadata,
+              'input-available',
+              part.toolInvocation.args,
+              transformToolPayloads,
+            ),
+            ...(part.toolInvocation.state === 'result'
+              ? {
+                  result: getDisplayTransform(
+                    part.providerMetadata,
+                    'output-available',
+                    getDisplayTransform(
+                      part.providerMetadata,
+                      'error',
+                      part.toolInvocation.result,
+                      transformToolPayloads,
+                    ),
+                    transformToolPayloads,
+                  ),
+                }
+              : {}),
+          };
 
           // Find the step number for this tool invocation
           let currentStep = -1;
@@ -156,8 +274,11 @@ export class AIV4Adapter {
       parts.push({ type: 'text', text: '' });
     }
 
-    // Filter out data-* parts when converting to UIMessageV4 (V4 doesn't support them)
-    const v4Parts = filterDataParts(parts);
+    const signalType = m.role === 'signal' ? getSignalType(m) : undefined;
+    const isUserMessageSignal = isUserSignalType(signalType);
+    const v4Parts = preserveExtendedParts(
+      m.role === 'signal' && !isUserMessageSignal ? [toSignalDataPart(m, m.content.content || contentString)] : parts,
+    );
 
     if (m.role === `user`) {
       const uiMessage: UIMessageWithMetadata = {
@@ -185,7 +306,21 @@ export class AIV4Adapter {
         parts: v4Parts,
         reasoning: undefined,
         toolInvocations:
-          `toolInvocations` in m.content ? m.content.toolInvocations?.filter(t => t.state === 'result') : undefined,
+          `toolInvocations` in m.content
+            ? m.content.toolInvocations
+                ?.filter(t => t.state === 'result')
+                .map(toolInvocation => {
+                  const partProviderMetadata = m.content.parts?.find(
+                    part =>
+                      part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolInvocation.toolCallId,
+                  )?.providerMetadata;
+                  return transformV4ToolInvocationForDisplay(
+                    toolInvocation,
+                    partProviderMetadata,
+                    transformToolPayloads,
+                  );
+                })
+            : undefined,
       };
       // Preserve metadata if present
       if (m.content.metadata) {
@@ -196,8 +331,8 @@ export class AIV4Adapter {
 
     const uiMessage: UIMessageWithMetadata = {
       id: m.id,
-      role: m.role,
-      content: m.content.content || contentString,
+      role: m.role === 'signal' ? (isUserMessageSignal ? 'user' : 'system') : m.role,
+      content: m.role === 'signal' && !isUserMessageSignal ? '' : m.content.content || contentString,
       createdAt: m.createdAt,
       parts: v4Parts,
       experimental_attachments: experimentalAttachments,
@@ -312,7 +447,7 @@ export class AIV4Adapter {
               parts.push({ type: 'step-start' });
             }
 
-            const part: MastraDBMessage['content']['parts'][number] = {
+            const part: UIMessageV4Part = {
               type: 'text' as const,
               text: aiV4Part.text,
             };
@@ -324,7 +459,7 @@ export class AIV4Adapter {
           }
 
           case 'tool-call': {
-            const part: MastraDBMessage['content']['parts'][number] = {
+            const part: UIMessageV4Part = {
               type: 'tool-invocation' as const,
               toolInvocation: {
                 state: 'call',
@@ -367,7 +502,7 @@ export class AIV4Adapter {
                 args: toolArgs,
               };
 
-              const part: MastraDBMessage['content']['parts'][number] = {
+              const part: UIMessageV4Part = {
                 type: 'tool-invocation',
                 toolInvocation: invocation,
               };

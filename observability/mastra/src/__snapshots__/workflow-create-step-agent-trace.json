@@ -6,7 +6,8 @@
     "│   └── agent_run: \"agent run: 'workflow-agent'\"",
     "│       └── model_generation: \"llm: 'mock-model-id'\"",
     "│           └── model_step: \"step: 0\"",
-    "│               └── model_chunk: \"chunk: 'text'\"",
+    "│               └── model_inference: \"inference: 0\"",
+    "│                   └── model_chunk: \"chunk: 'text'\"",
     "└── workflow_step: \"workflow step: 'mapping_<mapping-2>'\""
   ],
   "spans": [
@@ -25,7 +26,8 @@
           "status": "success"
         },
         "metadata": {
-          "runId": "<runId-1>"
+          "runId": "<runId-1>",
+          "environment": "test"
         },
         "input": {
           "query": "test query"
@@ -51,7 +53,8 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "query": "test query"
@@ -77,7 +80,8 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "prompt": "test query"
@@ -103,7 +107,8 @@
                   "instructions": "You are an agent in a workflow"
                 },
                 "metadata": {
-                  "runId": "<runId-2>"
+                  "runId": "<runId-2>",
+                  "environment": "test"
                 },
                 "input": "test query",
                 "output": {
@@ -128,9 +133,7 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {
-                        "temperature": 0
-                      },
+                      "parameters": {},
                       "finishReason": "stop",
                       "responseId": "1",
                       "completionStartTime": "<date>",
@@ -143,10 +146,12 @@
                         "outputDetails": {
                           "text": 20
                         }
-                      }
+                      },
+                      "responseModel": ""
                     },
                     "metadata": {
-                      "runId": "<runId-2>"
+                      "runId": "<runId-2>",
+                      "environment": "test"
                     },
                     "input": {
                       "messages": [
@@ -204,13 +209,23 @@
                         },
                         "metadata": {
                           "runId": "<runId-2>",
+                          "environment": "test",
                           "modelMetadata": {
                             "modelId": "mock-model-id",
                             "modelVersion": "v2",
                             "modelProvider": "mock-provider"
                           }
                         },
-                        "input": {},
+                        "input": [
+                          {
+                            "role": "system",
+                            "content": "You are an agent in a workflow"
+                          },
+                          {
+                            "role": "user",
+                            "content": "test query"
+                          }
+                        ],
                         "output": {
                           "text": "Test response from agent",
                           "toolCalls": []
@@ -221,8 +236,8 @@
                           "span": {
                             "id": "<span-7>",
                             "traceId": "<trace-1>",
-                            "name": "chunk: 'text'",
-                            "type": "model_chunk",
+                            "name": "inference: 0",
+                            "type": "model_inference",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
@@ -230,16 +245,62 @@
                             "entityType": "agent",
                             "entityId": "workflow-agent",
                             "attributes": {
-                              "chunkType": "text",
-                              "sequenceNumber": 0
+                              "stepIndex": 0,
+                              "model": "mock-model-id",
+                              "provider": "mock-provider",
+                              "streaming": true,
+                              "parameters": {},
+                              "availableTools": [],
+                              "toolChoice": "auto",
+                              "usage": {
+                                "inputTokens": 10,
+                                "outputTokens": 20,
+                                "inputDetails": {
+                                  "text": 10
+                                },
+                                "outputDetails": {
+                                  "text": 20
+                                }
+                              },
+                              "finishReason": "stop",
+                              "completionStartTime": "<date>"
                             },
                             "metadata": {
-                              "runId": "<runId-2>"
+                              "runId": "<runId-2>",
+                              "environment": "test"
                             },
                             "output": {
-                              "text": "Test response from agent"
+                              "text": "Test response from agent",
+                              "toolCalls": []
                             }
-                          }
+                          },
+                          "children": [
+                            {
+                              "span": {
+                                "id": "<span-8>",
+                                "traceId": "<trace-1>",
+                                "name": "chunk: 'text'",
+                                "type": "model_chunk",
+                                "completed": true,
+                                "isEvent": false,
+                                "isRootSpan": false,
+                                "parentId": "<span-7>",
+                                "entityType": "agent",
+                                "entityId": "workflow-agent",
+                                "attributes": {
+                                  "chunkType": "text",
+                                  "sequenceNumber": 0
+                                },
+                                "metadata": {
+                                  "runId": "<runId-2>",
+                                  "environment": "test"
+                                },
+                                "output": {
+                                  "text": "Test response from agent"
+                                }
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -251,7 +312,7 @@
         },
         {
           "span": {
-            "id": "<span-8>",
+            "id": "<span-9>",
             "traceId": "<trace-1>",
             "name": "workflow step: 'mapping_<mapping-2>'",
             "type": "workflow_step",
@@ -265,7 +326,8 @@
               "status": "success"
             },
             "metadata": {
-              "runId": "<runId-1>"
+              "runId": "<runId-1>",
+              "environment": "test"
             },
             "input": {
               "text": "Test response from agent"

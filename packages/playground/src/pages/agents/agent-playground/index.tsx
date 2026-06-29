@@ -1,42 +1,56 @@
-import {
-  AgentPlaygroundView,
-  AgentEditFormProvider,
-  useAgent,
-  useStoredAgent,
-  useAgentCmsForm,
-  useAgentVersions,
-  useAgentVersion,
-  useMemory,
-  mapAgentResponseToDataSource,
-  Spinner,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
+import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
+import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-agent-versions';
+import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
+import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
+import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
 function AgentPlayground() {
   const { agentId } = useParams();
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
   const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, { status: 'draft' });
   const { data: memory } = useMemory(agentId!);
+  const editorSource = useEditorSource();
+  const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
+
+  // Fetch versions first — this endpoint returns an empty array for code-only agents
+  const { data: versionsData } = useAgentVersions({
+    agentId: agentId ?? '',
+    params: { orderBy: { direction: 'DESC' } },
+  });
+
+  // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
+  const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, {
+    status: 'draft',
+    enabled: hasVersions,
+  });
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isLoading = isLoadingCodeAgent || isLoadingStoredAgent;
+  const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
+  const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
+  const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
+  const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
+  const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
+  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
   const hasMemory = Boolean(memory?.result);
 
   // Fetch version data when a specific version is selected
   const { data: versionData } = useAgentVersion({
     agentId: agentId ?? '',
     versionId: selectedVersionId ?? '',
-  });
-
-  const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
-    params: { sortDirection: 'DESC' },
   });
 
   const activeVersionId = storedAgent?.activeVersionId;
@@ -55,14 +69,38 @@ function AgentPlayground() {
     return {} as AgentDataSource;
   }, [isViewingVersion, versionData, storedAgent, codeAgent]);
 
-  const { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, isDirty } = useAgentCmsForm({
+  const {
+    form,
+    handlePublish,
+    handleSaveDraft,
+    handleDownloadJson,
+    handleOpenPr,
+    isSubmitting,
+    isSavingDraft,
+    isDirty,
+  } = useAgentCmsForm({
     mode: 'edit',
     agentId: agentId ?? '',
     dataSource,
     isCodeAgentOverride,
     hasStoredOverride: isCodeAgentOverride && !!storedAgent,
+    editorConfig: codeAgent?.editor,
+    saveSuccessMessage: isCodeSourceAgent ? 'Saved to filesystem' : undefined,
     onSuccess: () => {},
   });
+
+  const handlePublishVersion = useCallback(async () => {
+    if (isViewingPreviousVersion && selectedVersionId) {
+      await handlePublish(selectedVersionId);
+    } else {
+      await handlePublish();
+    }
+  }, [handlePublish, isViewingPreviousVersion, selectedVersionId]);
+
+  const handleOpenPrClick = useCallback(async () => {
+    if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId) return;
+    await handleOpenPr({ platformApiEndpoint: mastraPlatformApiEndpoint, projectId: mastraPlatformProjectId });
+  }, [handleOpenPr, mastraPlatformApiEndpoint, mastraPlatformProjectId]);
 
   const handleVersionSelect = useCallback(
     (versionId: string) => {
@@ -75,6 +113,14 @@ function AgentPlayground() {
     },
     [latestVersion?.id],
   );
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (
@@ -106,12 +152,15 @@ function AgentPlayground() {
       handlePublish={handlePublish}
       handleSaveDraft={handleSaveDraft}
       isCodeAgentOverride={isCodeAgentOverride}
-      readOnly={isViewingPreviousVersion}
+      isCodeSourceAgent={isCodeSourceAgent}
+      readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
+      editorConfig={codeAgent?.editor}
     >
       <AgentPlaygroundView
         agentId={agentId!}
         agentName={codeAgent?.name}
         modelVersion={codeAgent?.modelVersion}
+        agentVersionId={isViewingPreviousVersion ? (selectedVersionId ?? undefined) : undefined}
         hasMemory={hasMemory}
         activeVersionId={activeVersionId}
         selectedVersionId={selectedVersionId ?? undefined}
@@ -121,9 +170,16 @@ function AgentPlayground() {
         isSavingDraft={isSavingDraft}
         isPublishing={isSubmitting}
         hasDraft={hasDraft}
-        readOnly={isViewingPreviousVersion}
+        readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
+        isCodeSourceAgent={isCodeSourceAgent}
+        showCodeModeActions={showCodeModeActions}
+        canOpenPr={canOpenPr}
+        openPrTitle={openPrTitle}
         onSaveDraft={handleSaveDraft}
-        onPublish={handlePublish}
+        onPublish={handlePublishVersion}
+        onDownloadJson={handleDownloadJson}
+        onOpenPr={handleOpenPrClick}
+        isViewingPreviousVersion={isViewingPreviousVersion}
       />
     </AgentEditFormProvider>
   );

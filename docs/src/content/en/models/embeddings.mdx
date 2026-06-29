@@ -47,12 +47,12 @@ const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
 The model router automatically detects API keys from environment variables:
 
 - **OpenAI**: `OPENAI_API_KEY`
-- **Google**: `GOOGLE_GENERATIVE_AI_API_KEY`
+- **Google**: `GOOGLE_API_KEY` (falls back to `GOOGLE_GENERATIVE_AI_API_KEY`)
 
 ```bash
 # .env
 OPENAI_API_KEY=sk-...
-GOOGLE_GENERATIVE_AI_API_KEY=...
+GOOGLE_API_KEY=...
 ```
 
 ## Custom Providers
@@ -167,6 +167,6 @@ try {
 
 ## Next Steps
 
-- [Memory & Semantic Recall](/docs/memory/semantic-recall) - Use embeddings for agent memory
-- [RAG & Chunking](/docs/rag/chunking-and-embedding) - Build retrieval-augmented generation systems
-- [Vector Databases](/docs/rag/vector-databases) - Store and query embeddings
+- [Memory & Semantic Recall](/docs/memory/semantic-recall): Use embeddings for agent memory
+- [RAG & Chunking](/docs/rag/chunking-and-embedding): Build retrieval-augmented generation systems
+- [Vector Databases](/docs/rag/vector-databases): Store and query embeddings

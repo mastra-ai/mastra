@@ -10,12 +10,16 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
+import { RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
+import { PUBSUB_SYMBOL } from './constants';
+import { createWorkflow } from './create';
 import type { Workflow } from './types';
-import { createStep, createWorkflow } from './workflow';
+import { createStep } from './workflow';
 
 // ============================================================================
 // Shared Test Suite (Default Engine)
@@ -86,6 +90,10 @@ createWorkflowTestSuite({
     // requiring direct Mastra registration which the shared suite can't do.
     // The test remains in workflow.test.ts as a default-engine-specific test.
     resumeMapBranchCondition: true,
+
+    //default engine uses the same runId for parent and nested workflows which makes this test fail.
+    //The test will be added in workflow.test.ts as a default-engine-specific test.
+    restartNested: true,
   },
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
@@ -616,6 +624,455 @@ describe('Workflow (Default Engine Specifics)', () => {
       // The tracingContext should exist in the snapshot (may be undefined if no observability was configured)
       // The key is that the field structure is preserved in the snapshot
       expect('tracingContext' in (snapshot ?? {})).toBe(true);
+    });
+  });
+
+  describe('Nested workflow resourceId propagation (issue #15246)', () => {
+    it('persists the parent run resourceId on nested child workflow snapshots', async () => {
+      const storage = new MockStore();
+      const mastra = new Mastra({ logger: false, storage });
+
+      const childStep = createStep({
+        id: 'child-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        execute: async ({ inputData }) => ({ echoed: inputData.value }),
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'nested-resource-id-child',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        steps: [childStep],
+      })
+        .then(childStep)
+        .commit();
+
+      const parentWorkflow = createWorkflow({
+        id: 'nested-resource-id-parent',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ echoed: z.string() }),
+        steps: [childWorkflow],
+      })
+        .then(childWorkflow)
+        .commit();
+
+      parentWorkflow.__registerMastra(mastra);
+
+      const run = await parentWorkflow.createRun({ resourceId: 'workspace-1' });
+      const result = await run.start({ inputData: { value: 'hello' } });
+
+      expect(result.status).toBe('success');
+
+      const workflowsStore = await storage.getStore('workflows');
+
+      const parentRuns = await workflowsStore?.listWorkflowRuns({
+        workflowName: 'nested-resource-id-parent',
+        resourceId: 'workspace-1',
+      });
+      expect(parentRuns?.runs.length).toBe(1);
+      expect(parentRuns?.runs[0]?.resourceId).toBe('workspace-1');
+
+      const childRuns = await workflowsStore?.listWorkflowRuns({
+        workflowName: 'nested-resource-id-child',
+      });
+      expect(childRuns?.runs.length).toBe(1);
+      // Regression guard for #15246: child workflow snapshots must inherit the parent's resourceId.
+      expect(childRuns?.runs[0]?.resourceId).toBe('workspace-1');
+    });
+  });
+
+  describe('FGA checks', () => {
+    function createFGAWorkflow() {
+      const step = createStep({
+        id: 'fga-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      return createWorkflow({
+        id: 'fga-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+    }
+
+    it('checks internal workflow execution FGA with request context metadata', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      const result = await (workflow as any).execute({
+        runId: 'run-1',
+        resourceId: 'tenant-1',
+        inputData: { value: 'ok' },
+        state: {},
+        setState: vi.fn(),
+        suspend: vi.fn(),
+        [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+        mastra,
+        requestContext,
+        abort: vi.fn(),
+        abortSignal: new AbortController().signal,
+        engine: 'default',
+        bail: vi.fn(),
+      });
+
+      expect(result).toEqual({ value: 'ok' });
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'workflow', id: 'fga-workflow' },
+          permission: 'workflows:execute',
+          context: expect.objectContaining({
+            resourceId: 'tenant-1',
+            requestContext,
+            metadata: expect.objectContaining({
+              workflowId: 'fga-workflow',
+              runId: 'run-1',
+              resourceId: 'tenant-1',
+            }),
+          }),
+        },
+      );
+    });
+
+    it('fails closed when internal workflow FGA is configured and no user is available', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      await expect(
+        (workflow as any).execute({
+          runId: 'run-2',
+          inputData: { value: 'ok' },
+          state: {},
+          setState: vi.fn(),
+          suspend: vi.fn(),
+          [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+          mastra,
+          requestContext: new RequestContext(),
+          abort: vi.fn(),
+          abortSignal: new AbortController().signal,
+          engine: 'default',
+          bail: vi.fn(),
+        }),
+      ).rejects.toThrow('authenticated user is required');
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('bypasses membership resolution for a tenant-scoped trusted actor', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      const result = await (workflow as any).execute({
+        runId: 'run-3',
+        inputData: { value: 'ok' },
+        state: {},
+        setState: vi.fn(),
+        suspend: vi.fn(),
+        [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+        mastra,
+        requestContext,
+        actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+        abort: vi.fn(),
+        abortSignal: new AbortController().signal,
+        engine: 'default',
+        bail: vi.fn(),
+      });
+
+      expect(result).toEqual({ value: 'ok' });
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Nested workflow abort listener cleanup (issue #16125)', () => {
+    it('removes abort listeners after nested workflow execution completes', async () => {
+      const activeAbortListeners = new Map<AbortSignal, Set<EventListenerOrEventListenerObject>>();
+      const originalAddEventListener = AbortSignal.prototype.addEventListener;
+      const originalRemoveEventListener = AbortSignal.prototype.removeEventListener;
+      const addAbortListener = (signal: AbortSignal, listener: EventListenerOrEventListenerObject) => {
+        let listeners = activeAbortListeners.get(signal);
+        if (!listeners) {
+          listeners = new Set();
+          activeAbortListeners.set(signal, listeners);
+        }
+        listeners.add(listener);
+      };
+      const removeAbortListener = (signal: AbortSignal, listener: EventListenerOrEventListenerObject) => {
+        activeAbortListeners.get(signal)?.delete(listener);
+      };
+
+      const addEventListenerSpy = vi.spyOn(AbortSignal.prototype, 'addEventListener').mockImplementation(function (
+        this: AbortSignal,
+        ...args: Parameters<EventTarget['addEventListener']>
+      ) {
+        const [type, listener] = args;
+        if (type === 'abort' && listener) {
+          addAbortListener(this, listener);
+        }
+        return originalAddEventListener.apply(this, args);
+      });
+      const removeEventListenerSpy = vi
+        .spyOn(AbortSignal.prototype, 'removeEventListener')
+        .mockImplementation(function (this: AbortSignal, ...args: Parameters<EventTarget['removeEventListener']>) {
+          const [type, listener] = args;
+          if (type === 'abort' && listener) {
+            removeAbortListener(this, listener);
+          }
+          return originalRemoveEventListener.apply(this, args);
+        });
+
+      try {
+        const childStep = createStep({
+          id: 'abort-cleanup-child-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ echoed: z.string() }),
+          execute: async ({ inputData }) => ({ echoed: inputData.value }),
+        });
+
+        const childWorkflow = createWorkflow({
+          id: 'abort-cleanup-child-workflow',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ echoed: z.string() }),
+          steps: [childStep],
+        })
+          .then(childStep)
+          .commit();
+
+        const result = await (childWorkflow as any).execute({
+          inputData: { value: 'hello' },
+          state: {},
+          setState: vi.fn(),
+          suspend: vi.fn(),
+          [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+          mastra: new Mastra({ logger: false }),
+          abort: vi.fn(),
+          abortSignal: new AbortController().signal,
+          engine: 'default',
+          bail: vi.fn(),
+        });
+
+        expect(result).toEqual({ echoed: 'hello' });
+        expect([...activeAbortListeners.values()].reduce((count, listeners) => count + listeners.size, 0)).toBe(0);
+      } finally {
+        addEventListenerSpy.mockRestore();
+        removeEventListenerSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('Nested workflow restart', () => {
+    it('should restart a workflow execution that was previously active and has nested workflows', async () => {
+      const storage = new MockStore();
+      const mastra = new Mastra({ logger: false, storage });
+
+      const mockStep1 = vi.fn().mockResolvedValue({ step1Result: 2 });
+      const mockStep2 = vi.fn().mockResolvedValue({ step2Result: 3 });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: mockStep1,
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ step1Result: z.number() }),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        execute: mockStep2,
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ step2Result: z.number() }),
+      });
+
+      const step3 = createStep({
+        id: 'step3',
+        execute: async ({ inputData }) => ({
+          nestedFinal: inputData.step2Result + 1,
+        }),
+        inputSchema: z.object({ step2Result: z.number() }),
+        outputSchema: z.object({ nestedFinal: z.number() }),
+      });
+
+      const step4 = createStep({
+        id: 'step4',
+        execute: async ({ inputData }) => ({
+          final: inputData.nestedFinal + 1,
+        }),
+        inputSchema: z.object({ nestedFinal: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'restart-nestedWorkflow',
+        inputSchema: z.object({ step1Result: z.number() }),
+        outputSchema: z.object({ nestedFinal: z.number() }),
+        steps: [step2, step3],
+      })
+        .then(step2)
+        .then(step3)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'restart-nested',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ final: z.number() }),
+      })
+        .then(step1)
+        .then(nestedWorkflow as any)
+        .then(step4 as any)
+        .commit();
+
+      workflow.__registerMastra(mastra);
+
+      const workflowsStore = await storage?.getStore('workflows');
+
+      const runId = `restart-nested-${Date.now()}`;
+
+      if (!workflowsStore) {
+        return;
+      }
+
+      // Simulate a workflow where step1 completed and nested workflow is running step3
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { 'restart-nestedWorkflow': [1] },
+          value: {},
+          context: {
+            input: { value: 0 },
+            step1: {
+              payload: { value: 0 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step1Result: 2 },
+              endedAt: Date.now(),
+            },
+            'restart-nestedWorkflow': {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          },
+          serializedStepGraph: (workflow as any).serializedStepGraph,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      // Also simulate the nested workflow state
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'restart-nestedWorkflow',
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          activePaths: [1],
+          activeStepsPath: { step3: [1] },
+          value: {},
+          context: {
+            input: { step1Result: 2 },
+            step2: {
+              payload: { step1Result: 2 },
+              startedAt: Date.now(),
+              status: 'success',
+              output: { step2Result: 3 },
+              endedAt: Date.now(),
+            },
+            step3: {
+              payload: { step2Result: 3 },
+              startedAt: Date.now(),
+              status: 'running',
+            },
+          },
+          serializedStepGraph: (nestedWorkflow as any).serializedStepGraph,
+          suspendedPaths: {},
+          waitingPaths: {},
+          resumeLabels: {},
+          timestamp: Date.now(),
+        },
+      });
+
+      const run = await workflow.createRun({ runId });
+      const restartResult = await run.restart();
+
+      expect(restartResult.status).toBe('success');
+      expect(restartResult).toMatchObject({
+        status: 'success',
+        steps: {
+          input: { value: 0 },
+          step1: {
+            status: 'success',
+            output: { step1Result: 2 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          'restart-nestedWorkflow': {
+            status: 'success',
+            output: { nestedFinal: 4 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step4: {
+            status: 'success',
+            output: { final: 5 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        },
+      });
+
+      // step1 was already completed in the snapshot, should not be re-executed
+      expect(mockStep1).toHaveBeenCalledTimes(0);
+      // step2 was already completed in the nested snapshot, should not be re-executed
+      expect(mockStep2).toHaveBeenCalledTimes(0);
+
+      const nestedWorkflowStoreResult = await workflowsStore.loadWorkflowSnapshot({
+        workflowName: 'restart-nestedWorkflow',
+        runId,
+      });
+
+      expect(nestedWorkflowStoreResult?.status).toBe('success');
     });
   });
 });

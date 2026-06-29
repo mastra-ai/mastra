@@ -6,19 +6,11 @@
  * Changes apply immediately — Esc closes the panel.
  */
 
-import {
-  Box,
-  Container,
-  fuzzyFilter,
-  getEditorKeybindings,
-  Input,
-  SelectList,
-  SettingsList,
-  Spacer,
-  Text,
-} from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, SettingItem, TUI } from '@mariozechner/pi-tui';
+import { Box, Container, Input, SelectList, SettingsList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { ModelSelectorComponent } from './model-selector.js';
+import type { ModelItem } from './model-selector.js';
 
 // =============================================================================
 // Types
@@ -29,19 +21,25 @@ export interface OMSettingsConfig {
   reflectorModelId: string;
   observationThreshold: number;
   reflectionThreshold: number;
+  cavemanObservations: boolean;
+  observeAttachments: 'auto' | boolean;
 }
 
 export interface OMSettingsCallbacks {
-  onObserverModelChange: (modelId: string) => void | Promise<void>;
-  onReflectorModelChange: (modelId: string) => void | Promise<void>;
+  onObserverModelChange: (model: ModelItem) => void | Promise<void>;
+  onReflectorModelChange: (model: ModelItem) => void | Promise<void>;
   onObservationThresholdChange: (value: number) => void;
   onReflectionThresholdChange: (value: number) => void;
+  onCavemanObservationsChange: (enabled: boolean) => void;
+  onObserveAttachmentsChange: (value: 'auto' | boolean) => void | Promise<void>;
   onClose: () => void;
 }
 
-export interface ModelOption {
-  id: string;
-  label: string;
+interface BooleanSubmenuLabels {
+  onLabel?: string;
+  offLabel?: string;
+  onDescription?: string;
+  offDescription?: string;
 }
 
 // =============================================================================
@@ -78,46 +76,6 @@ function parseTokenInput(input: string): number | null {
   }
   // Large numbers used as-is: "30000" → 30,000
   return num;
-}
-
-const KITTY_CSI_U_REGEX = new RegExp('^\\x1b\\[(\\d+)(?::(\\d*))?(?::(\\d+))?(?:;(\\d+))?(?::(\\d+))?u$');
-const KITTY_MOD_SHIFT = 1;
-const KITTY_MOD_ALT = 2;
-const KITTY_MOD_CTRL = 4;
-const KITTY_LOCK_MASK = 64 + 128; // Caps Lock + Num Lock
-const KITTY_ALLOWED_MODIFIERS = KITTY_MOD_SHIFT | KITTY_LOCK_MASK;
-
-function decodeKittyPrintable(data: string): string | undefined {
-  const match = data.match(KITTY_CSI_U_REGEX);
-  if (!match) return undefined;
-
-  const codepoint = Number.parseInt(match[1] ?? '', 10);
-  if (!Number.isFinite(codepoint)) return undefined;
-
-  const shiftedKey = match[2] && match[2].length > 0 ? Number.parseInt(match[2], 10) : undefined;
-  const modValue = match[4] ? Number.parseInt(match[4], 10) : 1;
-  const modifier = Number.isFinite(modValue) ? modValue - 1 : 0;
-
-  if ((modifier & ~KITTY_ALLOWED_MODIFIERS) !== 0) return undefined;
-  if (modifier & (KITTY_MOD_ALT | KITTY_MOD_CTRL)) return undefined;
-
-  let effectiveCodepoint = codepoint;
-  if (modifier & KITTY_MOD_SHIFT && typeof shiftedKey === 'number') {
-    effectiveCodepoint = shiftedKey;
-  }
-
-  if (!Number.isFinite(effectiveCodepoint) || effectiveCodepoint < 32) return undefined;
-
-  try {
-    return String.fromCodePoint(effectiveCodepoint);
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeSearchInput(data: string): string {
-  const kittyPrintable = decodeKittyPrintable(data);
-  return kittyPrintable ?? data;
 }
 
 // =============================================================================
@@ -211,117 +169,28 @@ class ThresholdSubmenu extends Container {
 }
 
 // =============================================================================
-// Model Select Submenu
+// Boolean Submenu
 // =============================================================================
 
-export class ModelSelectSubmenu extends Container {
-  private searchInput: Input;
-  private listContainer: Container;
-  private allModels: ModelOption[];
-  private filteredModels: ModelOption[];
-  private selectedIndex = 0;
-  private currentModelId: string;
-  private onSelect: (modelId: string) => void | Promise<void>;
-  private onCancel: () => void;
-  private tui: TUI;
-
+class BooleanSubmenu extends SelectList {
   constructor(
-    title: string,
-    models: ModelOption[],
-    currentModelId: string,
-    onSelect: (modelId: string) => void | Promise<void>,
-    onCancel: () => void,
-    tui: TUI,
+    currentValue: boolean,
+    onSelect: (value: boolean) => void,
+    onBack: () => void,
+    labels?: BooleanSubmenuLabels,
   ) {
-    super();
-    this.allModels = models;
-    this.filteredModels = models;
-    this.currentModelId = currentModelId;
-    this.onSelect = onSelect;
-    this.onCancel = onCancel;
-    this.tui = tui;
+    const items: SelectItem[] = [
+      { value: 'on', label: `  ${labels?.onLabel ?? 'On'}`, description: labels?.onDescription ?? '' },
+      { value: 'off', label: `  ${labels?.offLabel ?? 'Off'}`, description: labels?.offDescription ?? '' },
+    ];
+    super(items, items.length, getSelectListTheme());
 
-    this.addChild(new Text(theme.bold(theme.fg('accent', title)), 0, 0));
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('muted', 'Type to search · ↑↓ navigate · Enter select · Esc back'), 0, 0));
-    this.addChild(new Spacer(1));
+    this.setSelectedIndex(currentValue ? 0 : 1);
 
-    this.searchInput = new Input();
-    this.addChild(this.searchInput);
-    this.addChild(new Spacer(1));
-
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
-
-    // Pre-select current model
-    const currentIndex = models.findIndex(m => m.id === currentModelId);
-    if (currentIndex !== -1) {
-      this.selectedIndex = currentIndex;
-    }
-
-    this.updateList();
-  }
-
-  private filterModels(query: string): void {
-    this.filteredModels = query ? fuzzyFilter(this.allModels, query, m => `${m.id} ${m.label}`) : this.allModels;
-
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredModels.length - 1));
-    this.updateList();
-  }
-
-  private updateList(): void {
-    this.listContainer.clear();
-
-    const maxVisible = 10;
-    const total = this.filteredModels.length;
-    const startIndex = Math.max(0, Math.min(this.selectedIndex - Math.floor(maxVisible / 2), total - maxVisible));
-    const endIndex = Math.min(startIndex + maxVisible, total);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      const item = this.filteredModels[i]!;
-      const isSelected = i === this.selectedIndex;
-      const isCurrent = item.id === this.currentModelId;
-      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-
-      const line = isSelected ? theme.fg('accent', `→ ${item.label}`) + checkmark : `  ${item.label}` + checkmark;
-
-      this.listContainer.addChild(new Text(line, 0, 0));
-    }
-
-    if (startIndex > 0 || endIndex < total) {
-      this.listContainer.addChild(new Text(theme.fg('muted', `(${this.selectedIndex + 1}/${total})`), 0, 0));
-    }
-
-    if (total === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching models'), 0, 0));
-    }
-  }
-
-  handleInput(data: string): void {
-    const kb = getEditorKeybindings();
-    const total = this.filteredModels.length;
-
-    if (kb.matches(data, 'selectUp')) {
-      if (total === 0) return;
-      this.selectedIndex = this.selectedIndex === 0 ? total - 1 : this.selectedIndex - 1;
-      this.updateList();
-      this.tui.requestRender();
-    } else if (kb.matches(data, 'selectDown')) {
-      if (total === 0) return;
-      this.selectedIndex = this.selectedIndex === total - 1 ? 0 : this.selectedIndex + 1;
-      this.updateList();
-      this.tui.requestRender();
-    } else if (kb.matches(data, 'selectConfirm')) {
-      const selected = this.filteredModels[this.selectedIndex];
-      if (selected) void this.onSelect(selected.id);
-    } else if (kb.matches(data, 'selectCancel')) {
-      this.onCancel();
-    } else {
-      const normalized = normalizeSearchInput(data);
-      this.searchInput.handleInput(normalized);
-      this.filterModels(this.searchInput.getValue());
-      this.tui.requestRender();
-    }
+    this.onSelect = (item: SelectItem) => {
+      onSelect(item.value === 'on');
+    };
+    this.onCancel = onBack;
   }
 }
 
@@ -341,7 +210,7 @@ export class OMSettingsComponent extends Box implements Focusable {
     this._focused = value;
   }
 
-  constructor(config: OMSettingsConfig, callbacks: OMSettingsCallbacks, models: ModelOption[], tui: TUI) {
+  constructor(config: OMSettingsConfig, callbacks: OMSettingsCallbacks, models: ModelItem[], tui: TUI) {
     super(2, 1, (text: string) => theme.bg('overlayBg', text));
 
     // Title
@@ -356,18 +225,18 @@ export class OMSettingsComponent extends Box implements Focusable {
         description: 'Model used for observing and summarizing message history',
         currentValue: getShortModelName(config.observerModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectSubmenu(
-            'Observer Model',
-            models,
-            config.observerModelId,
-            async modelId => {
-              await callbacks.onObserverModelChange(modelId);
-              config.observerModelId = modelId;
-              done(getShortModelName(modelId));
-            },
-            () => done(),
+          new ModelSelectorComponent({
             tui,
-          ),
+            models,
+            currentModelId: config.observerModelId,
+            title: 'Observer Model',
+            onSelect: async model => {
+              await callbacks.onObserverModelChange(model);
+              config.observerModelId = model.id;
+              done(getShortModelName(model.id));
+            },
+            onCancel: () => done(),
+          }),
       },
       {
         id: 'reflector-model',
@@ -375,18 +244,18 @@ export class OMSettingsComponent extends Box implements Focusable {
         description: 'Model used for compressing observations when they grow too large',
         currentValue: getShortModelName(config.reflectorModelId),
         submenu: (_currentValue, done) =>
-          new ModelSelectSubmenu(
-            'Reflector Model',
-            models,
-            config.reflectorModelId,
-            async modelId => {
-              await callbacks.onReflectorModelChange(modelId);
-              config.reflectorModelId = modelId;
-              done(getShortModelName(modelId));
-            },
-            () => done(),
+          new ModelSelectorComponent({
             tui,
-          ),
+            models,
+            currentModelId: config.reflectorModelId,
+            title: 'Reflector Model',
+            onSelect: async model => {
+              await callbacks.onReflectorModelChange(model);
+              config.reflectorModelId = model.id;
+              done(getShortModelName(model.id));
+            },
+            onCancel: () => done(),
+          }),
       },
       {
         id: 'obs-threshold',
@@ -428,11 +297,62 @@ export class OMSettingsComponent extends Box implements Focusable {
             () => done(),
           ),
       },
+      {
+        id: 'caveman-observations',
+        label: 'Caveman observations',
+        description:
+          'Optional. Use terse caveman-style compression for observations and reflections ' +
+          'instead of standard prose. Off by default; turn on if you prefer the more compact style',
+        currentValue: config.cavemanObservations ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new BooleanSubmenu(
+            config.cavemanObservations,
+            value => {
+              config.cavemanObservations = value;
+              callbacks.onCavemanObservationsChange(value);
+              done(value ? 'On' : 'Off');
+            },
+            () => done(),
+            {
+              onDescription: 'Caveman-style terse compression',
+              offDescription: 'Standard prose observations',
+            },
+          ),
+      },
+      {
+        id: 'observe-attachments',
+        label: 'Observe attachments',
+        description:
+          'Forward image and file attachments to the Observer LLM. ' + 'Auto checks model capabilities to decide',
+        currentValue: formatAttachmentValue(config.observeAttachments),
+        submenu: (_currentValue, done) => {
+          const items: SelectItem[] = [
+            { value: 'auto', label: '  Auto', description: 'Use model capabilities to decide' },
+            { value: 'on', label: '  On', description: 'Always forward attachments' },
+            { value: 'off', label: '  Off', description: 'Drop attachments (placeholder text only)' },
+          ];
+          const list = new SelectList(items, items.length, getSelectListTheme());
+          const currentIndex = config.observeAttachments === 'auto' ? 0 : config.observeAttachments ? 1 : 2;
+          list.setSelectedIndex(currentIndex);
+          list.onSelect = async (item: SelectItem) => {
+            const value: 'auto' | boolean = item.value === 'auto' ? 'auto' : item.value === 'on';
+            try {
+              await callbacks.onObserveAttachmentsChange(value);
+              config.observeAttachments = value;
+              done(formatAttachmentValue(value));
+            } catch (error) {
+              console.error('Failed to update observe attachments setting:', error);
+            }
+          };
+          list.onCancel = () => done();
+          return list;
+        },
+      },
     ];
 
     this.settingsList = new SettingsList(
       items,
-      10,
+      11,
       getSettingsListTheme(),
       (_id, _newValue) => {
         // All changes handled via submenu callbacks
@@ -456,4 +376,9 @@ function getShortModelName(modelId: string): string {
   if (!modelId) return '(none)';
   const parts = modelId.split('/');
   return parts.length > 1 ? parts.slice(1).join('/') : modelId;
+}
+
+function formatAttachmentValue(value: 'auto' | boolean): string {
+  if (value === 'auto') return 'Auto';
+  return value ? 'On' : 'Off';
 }

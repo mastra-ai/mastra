@@ -39,7 +39,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       category: ErrorCategory.USER,
     });
     loggerToUse.trackException(mastraError);
-    loggerToUse.error(mastraError.toString());
     throw mastraError;
   }
 
@@ -69,11 +68,21 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     memory: _internal?.memory,
     threadExists: _internal?.threadExists,
     transportRef: _internal?.transportRef ?? {},
+    backgroundTaskManager: _internal?.backgroundTaskManager,
+    agentBackgroundConfig: _internal?.agentBackgroundConfig,
+    backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
+    skipBgTaskWait: _internal?.skipBgTaskWait,
+    drainPendingSignals: _internal?.drainPendingSignals,
+    initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
   };
 
   let startTimestamp = internalToUse.now?.();
 
-  const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+  let currentResponseMessageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
+  const rotateResponseMessageId = () => {
+    currentResponseMessageId = internalToUse.generateId?.();
+    return currentResponseMessageId!;
+  };
 
   let modelOutput: MastraModelOutput<OUTPUT> | undefined;
   const serializeStreamState = () => {
@@ -99,7 +108,8 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     tools,
     modelSettings,
     outputProcessors,
-    messageId: messageId!,
+    messageId: currentResponseMessageId!,
+    rotateResponseMessageId,
     agentId,
     requireToolApproval,
     toolCallConcurrency,
@@ -139,7 +149,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     },
     stream,
     messageList,
-    messageId: messageId!,
+    messageId: currentResponseMessageId!,
     options: {
       runId: runIdToUse!,
       toolCallStreaming: rest.toolCallStreaming,

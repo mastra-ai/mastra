@@ -18,25 +18,100 @@ inputs:
     description: 'Path to pnpm-lock.yaml for cache key (useful when checkout is not at workspace root)'
     required: false
     default: ''
+  version:
+    description: 'Explicit pnpm version (overrides packageManager detection)'
+    required: false
+    default: ''
 
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@v4
-      name: Install pnpm
-      with:
-        run_install: false
-        package_json_file: ${{ inputs.package-json-file || 'package.json' }}
-
     - name: Setup Node.js 22.x
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
       with:
         node-version: 22.13.0
-        cache: 'pnpm'
-        cache-dependency-path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
-        package-manager-cache: ${{ inputs.package-manager-cache == 'true' }}
+
+    # Let pnpm/action-setup handle store caching instead of actions/setup-node.
+    # setup-node's cache: 'pnpm' runs `pnpm store path --silent` which returns
+    # a bogus path on self-hosted runners where pnpm is installed into
+    # ~/setup-pnpm/node_modules/.bin/.
+    - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+      name: Install pnpm
+      with:
+        version: ${{ inputs.version || '' }}
+        run_install: false
+        package_json_file: ${{ inputs.package-json-file || 'package.json' }}
+        cache: ${{ inputs.package-manager-cache == 'true' }}
+        cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
+
+    - name: Reset corrupt pnpm store cache
+      id: reset-store
+      if: ${{ inputs.package-manager-cache == 'true' }}
+      shell: bash
+      run: |
+        set +e
+        store_path=$(pnpm store path --silent)
+        pnpm store status >/tmp/pnpm-store-status.log 2>&1
+        status=$?
+        set -e
+
+        if [ "$status" -eq 0 ]; then
+          exit 0
+        fi
+
+        # A corrupt restored store cache surfaces in one of two ways from
+        # `pnpm store status`:
+        #   * a SQLite error if the store index is malformed
+        #     ("database disk image is malformed", "file is not a database"), or
+        #   * ERR_PNPM_MODIFIED_DEPENDENCY if cached content files were captured
+        #     mid-write and no longer match their content hashes.
+        # Any other non-zero status is a real failure and should be surfaced.
+        if ! grep -qE "ERR_SQLITE_ERROR|database disk image is malformed|file is not a database|ERR_PNPM_MODIFIED_DEPENDENCY" /tmp/pnpm-store-status.log; then
+          cat /tmp/pnpm-store-status.log
+          exit "$status"
+        fi
+
+        # Recover by deleting only the store index, keeping the content-addressed
+        # files/ (into which pnpm's own binary is hard-linked). pnpm rebuilds the
+        # index from the content on the next operation, so the binary survives.
+        # Wiping the whole store instead removed pnpm itself (MODULE_NOT_FOUND for
+        # pnpm.mjs) and reinstalling/relinking it left content mismatched against
+        # the lockfile (ERR_PNPM_MODIFIED_DEPENDENCY).
+        echo "Detected corrupt pnpm store at $store_path; deleting only the store index, preserving content."
+        # pnpm >=11 keeps the index in index.db; older versions used
+        # index-v5.json* plus an index/ directory. Remove whichever exist.
+        rm -rf \
+          "$store_path/index.db" \
+          "$store_path/index.db-shm" \
+          "$store_path/index.db-wal" \
+          "$store_path"/index-v*.json* \
+          "$store_path/index"
+
+        pnpm --version
+
+        # Re-check the store. If only the index was corrupt this now passes. If
+        # content files were also mutated, pnpm still reports them; signal the
+        # install step to refetch the modified packages with --force (which is
+        # exactly what pnpm recommends for ERR_PNPM_MODIFIED_DEPENDENCY).
+        set +e
+        pnpm store status >/tmp/pnpm-store-status-after.log 2>&1
+        after=$?
+        set -e
+        if [ "$after" -ne 0 ]; then
+          if ! grep -qE "ERR_PNPM_MODIFIED_DEPENDENCY" /tmp/pnpm-store-status-after.log; then
+            cat /tmp/pnpm-store-status-after.log
+            exit "$after"
+          fi
+          echo "Store content was also modified; the install step will refetch with --force."
+          echo "force-install=true" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: |
+        if [ "${{ steps.reset-store.outputs.force-install }}" = "true" ]; then
+          pnpm install --frozen-lockfile --force
+        else
+          pnpm install --frozen-lockfile
+        fi

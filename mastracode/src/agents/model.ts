@@ -1,113 +1,48 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
-import type { LanguageModelV1 } from '@ai-sdk/provider';
-import type { HarnessRequestContext } from '@mastra/core/harness';
-import { ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import { wrapLanguageModel } from 'ai';
-import { AuthStorage } from '../auth/storage.js';
-import { getCustomProviderId, loadSettings } from '../onboarding/settings.js';
-import { opencodeClaudeMaxProvider, promptCacheMiddleware } from '../providers/claude-max.js';
-import { openaiCodexProvider } from '../providers/openai-codex.js';
+import { loadSettings } from '../onboarding/settings.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
+import {
+  MASTRA_GATEWAY_PREFIX,
+  MASTRACODE_GATEWAY_ID,
+  MastraCodeGateway,
+  reloadAuthStorage,
+  stripMastraGatewayPrefix,
+} from './mastracode-gateway.js';
+import type { MastraCodeGatewayOptions } from './mastracode-gateway.js';
 
-const authStorage = new AuthStorage();
+export {
+  getAnthropicApiKey,
+  getOpenAIApiKey,
+  MASTRACODE_GATEWAY_ID,
+  MastraCodeGateway,
+  remapOpenAIModelForCodexOAuth,
+  resolveAuth,
+} from './mastracode-gateway.js';
+export type { MastraCodeCustomProvider, MastraCodeGatewayOptions } from './mastracode-gateway.js';
 
-const OPENAI_PREFIX = 'openai/';
-
-const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
-  'gpt-5.3': 'gpt-5.3-codex',
-  'gpt-5.2': 'gpt-5.2-codex',
-  'gpt-5.1': 'gpt-5.1-codex',
-  'gpt-5.1-mini': 'gpt-5.1-codex-mini',
-  'gpt-5': 'gpt-5-codex',
-};
-
-type ResolvedModel =
-  | ReturnType<typeof openaiCodexProvider>
-  | ReturnType<typeof opencodeClaudeMaxProvider>
-  | ModelRouterLanguageModel
-  | ReturnType<ReturnType<typeof createAnthropic>>
-  | ReturnType<ReturnType<typeof createOpenAI>>;
-
+type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
-function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
-  const harnessContext = requestContext?.get('harness') as HarnessRequestContext<any> | undefined;
+function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
+  const agentControllerContext = requestContext?.get('controller') as AgentControllerRequestContext<any> | undefined;
   const headers = {
-    ...(harnessContext?.threadId ? { 'x-thread-id': harnessContext.threadId } : {}),
-    ...(harnessContext?.resourceId ? { 'x-resource-id': harnessContext.resourceId } : {}),
+    ...(agentControllerContext?.threadId ? { 'x-thread-id': agentControllerContext.threadId } : {}),
+    ...(agentControllerContext?.resourceId ? { 'x-resource-id': agentControllerContext.resourceId } : {}),
   };
 
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
-export function remapOpenAIModelForCodexOAuth(modelId: string): string {
-  if (!modelId.startsWith(OPENAI_PREFIX)) {
-    return modelId;
-  }
-
-  const openaiModelId = modelId.substring(OPENAI_PREFIX.length);
-
-  if (openaiModelId.includes('-codex')) {
-    return modelId;
-  }
-
-  const codexModelId = CODEX_OPENAI_MODEL_REMAPS[openaiModelId];
-  if (!codexModelId) {
-    return modelId;
-  }
-
-  return `${OPENAI_PREFIX}${codexModelId}`;
+export function createMastraCodeGateway(options: MastraCodeGatewayOptions): MastraCodeGateway {
+  return new MastraCodeGateway(options);
 }
 
-/**
- * Resolve the Anthropic API key from stored credentials.
- * Returns the key if available, undefined otherwise.
- */
-export function getAnthropicApiKey(): string | undefined {
-  // Check stored API key credential (set via /apikey or UI prompt)
-  const storedCred = authStorage.get('anthropic');
-  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-    return storedCred.key.trim();
-  }
-  return undefined;
-}
-
-/**
- * Resolve the OpenAI API key from stored credentials.
- * Returns the key if available, undefined otherwise.
- */
-export function getOpenAIApiKey(): string | undefined {
-  const storedCred = authStorage.get('openai-codex');
-  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-    return storedCred.key.trim();
-  }
-  return undefined;
-}
-
-/**
- * Create an Anthropic model using a direct API key (no OAuth).
- * Applies prompt caching but NOT the Claude Code identity middleware
- * (which is only required for Claude Max OAuth).
- */
-function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
-  const anthropic = createAnthropic({ apiKey, headers });
-  return wrapLanguageModel({
-    model: anthropic(modelId),
-    middleware: [promptCacheMiddleware],
-  });
-}
-
-/**
- * Create an OpenAI model using a direct API key from AuthStorage.
- */
-function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders): LanguageModelV1 {
-  const openai = createOpenAI({ apiKey, headers });
-  return wrapLanguageModel({
-    model: openai.responses(modelId),
-    middleware: [],
-  });
+export function createMastraCodeModelCatalogProvider(gateway: MastraModelGatewayInterface) {
+  return gateway instanceof MastraCodeGateway
+    ? gateway.createModelCatalogProvider()
+    : MastraCodeGateway.createModelCatalogProvider(gateway);
 }
 
 /**
@@ -122,98 +57,81 @@ function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRe
 export function resolveModel(
   modelId: string,
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
-): ResolvedModel {
-  authStorage.reload();
-  const headers = getHarnessHeaders(options?.requestContext);
-  const [providerId, modelName] = modelId.split('/', 2);
+): GatewayLanguageModel {
+  reloadAuthStorage();
+  const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  const customProvider =
-    providerId && modelName
-      ? settings.customProviders.find(provider => {
-          return providerId === getCustomProviderId(provider.name);
-        })
-      : undefined;
-
-  if (customProvider) {
-    return new ModelRouterLanguageModel({
-      id: modelId as `${string}/${string}`,
-      url: customProvider.url,
-      apiKey: customProvider.apiKey,
-      headers,
-    });
+  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
+  const normalizedModelId = stripMastraGatewayPrefix(modelId);
+  const [providerId, ...modelParts] = normalizedModelId.split('/');
+  const bareModelId = modelParts.join('/');
+  if (!providerId || !bareModelId) {
+    throw new Error(`Invalid model id: ${modelId}`);
   }
+  const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
-  const isAnthropicModel = modelId.startsWith('anthropic/');
-  const isOpenAIModel = modelId.startsWith(OPENAI_PREFIX);
-  const isMoonshotModel = modelId.startsWith('moonshotai/');
+  const mgApiKey = MastraCodeGateway.getMemoryGatewayApiKey();
+  const rawGatewayBase =
+    settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
+    mastraGatewayApiKey: mgApiKey,
+    routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
+    thinkingLevel: options?.thinkingLevel,
+    customProviders: settings.customProviders,
+  });
 
-  if (isMoonshotModel) {
-    if (!process.env.MOONSHOT_AI_API_KEY) {
-      throw new Error(`Need MOONSHOT_AI_API_KEY`);
-    }
-    return createAnthropic({
-      apiKey: process.env.MOONSHOT_AI_API_KEY!,
-      baseURL: 'https://api.moonshot.ai/anthropic/v1',
-      name: 'moonshotai.anthropicv1',
-      headers,
-    })(modelId.substring('moonshotai/'.length));
-  } else if (isAnthropicModel) {
-    const bareModelId = modelId.substring('anthropic/'.length);
-    const storedCred = authStorage.get('anthropic');
+  const auth = gateway.resolveAuth({
+    gatewayId: MASTRACODE_GATEWAY_ID,
+    providerId,
+    modelId: bareModelId,
+    routerId,
+  });
 
-    // Primary path: explicit OAuth credential
-    if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { headers });
-    }
-
-    // Secondary path: explicit stored API key credential
-    if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers);
-    }
-
-    // Fallback: direct API key from AuthStorage
-    const apiKey = getAnthropicApiKey();
-    if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers);
-    }
-    // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId, { headers });
-  } else if (isOpenAIModel) {
-    const bareModelId = modelId.substring(OPENAI_PREFIX.length);
-    const storedCred = authStorage.get('openai-codex');
-
-    if (storedCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
-      return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-        thinkingLevel: options?.thinkingLevel,
-        headers,
-      });
-    }
-
-    const apiKey = getOpenAIApiKey();
-    if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey, headers);
-    }
-
-    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
-  } else {
-    return new ModelRouterLanguageModel({ id: modelId as `${string}/${string}`, headers });
-  }
+  return gateway.resolveLanguageModel({
+    providerId,
+    modelId: bareModelId,
+    apiKey: auth?.apiKey ?? mgApiKey ?? '',
+    headers,
+  });
 }
 
 /**
- * Dynamic model function that reads the current model from harness state.
+ * Dynamic model function that reads the current model from controller state.
  * This allows runtime model switching via the /models picker.
  */
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
+  const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.state?.currentModelId;
+  const modelId = agentControllerContext?.session?.modelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
+  const thinkingLevel = agentControllerContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
-  return resolveModel(modelId, { thinkingLevel, requestContext });
+  return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
+}
+
+/**
+ * Goal judge model resolver for the agent's `goal.judge` config. Resolves the
+ * configured goal judge model through mastracode's gateway so provider
+ * credentials (stored in auth storage, not just env) are injected — a bare model
+ * id handed to core's default model router would fail to find the API key.
+ *
+ * Returns `undefined` when no judge model is configured, which keeps the goal
+ * step a complete no-op (the goal mechanism requires a judge to do anything).
+ *
+ * `settingsPath` must be the same source `createMastraCode()` reads from so the
+ * judge model and the goal budget (`goalMaxTurns`) come from one config — with a
+ * custom `settingsPath` a bare `loadSettings()` here could read a different file
+ * and silently turn the goal step into a no-op.
+ */
+export function getGoalJudgeModel(
+  { requestContext }: { requestContext: RequestContext },
+  settingsPath?: string,
+): ResolvedModel | undefined {
+  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel;
+  if (!judgeModelId) return undefined;
+  return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
 }

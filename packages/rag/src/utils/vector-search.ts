@@ -1,3 +1,5 @@
+import type { ObservabilityContext } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
@@ -14,6 +16,8 @@ type VectorQuerySearchParams = {
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
+  /** Observability context for tracing nested operations */
+  observabilityContext?: ObservabilityContext;
 } & ProviderOptions;
 
 interface VectorQuerySearchResult {
@@ -41,36 +45,73 @@ export const vectorQuerySearch = async ({
   maxRetries = 2,
   databaseConfig = {},
   providerOptions,
+  observabilityContext,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  let embeddingResult;
+  const parentSpan = observabilityContext?.tracingContext?.currentSpan;
 
-  if (model.specificationVersion === 'v3') {
-    embeddingResult = await embedV3({
-      model: model,
-      value: queryText,
-      maxRetries,
-      // Type assertion needed: providerOptions type is a union, but embedV3 expects specific version
-      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV3>[0]['providerOptions'] }),
-    });
-  } else if (model.specificationVersion === 'v2') {
-    embeddingResult = await embedV2({
-      model: model,
-      value: queryText,
-      maxRetries,
-      // Type assertion needed: providerOptions type is a union, but embedV2 expects specific version
-      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV2>[0]['providerOptions'] }),
-    });
-  } else {
-    embeddingResult = await embedV1({
-      value: queryText,
-      model: model,
-      maxRetries,
-    });
+  // ----- Embed query -----
+  const embedSpan = parentSpan?.createChildSpan({
+    type: SpanType.RAG_EMBEDDING,
+    name: `rag embed: query`,
+    input: queryText,
+    attributes: {
+      mode: 'query',
+      model: (model as any)?.modelId,
+      provider: (model as any)?.provider,
+      inputCount: 1,
+    },
+  });
+
+  let embeddingResult;
+  try {
+    if (model.specificationVersion === 'v3') {
+      embeddingResult = await embedV3({
+        model: model,
+        value: queryText,
+        maxRetries,
+        // Type assertion needed: providerOptions type is a union, but embedV3 expects specific version
+        ...(providerOptions && {
+          providerOptions: providerOptions as Parameters<typeof embedV3>[0]['providerOptions'],
+        }),
+      });
+    } else if (model.specificationVersion === 'v2') {
+      embeddingResult = await embedV2({
+        model: model,
+        value: queryText,
+        maxRetries,
+        // Type assertion needed: providerOptions type is a union, but embedV2 expects specific version
+        ...(providerOptions && {
+          providerOptions: providerOptions as Parameters<typeof embedV2>[0]['providerOptions'],
+        }),
+      });
+    } else {
+      embeddingResult = await embedV1({
+        value: queryText,
+        model: model,
+        maxRetries,
+      });
+    }
+  } catch (err) {
+    embedSpan?.error({ error: err as Error, endSpan: true });
+    throw err;
   }
 
   const embedding = embeddingResult.embedding;
+  // `embedV*` returns provider-shaped results; `usage` is present on v2/v3.
+  const embedUsage = (embeddingResult as any)?.usage;
+  embedSpan?.end({
+    attributes: {
+      dimensions: embedding?.length,
+      ...(embedUsage && {
+        usage: {
+          inputTokens: embedUsage.tokens ?? embedUsage.promptTokens ?? embedUsage.inputTokens,
+        },
+      }),
+    },
+    output: { dimensions: embedding?.length },
+  });
 
-  // Build query parameters with database-specific configurations
+  // ----- Vector store query -----
   const queryParams: QueryVectorParams = {
     indexName,
     queryVector: embedding,
@@ -79,8 +120,31 @@ export const vectorQuerySearch = async ({
     includeVector: includeVectors,
   };
 
-  // Get relevant chunks from the vector database
-  const results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
+  const querySpan = parentSpan?.createChildSpan({
+    type: SpanType.RAG_VECTOR_OPERATION,
+    name: `rag vector: query`,
+    // Pass filter as-is; the observability layer's deepClean handles
+    // size limits and sanitization centrally.
+    input: { topK, filter: queryFilter },
+    attributes: {
+      operation: 'query',
+      indexName,
+      topK,
+      dimensions: embedding?.length,
+    },
+  });
+
+  let results: QueryResult[];
+  try {
+    results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
+  } catch (err) {
+    querySpan?.error({ error: err as Error, endSpan: true });
+    throw err;
+  }
+
+  querySpan?.end({
+    output: { returned: results?.length ?? 0 },
+  });
 
   return { results, queryEmbedding: embedding };
 };

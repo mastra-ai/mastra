@@ -1,6 +1,6 @@
 ---
 title: "Reference: MastraModelGateway | Core"
-description: "Base class for creating custom model gateways"
+description: "Base class and interface for creating custom model gateways"
 packages:
   - "@mastra/core"
 ---
@@ -8,6 +8,8 @@ packages:
 # MastraModelGateway
 
 Abstract base class for implementing custom model gateways. Gateways handle provider-specific logic for accessing language models, including provider configuration, authentication, URL construction, and model instantiation.
+
+Use `MastraModelGatewayInterface` when you want to provide a plain object gateway instead of extending the base class.
 
 ## Class overview
 
@@ -24,7 +26,7 @@ class MyCustomGateway extends MastraModelGateway {
     return {
       'my-provider': {
         name: 'My Provider',
-        models: ['model-1', 'model-2'],
+        models: ['__GATEWAY_OPENAI_MODEL__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'],
         apiKeyEnvVar: 'MY_API_KEY',
         gateway: this.id,
       },
@@ -135,6 +137,8 @@ Fetches provider configurations from the gateway.
 
 Builds the API URL for a specific model/provider combination.
 
+If your provider URL contains placeholders such as `${ACCOUNT_ID}`, resolve them inside `buildUrl()` from `envVars` or `process.env` before returning the final URL.
+
 **Parameters:**
 
 <PropertiesTable
@@ -172,6 +176,27 @@ Retrieves the API key for authentication.
 />
 
 **Returns:** `Promise<string>`
+
+### `resolveAuth()`
+
+Resolves credentials before Mastra creates the language model. Implement this optional hook when a gateway owns authentication. If omitted, Mastra falls back to `getApiKey()`.
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'request',
+    type: 'GatewayAuthRequest',
+    description:
+      'Incoming request context containing gatewayId, providerId, modelId, and routerId for the gateway to inspect and validate.',
+  },
+]}
+/>
+
+**Returns:** `GatewayAuthResult | undefined | Promise<GatewayAuthResult | undefined>`
+
+A `GatewayAuthResult` may include `apiKey`, `bearerToken`, `headers`, and an optional `source` field to trace where auth came from.
 
 ### `resolveLanguageModel()`
 
@@ -228,8 +253,8 @@ Examples:
 
 ## Related
 
-- [Custom Gateways Guide](/models/gateways/custom-gateways) - Complete guide to creating custom gateways
-- [Mastra.addGateway()](/reference/core/addGateway) - Add a gateway to Mastra
-- [Mastra.getGateway()](/reference/core/getGateway) - Get gateway by registration key
-- [Mastra.getGatewayById()](/reference/core/getGatewayById) - Get gateway by ID
-- [Mastra.listGateways()](/reference/core/listGateways) - List all gateways
+- [Custom Gateways Guide](/models/gateways/custom-gateways): Complete guide to creating custom gateways
+- [Mastra.addGateway()](/reference/core/addGateway): Add a gateway to Mastra
+- [Mastra.getGateway()](/reference/core/getGateway): Get gateway by registration key
+- [Mastra.getGatewayById()](/reference/core/getGatewayById): Get gateway by ID
+- [Mastra.listGateways()](/reference/core/listGateways): List all gateways

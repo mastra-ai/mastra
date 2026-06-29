@@ -1,14 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Spacer } from '@mariozechner/pi-tui';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
+import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
+import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
 async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promise<void> {
-  const harnessState = ctx.state.harness.getState() as {
-    sandboxAllowedPaths?: string[];
-  };
-  const currentPaths = harnessState.sandboxAllowedPaths ?? [];
+  const controllerWithState = ctx.state.session.state.get() as
+    | {
+        sandboxAllowedPaths?: string[];
+      }
+    | undefined;
+  const currentPaths = controllerWithState?.sandboxAllowedPaths ?? [];
   const resolved = path.resolve(rawPath);
 
   if (currentPaths.includes(resolved)) {
@@ -22,8 +24,8 @@ async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promis
     return;
   }
   const updated = [...currentPaths, resolved];
-  ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-  await ctx.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
+  await ctx.state.session.state.set({ sandboxAllowedPaths: updated } as any);
+  await ctx.state.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Added to sandbox: ${resolved}`);
 }
 
@@ -35,46 +37,39 @@ async function sandboxRemovePath(ctx: SlashCommandContext, rawPath: string, curr
     return;
   }
   const updated = currentPaths.filter(p => p !== match);
-  ctx.state.harness.setState({ sandboxAllowedPaths: updated } as any);
-  await ctx.state.harness.setThreadSetting({ key: 'sandboxAllowedPaths', value: updated });
+  await ctx.state.session.state.set({ sandboxAllowedPaths: updated } as any);
+  await ctx.state.session.thread.setSetting({ key: 'sandboxAllowedPaths', value: updated });
   ctx.showInfo(`Removed from sandbox: ${match}`);
 }
 
 async function showSandboxAddPrompt(ctx: SlashCommandContext): Promise<void> {
   return new Promise<void>(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: 'Enter path to allow',
-        formatResult: answer => {
-          return `Path: ${path.resolve(answer)}`;
-        },
-        onSubmit: async answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          await sandboxAddPath(ctx, answer);
-          resolve();
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve();
-        },
+    const questionComponent = new AskQuestionDialogComponent({
+      question: 'Enter path to allow',
+      tui: ctx.state.ui,
+      onSubmit: async answer => {
+        ctx.state.ui.hideOverlay();
+        await sandboxAddPath(ctx, answer);
+        resolve();
       },
-      ctx.state.ui,
-    );
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        resolve();
+      },
+    });
 
-    ctx.state.activeInlineQuestion = questionComponent;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(questionComponent);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, questionComponent, { maxHeight: '50%' });
+    questionComponent.focused = true;
   });
 }
 
 export async function handleSandboxCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const harnessState = ctx.state.harness.getState() as {
-    sandboxAllowedPaths?: string[];
-  };
-  const currentPaths = harnessState.sandboxAllowedPaths ?? [];
+  const agentControllerState = ctx.state.session.state.get() as
+    | {
+        sandboxAllowedPaths?: string[];
+      }
+    | undefined;
+  const currentPaths = agentControllerState?.sandboxAllowedPaths ?? [];
 
   const subcommand = args[0]?.toLowerCase();
   if (subcommand === 'add' && args.length > 1) {
@@ -86,7 +81,6 @@ export async function handleSandboxCommand(ctx: SlashCommandContext, args: strin
     return;
   }
 
-  // Interactive mode — show inline selector
   const options: Array<{ label: string; description?: string }> = [
     { label: 'Add path', description: 'Allow access to another directory' },
   ];
@@ -103,45 +97,29 @@ export async function handleSandboxCommand(ctx: SlashCommandContext, args: strin
     : 'no extra paths';
 
   return new Promise<void>(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: `Sandbox settings (${pathsSummary})`,
-        options,
-        formatResult: answer => {
-          if (answer === 'Add path') return 'Adding sandbox path…';
-          if (answer.startsWith('Remove: ')) {
-            return `Removed: ${answer.replace('Remove: ', '')}`;
+    const questionComponent = new AskQuestionDialogComponent({
+      question: `Sandbox settings (${pathsSummary})`,
+      options,
+      tui: ctx.state.ui,
+      onSubmit: async answer => {
+        ctx.state.ui.hideOverlay();
+        if (answer === 'Add path') {
+          await showSandboxAddPrompt(ctx);
+        } else if (answer.startsWith('Remove: ')) {
+          const targetPath = answer.replace('Remove: ', '');
+          if (currentPaths.includes(targetPath)) {
+            await sandboxRemovePath(ctx, targetPath, currentPaths);
           }
-          return answer;
-        },
-        onSubmit: async answer => {
-          ctx.state.activeInlineQuestion = undefined;
-          if (answer === 'Add path') {
-            resolve();
-            await showSandboxAddPrompt(ctx);
-          } else if (answer.startsWith('Remove: ')) {
-            const targetPath = answer.replace('Remove: ', '');
-            if (currentPaths.includes(targetPath)) {
-              await sandboxRemovePath(ctx, targetPath, currentPaths);
-            }
-            resolve();
-          } else {
-            resolve();
-          }
-        },
-        onCancel: () => {
-          ctx.state.activeInlineQuestion = undefined;
-          resolve();
-        },
+        }
+        resolve();
       },
-      ctx.state.ui,
-    );
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        resolve();
+      },
+    });
 
-    ctx.state.activeInlineQuestion = questionComponent;
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.chatContainer.addChild(questionComponent);
-    ctx.state.chatContainer.addChild(new Spacer(1));
-    ctx.state.ui.requestRender();
-    ctx.state.chatContainer.invalidate();
+    showModalOverlay(ctx.state.ui, questionComponent, { maxHeight: '60%' });
+    questionComponent.focused = true;
   });
 }

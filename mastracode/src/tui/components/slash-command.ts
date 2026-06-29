@@ -4,9 +4,10 @@
  * expanded with ctrl+e. The full content is still sent to the assistant.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 const MAX_COLLAPSED_LINES = 3;
 const getBorderColor = () => mastra.green;
@@ -21,6 +22,17 @@ export class SlashCommandComponent extends Container {
     this.commandName = commandName;
     this.contentLines = content ? content.split('\n').filter(l => l.trim()) : [];
     this.rebuild();
+  }
+
+  matches(commandName: string, content: string): boolean {
+    return (
+      this.commandName === commandName &&
+      this.contentLines.join('\n') ===
+        content
+          .split('\n')
+          .filter(l => l.trim())
+          .join('\n')
+    );
   }
 
   setExpanded(expanded: boolean): void {
@@ -83,6 +95,9 @@ export class SlashCommandComponent extends Container {
 
     // Bottom border with command name
     this.addChild(new Text(`${border('╰──')} ${heading}`, BOX_INDENT, 0));
-    this.addChild(new Spacer(1));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }

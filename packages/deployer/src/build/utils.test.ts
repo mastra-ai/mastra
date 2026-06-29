@@ -579,8 +579,8 @@ describe('detectRuntime', () => {
 });
 
 describe('injectStudioHtmlConfig', () => {
-  it('should inject MASTRA_THEME_TOGGLE placeholder', () => {
-    const html = "window.MASTRA_THEME_TOGGLE = '%%MASTRA_THEME_TOGGLE%%';";
+  it('should inject MASTRA_EXPERIMENTAL_UI placeholder', () => {
+    const html = "window.MASTRA_EXPERIMENTAL_UI = '%%MASTRA_EXPERIMENTAL_UI%%';";
 
     const result = injectStudioHtmlConfig(html, {
       host: "'localhost'",
@@ -591,13 +591,39 @@ describe('injectStudioHtmlConfig', () => {
       hideCloudCta: "'false'",
       cloudApiEndpoint: "''",
       experimentalFeatures: "'false'",
+      templates: "'false'",
       telemetryDisabled: "''",
       requestContextPresets: "''",
-      themeToggle: "'true'",
-      experimentalUI: "'false'",
+      experimentalUI: "'true'",
+      agentSignals: "'true'",
+      signalsUI: "'false'",
       autoDetectUrl: "'false'",
     });
 
-    expect(result).toBe("window.MASTRA_THEME_TOGGLE = 'true';");
+    expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
+  });
+
+  it('should inject MASTRA_SIGNALS_UI placeholder', () => {
+    const html = "window.MASTRA_SIGNALS_UI = '%%MASTRA_SIGNALS_UI%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      signalsUI: "'true'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_SIGNALS_UI = 'true';");
   });
 });

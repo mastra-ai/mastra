@@ -1,0 +1,271 @@
+---
+title: "A2A | Agents"
+description: "Expose and call remote Mastra agents over the Agent-to-Agent protocol."
+packages:
+  - "@mastra/client-js"
+  - "@mastra/core"
+  - "@mastra/server"
+---
+
+# A2A (Agent-to-Agent)
+
+Mastra supports the [Agent-to-Agent (A2A) protocol](https://a2a-protocol.org/latest/) for cross-platform multi-agent systems. Use A2A to expose Mastra agents as remote agents, consume remote A2A agents as Mastra subagents, or call A2A endpoints with the JavaScript client SDK.
+
+A2A is an open protocol for delegating work to agents across network, framework, vendor, and language boundaries. A remote agent keeps its own tools, prompts, memory, workflows, and infrastructure private while exposing a protocol endpoint that other systems can discover and call.
+
+## When to use A2A
+
+- A parent agent should delegate work to a specialized remote agent.
+- A remote agent is owned by another service, team, vendor, or runtime.
+- A backend, browser app, or another A2A-compatible system needs programmatic access to a Mastra agent.
+- Long-running remote work needs task IDs, status updates, artifacts, cancellation, resubscription, or push notifications.
+
+## How A2A works
+
+A2A uses an agent card for discovery. The card is a JSON document served from a well-known URL. It describes the remote agent and includes the execution URL that accepts A2A JSON-RPC requests.
+
+When using the default Mastra Server `apiPrefix` of `/api`, an agent registered as `weather-agent` exposes:
+
+- Agent card: `/api/.well-known/weather-agent/agent-card.json`
+- Execution endpoint: `/api/a2a/weather-agent`
+
+An agent card includes fields like the agent name, description, endpoint URL, provider, capabilities, security metadata, and skills:
+
+```json title="agent-card.json"
+{
+  "protocolVersion": "0.3.0",
+  "name": "Weather Agent",
+  "description": "Provides weather information.",
+  "url": "https://agent.example.com/api/a2a/weather-agent",
+  "version": "1.0",
+  "provider": {
+    "organization": "Acme",
+    "url": "https://acme.example.com"
+  },
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "stateTransitionHistory": false
+  },
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    {
+      "id": "weather",
+      "name": "weather",
+      "description": "Gets weather conditions for a location.",
+      "tags": ["tool"]
+    }
+  ]
+}
+```
+
+A2A represents work as messages and tasks. Messages carry text, file, or structured data parts. Tasks are stateful units of work with IDs and lifecycle states, so clients can follow long-running work, send follow-up turns, cancel work, or resubscribe after a disconnect.
+
+## Get started
+
+A2A has two common paths in Mastra:
+
+- Consume a remote A2A agent as a Mastra subagent with `A2AAgent`.
+- Send requests to a Mastra A2A endpoint with `MastraClient.getA2A()`.
+
+Use `A2AAgent` when another Mastra agent should delegate work to a remote agent. Use the client SDK when application code needs to call an A2A-enabled Mastra endpoint directly.
+
+## Consume A2A agents as subagents
+
+Use `A2AAgent` to wrap a remote A2A agent, then add it to a parent agent with the [supervisor agents](/docs/agents/supervisor-agents) pattern. Pass an explicit agent card URL when the remote server hosts multiple agents or uses a custom well-known path.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+  headers: {
+    Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
+  },
+})
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer user questions and delegate weather questions when needed.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  agents: {
+    remoteWeatherAgent,
+  },
+})
+```
+
+If `url` points to a domain, `A2AAgent` fetches the agent card from `/.well-known/agent-card.json`. Use a domain URL for single-agent servers that follow that discovery path. For multi-agent servers, pass the full card URL, such as `https://agent.example.com/api/.well-known/weather-agent/agent-card.json`.
+
+During execution, `A2AAgent`:
+
+- Fetches and caches the remote agent card.
+- Reads the execution URL and capabilities from the card.
+- Calls `message/send` for non-streaming runs or `message/stream` when streaming is supported.
+- Converts remote messages, tasks, artifacts, and status updates into Mastra subagent results.
+- Supports `resumeGenerate()` and `resumeStream()` when the remote task requires follow-up input or resubscription.
+
+If the remote card doesn't advertise streaming support, `A2AAgent.stream()` falls back to the non-streaming generate path and returns a buffered stream result.
+
+## Send requests with the client SDK
+
+Use `MastraClient.getA2A()` when you want application code to call an A2A-enabled Mastra agent. Configure `baseUrl` for the server origin and `apiPrefix` when the server doesn't use the default `/api` prefix.
+
+```typescript title="src/a2a-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({
+  baseUrl: 'https://agent.example.com',
+  headers: {
+    Authorization: `Bearer ${process.env.AGENT_API_TOKEN}`,
+  },
+})
+
+const a2a = client.getA2A('weather-agent')
+const card = await a2a.getAgentCard()
+
+console.log(card.name, card.capabilities)
+```
+
+Use `sendMessageStream()` to send a message and receive task status and artifact updates over Server-Sent Events (SSE):
+
+```typescript title="src/a2a-client.ts"
+const stream = a2a.sendMessageStream({
+  message: {
+    kind: 'message',
+    role: 'user',
+    messageId: crypto.randomUUID(),
+    parts: [{ kind: 'text', text: "What's the weather in Prague?" }],
+  },
+})
+
+for await (const event of stream) {
+  if (event.kind === 'artifact-update') {
+    console.log(event.artifact.parts)
+  }
+}
+```
+
+If a stream disconnects while a task is still running, use `resubscribeTask()` to receive live updates for the in-progress task:
+
+```typescript title="src/a2a-client.ts"
+const updates = a2a.resubscribeTask({
+  id: 'task-123',
+})
+
+for await (const event of updates) {
+  console.log(event)
+}
+```
+
+## Configure subagent calls
+
+`A2AAgent` accepts request options for authenticated or constrained environments:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+  headers: {
+    Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
+  },
+  retries: 2,
+  backoffMs: 250,
+  maxBackoffMs: 1000,
+  timeoutMs: 30_000,
+})
+```
+
+You can also pass `credentials`, `fetch`, and `abortSignal` when the runtime needs custom fetch behavior or request cancellation.
+
+## Push notifications
+
+Mastra supports A2A push notifications for remote agents that advertise `capabilities.pushNotifications`. Use push notifications when a client can't keep a stream open, or when a long-running task should update a callback URL after the original request ends.
+
+After a client has a task ID, it can register a callback URL for that task:
+
+```typescript title="src/a2a-client.ts"
+await a2a.setTaskPushNotificationConfig({
+  taskId: 'task-123',
+  pushNotificationConfig: {
+    url: 'https://app.example.com/a2a/tasks',
+    token: process.env.A2A_WEBHOOK_TOKEN,
+  },
+})
+```
+
+Mastra Server sends the current task snapshot to registered callbacks when the task reaches `completed`, `failed`, `canceled`, or `input-required`. Push notification delivery is best-effort. Protect callback URLs, validate notification tokens, and avoid exposing internal network targets as push notification destinations.
+
+## Sign and verify agent cards
+
+Mastra supports signed A2A agent cards so clients can verify that a discovered card came from a trusted publisher and wasn't changed in transit. Configure signing on the Mastra server that exposes the remote agent:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  server: {
+    a2a: {
+      agentCardSigning: {
+        privateKey: process.env.A2A_AGENT_CARD_PRIVATE_KEY!,
+        protectedHeader: {
+          alg: 'ES256',
+          kid: 'agent-card-key',
+        },
+      },
+    },
+  },
+})
+```
+
+When signing is configured, Mastra includes a `signatures` array on the agent card. Client verification is opt-in, and unsigned cards still return unchanged.
+
+Verify a signed card with `MastraClient.getA2A()`:
+
+```typescript title="src/a2a-client.ts"
+const card = await a2a.getAgentCard({
+  verifySignature: {
+    algorithms: ['ES256'],
+    keyProvider: async ({ kid, jku }) => {
+      return fetchTrustedPublicJwk({ kid, jku })
+    },
+  },
+})
+
+if (!card.signatures?.length) {
+  throw new Error('Expected a signed A2A agent card.')
+}
+```
+
+Use client-side signature verification when a client must enforce trusted keys before calling the remote agent.
+
+## Verify subagent cards
+
+Use `verifyAgentCard` when a parent agent should validate a remote agent before delegating work to it. The verification hook receives the fetched agent card and context about where and when it was fetched.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { A2AAgent } from '@mastra/core/a2a'
+
+const remoteWeatherAgent = new A2AAgent({
+  url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+  verifyAgentCard: {
+    verify: async (card, context) => {
+      if (card.provider?.organization !== 'Weather Inc') {
+        throw new Error(`Unexpected provider for ${context.cardUrl}`)
+      }
+    },
+  },
+})
+```
+
+Use this hook to enforce expected providers, expected endpoints, certificate-bound identities, signed cards, or other trust requirements before a parent agent delegates to the remote agent.
+
+## Related
+
+- [Agent reference](/reference/agents/agent)
+- [JavaScript client agents reference](/reference/client-js/agents)
+- [A2A core concepts](https://a2a-protocol.org/latest/topics/key-concepts/)
+- [A2A discovery guide](https://a2a-protocol.org/latest/topics/agent-discovery/)

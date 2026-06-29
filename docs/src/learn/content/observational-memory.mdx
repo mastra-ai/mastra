@@ -1,0 +1,35 @@
+Basic message history has limits. As conversations grow, raw history piles up fast: tool calls, wait time lookups, weather checks, scraped park data. In this lesson, you'll enable Observational Memory, which compresses that growing history into denser context the agent can actually use.
+
+You'll switch the agent to `observationalMemory`, set the scope to `resource` so memory follows the user across threads, and test it in Studio by starting a conversation in one thread and picking it back up in a new one. Earlier preferences carry over even though the thread is fresh.
+
+This matters because Observational Memory replaces manual `lastMessages` tuning with automatic compression. The conversation stays coherent across long sessions and multiple threads without dragging all the raw history forward on every call.
+
+> "You don't remember every word of every conversation you've ever had. You observe what happened, and over time that condenses into something more useful. OM is built around that same idea."
+>
+> — Guil Hernandez
+
+## Mentioned in the lesson
+
+Code:
+
+- [Course GitHub repo](https://github.com/mastra-ai/mastra-agent-course)
+
+Relevant Mastra docs:
+
+- [Observational Memory](/docs/memory/observational-memory)
+- [Memory overview](/docs/memory/overview)
+- [Memory storage](/docs/memory/storage)
+- [Working memory](/docs/memory/working-memory)
+
+## Join the community
+
+Ask questions:
+
+- [Discord](https://discord.gg/mastra) — chat with other learners and the Mastra team
+- [Guil on LinkedIn](https://www.linkedin.com/in/guiljh/) — ask him questions directly
+
+Follow Mastra:
+
+- [X](https://x.com/mastra) — follow Mastra for updates
+- [YouTube](https://www.youtube.com/@mastra-ai) — watch more tutorials
+- [LinkedIn](https://www.linkedin.com/company/mastra-ai) — follow for updates

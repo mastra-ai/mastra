@@ -32,6 +32,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -41,6 +42,7 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
@@ -886,11 +888,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
       const result = await collection.findOne<any>({ id: threadId });
-      if (!result) {
+      if (!result || (resourceId !== undefined && result.resourceId !== resourceId)) {
         return null;
       }
 
@@ -1069,6 +1077,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
     }
 
+    const now = new Date();
     const updatedThread = {
       ...thread,
       title,
@@ -1076,6 +1085,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: now,
     };
 
     try {
@@ -1086,6 +1096,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             title,
             metadata: updatedThread.metadata,
+            updatedAt: now,
           },
         },
       );
@@ -1412,11 +1423,25 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
       const collection = await this.getCollection(OM_TABLE);
-      const docs = await collection.find({ lookupKey }).sort({ generationCount: -1 }).limit(limit).toArray();
+
+      const filter: Record<string, unknown> = { lookupKey };
+      if (options?.from || options?.to) {
+        const createdAtFilter: Record<string, unknown> = {};
+        if (options.from) createdAtFilter['$gte'] = options.from;
+        if (options.to) createdAtFilter['$lte'] = options.to;
+        filter['createdAt'] = createdAtFilter;
+      }
+
+      let cursor = collection.find(filter).sort({ generationCount: -1 });
+      if (options?.offset != null) {
+        cursor = cursor.skip(options.offset);
+      }
+      const docs = await cursor.limit(limit).toArray();
       return docs.map((doc: any) => this.parseOMDocument(doc));
     } catch (error) {
       throw new MastraError(
@@ -1873,6 +1898,43 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    try {
+      const collection = await this.getCollection(OM_TABLE);
+
+      // Read current config
+      const doc = await collection.findOne({ id: input.id }, { projection: { config: 1 } });
+
+      if (!doc) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const existing: Record<string, unknown> = (doc.config as Record<string, unknown>) ?? {};
+      const merged = this.deepMergeConfig(existing, input.config);
+
+      await collection.updateOne({ id: input.id }, { $set: { config: merged, updatedAt: new Date() } });
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'UPDATE_OM_CONFIG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
   // ============================================
   // Async Buffering Methods
   // ============================================
@@ -1893,6 +1955,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically

@@ -2,8 +2,12 @@
  * Shell passthrough: execute a shell command and display the output in the TUI.
  * Streams stdout/stderr in real-time using a bordered box that rebuilds on each chunk.
  */
+import { loadSettings } from '../onboarding/settings.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { ShellStreamComponent } from './components/shell-output.js';
 import { showError, showInfo } from './display.js';
+import { resolveShellPassthroughCompletion } from './shell-result.js';
+import { createShellPassthroughSubprocess } from './shell-runner.js';
 import type { TUIState } from './state.js';
 
 export async function handleShellPassthrough(state: TUIState, command: string): Promise<void> {
@@ -13,22 +17,18 @@ export async function handleShellPassthrough(state: TUIState, command: string): 
   }
 
   const component = new ShellStreamComponent(command);
-  state.chatContainer.addChild(component);
+  if (state.toolOutputExpanded) {
+    component.setExpanded(true);
+  }
+  state.allShellComponents.push(component);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   state.ui.requestRender();
 
   try {
-    const { execa } = await import('execa');
-
-    const subprocess = execa(command, {
-      shell: true,
-      cwd: process.cwd(),
-      reject: false,
-      timeout: 30_000,
-      env: {
-        ...process.env,
-        FORCE_COLOR: '1',
-      },
-    });
+    const { invocation, subprocess } = await createShellPassthroughSubprocess(command, loadSettings().shellPassthrough);
+    for (const warning of invocation.warnings) {
+      showInfo(state, `Shell passthrough: ${warning}`);
+    }
 
     // Stream stdout/stderr as it arrives
     if (subprocess.stdout) {
@@ -48,8 +48,12 @@ export async function handleShellPassthrough(state: TUIState, command: string): 
 
     // Wait for the process to complete
     const result = await subprocess;
+    const completion = resolveShellPassthroughCompletion(result);
+    if (completion.diagnostic) {
+      component.appendOutput(`${completion.diagnostic}\n`);
+    }
 
-    component.finish(result.exitCode ?? 0);
+    component.finish(completion.exitCode);
     state.ui.requestRender();
   } catch (error) {
     component.finish(1);

@@ -5,6 +5,9 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
+import * as path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
+
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
 import { getExeca } from './execa';
@@ -50,9 +53,30 @@ class LocalProcessHandle extends ProcessHandle {
         }, options.timeout)
       : undefined;
 
+    const stdoutDecoder = new StringDecoder();
+    const stderrDecoder = new StringDecoder();
+    let stdoutDecoderEnded = false;
+    let stderrDecoderEnded = false;
+
+    const flushStdoutDecoder = () => {
+      if (stdoutDecoderEnded) return;
+      stdoutDecoderEnded = true;
+      const data = stdoutDecoder.end();
+      if (data) this.emitStdout(data);
+    };
+
+    const flushStderrDecoder = () => {
+      if (stderrDecoderEnded) return;
+      stderrDecoderEnded = true;
+      const data = stderrDecoder.end();
+      if (data) this.emitStderr(data);
+    };
+
     this.waitPromise = new Promise<CommandResult>(resolve => {
       subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
         if (timeoutId) clearTimeout(timeoutId);
+        flushStdoutDecoder();
+        flushStderrDecoder();
         if (timedOut) {
           const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
           this.emitStderr(timeoutMsg);
@@ -73,6 +97,8 @@ class LocalProcessHandle extends ProcessHandle {
 
       subprocess.on('error', (err: Error) => {
         if (timeoutId) clearTimeout(timeoutId);
+        flushStdoutDecoder();
+        flushStderrDecoder();
         this.emitStderr(err.message);
         this.exitCode = 1;
         resolve({
@@ -86,12 +112,16 @@ class LocalProcessHandle extends ProcessHandle {
     });
 
     subprocess.stdout?.on('data', (data: Buffer) => {
-      this.emitStdout(data.toString());
+      const decoded = stdoutDecoder.write(data);
+      if (decoded) this.emitStdout(decoded);
     });
+    subprocess.stdout?.on('end', flushStdoutDecoder);
 
     subprocess.stderr?.on('data', (data: Buffer) => {
-      this.emitStderr(data.toString());
+      const decoded = stderrDecoder.write(data);
+      if (decoded) this.emitStderr(decoded);
     });
+    subprocess.stderr?.on('end', flushStderrDecoder);
   }
 
   async wait(): Promise<CommandResult> {
@@ -163,7 +193,22 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
-    const cwd = options.cwd ?? this.sandbox.workingDirectory;
+    let cwd = this.sandbox.workingDirectory;
+    if (options.cwd) {
+      if (path.isAbsolute(options.cwd)) {
+        cwd = options.cwd;
+      } else {
+        // Prevent duplicate nesting when agent passes cwd that's already workspace-relative
+        const normalizedWorkingDir = path.resolve(this.sandbox.workingDirectory);
+        const normalizedOptionsCwd = path.resolve(options.cwd);
+        // Check if path is already under workspace (exact match or nested subpath)
+        const isAlreadyWorkspacePath =
+          normalizedOptionsCwd === normalizedWorkingDir ||
+          normalizedOptionsCwd.startsWith(`${normalizedWorkingDir}${path.sep}`);
+
+        cwd = isAlreadyWorkspacePath ? normalizedOptionsCwd : path.resolve(this.sandbox.workingDirectory, options.cwd);
+      }
+    }
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 

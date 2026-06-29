@@ -1,14 +1,15 @@
+import { sendSlashCommandMessage } from './send-slash-command-message.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleReviewCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  if (!ctx.state.harness.hasModelSelected()) {
+  if (!ctx.state.session.model.hasSelection()) {
     ctx.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
     return;
   }
 
   // Ensure thread exists
   if (ctx.state.pendingNewThread) {
-    await ctx.state.harness.createThread();
+    await ctx.state.session.thread.create();
     ctx.state.pendingNewThread = false;
   }
 
@@ -43,20 +44,8 @@ export async function handleReviewCommand(ctx: SlashCommandContext, args: string
     }
   }
 
-  ctx.addUserMessage({
-    id: `user-${Date.now()}`,
-    role: 'user',
-    content: [
-      {
-        type: 'text',
-        text: prNumber ? `/review ${args.join(' ')}` : '/review',
-      },
-    ],
-    createdAt: new Date(),
-  });
-  ctx.state.ui.requestRender();
-
-  ctx.state.harness.sendMessage({ content: prompt }).catch(error => {
+  const displayText = prNumber ? `/review ${args.join(' ')}` : '/review';
+  sendSlashCommandMessage(ctx, displayText, prompt).catch(error => {
     ctx.showError(error instanceof Error ? error.message : 'Review failed');
   });
 }

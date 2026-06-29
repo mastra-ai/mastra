@@ -3,18 +3,18 @@ name: Publish to npm
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 on:
   workflow_dispatch:
     inputs:
       publish_type:
-        description: 'Type of publish'
+        description: 'Type of publish/action'
         required: true
         type: choice
         options:
           - prerelease
           - stable
+          - enter-prerelease
           - snapshot
         default: prerelease
       tag:
@@ -44,23 +44,47 @@ jobs:
         (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_type == 'prerelease')
       )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
+
+      - name: Verify alpha prerelease state
+        run: |
+          if [ ! -f .changeset/pre.json ]; then
+            echo "::error::.changeset/pre.json is missing. Run the Cron Alpha Version workflow first to restore alpha prerelease mode."
+            exit 1
+          fi
+
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const { execSync } = require('node:child_process');
+
+          const pre = JSON.parse(readFileSync('.changeset/pre.json', 'utf8'));
+          if (pre.mode !== 'pre' || pre.tag !== 'alpha') {
+            console.error(`Expected .changeset/pre.json to be in alpha pre mode, got mode=${pre.mode} tag=${pre.tag}`);
+            process.exit(1);
+          }
+          NODE
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
@@ -82,6 +106,49 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
 
+      - name: Get CLI version
+        id: cli-version
+        run: |
+          version=$(node -p 'require("./packages/cli/package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload studio assets to R2 (staging)
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_STAGING }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_STAGING }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_STAGING }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      - name: Upload studio assets to R2 (production)
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      - name: Notify linked issues (alpha available)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: alpha-released
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
   # ===========================================
   # STABLE RELEASE: Manual trigger only
   # ===========================================
@@ -91,11 +158,12 @@ jobs:
       github.event_name == 'workflow_dispatch' && 
       github.event.inputs.publish_type == 'stable'
     runs-on: ubuntu-latest
-    outputs:
-      exited_prerelease: ${{ steps.exit-prerelease-mode.outputs.executed }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -104,11 +172,14 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
@@ -116,21 +187,26 @@ jobs:
 
       - name: Check for pre.json file existence
         id: check_files
-        uses: andstor/file-existence-action@v3.0.0
-        with:
-          files: '.changeset/pre.json'
+        shell: bash
+        run: |
+          if [[ -f .changeset/pre.json ]]; then
+            echo "files_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "files_exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
@@ -142,7 +218,6 @@ jobs:
         run: pnpm build
 
       - name: Exit prerelease mode
-        id: exit-prerelease-mode
         if: steps.check_files.outputs.files_exists == 'true'
         run: |
           pnpm changeset-cli pre exit
@@ -151,7 +226,6 @@ jobs:
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
           git push
-          echo "executed=true" >> "$GITHUB_OUTPUT"
           pnpm install
           pnpm build
         env:
@@ -174,15 +248,32 @@ jobs:
 
       - name: Get CLI version
         id: cli-version
-        run: echo "version=$(node -p \"require('./packages/cli/package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          version=$(node -p 'require("./packages/cli/package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Upload studio assets to R2
+      - name: Upload studio assets to R2 (staging)
         if: ${{ !inputs.dry_run }}
+        continue-on-error: true
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
-          STUDIO_BUCKET_NAME: ${{ secrets.STUDIO_BUCKET_NAME }}
-          STUDIO_ENDPOINT_URL: ${{ secrets.STUDIO_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_STAGING }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_STAGING }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_STAGING }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      # TODO: Remove continue-on-error once production CF R2 credentials are configured.
+      - name: Upload studio assets to R2 (production)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
         run: |
           aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
@@ -201,15 +292,35 @@ jobs:
           pnpm changeset-cli tag
           git push origin --tags
 
+      - name: Notify linked issues (stable released)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: stable-released
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
   enter_prerelease:
     needs: stable
     if: |
-      github.repository == 'mastra-ai/mastra' && 
-      needs.stable.outputs.exited_prerelease == 'true'
+      always() &&
+      github.repository == 'mastra-ai/mastra' &&
+      github.event_name == 'workflow_dispatch' &&
+      (
+        (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.result == 'success') ||
+        github.event.inputs.publish_type == 'enter-prerelease'
+      )
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -218,27 +329,30 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install
@@ -246,6 +360,10 @@ jobs:
       - name: Enter prerelease mode
         run: |
           git pull
+          if [[ -f .changeset/pre.json ]]; then
+            echo "Already in prerelease mode; no changes needed."
+            exit 0
+          fi
           pnpm changeset-cli pre enter alpha
           git add -A
           git commit -m 'chore: version - enter prerelease mode' --no-verify
@@ -269,13 +387,16 @@ jobs:
       github.event.inputs.publish_type == 'snapshot' &&
       github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           persist-credentials: false
@@ -284,27 +405,30 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           token: ${{ steps.app-auth.outputs.token }}
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
         with:
           run_install: false
 
       - name: Setup Node.js 24.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
+          package-manager-cache: false
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
@@ -346,10 +470,24 @@ jobs:
           echo "Finished updating workspace dependencies. $changed_count files updated."
         shell: bash
 
+      - name: Update lockfile
+        run: pnpm install --no-frozen-lockfile --lockfile-only
+
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build
 
+      - name: Check for pre.json file existence
+        id: check-snapshot-pre-json
+        shell: bash
+        run: |
+          if [[ -f .changeset/pre.json ]]; then
+            echo "files_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "files_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run Changeset Pre Exit
+        if: steps.check-snapshot-pre-json.outputs.files_exists == 'true'
         run: pnpm changeset-cli pre exit
 
       - name: Run Changeset Version Snapshot
@@ -361,3 +499,33 @@ jobs:
         run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
         env:
           NPM_CONFIG_PROVENANCE: true
+
+      - name: Get CLI version
+        id: cli-version
+        run: |
+          version=$(node -p 'require("./packages/cli/package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Upload studio assets to R2 (staging)
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_STAGING }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_STAGING }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_STAGING }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_STAGING }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete
+
+      - name: Upload studio assets to R2 (production)
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.STUDIO_R2_ACCESS_KEY_ID_PROD }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.STUDIO_R2_ACCESS_SECRET_PROD }}
+          STUDIO_BUCKET_NAME: ${{ vars.STUDIO_R2_BUCKET_PROD }}
+          STUDIO_ENDPOINT_URL: ${{ vars.STUDIO_R2_ENDPOINT_URL_PROD }}
+        run: |
+          aws s3 sync packages/cli/dist/studio "s3://${STUDIO_BUCKET_NAME}/${{ steps.cli-version.outputs.version }}/studio/" \
+            --endpoint-url "${STUDIO_ENDPOINT_URL}" \
+            --delete

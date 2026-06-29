@@ -36,6 +36,24 @@ export const mastra = new Mastra({
 })
 ```
 
+Enable scheduled notification dispatch when deferred notification records and notification summaries should be delivered automatically through the workflow scheduler:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  storage,
+  notifications: {
+    dispatch: {
+      enabled: true,
+      cron: '*/1 * * * *',
+      batchSize: 100,
+    },
+  },
+})
+```
+
+`notifications.dispatch.enabled` registers an internal workflow with the default cron `*/1 * * * *`. The dispatcher reads due notification records from storage, groups summaries by `agentId`, `resourceId`, and `threadId`, and emits signals through the agent thread runtime. It isn't a user-facing entrypoint.
+
 ## Constructor parameters
 
 Visit the [Configuration reference](/reference/configuration) for detailed documentation on all available configuration options.
@@ -105,6 +123,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     description: 'Observability configuration for tracing and monitoring',
   },
   {
+    name: 'environment',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Deployment environment name (e.g. `production`, `staging`, `development`). When set, automatically attached to all observability signals so they can be filtered by environment without passing `tracingOptions.metadata.environment` on each call. Falls back to `process.env.NODE_ENV` when unset; left undefined if neither is set. Per-call `tracingOptions.metadata.environment` always takes precedence.',
+  },
+  {
     name: 'deployer',
     type: 'MastraDeployer',
     isOptional: true,
@@ -161,6 +186,98 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
       'Memory instances to register. These can be referenced by stored agents and resolved at runtime. Structured as a key-value pair, with keys being the registry key and values being memory instances.',
     isOptional: true,
     defaultValue: '{}',
+  },
+  {
+    name: 'notifications',
+    type: 'object',
+    description: 'Runtime configuration for notification signal dispatch.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'dispatch',
+            type: 'NotificationDispatchConfig',
+            isOptional: true,
+            description:
+              'Scheduled dispatch configuration for deferred notifications and notification summaries. Dispatch is enabled by default.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'enabled',
+                    type: 'boolean',
+                    isOptional: true,
+                    defaultValue: 'true',
+                    description: 'Set to `false` to opt out of automatic scheduled notification dispatch.',
+                  },
+                  {
+                    name: 'cron',
+                    type: 'string',
+                    isOptional: true,
+                    defaultValue: '`*/1 * * * *`',
+                    description: 'Cron schedule used by the internal notification dispatcher workflow.',
+                  },
+                  {
+                    name: 'batchSize',
+                    type: 'number',
+                    isOptional: true,
+                    defaultValue: '100',
+                    description: 'Maximum number of due notification records to process per dispatch run.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'versions',
+    type: 'VersionOverrides',
+    description:
+      'Global version overrides for sub-agent delegation. When a supervisor agent delegates to a sub-agent, these overrides determine which stored version of that sub-agent to use instead of the code-defined default. Requires the editor package to be configured. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning) for details.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'VersionOverrides',
+        parameters: [
+          {
+            name: 'agents',
+            type: 'Record<string, VersionSelector>',
+            isOptional: true,
+            description:
+              'A map of agent IDs to their version selectors. Each selector can target a specific version by ID or by publication status.',
+            properties: [
+              {
+                type: 'VersionSelector',
+                parameters: [
+                  {
+                    name: 'versionId',
+                    type: 'string',
+                    isOptional: true,
+                    description: 'The ID of a specific version to use.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'status',
+                    type: "'draft' | 'published'",
+                    isOptional: true,
+                    description: 'Select the latest version with this publication status.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

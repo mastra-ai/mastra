@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import stripJsonComments from 'strip-json-comments';
-import { logger } from '../../../utils/logger.js';
-import type { LintContext, LintRule } from './types.js';
+import type { LintContext, LintIssue, LintRule } from './types.js';
 
 function readTsConfig(dir: string) {
   const tsConfigPath = join(dir, 'tsconfig.json');
@@ -18,33 +17,36 @@ function readTsConfig(dir: string) {
 export const tsConfigRule: LintRule = {
   name: 'ts-config',
   description: 'Checks if TypeScript config is properly configured for Mastra packages',
-  async run(context: LintContext): Promise<boolean> {
+  async run(context: LintContext): Promise<LintIssue[]> {
     const tsConfig = readTsConfig(context.rootDir);
     if (!tsConfig) {
-      logger.warn('No tsconfig.json found. This might cause issues with Mastra packages.');
-      return true; // Not a critical error, just a warning
+      return [
+        {
+          code: 'MISSING_TSCONFIG',
+          severity: 'warning',
+          scope: 'project',
+          message: 'No tsconfig.json found. Mastra projects should include a TypeScript config.',
+          fix: 'Add a tsconfig.json file. See https://mastra.ai/en/docs/getting-started/installation#initialize-typescript',
+        },
+      ];
     }
 
     const { module, moduleResolution } = tsConfig.compilerOptions || {};
 
-    // Check if either moduleResolution is 'bundler' or module is 'CommonJS'
     const isValidConfig = moduleResolution === 'bundler' || module === 'CommonJS';
     if (!isValidConfig) {
-      logger.error('tsconfig.json has invalid configuration');
-      logger.error('Please set either:');
-      logger.error('  "compilerOptions": {');
-      logger.error('    "moduleResolution": "bundler"');
-      logger.error('  }');
-      logger.error('or');
-      logger.error('  "compilerOptions": {');
-      logger.error('    "module": "CommonJS"');
-      logger.error('  }');
-      logger.error('For the recommended TypeScript configuration, see:');
-      logger.error('https://mastra.ai/en/docs/getting-started/installation#initialize-typescript');
-      return false;
+      return [
+        {
+          code: 'INVALID_TSCONFIG',
+          severity: 'error',
+          scope: 'project',
+          message:
+            'tsconfig.json must set either compilerOptions.moduleResolution to "bundler" or compilerOptions.module to "CommonJS".',
+          fix: 'Update tsconfig.json with either { "compilerOptions": { "moduleResolution": "bundler" } } or { "compilerOptions": { "module": "CommonJS" } }. See https://mastra.ai/en/docs/getting-started/installation#initialize-typescript',
+        },
+      ];
     }
 
-    logger.info('TypeScript config is properly configured for Mastra packages');
-    return true;
+    return [];
   },
 };

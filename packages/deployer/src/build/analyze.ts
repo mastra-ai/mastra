@@ -279,7 +279,7 @@ async function validateOutput(
       continue;
     }
 
-    logger.debug(`Validating if ${file.fileName} is a valid module.`);
+    logger.debug('Validating module', { fileName: file.fileName });
     if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
       result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
@@ -335,12 +335,10 @@ export async function analyzeBundle(
   });
 
   if (!mastraConfigResult.hasValidConfig) {
-    logger.warn(`Invalid Mastra config. Please make sure that your entry file looks like this:
-export const mastra = new Mastra({
-  // your options
-})
-
-If you think your configuration is valid, please open an issue.`);
+    logger.warn('Invalid Mastra config', {
+      details:
+        'Please make sure that your entry file looks like this:\nexport const mastra = new Mastra({\n  // your options\n})\n\nIf you think your configuration is valid, please open an issue.',
+    });
   }
 
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: mastraEntry });
@@ -364,6 +362,8 @@ If you think your configuration is valid, please open an issue.`);
 
   // Track external dependencies with their version info
   const allUsedExternals = new Map<string, ExternalDependencyInfo>();
+  // Shared cache prevents re-analyzing the same workspace package across entries and recursive calls.
+  const analyzeCache = new Map<string, Awaited<ReturnType<typeof analyzeEntry>>>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
@@ -372,6 +372,7 @@ If you think your configuration is valid, please open an issue.`);
       workspaceMap,
       projectRoot,
       shouldCheckTransitiveDependencies: isDev || externalsPreset,
+      analyzeCache,
     });
 
     // Detect pino transports in the bundled output
@@ -425,7 +426,7 @@ If you think your configuration is valid, please open an issue.`);
 
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
-  logger.debug(`${sortedDeps.map(key => `- ${key}`).join('\n')}`);
+  logger.debug('Sorted dependencies', { deps: sortedDeps });
 
   const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
     bundlerOptions: {

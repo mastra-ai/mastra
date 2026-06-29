@@ -1,15 +1,23 @@
 services:
   db:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:26.5.1.882
     container_name: 'clickhouse-test-db'
     ports:
       - '8123:8123'
       - '9000:9000'
+      - '9181:9181'
     environment:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-password}
+    healthcheck:
+      test: ['CMD-SHELL', "clickhouse-client --query 'SELECT 1'"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+    tmpfs:
+      - /var/lib/clickhouse
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
-volumes:
-  clickhouse_data:
+      - ./docker/keeper.test.xml:/etc/clickhouse-server/config.d/keeper.xml:ro
+      - ./docker/disable-jit.test.xml:/etc/clickhouse-server/users.d/disable-jit.xml:ro

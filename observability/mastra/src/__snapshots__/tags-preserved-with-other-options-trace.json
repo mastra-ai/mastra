@@ -22,7 +22,8 @@
         },
         "metadata": {
           "runId": "<runId-1>",
-          "someKey": "someValue"
+          "someKey": "someValue",
+          "environment": "test"
         },
         "input": "Hello",
         "output": {
@@ -48,9 +49,7 @@
               "model": "mock-model-id",
               "provider": "mock-provider",
               "streaming": true,
-              "parameters": {
-                "temperature": 0
-              },
+              "parameters": {},
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -68,7 +67,8 @@
             },
             "metadata": {
               "runId": "<runId-1>",
-              "someKey": "someValue"
+              "someKey": "someValue",
+              "environment": "test"
             },
             "input": {
               "messages": [
@@ -122,7 +122,8 @@
                     }
                   },
                   "isContinued": false,
-                  "finishReason": "stop"
+                  "finishReason": "stop",
+                  "warnings": []
                 },
                 "metadata": {
                   "runId": "<runId-1>",
@@ -131,7 +132,8 @@
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
                     "modelProvider": "mock-provider"
-                  }
+                  },
+                  "environment": "test"
                 },
                 "input": {},
                 "output": {
@@ -158,7 +160,8 @@
                     },
                     "metadata": {
                       "runId": "<runId-1>",
-                      "someKey": "someValue"
+                      "someKey": "someValue",
+                      "environment": "test"
                     },
                     "output": {
                       "text": "Mock V2 generate response"

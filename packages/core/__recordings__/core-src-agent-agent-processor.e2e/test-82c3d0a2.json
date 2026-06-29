@@ -1,0 +1,137 @@
+{
+  "meta": {
+    "name": "test-82c3d0a2",
+    "testFile": "packages/core/src/agent/agent-processor.e2e.test.ts",
+    "testName": "StructuredOutputProcessor Integration Tests > with real LLM > should handle fallback strategy gracefully",
+    "model": "gpt-4o",
+    "createdAt": "2026-05-18T10:50:58.300Z"
+  },
+  "recordings": [
+    {
+      "hash": "4dda7b8014372005",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant.\n\nYour response will be processed by another agent to extract structured data. Please ensure your response contains comprehensive information for all the following fields that will be extracted:\n\n{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"impossible\":{\"type\":\"string\",\"const\":\"exact_match_required\"},\"number\":{\"type\":\"number\",\"minimum\":1000,\"maximum\":1000}},\"required\":[\"impossible\",\"number\"],\"additionalProperties\":false}\n\n\nYou don't need to format your response as JSON unless the user asks you to. Just ensure your natural language response includes relevant information for each field in the schema above."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Tell me about the weather today in a casual way."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1779101457373
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda4dcceb60b774-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 10:50:58 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "757",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "29824",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "352ms",
+          "x-request-id": "req_276ac1eaedaf445dbab3d59d619736ac"
+        },
+        "body": {
+          "id": "resp_033e6b28eea713cb006a0aef118540819094b1ef8922f8b03c",
+          "object": "response",
+          "created_at": 1779101457,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779101458,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_033e6b28eea713cb006a0aef11ddec8190877aa160182589af",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "I'm sorry, but I can't provide the information you requested. However, I can share that the number is 1000."
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 157,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 26,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 183
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

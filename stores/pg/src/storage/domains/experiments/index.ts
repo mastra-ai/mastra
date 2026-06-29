@@ -65,6 +65,17 @@ export class ExperimentsPG extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.#db.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: EXPERIMENT_RESULTS_SCHEMA });
+    // Add columns introduced after initial schema for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -78,6 +89,17 @@ export class ExperimentsPG extends ExperimentsStorage {
         table: TABLE_EXPERIMENT_RESULTS,
         columns: ['experimentId', 'itemId'],
         unique: true,
+      },
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
+      {
+        name: 'idx_experiments_org_project',
+        table: TABLE_EXPERIMENTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_experiment_results_org_project',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['organizationId', 'projectId'],
       },
     ];
   }
@@ -115,6 +137,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       agentVersion: (row.agentVersion as string | null) ?? null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       status: row.status as Experiment['status'],
@@ -135,6 +159,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       experimentId: row.experimentId as string,
       itemId: row.itemId as string,
       itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
@@ -145,6 +171,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,
+      toolMockReport: row.toolMockReport ? safelyParseJSON(row.toolMockReport) : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
   }
@@ -167,6 +194,8 @@ export class ExperimentsPG extends ExperimentsStorage {
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
           agentVersion: input.agentVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
           status: 'pending',
@@ -189,6 +218,8 @@ export class ExperimentsPG extends ExperimentsStorage {
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
         agentVersion: input.agentVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         status: 'pending',
@@ -325,6 +356,33 @@ export class ExperimentsPG extends ExperimentsStorage {
         conditions.push(`"datasetId" = $${paramIndex++}`);
         queryParams.push(args.datasetId);
       }
+      if (args.targetType) {
+        conditions.push(`"targetType" = $${paramIndex++}`);
+        queryParams.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push(`"targetId" = $${paramIndex++}`);
+        queryParams.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push(`"agentVersion" = $${paramIndex++}`);
+        queryParams.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push(`"status" = $${paramIndex++}`);
+        queryParams.push(args.status);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -407,6 +465,8 @@ export class ExperimentsPG extends ExperimentsStorage {
           experimentId: input.experimentId,
           itemId: input.itemId,
           itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           input: input.input,
           output: input.output ?? null,
           groundTruth: input.groundTruth ?? null,
@@ -417,6 +477,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags ?? null,
+          toolMockReport: input.toolMockReport ?? null,
           createdAt: nowIso,
         },
       });
@@ -426,6 +487,8 @@ export class ExperimentsPG extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         input: input.input,
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
@@ -436,6 +499,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolMockReport: input.toolMockReport ?? null,
         createdAt: now,
       };
     } catch (error) {
@@ -536,9 +600,35 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { page, perPage: perPageInput } = args.pagination;
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
 
+      const conditions: string[] = ['"experimentId" = $1'];
+      const queryParams: any[] = [args.experimentId];
+      let paramIndex = 2;
+
+      if (args.traceId) {
+        conditions.push(`"traceId" = $${paramIndex++}`);
+        queryParams.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push(`"status" = $${paramIndex++}`);
+        queryParams.push(args.status);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
       const countResult = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} WHERE "experimentId" = $1`,
-        [args.experimentId],
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
       );
       const total = parseInt(countResult.count, 10);
 
@@ -551,8 +641,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} WHERE "experimentId" = $1 ORDER BY "startedAt" ASC LIMIT $2 OFFSET $3`,
-        [args.experimentId, limitValue, offset],
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "startedAt" ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+        [...queryParams, limitValue, offset],
       );
 
       return {

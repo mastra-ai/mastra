@@ -27,8 +27,14 @@ import { Sandbox, Template } from 'e2b';
 import type { TemplateBuilder, TemplateClass } from 'e2b';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
-import { mountS3, mountGCS, LOG_PREFIX } from './mounts';
-import type { E2BMountConfig, E2BS3MountConfig, E2BGCSMountConfig, MountContext } from './mounts';
+import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
+import type {
+  E2BMountConfig,
+  E2BS3MountConfig,
+  E2BGCSMountConfig,
+  E2BAzureBlobMountConfig,
+  MountContext,
+} from './mounts';
 import { E2BProcessManager } from './process-manager';
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
@@ -267,14 +273,14 @@ export class E2BSandbox extends MastraSandbox {
       resolvedTemplateId = await this.resolveTemplate();
     }
 
-    // Create a new sandbox with our logical ID in metadata
-    // Using betaCreate with autoPause so sandbox pauses on timeout instead of being destroyed
+    // Create a new sandbox with our logical ID in metadata.
+    // lifecycle.onTimeout: 'pause' makes the sandbox pause on timeout instead of being destroyed.
     this.logger.debug(`${LOG_PREFIX} Creating new sandbox for: ${this.id} with template: ${resolvedTemplateId}`);
 
     try {
-      this._sandbox = await Sandbox.betaCreate(resolvedTemplateId, {
+      this._sandbox = await Sandbox.create(resolvedTemplateId, {
         ...this.connectionOpts,
-        autoPause: true,
+        lifecycle: { onTimeout: 'pause' },
         metadata: {
           ...this.metadata,
           'mastra-sandbox-id': this.id,
@@ -290,9 +296,9 @@ export class E2BSandbox extends MastraSandbox {
         const rebuiltTemplateId = await this.buildDefaultTemplate();
 
         this.logger.debug(`${LOG_PREFIX} Retrying sandbox creation with rebuilt template: ${rebuiltTemplateId}`);
-        this._sandbox = await Sandbox.betaCreate(rebuiltTemplateId, {
+        this._sandbox = await Sandbox.create(rebuiltTemplateId, {
           ...this.connectionOpts,
-          autoPause: true,
+          lifecycle: { onTimeout: 'pause' },
           metadata: {
             ...this.metadata,
             'mastra-sandbox-id': this.id,
@@ -501,6 +507,11 @@ export class E2BSandbox extends MastraSandbox {
           await mountGCS(mountPath, config as E2BGCSMountConfig, mountCtx);
           this.logger.debug(`${LOG_PREFIX} Mounted GCS bucket at ${mountPath}`);
           break;
+        case 'azure-blob':
+          this.logger.debug(`${LOG_PREFIX} Mounting Azure Blob container at ${mountPath}...`);
+          await mountAzure(mountPath, config as E2BAzureBlobMountConfig, mountCtx);
+          this.logger.debug(`${LOG_PREFIX} Mounted Azure Blob container at ${mountPath}`);
+          break;
         default:
           this.mounts.set(mountPath, {
             filesystem,
@@ -601,7 +612,7 @@ export class E2BSandbox extends MastraSandbox {
 
     // Get current FUSE mounts in the sandbox
     const mountsResult = await this._sandbox.commands.run(
-      `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
+      `grep -E 'fuse\\.(s3fs|gcsfuse|blobfuse2)' /proc/mounts | awk '{print $2}'`,
     );
     const currentMounts = mountsResult.stdout
       .trim()

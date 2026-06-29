@@ -1,4 +1,4 @@
-import type { TUI } from '@mariozechner/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SubagentExecutionComponent } from '../subagent-execution.js';
@@ -45,6 +45,16 @@ describe('SubagentExecutionComponent', () => {
     expect(lines.some(l => l.includes('╰──'))).toBe(true);
     expect(lines.some(l => l.includes('subagent'))).toBe(true);
     expect(lines.some(l => l.includes('explore'))).toBe(true);
+  });
+
+  it('renders fork as the type and the parent model id when forked', () => {
+    const comp = new SubagentExecutionComponent('explore', 'Summarize context', mockTui, 'openai/gpt-5.5', {
+      forked: true,
+    });
+    const lines = renderPlain(comp);
+
+    expect(lines.some(l => l.includes('subagent fork openai/gpt-5.5'))).toBe(true);
+    expect(lines.some(l => l.includes('subagent explore fork'))).toBe(false);
   });
 
   it('renders tool call activity while running', () => {
@@ -182,6 +192,24 @@ describe('SubagentExecutionComponent', () => {
       expect(lines.some(l => l.includes('Find all usages of X'))).toBe(true);
       expect(lines.some(l => l.includes('search_content'))).toBe(true);
       expect(lines.some(l => l.includes('╰──'))).toBe(true);
+    });
+
+    it('can stay expanded on completion and show the final result', () => {
+      const comp = new SubagentExecutionComponent('explore', 'List files', mockTui, 'openai/gpt-5.5', {
+        expandOnComplete: true,
+      });
+      comp.addToolStart('find_files', { path: '/tmp/quiet-tool-demo' });
+      comp.addToolEnd('find_files', 'browser-demo.html', false);
+
+      comp.finish(false, 10, 'nested\nbrowser-demo.html');
+
+      const lines = nonEmpty(renderPlain(comp));
+      expect(lines.some(l => l.includes('╭──'))).toBe(true);
+      expect(lines.some(l => l.includes('List files'))).toBe(true);
+      expect(lines.some(l => l.includes('find_files'))).toBe(true);
+      expect(lines.some(l => l.includes('nested'))).toBe(true);
+      expect(lines.some(l => l.includes('browser-demo.html'))).toBe(true);
+      expect(lines.some(l => l.includes('subagent explore openai/gpt-5.5'))).toBe(true);
     });
 
     it('toggleExpanded works correctly after completion', () => {

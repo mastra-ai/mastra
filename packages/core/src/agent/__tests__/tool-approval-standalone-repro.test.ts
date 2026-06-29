@@ -19,9 +19,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
+import { ToolSearchProcessor } from '../../processors';
 import type { ProcessInputStepArgs, Processor } from '../../processors';
+import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../../processors/step-schema';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
+import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import type { MastraDBMessage, MessageList } from '../message-list';
 import { TripWire } from '../trip-wire';
@@ -400,5 +403,202 @@ describe('resumeStream with input processors', () => {
     }
 
     expect(tripwireDetected).toBe(false);
+  }, 30000);
+});
+
+describe('tool approval with ToolSearchProcessor', () => {
+  const expectDynamicallyLoadedToolAfterApprovalResume = async ({
+    toolId,
+    agentId,
+    inputProcessors,
+  }: {
+    toolId: string;
+    agentId: string;
+    inputProcessors: (args: { toolId: string; dynamicApprovalTool: any }) => any[];
+  }) => {
+    const executeDynamicTool = vi.fn().mockResolvedValue({ ok: true });
+
+    const dynamicApprovalTool = createTool({
+      id: toolId,
+      description: 'Runs an action that requires approval',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async input => executeDynamicTool(input),
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        callCount++;
+
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'load-call',
+                toolName: 'load_tool',
+                input: JSON.stringify({ toolName: toolId }),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+
+        if (callCount === 2) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'dynamic-call',
+                toolName: toolId,
+                input: JSON.stringify({ value: 'approved input' }),
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 15, outputTokens: 5, totalTokens: 20 },
+              },
+            ]),
+          };
+        }
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-2', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const userAgent = new Agent({
+      id: agentId,
+      name: 'Tool Search Approval Agent',
+      instructions: 'Load and use dynamic tools.',
+      model: mockModel,
+      inputProcessors: inputProcessors({ toolId, dynamicApprovalTool }),
+    });
+
+    const mastra = new Mastra({
+      agents: { userAgent },
+      logger: false,
+      storage: new InMemoryStore(),
+    });
+
+    const agent = mastra.getAgent('userAgent');
+    const stream = await agent.stream('Load and use the approval tool', { maxSteps: 5 });
+
+    let toolCallId = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+      }
+    }
+
+    expect(toolCallId).toBe('dynamic-call');
+
+    const resumeResult = await agent.approveToolCall({ runId: stream.runId, toolCallId });
+
+    const toolErrors: unknown[] = [];
+    for await (const chunk of resumeResult.fullStream) {
+      if (chunk.type === 'tool-error') {
+        toolErrors.push(chunk.payload);
+      }
+    }
+
+    expect(toolErrors).toEqual([]);
+    expect(executeDynamicTool).toHaveBeenCalledWith({ value: 'approved input' });
+  };
+
+  it('executes a dynamically loaded tool after approval resume', async () => {
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_approval_tool',
+      agentId: 'tool-search-approval-agent',
+      inputProcessors: ({ toolId, dynamicApprovalTool }) => [
+        new ToolSearchProcessor({
+          tools: {
+            [toolId]: dynamicApprovalTool,
+          },
+        }),
+      ],
+    });
+  }, 30000);
+
+  it('executes a dynamically loaded tool from a processor workflow after approval resume', async () => {
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_workflow_approval_tool',
+      agentId: 'workflow-tool-search-approval-agent',
+      inputProcessors: ({ toolId, dynamicApprovalTool }) => {
+        const toolSearchProcessor = new ToolSearchProcessor({
+          tools: {
+            [toolId]: dynamicApprovalTool,
+          },
+        });
+        const inputProcessorWorkflow = createWorkflow({
+          id: 'tool-search-approval-processor-workflow',
+          inputSchema: ProcessorStepInputSchema,
+          outputSchema: ProcessorStepOutputSchema,
+        })
+          .then(createStep(toolSearchProcessor))
+          .commit();
+
+        return [inputProcessorWorkflow];
+      },
+    });
+  }, 30000);
+
+  it('executes a dynamically loaded tool from a processor workflow wrapped with createStep after approval resume', async () => {
+    await expectDynamicallyLoadedToolAfterApprovalResume({
+      toolId: 'dynamic_wrapped_workflow_approval_tool',
+      agentId: 'wrapped-workflow-tool-search-approval-agent',
+      inputProcessors: ({ toolId, dynamicApprovalTool }) => {
+        const toolSearchProcessor = new ToolSearchProcessor({
+          tools: {
+            [toolId]: dynamicApprovalTool,
+          },
+        });
+        const innerProcessorWorkflow = createWorkflow({
+          id: 'inner-tool-search-approval-processor-workflow',
+          inputSchema: ProcessorStepInputSchema,
+          outputSchema: ProcessorStepOutputSchema,
+        })
+          .then(createStep(toolSearchProcessor))
+          .commit();
+        const parentProcessorWorkflow = createWorkflow({
+          id: 'parent-tool-search-approval-processor-workflow',
+          inputSchema: ProcessorStepInputSchema,
+          outputSchema: ProcessorStepOutputSchema,
+        })
+          .then(createStep(innerProcessorWorkflow as any))
+          .commit();
+
+        return [parentProcessorWorkflow];
+      },
+    });
   }, 30000);
 });

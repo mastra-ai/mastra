@@ -3,11 +3,16 @@
  * om_status, om_observation_start/end, om_reflection_start/end,
  * om_buffering_start/end/failed, om_activation, and om_*_failed.
  *
- * All omProgress state updates are handled by the Harness display state.
+ * All omProgress state updates are handled by the AgentController display state.
  * These handlers focus on UI component creation/removal.
  */
-import type { Component } from '@mariozechner/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 
+import {
+  insertChatComponentWithBoundarySpacing,
+  reconcileChatBoundarySpacers,
+} from '../chat-boundary-reconciliation.js';
+import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { OMMarkerComponent } from '../components/om-marker.js';
 import type { OMMarkerData } from '../components/om-marker.js';
 import { OMOutputComponent } from '../components/om-output.js';
@@ -19,17 +24,39 @@ import type { EventHandlerContext } from './types.js';
  * doesn't get pushed down as text streams in.  Falls back to a normal
  * append when nothing is streaming.
  */
-function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): void {
+function getInsertIndexBeforeStreaming(ctx: EventHandlerContext): number {
   const { state } = ctx;
   if (state.streamingComponent) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent);
-    if (idx >= 0) {
-      state.chatContainer.children.splice(idx, 0, child);
-      state.chatContainer.invalidate();
-      return;
+    if (idx >= 0) return idx;
+  }
+  return state.chatContainer.children.length;
+}
+
+function addChildBeforeStreaming(ctx: EventHandlerContext, child: Component): void {
+  const insertIndex = getInsertIndexBeforeStreaming(ctx);
+  insertChatComponentWithBoundarySpacing(ctx.state.chatContainer, child, insertIndex);
+}
+
+function isImmediatelyBeforeStreamingInsert(ctx: EventHandlerContext, child: Component): boolean {
+  const insertIndex = getInsertIndexBeforeStreaming(ctx);
+  // Walk backward from the insert point, skipping boundary spacers,
+  // to find the actual preceding component.
+  for (let i = insertIndex - 1; i >= 0; i--) {
+    if (!isChatBoundarySpacer(ctx.state.chatContainer.children[i]!)) {
+      return ctx.state.chatContainer.children[i] === child;
     }
   }
-  state.chatContainer.addChild(child);
+  return false;
+}
+
+function removeChatChild(ctx: EventHandlerContext, child: Component | undefined): void {
+  if (!child) return;
+  const idx = ctx.state.chatContainer.children.indexOf(child);
+  if (idx >= 0) {
+    ctx.state.chatContainer.children.splice(idx, 1);
+    reconcileChatBoundarySpacers(ctx.state.chatContainer);
+  }
 }
 
 export function handleOMObservationStart(ctx: EventHandlerContext, cycleId: string, tokensToObserve: number): void {
@@ -99,10 +126,10 @@ export function handleOMReflectionEnd(
 ): void {
   const { state } = ctx;
   // Read pre-compression tokens from display state (set during om_reflection_start)
-  // Note: Harness has already updated observationTokens to compressedTokens,
+  // Note: AgentController has already updated observationTokens to compressedTokens,
   // so we use tokensToReflect from the start event via the cycleId context.
   // For display purposes, we read the event parameter directly.
-  const ds = state.harness.getDisplayState();
+  const ds = state.session.displayState.get();
   // Remove in-progress marker — the output box replaces it
   if (state.activeOMMarker) {
     const idx = state.chatContainer.children.indexOf(state.activeOMMarker);
@@ -154,6 +181,14 @@ export function handleOMBufferingStart(
 ): void {
   const { state } = ctx;
   state.activeActivationMarker = undefined;
+  state.activeActivationData = undefined;
+  state.activeActivationProviderChangeMarker = undefined;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   state.activeBufferingMarker = new OMMarkerComponent({
     type: 'om_buffering_start',
     operationType,
@@ -171,6 +206,12 @@ export function handleOMBufferingEnd(
   observations?: string,
 ): void {
   const { state } = ctx;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   if (state.activeBufferingMarker) {
     state.activeBufferingMarker.update({
       type: 'om_buffering_end',
@@ -190,6 +231,12 @@ export function handleOMBufferingFailed(
   error: string,
 ): void {
   const { state } = ctx;
+  if (state.quietMode) {
+    removeChatChild(ctx, state.activeBufferingMarker);
+    state.activeBufferingMarker = undefined;
+    state.ui.requestRender();
+    return;
+  }
   if (state.activeBufferingMarker) {
     state.activeBufferingMarker.update({
       type: 'om_buffering_failed',
@@ -206,21 +253,67 @@ export function handleOMActivation(
   operationType: 'observation' | 'reflection',
   tokensActivated: number,
   observationTokens: number,
+  triggeredBy?: 'threshold' | 'ttl' | 'provider_change',
+  activateAfterIdle?: number,
+  ttlExpiredMs?: number,
+  previousModel?: string,
+  currentModel?: string,
 ): void {
   const { state } = ctx;
-  const activationData: OMMarkerData = {
-    type: 'om_activation',
-    operationType,
-    tokensActivated,
-    observationTokens,
-  };
-  state.activeActivationMarker = new OMMarkerComponent(activationData);
-  addChildBeforeStreaming(ctx, state.activeActivationMarker);
+
+  if (triggeredBy === 'provider_change' && previousModel && currentModel) {
+    const providerChangeData: OMMarkerData = {
+      type: 'om_activation_provider_change',
+      previousModel,
+      currentModel,
+    };
+
+    if (state.activeActivationProviderChangeMarker) {
+      state.activeActivationProviderChangeMarker.update(providerChangeData);
+    } else {
+      state.activeActivationProviderChangeMarker = new OMMarkerComponent(providerChangeData);
+      addChildBeforeStreaming(ctx, state.activeActivationProviderChangeMarker);
+    }
+  }
+
+  const previousActivationData = state.activeActivationData;
+  const canCombineActivation =
+    previousActivationData?.type === 'om_activation' &&
+    previousActivationData.operationType === operationType &&
+    state.activeActivationMarker !== undefined &&
+    isImmediatelyBeforeStreamingInsert(ctx, state.activeActivationMarker);
+
+  const activationData: OMMarkerData = canCombineActivation
+    ? {
+        type: 'om_activation',
+        operationType,
+        tokensActivated: previousActivationData.tokensActivated + tokensActivated,
+        observationTokens: previousActivationData.observationTokens + observationTokens,
+        activationCount: (previousActivationData.activationCount ?? 1) + 1,
+        activateAfterIdle: previousActivationData.activateAfterIdle ?? activateAfterIdle,
+      }
+    : {
+        type: 'om_activation',
+        operationType,
+        tokensActivated,
+        observationTokens,
+        ...(triggeredBy === 'ttl' && activateAfterIdle !== undefined ? { activateAfterIdle } : {}),
+      };
+
+  if (canCombineActivation && state.activeActivationMarker) {
+    state.activeActivationMarker.update(activationData);
+  } else {
+    state.activeActivationMarker = new OMMarkerComponent(activationData);
+    addChildBeforeStreaming(ctx, state.activeActivationMarker);
+  }
+
+  state.activeActivationData = activationData;
   state.activeBufferingMarker = undefined;
   state.ui.requestRender();
 }
 
 export function handleOMThreadTitleUpdated(ctx: EventHandlerContext, newTitle: string, oldTitle?: string): void {
+  if (ctx.state.quietMode) return;
   const marker = new OMMarkerComponent({
     type: 'om_thread_title_updated',
     newTitle,

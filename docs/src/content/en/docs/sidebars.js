@@ -27,11 +27,6 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/project-structure',
           label: 'Project Structure',
         },
@@ -44,6 +39,53 @@ const sidebars = {
           type: 'doc',
           id: 'getting-started/build-with-ai',
           label: 'Build with AI',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Studio',
+      items: [
+        {
+          type: 'doc',
+          id: 'studio/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'studio/deployment',
+          label: 'Deployment',
+        },
+        {
+          type: 'doc',
+          id: 'studio/auth',
+          label: 'Auth',
+        },
+        {
+          type: 'doc',
+          id: 'studio/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'category',
+          label: 'Editor',
+          items: [
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'editor/tools',
+              label: 'Tools',
+            },
+            {
+              type: 'doc',
+              id: 'editor/prompts',
+              label: 'Prompts',
+            },
+          ],
         },
       ],
     },
@@ -62,6 +104,11 @@ const sidebars = {
           label: 'Tools',
         },
         {
+          type: 'doc',
+          id: 'agents/skills',
+          label: 'Skills',
+        },
+        {
           type: 'html',
           value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
@@ -69,14 +116,6 @@ const sidebars = {
           type: 'doc',
           id: 'agents/structured-output',
           label: 'Structured Output',
-        },
-        {
-          type: 'doc',
-          id: 'agents/supervisor-agents',
-          label: 'Supervisor Agents',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -95,8 +134,81 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
+        },
+        {
+          type: 'doc',
+          id: 'agents/goals',
+          label: 'Goals',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/background-tasks',
+          label: 'Background Tasks',
+        },
+        {
+          type: 'doc',
+          id: 'agents/durable-agents',
+          label: 'Durable Agents',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/channels',
+          label: 'Channels',
+        },
+        {
+          type: 'doc',
+          id: 'agents/a2a',
+          label: 'A2A',
+        },
+        {
+          type: 'doc',
+          id: 'agents/acp',
+          label: 'ACP',
+        },
+        {
+          type: 'doc',
+          id: 'agents/sdk-agents',
+          label: 'SDK Agents',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/adding-voice',
           label: 'Voice',
+        },
+        {
+          type: 'doc',
+          id: 'agents/code-mode',
+          label: 'Code Mode',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/signal-providers',
+          label: 'Signal Providers',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -132,9 +244,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/observational-memory',
           label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -150,6 +259,11 @@ const sidebars = {
           type: 'doc',
           id: 'memory/memory-processors',
           label: 'Memory Processors',
+        },
+        {
+          type: 'doc',
+          id: 'memory/multi-user-threads',
+          label: 'Multi-user Threads',
         },
       ],
     },
@@ -202,32 +316,31 @@ const sidebars = {
           id: 'workflows/error-handling',
           label: 'Error Handling',
         },
+        {
+          type: 'doc',
+          id: 'workflows/scheduled-workflows',
+          label: 'Scheduled Workflows',
+        },
       ],
     },
     {
       type: 'category',
-      label: 'Streaming',
+      label: 'Agent Builder',
+      customProps: {
+        tags: ['new'],
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'streaming/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/events',
-          label: 'Events',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/tool-streaming',
-          label: 'Tool Streaming',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/workflow-streaming',
-          label: 'Workflow Streaming',
-        },
+        { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+        { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+        { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+        { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+        { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+        { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+        { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+        { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+        { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
+        { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+        { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
       ],
     },
     {
@@ -242,48 +355,53 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'mcp/publishing-mcp-server',
-          label: 'Publishing an MCP Server',
+          id: 'mcp/mcp-apps',
+          label: 'MCP Apps',
         },
       ],
     },
     {
       type: 'category',
-      label: 'RAG',
+      label: 'AgentController',
+      customProps: {
+        tags: ['beta'],
+      },
       items: [
         {
           type: 'doc',
-          id: 'rag/overview',
+          id: 'agent-controller/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'rag/chunking-and-embedding',
-          label: 'Chunking and Embedding',
+          id: 'agent-controller/session',
+          label: 'Session',
         },
         {
           type: 'doc',
-          id: 'rag/vector-databases',
-          label: 'Vector Databases',
+          id: 'agent-controller/modes',
+          label: 'Modes',
         },
         {
           type: 'doc',
-          id: 'rag/retrieval',
-          label: 'Retrieval',
+          id: 'agent-controller/threads-and-state',
+          label: 'Threads and State',
         },
         {
           type: 'doc',
-          id: 'rag/graph-rag',
-          label: 'GraphRAG',
+          id: 'agent-controller/subagents',
+          label: 'Subagents',
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/tool-approvals',
+          label: 'Tool Approvals',
         },
       ],
     },
     {
       type: 'category',
       label: 'Workspaces',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -319,6 +437,37 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Browser',
+      items: [
+        {
+          type: 'doc',
+          id: 'browser/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'browser/agent-browser',
+          label: 'AgentBrowser',
+        },
+        {
+          type: 'doc',
+          id: 'browser/stagehand',
+          label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/recording',
+          label: 'Recording',
+        },
+        {
+          type: 'doc',
+          id: 'browser/browser-viewer',
+          label: 'BrowserViewer',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Server',
       items: [
         {
@@ -345,6 +494,14 @@ const sidebars = {
           type: 'doc',
           id: 'server/request-context',
           label: 'Request Context',
+        },
+        {
+          type: 'doc',
+          id: 'server/pubsub',
+          label: 'PubSub',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
@@ -397,6 +554,16 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/fga',
+              label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/google',
+              label: 'Google',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
             },
@@ -440,11 +607,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
           id: 'deployment/monorepo',
           label: 'Monorepo',
         },
@@ -467,40 +629,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Cloud',
-      customProps: {
-        tags: ['beta'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-cloud/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/setup',
-          label: 'Setup',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/deployment',
-          label: 'Deployment',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-cloud/observability',
-          label: 'Observability',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Observability',
       items: [
         {
@@ -511,8 +639,34 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'observability/config',
+          label: 'Config',
+        },
+        {
+          type: 'doc',
+          id: 'observability/storage',
+          label: 'Storage',
+        },
+        {
+          type: 'doc',
           id: 'observability/logging',
           label: 'Logging',
+        },
+        {
+          type: 'category',
+          label: 'Metrics',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/metrics/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/metrics/querying',
+              label: 'Querying metrics',
+            },
+          ],
         },
         {
           type: 'category',
@@ -524,13 +678,29 @@ const sidebars = {
               key: 'observability.tracing.overview',
               label: 'Overview',
             },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Integrations',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/integrations/overview',
+              label: 'Overview',
+            },
             {
               type: 'category',
               label: 'Bridges',
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/bridges/otel',
+                  id: 'observability/integrations/bridges/datadog',
+                  label: 'Datadog',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/bridges/otel',
                   label: 'OpenTelemetry',
                 },
               ],
@@ -541,57 +711,62 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/default',
-                  label: 'Default',
+                  id: 'observability/integrations/exporters/mastra-storage',
+                  label: 'Mastra Storage',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/cloud',
-                  label: 'Cloud',
+                  id: 'observability/integrations/exporters/mastra-platform',
+                  label: 'Mastra platform',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/arize',
+                  id: 'observability/integrations/exporters/arize',
                   label: 'Arize',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/braintrust',
+                  id: 'observability/integrations/exporters/arthur',
+                  label: 'Arthur',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/braintrust',
                   label: 'Braintrust',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/datadog',
+                  id: 'observability/integrations/exporters/datadog',
                   label: 'Datadog',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/laminar',
+                  id: 'observability/integrations/exporters/laminar',
                   label: 'Laminar',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/langfuse',
+                  id: 'observability/integrations/exporters/langfuse',
                   label: 'Langfuse',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/langsmith',
+                  id: 'observability/integrations/exporters/langsmith',
                   label: 'LangSmith',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/otel',
+                  id: 'observability/integrations/exporters/otel',
                   label: 'OpenTelemetry',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/posthog',
+                  id: 'observability/integrations/exporters/posthog',
                   label: 'PostHog',
                 },
                 {
                   type: 'doc',
-                  id: 'observability/tracing/exporters/sentry',
+                  id: 'observability/integrations/exporters/sentry',
                   label: 'Sentry',
                 },
               ],
@@ -602,26 +777,10 @@ const sidebars = {
               items: [
                 {
                   type: 'doc',
-                  id: 'observability/tracing/processors/sensitive-data-filter',
+                  id: 'observability/integrations/processors/sensitive-data-filter',
                   label: 'SensitiveDataFilter',
                 },
               ],
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Datasets',
-          items: [
-            {
-              type: 'doc',
-              id: 'observability/datasets/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'observability/datasets/running-experiments',
-              label: 'Running Experiments',
             },
           ],
         },
@@ -643,6 +802,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'evals/quick-checks',
+          label: 'Quick Checks',
+        },
+        {
+          type: 'doc',
+          id: 'evals/gates-and-verdicts',
+          label: 'Gates and Verdicts',
+        },
+        {
+          type: 'doc',
           id: 'evals/custom-scorers',
           label: 'Custom Scorers',
         },
@@ -650,6 +819,58 @@ const sidebars = {
           type: 'doc',
           id: 'evals/running-in-ci',
           label: 'Running in CI',
+        },
+        {
+          type: 'doc',
+          id: 'evals/evals-with-memory',
+          label: 'Evals with Memory',
+        },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'evals/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'evals/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'RAG',
+      items: [
+        {
+          type: 'doc',
+          id: 'rag/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'rag/chunking-and-embedding',
+          label: 'Chunking and Embedding',
+        },
+        {
+          type: 'doc',
+          id: 'rag/vector-databases',
+          label: 'Vector Databases',
+        },
+        {
+          type: 'doc',
+          id: 'rag/retrieval',
+          label: 'Retrieval',
+        },
+        {
+          type: 'doc',
+          id: 'rag/graph-rag',
+          label: 'GraphRAG',
         },
       ],
     },
@@ -679,24 +900,6 @@ const sidebars = {
         },
       ],
     },
-
-    {
-      type: 'category',
-      label: 'Build with AI',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'build-with-ai/skills',
-          label: 'Skills',
-        },
-        {
-          type: 'doc',
-          id: 'build-with-ai/mcp-docs-server',
-          label: 'MCP Docs Server',
-        },
-      ],
-    },
     {
       type: 'category',
       label: 'Community',
@@ -715,6 +918,52 @@ const sidebars = {
           type: 'doc',
           id: 'community/discord',
           label: 'Discord',
+        },
+      ],
+    },
+  ],
+  platformSidebar: [
+    {
+      type: 'category',
+      label: 'Mastra platform',
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/github',
+          label: 'GitHub integration',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/database',
+          label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
         },
       ],
     },

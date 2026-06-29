@@ -21,7 +21,7 @@ describe('workspace_write_file', () => {
 
   it('should write file content', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
       {
@@ -41,7 +41,7 @@ describe('workspace_write_file', () => {
   it('should overwrite existing file by default', async () => {
     await fs.writeFile(path.join(tempDir, 'existing.txt'), 'original');
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     // Read first (required by safety)
     await workspace.filesystem!.readFile('existing.txt');

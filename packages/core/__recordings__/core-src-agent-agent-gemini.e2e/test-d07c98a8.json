@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "name": "test-d07c98a8",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle basic generation with Gemini",
+    "createdAt": "2026-05-28T17:33:22.007Z",
+    "updatedAt": "2026-05-28T17:33:32.333Z"
+  },
+  "recordings": [
+    {
+      "hash": "262f4fd0e8d9b16b",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Hello, how are you?"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are a helpful assistant"
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989610685
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:33:32 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1198",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Hello! As a large language model, I don't experience feelings like humans do, so I can't say I'm \"good\" or \"bad\" in the same way. However, I am functioning well and ready to assist you! How can I help you today?\n"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.18253163159903835
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 11,
+            "candidatesTokenCount": 59,
+            "totalTokenCount": 70,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 11
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 59
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "a3wYasSeE-3XjMcP5OPxwQE"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

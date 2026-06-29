@@ -17,6 +17,12 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `GET` | `/api/agents/:agentId` | Get agent by ID (supports version query params) |
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
+| `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
+| `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
+| `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
+| `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
+| `POST` | `/api/agents/:agentId/send-tool-approval` | Approve or decline a tool call and resume through a thread subscription |
+| `POST` | `/api/agents/:agentId/resume-stream` | Resume a suspended agent stream with custom data |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
 
@@ -74,6 +80,100 @@ GET /api/agents/my-agent?versionId=abc123
 }
 ```
 
+### Agent message routes
+
+Use `POST /api/agents/:agentId/send-message` to send a user message to the active agent loop or wake an idle thread. Use `POST /api/agents/:agentId/queue-message` when the active run should finish before Mastra starts a follow-up run.
+
+Both routes accept the same request body:
+
+```typescript prettier:false
+{
+  message: string | Array<TextPart | FilePart> | {
+    contents: string | Array<TextPart | FilePart>;
+    attributes?: Record<string, JSONValue>;
+    metadata?: Record<string, unknown>;
+    providerOptions?: ProviderMetadata;
+  };
+  runId?: string;
+  resourceId?: string;
+  threadId?: string;
+  ifActive?: {
+    behavior?: 'deliver' | 'persist' | 'discard';
+    attributes?: Record<string, string | number | boolean>;
+  };
+  ifIdle?: {
+    behavior?: 'wake' | 'persist' | 'discard';
+    streamOptions?: Omit<AgentExecutionOptions, 'messages'>;
+    attributes?: Record<string, string | number | boolean>;
+  };
+}
+```
+
+When `runId` is omitted, `resourceId` and `threadId` are required. `ifIdle` only applies to thread-targeted requests, not run-targeted requests.
+
+#### Send a message
+
+```bash
+curl -X POST http://localhost:4111/api/agents/supportAgent/send-message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": {
+      "contents": "Show the shorter version.",
+      "attributes": { "sentFrom": "web" }
+    },
+    "resourceId": "user_123",
+    "threadId": "thread_456"
+  }'
+```
+
+#### Queue a message
+
+```bash
+curl -X POST http://localhost:4111/api/agents/supportAgent/queue-message \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": "Also check whether the tests need updates.",
+    "resourceId": "user_123",
+    "threadId": "thread_456"
+  }'
+```
+
+Both routes return:
+
+```typescript prettier:false
+{
+  accepted: true;
+  runId: string;
+  signal?: CreatedAgentSignal;
+}
+```
+
+### Subscription tool approval routes
+
+Use `POST /api/agents/:agentId/send-tool-approval` when the client already has an active thread subscription. The route resumes the run and returns a JSON acknowledgement. Resumed stream chunks are delivered through `POST /api/agents/:agentId/threads/subscribe`.
+
+The route accepts this request body:
+
+```typescript prettier:false
+{
+  resourceId: string;
+  threadId: string;
+  toolCallId: string;
+  approved: boolean;
+  requestContext?: Record<string, unknown>;
+}
+```
+
+The route returns:
+
+```typescript prettier:false
+{
+  accepted: true;
+  runId: string;
+  toolCallId?: string;
+}
+```
+
 ## Workflows
 
 | Method | Path | Description |
@@ -97,7 +197,7 @@ GET /api/agents/my-agent?versionId=abc123
 }
 ```
 
-### Start-async request body
+### Request body for `/start-async`
 
 ```typescript prettier:false
 {
@@ -255,6 +355,27 @@ GET /api/agents/my-agent?versionId=abc123
 | `POST` | `/api/mcp/:serverId` | MCP HTTP transport |
 | `GET` | `/api/mcp/:serverId/sse` | MCP SSE transport |
 
+## Responses API
+
+| Method | Path | Description |
+| - | - | - |
+| `POST` | `/api/v1/responses` | Create a response through the OpenAI-compatible Responses API route |
+| `GET` | `/api/v1/responses/:responseId` | Retrieve a stored response |
+| `DELETE` | `/api/v1/responses/:responseId` | Delete a stored response |
+
+For the full request and response contract, see the [Responses API reference](/reference/client-js/responses).
+
+## Conversations API
+
+| Method | Path | Description |
+| - | - | - |
+| `POST` | `/api/v1/conversations` | Create a conversation |
+| `GET` | `/api/v1/conversations/:conversationId` | Retrieve a conversation |
+| `DELETE` | `/api/v1/conversations/:conversationId` | Delete a conversation |
+| `GET` | `/api/v1/conversations/:conversationId/items` | List stored items for a conversation |
+
+For the full request and response contract, see the [Conversations API reference](/reference/client-js/conversations).
+
 ## Logs
 
 | Method | Path | Description |
@@ -329,5 +450,5 @@ Common status codes:
 
 ## Related
 
-- [createRoute()](/reference/server/create-route) - Creating custom routes
-- [Server Adapters](/docs/server/server-adapters) - Using adapters
+- [createRoute()](/reference/server/create-route): Creating custom routes
+- [Server Adapters](/docs/server/server-adapters): Using adapters

@@ -123,7 +123,8 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       context: enhancedContext,
     } satisfies AgentGenerateOptions<any, any>;
 
-    this.logger.debug(`[AgentBuilder:${this.name}] Starting generation with enhanced context`, {
+    this.logger.debug('Starting generation with enhanced context', {
+      agent: this.name,
       projectPath: this.builderConfig.projectPath,
     });
 
@@ -157,7 +158,8 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       context: enhancedContext,
     };
 
-    this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
+    this.logger.debug('Starting streaming with enhanced context', {
+      agent: this.name,
       projectPath: this.builderConfig.projectPath,
     });
 
@@ -215,7 +217,8 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       context: enhancedContext,
     } as any;
 
-    this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
+    this.logger.debug('Starting streaming with enhanced context', {
+      agent: this.name,
       projectPath: this.builderConfig.projectPath,
     });
 
@@ -269,7 +272,8 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       context: enhancedContext,
     } as any;
 
-    this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
+    this.logger.debug('Starting generation with enhanced context', {
+      agent: this.name,
       projectPath: this.builderConfig.projectPath,
     });
 

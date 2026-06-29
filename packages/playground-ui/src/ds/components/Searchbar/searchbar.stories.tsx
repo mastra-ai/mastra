@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Searchbar, SearchbarWrapper } from './searchbar';
 import { useState } from 'react';
+import { Searchbar, SearchbarWrapper } from './searchbar';
 
 const meta: Meta<typeof Searchbar> = {
   title: 'Composite/Searchbar',
@@ -8,7 +8,12 @@ const meta: Meta<typeof Searchbar> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
+  argTypes: {
+    variant: {
+      control: { type: 'select' },
+      options: ['default', 'filled', 'outline'],
+    },
+  },
 };
 
 export default meta;
@@ -21,7 +26,7 @@ export const Default: Story = {
     onSearch: (value: string) => console.log('Search:', value),
   },
   render: args => (
-    <div className="w-[300px]">
+    <div className="w-dropdown-max-height">
       <Searchbar {...args} />
     </div>
   ),
@@ -29,7 +34,7 @@ export const Default: Story = {
 
 export const AgentSearch: Story = {
   render: () => (
-    <div className="w-[300px]">
+    <div className="w-dropdown-max-height">
       <Searchbar
         label="Search agents"
         placeholder="Search agents..."
@@ -39,9 +44,34 @@ export const AgentSearch: Story = {
   ),
 };
 
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-dropdown-max-height">
+      <Searchbar
+        variant="default"
+        label="Search"
+        placeholder="Default"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar
+        variant="filled"
+        label="Search"
+        placeholder="Filled"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar
+        variant="outline"
+        label="Search"
+        placeholder="Outline"
+        onSearch={value => console.log('Search:', value)}
+      />
+    </div>
+  ),
+};
+
 export const WithCustomDebounce: Story = {
   render: () => (
-    <div className="w-[300px]">
+    <div className="w-dropdown-max-height">
       <Searchbar
         label="Search"
         placeholder="Search (500ms debounce)..."
@@ -54,7 +84,7 @@ export const WithCustomDebounce: Story = {
 
 export const WithWrapper: Story = {
   render: () => (
-    <div className="w-[300px] bg-surface2 rounded-lg">
+    <div className="w-dropdown-max-height bg-surface2 rounded-lg">
       <SearchbarWrapper>
         <Searchbar
           label="Search workflows"
@@ -80,7 +110,7 @@ const InteractiveSearchDemo = () => {
   };
 
   return (
-    <div className="w-[300px] space-y-2">
+    <div className="w-dropdown-max-height space-y-2">
       <Searchbar
         label="Search agents"
         placeholder="Type to search agents..."
@@ -114,6 +144,41 @@ export const InSidebarContext: Story = {
         <div className="h-8 bg-surface3 rounded" />
         <div className="h-8 bg-surface3 rounded" />
         <div className="h-8 bg-surface3 rounded" />
+      </div>
+    </div>
+  ),
+};
+
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-dropdown-max-height">
+      <Searchbar size="sm" label="Search" placeholder="Small" onSearch={value => console.log('Search:', value)} />
+      <Searchbar size="md" label="Search" placeholder="Medium" onSearch={value => console.log('Search:', value)} />
+      <Searchbar
+        size="default"
+        label="Search"
+        placeholder="Default"
+        onSearch={value => console.log('Search:', value)}
+      />
+      <Searchbar size="lg" label="Search" placeholder="Large" onSearch={value => console.log('Search:', value)} />
+    </div>
+  ),
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface1" onSearch={value => console.log('Search:', value)} />
+      </div>
+      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface2" onSearch={value => console.log('Search:', value)} />
+      </div>
+      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface3" onSearch={value => console.log('Search:', value)} />
+      </div>
+      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+        <Searchbar label="Search" placeholder="On bg-surface4" onSearch={value => console.log('Search:', value)} />
       </div>
     </div>
   ),

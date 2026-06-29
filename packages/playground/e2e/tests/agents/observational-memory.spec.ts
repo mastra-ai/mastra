@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 import { selectFixture } from '../__utils__/select-fixture';
 
@@ -16,12 +17,23 @@ import { selectFixture } from '../__utils__/select-fixture';
  * 6. Adaptive threshold adjusts progress bar display
  */
 
+async function openMemorySidebar(page: Page) {
+  const memoryCard = page.getByTestId('memory-sidebar-card');
+  await expect(memoryCard).toBeVisible({ timeout: 10000 });
+
+  if ((await memoryCard.getAttribute('aria-pressed')) !== 'true') {
+    await memoryCard.click();
+  }
+
+  await expect(memoryCard).toHaveAttribute('aria-pressed', 'true');
+}
+
 test.describe('Observational Memory - Behavior Tests', () => {
   test.afterEach(async () => {
     await resetStorage();
   });
 
-  test.describe('Sidebar Threshold Rendering', () => {
+  test.describe('when OM is enabled and the memory sidebar is open', () => {
     /**
      * BEHAVIOR: OM sidebar shows progress bars for message and observation thresholds
      * OUTCOME: User can see how close they are to triggering observation/reflection
@@ -34,8 +46,8 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // Wait for the page to load and OM to initialize
       await expect(page.locator('h2')).toContainText('OM Agent');
 
-      // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to see OM status.
+      await openMemorySidebar(page);
 
       // ASSERT: OM sidebar section should be visible with progress bars
       // The sidebar should show "Observational Memory" section
@@ -59,8 +71,8 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Agent');
 
-      // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to see OM status.
+      await openMemorySidebar(page);
 
       // Wait for OM section
       await expect(page.getByRole('heading', { name: 'Observational Memory' })).toBeVisible({ timeout: 10000 });
@@ -84,7 +96,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     });
   });
 
-  test.describe('Chat History Observation Markers', () => {
+  test.describe('when messages are sent and observation runs', () => {
     /**
      * BEHAVIOR: Observation start marker appears when observation begins
      * OUTCOME: User sees real-time feedback that memory is being updated
@@ -110,8 +122,8 @@ test.describe('Observational Memory - Behavior Tests', () => {
       const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
       await expect(threadWrapper).toBeVisible({ timeout: 15000 });
 
-      // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to see OM status.
+      await openMemorySidebar(page);
 
       // The OM sidebar should show activity (progress bars should have updated)
       await expect(page.getByText('Messages', { exact: true })).toBeVisible();
@@ -166,7 +178,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     });
   });
 
-  test.describe('Observation Persistence', () => {
+  test.describe('when the page is reloaded after an observation', () => {
     test('should persist observations after page reload', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-observation-success');
@@ -221,13 +233,13 @@ test.describe('Observational Memory - Behavior Tests', () => {
       });
 
       // ASSERT: OM sidebar should show the observations
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      await openMemorySidebar(page);
       const omSection = page.getByRole('heading', { name: 'Observational Memory' });
       await expect(omSection).toBeVisible({ timeout: 10000 });
     });
   });
 
-  test.describe('Reflection Behavior', () => {
+  test.describe('when a reflection occurs', () => {
     test.skip('should show reflection indicator when reflection occurs', async ({ page }) => {
       // ARRANGE
       await selectFixture(page, 'om-reflection');
@@ -255,13 +267,13 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // Reflection marker should also show (fixture emits reflection after observation)
       await expect(threadWrapper.getByText(/Reflected.*→.*tokens/i).first()).toBeVisible({ timeout: 10000 });
 
-      // Click on the Memory tab to verify sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to verify OM status.
+      await openMemorySidebar(page);
       await expect(page.getByRole('heading', { name: 'Observational Memory' })).toBeVisible();
     });
   });
 
-  test.describe('Adaptive Threshold', () => {
+  test.describe('when the agent uses an adaptive threshold', () => {
     /**
      * BEHAVIOR: Adaptive threshold shows shared budget in progress bars
      * OUTCOME: User sees that thresholds adjust based on current observation size
@@ -274,8 +286,8 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // Wait for page to load
       await expect(page.locator('h2')).toContainText('OM Adaptive Agent');
 
-      // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to see OM status.
+      await openMemorySidebar(page);
 
       // ASSERT: OM sidebar should show adaptive threshold behavior
       const omSection = page.getByRole('heading', { name: 'Observational Memory' });
@@ -302,7 +314,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     });
   });
 
-  test.describe('Previous Observations Section', () => {
+  test.describe('when observation history exists', () => {
     /**
      * BEHAVIOR: Previous observations section shows history
      * OUTCOME: User can see past observation generations
@@ -312,8 +324,8 @@ test.describe('Observational Memory - Behavior Tests', () => {
       await selectFixture(page, 'om-reflection');
       await page.goto('/agents/om-agent/chat/new');
 
-      // Click on the Memory tab to see OM sidebar
-      await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to see OM status.
+      await openMemorySidebar(page);
 
       // ACT: Send messages to create observation history
       const chatInput = page.locator('textarea[placeholder*="message"]').first();
@@ -342,70 +354,74 @@ test.describe('Observational Memory - Edge Cases', () => {
    * BEHAVIOR: OM handles stream interruption gracefully
    * OUTCOME: User sees "interrupted" state, not stuck loading
    */
-  test('should handle interrupted observation gracefully', async ({ page }) => {
-    // ARRANGE
-    await selectFixture(page, 'om-observation-success');
-    await page.goto('/agents/om-agent/chat/new');
+  test.describe('when an observation stream is interrupted by navigation', () => {
+    test('should handle interrupted observation gracefully', async ({ page }) => {
+      // ARRANGE
+      await selectFixture(page, 'om-observation-success');
+      await page.goto('/agents/om-agent/chat/new');
 
-    // ACT: Start a message then navigate away
-    const chatInput = page.locator('textarea[placeholder*="message"]').first();
-    await chatInput.fill('Start processing');
-    await chatInput.press('Enter');
+      // ACT: Start a message then navigate away
+      const chatInput = page.locator('textarea[placeholder*="message"]').first();
+      await chatInput.fill('Start processing');
+      await chatInput.press('Enter');
 
-    // Wait briefly then navigate away
-    await page.waitForTimeout(500);
-    await page.goto('/agents');
+      // Wait briefly then navigate away
+      await page.waitForTimeout(500);
+      await page.goto('/agents');
 
-    // Navigate back
-    await page.goto('/agents/om-agent/chat/new');
+      // Navigate back
+      await page.goto('/agents/om-agent/chat/new');
 
-    // ASSERT: Page should load without stuck loading states
-    await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
+      // ASSERT: Page should load without stuck loading states
+      await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
 
-    // Click on the Memory tab to see OM sidebar
-    await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to see OM status.
+      await openMemorySidebar(page);
 
-    // OM section should not show stuck "observing" state
-    const omSection = page.getByRole('heading', { name: 'Observational Memory' });
-    await expect(omSection).toBeVisible({ timeout: 10000 });
+      // OM section should not show stuck "observing" state
+      const omSection = page.getByRole('heading', { name: 'Observational Memory' });
+      await expect(omSection).toBeVisible({ timeout: 10000 });
+    });
   });
 
   /**
    * BEHAVIOR: OM works correctly when switching between threads
    * OUTCOME: Each thread has its own observation state
    */
-  test('should maintain separate observation state per thread', async ({ page }) => {
-    // ARRANGE
-    await selectFixture(page, 'om-observation-success');
+  test.describe('when switching between threads', () => {
+    test('should maintain separate observation state per thread', async ({ page }) => {
+      // ARRANGE
+      await selectFixture(page, 'om-observation-success');
 
-    // Create first thread
-    await page.goto('/agents/om-agent/chat/new');
-    await expect(page.locator('h2')).toContainText('OM Agent');
+      // Create first thread
+      await page.goto('/agents/om-agent/chat/new');
+      await expect(page.locator('h2')).toContainText('OM Agent');
 
-    const chatInput = page.locator('textarea[placeholder*="message"]').first();
-    await chatInput.fill('Message in thread 1');
-    await chatInput.press('Enter');
-    await page.waitForTimeout(3000);
+      const chatInput = page.locator('textarea[placeholder*="message"]').first();
+      await chatInput.fill('Message in thread 1');
+      await chatInput.press('Enter');
+      await page.waitForTimeout(3000);
 
-    // Get first thread URL
-    const thread1Url = page.url();
+      // Get first thread URL
+      const thread1Url = page.url();
 
-    // ACT: Create second thread
-    await page.goto('/agents/om-agent/chat/new');
-    await expect(page.locator('h2')).toContainText('OM Agent');
+      // ACT: Create second thread
+      await page.goto('/agents/om-agent/chat/new');
+      await expect(page.locator('h2')).toContainText('OM Agent');
 
-    // Click on the Memory tab to see OM sidebar
-    await page.getByRole('tab', { name: 'Memory' }).click();
+      // Open the live Memory sidebar to see OM status.
+      await openMemorySidebar(page);
 
-    // ASSERT: Second thread should start fresh
-    // Progress bars should be at 0 or initial state
-    const omSection = page.getByRole('heading', { name: 'Observational Memory' });
-    await expect(omSection).toBeVisible({ timeout: 10000 });
+      // ASSERT: Second thread should start fresh
+      // Progress bars should be at 0 or initial state
+      const omSection = page.getByRole('heading', { name: 'Observational Memory' });
+      await expect(omSection).toBeVisible({ timeout: 10000 });
 
-    // Navigate back to first thread
-    await page.goto(thread1Url);
+      // Navigate back to first thread
+      await page.goto(thread1Url);
 
-    // First thread should still have its state
-    await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
+      // First thread should still have its state
+      await expect(page.locator('h2')).toContainText('OM Agent', { timeout: 10000 });
+    });
   });
 });

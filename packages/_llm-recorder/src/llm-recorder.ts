@@ -61,7 +61,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { diffJson } from 'diff';
 import { http, HttpResponse, bypass } from 'msw';
-import type { SetupServerApi } from 'msw/node';
+import type { SetupServer } from 'msw/node';
 import { setupServer } from 'msw/node';
 import stringSimilarity from 'string-similarity';
 import { beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
@@ -89,7 +89,7 @@ export type LLMTestMode = 'auto' | 'update' | 'replay' | 'live' | 'record';
  */
 function isUpdateMode(): boolean {
   if (process.env.UPDATE_RECORDINGS === 'true') return true;
-  return process.argv.includes('--update-recordings') || process.argv.includes('-U');
+  return process.argv.includes('--update-recordings');
 }
 
 /**
@@ -164,6 +164,11 @@ export interface LLMRecording {
     isStreaming: boolean;
   };
 }
+
+type ReplayRecording = LLMRecording & {
+  /** Additional exact-match hashes derived at replay time for backward compatibility. */
+  lookupHashes?: string[];
+};
 
 /**
  * Metadata stored at the top of each recording file.
@@ -279,6 +284,11 @@ export interface LLMRecorderOptions {
    */
   debug?: boolean;
   /**
+   * When true, only accept exact hash matches during replay.
+   * Disables fuzzy/similarity matching.
+   */
+  exactMatch?: boolean;
+  /**
    * Override the test mode instead of reading from `LLM_TEST_MODE` env var.
    * Useful for tests that must always replay regardless of environment.
    */
@@ -299,7 +309,7 @@ export interface LLMRecorderOptions {
 
 export interface LLMRecorderInstance {
   /** The MSW server instance (null in live mode) */
-  server: SetupServerApi | null;
+  server: SetupServer | null;
   /** Start intercepting requests (no-op in live mode) */
   start(): void;
   /** Stop intercepting requests (no-op in live mode) */
@@ -363,13 +373,20 @@ function relativizeTestFile(filepath: string): string {
  * Deep sort object keys for stable serialization
  */
 function stableSortKeys(value: unknown): unknown {
+  if (typeof value === 'string') return canonicalizeISODateString(value);
   if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) return value.map(stableSortKeys);
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(value as Record<string, unknown>).sort()) {
     sorted[key] = stableSortKeys((value as Record<string, unknown>)[key]);
   }
   return sorted;
+}
+
+function canonicalizeISODateString(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value)) return value;
+  return new Date(value).toISOString();
 }
 
 interface ParsedRequestBody {
@@ -422,9 +439,15 @@ async function parseRequestBody(request: Request): Promise<ParsedRequestBody> {
 /**
  * Serialize request content for hashing and fuzzy matching.
  */
+function normalizeRequestBody(body: unknown): unknown {
+  if (typeof body === 'string') return canonicalizeISODateString(body);
+  if (body !== null && typeof body === 'object') return stableSortKeys(body);
+  return body;
+}
+
 function serializeRequestContent(url: string, body: unknown): string {
-  const normalizedBody = typeof body === 'object' ? JSON.stringify(stableSortKeys(body)) : String(body);
-  return `${url}:${normalizedBody}`;
+  const normalizedBody = normalizeRequestBody(body);
+  return `${url}:${typeof normalizedBody === 'string' ? normalizedBody : JSON.stringify(normalizedBody)}`;
 }
 
 /**
@@ -587,14 +610,14 @@ const SIMILARITY_THRESHOLD = 0.6;
  * recording).  Exact hash matches are always exempt.
  */
 function findRecording(
-  recordings: LLMRecording[],
+  recordings: ReplayRecording[],
   hash: string,
   url: string,
   body: unknown,
   usedHashes?: Set<string>,
-): LLMRecording | undefined {
-  // 1. Exact hash match (fast path) — always valid regardless of used set
-  const exact = recordings.find(r => r.hash === hash);
+): ReplayRecording | undefined {
+  // 1. Exact hash match (fast path)
+  const exact = recordings.find(r => isExactRecordingMatch(r, hash));
   if (exact) {
     return exact;
   }
@@ -683,6 +706,33 @@ function findRecording(
   return undefined;
 }
 
+function isExactRecordingMatch(recording: ReplayRecording, hash: string): boolean {
+  return recording.hash === hash || recording.lookupHashes?.includes(hash) === true;
+}
+
+function prepareReplayRecordings(
+  recordings: LLMRecording[],
+  transformRequest?: LLMRecorderOptions['transformRequest'],
+): ReplayRecording[] {
+  if (!transformRequest) {
+    return recordings;
+  }
+
+  return recordings.map(recording => {
+    const transformed = transformRequest({ url: recording.request.url, body: recording.request.body });
+    const transformedHash = hashRequest(transformed.url, transformed.body);
+
+    if (transformedHash === recording.hash) {
+      return recording;
+    }
+
+    return {
+      ...recording,
+      lookupHashes: [recording.hash, transformedHash],
+    };
+  });
+}
+
 /**
  * Set up LLM response recording/replay
  */
@@ -701,14 +751,14 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
   // Load existing recordings / metadata before any mutations (backward compatible)
   // In record/update modes a corrupted file should not block re-recording.
-  let savedRecordings: LLMRecording[] = [];
+  let savedRecordings: ReplayRecording[] = [];
   let existingMeta: RecordingMeta | undefined;
   if (recordingExists) {
     const willRecord = mode === 'record' || mode === 'update';
     try {
       const file = loadRecordingFile(recordingPath, options.name);
       existingMeta = file.meta;
-      savedRecordings = file.recordings;
+      savedRecordings = prepareReplayRecordings(file.recordings, options.transformRequest);
     } catch (err) {
       if (!willRecord) {
         throw err;
@@ -737,11 +787,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       mode = 'record';
     }
   } else if (mode === 'replay' && !recordingExists) {
-    // Strict replay: fail if no recording
-    throw new Error(
-      `[llm-recorder] No recording found for "${options.name}". ` +
-        `Run with UPDATE_RECORDINGS=true or --update-recordings to create recordings.`,
-    );
+    // Strict replay: missing files can represent tests that made no LLM calls.
+    // Keep replay mode active with an empty recording set; if a request is made,
+    // the normal per-request missing-recording error will still fail the test.
+    savedRecordings = [];
   }
 
   // Live mode: no interception, just pass through
@@ -939,11 +988,11 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         }
 
         if (debug) {
-          const matchType = recording.hash === hash ? 'exact' : 'fuzzy';
+          const matchType = isExactRecordingMatch(recording, hash) ? 'exact' : 'fuzzy';
           console.log(`[llm-recorder]   Matched (${matchType}): ${recording.request.url} [hash: ${recording.hash}]`);
         }
 
-        if (recording.hash !== hash) {
+        if (!isExactRecordingMatch(recording, hash)) {
           // findRecording returned a fuzzy match (rating >= SIMILARITY_THRESHOLD).
           // Accept it with a warning rather than failing the test.
           console.warn(
@@ -953,7 +1002,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
           const transformedReqBody = options.transformRequest
             ? options.transformRequest({ url, body: recording.request.body }).body
             : recording.request.body;
-          const changes = diffJson(transformedReqBody!, transformedBody ?? {});
+          const changes = diffJson(
+            normalizeRequestBody(transformedReqBody)!,
+            normalizeRequestBody(transformedBody) ?? {},
+          );
           const formatted = changes
             .map(part => {
               const prefix = part.added ? '+' : part.removed ? '-' : ' ';
@@ -965,6 +1017,13 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
             })
             .join('\n');
           console.warn(`[llm-recorder] Diff (recorded vs actual):\n${formatted}`);
+
+          if (options.exactMatch) {
+            throw new Error(
+              `No exact match for hash ${hash}, using fuzzy match (recorded hash: ${recording.hash}). ` +
+                `Consider re-recording with UPDATE_RECORDINGS=true.`,
+            );
+          }
         }
 
         if (recording.response.isStreaming) {
@@ -1232,8 +1291,27 @@ export function listLLMRecordings(recordingsDir?: string): string[] {
 }
 
 /**
+ * Find the nearest package root from a file path.
+ */
+function findPackageRoot(filepath: string): string | null {
+  let dir = path.dirname(path.resolve(filepath));
+
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    dir = path.dirname(dir);
+  }
+
+  return null;
+}
+
+/**
  * Get recordings directory path
  */
-export function getLLMRecordingsDir(): string {
+export function getLLMRecordingsDir(filepath?: string): string {
+  if (filepath) {
+    const packageRoot = findPackageRoot(filepath);
+    if (packageRoot) return path.join(packageRoot, '__recordings__');
+  }
+
   return DEFAULT_RECORDINGS_DIR;
 }

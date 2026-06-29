@@ -33,8 +33,10 @@ export class GitHistory {
   /** Cache: `dir:filename:limit` → ordered commits (newest first). */
   private commitCache = new Map<string, GitCommit[]>();
 
-  /** Cache: `dir:commitHash:filename` → parsed JSON. */
-  private snapshotCache = new Map<string, Record<string, Record<string, unknown>>>();
+  /** Cache: `dir:commitHash:filename` → parsed JSON. Stored as unknown because
+   * shared files are `{ [entityId]: snapshot }` while per-entity files are the
+   * snapshot itself. */
+  private snapshotCache = new Map<string, unknown>();
 
   // ===========================================================================
   // Public API
@@ -140,7 +142,7 @@ export class GitHistory {
     try {
       const relPath = this.relativeToRepo(dir, filename);
       const raw = await this.exec(dir, ['show', `${commitHash}:${relPath}`]);
-      const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>;
+      const parsed = JSON.parse(raw);
       this.snapshotCache.set(cacheKey, parsed);
       return parsed as T;
     } catch {

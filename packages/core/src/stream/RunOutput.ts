@@ -9,16 +9,21 @@ import { consumeStream } from './base/consume-stream';
 import { ChunkFrom } from './types';
 import type { StepTripwireData, WorkflowStreamEvent } from './types';
 
+type AggregatedLanguageModelUsage = Required<LanguageModelUsage> & {
+  cacheCreationInputTokens: number;
+};
+
 export class WorkflowRunOutput<
   TResult extends WorkflowResult<any, any, any, any> = WorkflowResult<any, any, any, any>,
 > implements MastraBaseStream<WorkflowStreamEvent> {
   #status: WorkflowRunStatus = 'running';
   #tripwireData: StepTripwireData | undefined;
-  #usageCount: Required<LanguageModelUsage> = {
+  #usageCount: AggregatedLanguageModelUsage = {
     inputTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
     cachedInputTokens: 0,
+    cacheCreationInputTokens: 0,
     reasoningTokens: 0,
   };
   #consumptionStarted = false;
@@ -169,6 +174,7 @@ export class WorkflowRunOutput<
           totalTokens?: `${number}` | number;
           reasoningTokens?: `${number}` | number;
           cachedInputTokens?: `${number}` | number;
+          cacheCreationInputTokens?: `${number}` | number;
         }
       | {
           promptTokens?: `${number}` | number;
@@ -176,6 +182,7 @@ export class WorkflowRunOutput<
           totalTokens?: `${number}` | number;
           reasoningTokens?: `${number}` | number;
           cachedInputTokens?: `${number}` | number;
+          cacheCreationInputTokens?: `${number}` | number;
         },
   ) {
     let totalUsage = {
@@ -184,6 +191,7 @@ export class WorkflowRunOutput<
       totalTokens: this.#usageCount.totalTokens ?? 0,
       reasoningTokens: this.#usageCount.reasoningTokens ?? 0,
       cachedInputTokens: this.#usageCount.cachedInputTokens ?? 0,
+      cacheCreationInputTokens: this.#usageCount.cacheCreationInputTokens ?? 0,
     };
     if ('inputTokens' in usage) {
       totalUsage.inputTokens += parseInt(usage?.inputTokens?.toString() ?? '0', 10);
@@ -197,6 +205,7 @@ export class WorkflowRunOutput<
 
     totalUsage.reasoningTokens += parseInt(usage?.reasoningTokens?.toString() ?? '0', 10);
     totalUsage.cachedInputTokens += parseInt(usage?.cachedInputTokens?.toString() ?? '0', 10);
+    totalUsage.cacheCreationInputTokens += parseInt(usage?.cacheCreationInputTokens?.toString() ?? '0', 10);
     this.#usageCount = totalUsage;
   }
 

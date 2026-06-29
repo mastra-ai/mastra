@@ -57,6 +57,8 @@ function transformExperimentRow(row: Record<string, unknown>): Experiment {
     metadata: parseJsonField(row.metadata) ?? undefined,
     datasetId: (row.datasetId as string | null) ?? null,
     datasetVersion: row.datasetVersion != null ? Number(row.datasetVersion) : null,
+    organizationId: (row.organizationId as string | null) ?? null,
+    projectId: (row.projectId as string | null) ?? null,
     targetType: row.targetType as Experiment['targetType'],
     targetId: row.targetId as string,
     status: row.status as Experiment['status'],
@@ -78,6 +80,8 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     experimentId: row.experimentId as string,
     itemId: row.itemId as string,
     itemDatasetVersion: row.itemDatasetVersion != null ? Number(row.itemDatasetVersion) : null,
+    organizationId: (row.organizationId as string | null) ?? null,
+    projectId: (row.projectId as string | null) ?? null,
     input: parseJsonField(row.input),
     output: parseJsonField(row.output) ?? null,
     groundTruth: parseJsonField(row.groundTruth) ?? null,
@@ -88,6 +92,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     traceId: (row.traceId as string | null) ?? null,
     status: (row.status as ExperimentResultStatus | null) ?? null,
     tags: Array.isArray(row.tags) ? row.tags : (parseJsonField(row.tags) ?? null),
+    toolMockReport: (parseJsonField(row.toolMockReport) as ExperimentResult['toolMockReport']) ?? null,
     createdAt: toDate(row.createdAt),
   };
 }
@@ -125,11 +130,14 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       { collection: TABLE_EXPERIMENTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENTS, keys: { datasetId: 1 } },
       { collection: TABLE_EXPERIMENTS, keys: { createdAt: -1, id: 1 } },
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
+      { collection: TABLE_EXPERIMENTS, keys: { organizationId: 1, projectId: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { id: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, itemId: 1 }, options: { unique: true } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { createdAt: -1 } },
       { collection: TABLE_EXPERIMENT_RESULTS, keys: { experimentId: 1, startedAt: 1, id: 1 } },
+      { collection: TABLE_EXPERIMENT_RESULTS, keys: { organizationId: 1, projectId: 1 } },
     ];
   }
 
@@ -177,6 +185,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       metadata: input.metadata ?? null,
       datasetId: input.datasetId ?? null,
       datasetVersion: input.datasetVersion ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
       targetType: input.targetType,
       targetId: input.targetId,
       status: 'pending' as const,
@@ -202,6 +212,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         metadata: input.metadata,
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         status: 'pending',
@@ -299,6 +311,27 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       if (args.datasetId) {
         filter.datasetId = args.datasetId;
       }
+      if (args.targetType) {
+        filter.targetType = args.targetType;
+      }
+      if (args.targetId) {
+        filter.targetId = args.targetId;
+      }
+      if (args.agentVersion) {
+        filter.agentVersion = args.agentVersion;
+      }
+      if (args.status) {
+        filter.status = args.status;
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          filter.organizationId = organizationId;
+        }
+        if (projectId !== undefined) {
+          filter.projectId = projectId;
+        }
+      }
 
       const total = await collection.countDocuments(filter);
 
@@ -378,6 +411,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       experimentId: input.experimentId,
       itemId: input.itemId,
       itemDatasetVersion: input.itemDatasetVersion ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
       input: input.input,
       output: input.output ?? null,
       groundTruth: input.groundTruth ?? null,
@@ -388,6 +423,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      toolMockReport: input.toolMockReport ?? null,
       createdAt: now,
     };
 
@@ -400,6 +436,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         input: input.input,
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
@@ -410,6 +448,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolMockReport: input.toolMockReport ?? null,
         createdAt: now,
       };
     } catch (error) {
@@ -503,6 +542,21 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const { page, perPage: perPageInput } = args.pagination;
 
       const filter: Record<string, unknown> = { experimentId: args.experimentId };
+      if (args.traceId) {
+        filter.traceId = args.traceId;
+      }
+      if (args.status) {
+        filter.status = args.status;
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          filter.organizationId = organizationId;
+        }
+        if (projectId !== undefined) {
+          filter.projectId = projectId;
+        }
+      }
 
       const total = await collection.countDocuments(filter);
 

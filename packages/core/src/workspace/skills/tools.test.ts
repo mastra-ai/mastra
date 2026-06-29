@@ -1,7 +1,12 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
+import { LocalSkillSource } from './local-skill-source';
 import { createSkillTools } from './tools';
 import type { Skill, SkillMetadata, SkillSearchResult, WorkspaceSkills } from './types';
+import { WorkspaceSkillsImpl } from './workspace-skills';
 
 // =============================================================================
 // Mock WorkspaceSkills
@@ -87,6 +92,55 @@ describe('skill tool', () => {
     const result = await exec(tool, { name: 'brand-guidelines' });
 
     expect(result).toBe('# Brand Guidelines\n\nUse blue.');
+  });
+
+  it('calls maybeRefresh before resolving so on-disk edits are picked up (#16640)', async () => {
+    const skill = makeSkill({ instructions: 'stale' });
+    const maybeRefresh = vi.fn(async () => {});
+    const getFn = vi.fn(async () => skill);
+    const skills = createMockWorkspaceSkills({ maybeRefresh, get: getFn });
+    const { skill: tool } = createSkillTools(skills);
+
+    await exec(tool, { name: 'test-skill' });
+
+    expect(maybeRefresh).toHaveBeenCalledTimes(1);
+    // Order matters: refresh must happen before get(), otherwise we still
+    // resolve against the cached (stale) skill entry.
+    const refreshOrder = maybeRefresh.mock.invocationCallOrder[0]!;
+    const getOrder = getFn.mock.invocationCallOrder[0]!;
+    expect(refreshOrder).toBeLessThan(getOrder);
+  });
+
+  it('activates a symlinked local skill by bare name when two roots point to the same canonical path on disk', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-tool-'));
+
+    try {
+      const agentsRoot = path.join(tempDir, '.agents', 'skills');
+      const claudeRoot = path.join(tempDir, '.claude', 'skills');
+      const canonicalSkillDir = path.join(agentsRoot, 'mastra');
+      const symlinkedSkillDir = path.join(claudeRoot, 'mastra');
+
+      await fs.mkdir(canonicalSkillDir, { recursive: true });
+      await fs.mkdir(claudeRoot, { recursive: true });
+      await fs.writeFile(
+        path.join(canonicalSkillDir, 'SKILL.md'),
+        '---\nname: mastra\ndescription: canonical mastra skill\n---\n\n# Mastra\n\nUse the canonical skill.',
+      );
+      await fs.symlink(canonicalSkillDir, symlinkedSkillDir, 'dir');
+
+      const skills = new WorkspaceSkillsImpl({
+        source: new LocalSkillSource({ basePath: tempDir }),
+        skills: ['.claude/skills', '.agents/skills'],
+      });
+      const { skill: tool } = createSkillTools(skills);
+
+      const result = await exec(tool, { name: 'mastra' });
+
+      expect(result).toContain('# Mastra');
+      expect(result).toContain('Use the canonical skill.');
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('appends references section when skill has references', async () => {
@@ -261,6 +315,20 @@ describe('skill_search tool', () => {
     const result = await exec(tool, { query: 'something' });
 
     expect(result).toBe('No results found.');
+  });
+
+  it('calls maybeRefresh before searching so newly-edited skills are searchable (#16640)', async () => {
+    const maybeRefresh = vi.fn(async () => {});
+    const search = vi.fn(async () => []);
+    const skills = createMockWorkspaceSkills({ maybeRefresh, search });
+    const { skill_search: tool } = createSkillTools(skills);
+
+    await exec(tool, { query: 'anything' });
+
+    expect(maybeRefresh).toHaveBeenCalledTimes(1);
+    const refreshOrder = maybeRefresh.mock.invocationCallOrder[0]!;
+    const searchOrder = search.mock.invocationCallOrder[0]!;
+    expect(refreshOrder).toBeLessThan(searchOrder);
   });
 
   it('formats results with skill name, score, and preview', async () => {

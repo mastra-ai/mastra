@@ -62,6 +62,46 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    it('should round-trip the resolved `author` field on each list row', async () => {
+      const mockResponse = {
+        agents: [
+          {
+            id: 'agent-1',
+            name: 'Test Agent',
+            instructions: 'You are a helpful assistant',
+            model: { provider: 'openai', name: 'gpt-4' },
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+            authorId: 'author-1',
+            author: { id: 'author-1', name: 'Alice', email: 'alice@example.com' },
+          },
+          {
+            id: 'agent-2',
+            name: 'Test Agent 2',
+            instructions: 'x',
+            model: { provider: 'openai', name: 'gpt-4' },
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+            authorId: 'author-2',
+            // No `author` — server could not resolve this id.
+          },
+        ],
+        total: 2,
+        page: 0,
+        perPage: 100,
+        hasMore: false,
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await client.listStoredAgents();
+      expect(result.agents[0].author).toEqual({
+        id: 'author-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+      });
+      expect(result.agents[1].author).toBeUndefined();
+    });
+
     it('should list stored agents with pagination', async () => {
       const mockResponse = {
         agents: [],
@@ -101,6 +141,17 @@ describe('StoredAgent Resource', () => {
         expect.objectContaining({
           headers: expect.objectContaining(clientOptions.headers),
         }),
+      );
+    });
+
+    it('should pass favoritedOnly and pinFavoritedFor on listStoredAgents', async () => {
+      const mockResponse = { agents: [], total: 0, page: 0, perPage: 100, hasMore: false };
+      mockFetchResponse(mockResponse);
+
+      await client.listStoredAgents({ favoritedOnly: true, pinFavoritedFor: 'user-1' });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents?favoritedOnly=true&pinFavoritedFor=user-1`,
+        expect.anything(),
       );
     });
   });
@@ -191,6 +242,30 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    it('should round-trip the resolved `author` field on details()', async () => {
+      const mockResponse = {
+        id: storedAgentId,
+        name: 'Test Agent',
+        instructions: 'You are a helpful assistant',
+        model: { provider: 'openai', name: 'gpt-4' },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        authorId: 'author-1',
+        author: {
+          id: 'author-1',
+          name: 'Alice',
+          email: 'alice@example.com',
+          avatarUrl: 'https://x/y.png',
+        },
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.details();
+      // Type-level: StoredAgentResponse#author is optional ResolvedAuthor — this assignment compiles.
+      const author: { id: string; name?: string; email?: string; avatarUrl?: string } | undefined = result.author;
+      expect(author).toEqual(mockResponse.author);
+    });
+
     it('should update stored agent', async () => {
       const updateParams = {
         name: 'Updated Agent Name',
@@ -216,6 +291,51 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    it('should export stored agent JSON', async () => {
+      const params = { instructions: 'Updated instructions' };
+      const mockResponse = {
+        agentId: storedAgentId,
+        fileName: `agents/${storedAgentId}.json`,
+        content: '{\n  "instructions": "Updated instructions"\n}\n',
+        config: { instructions: 'Updated instructions' },
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.export(params);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/export`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
+    it('should open a stored agent change request', async () => {
+      const params = {
+        instructions: 'Updated instructions',
+        changeMessage: 'Tune weather instructions',
+        userName: 'Ada Lovelace',
+      };
+      const mockResponse = {
+        id: '123',
+        url: 'https://github.com/acme/repo/pull/123',
+        ref: 'mastra/source-storage/test',
+      };
+      mockFetchResponse(mockResponse);
+
+      const result = await storedAgent.openChangeRequest(params);
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/change-request`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(params),
+        }),
+      );
+    });
+
     it('should delete stored agent', async () => {
       const mockResponse = {
         success: true,
@@ -231,6 +351,36 @@ describe('StoredAgent Resource', () => {
           method: 'DELETE',
         }),
       );
+    });
+
+    describe('Favorites', () => {
+      it('should favorite the agent via PUT /favorite', async () => {
+        const mockResponse = { favorited: true, favoriteCount: 3 };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.favorite();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/favorite`,
+          expect.objectContaining({
+            method: 'PUT',
+          }),
+        );
+      });
+
+      it('should unfavorite the agent via DELETE /favorite', async () => {
+        const mockResponse = { favorited: false, favoriteCount: 2 };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.unfavorite();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/favorite`,
+          expect.objectContaining({
+            method: 'DELETE',
+          }),
+        );
+      });
     });
 
     it('should handle special characters in storedAgentId', async () => {
@@ -305,12 +455,11 @@ describe('StoredAgent Resource', () => {
         const result = await storedAgent.listVersions({
           page: 1,
           perPage: 5,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
-          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy=createdAt&sortDirection=DESC`,
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy%5Bfield%5D=createdAt&orderBy%5Bdirection%5D=DESC`,
           expect.objectContaining({
             headers: expect.objectContaining(clientOptions.headers),
           }),

@@ -21,6 +21,37 @@ import {
  * versions that don't export TABLE_OBSERVATIONAL_MEMORY.
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
+const POSTGRES_MAX_BIND_PARAMETERS = 65535;
+// Keep in sync with the message INSERT column list in saveMessages.
+const MESSAGE_INSERT_BIND_PARAMETERS = 8;
+const MAX_MESSAGES_PER_INSERT = Math.floor(POSTGRES_MAX_BIND_PARAMETERS / MESSAGE_INSERT_BIND_PARAMETERS);
+
+/**
+ * Columns added to the OM table after its initial release.
+ * Used in `alterTable({ ifNotExists })` so that databases created on older
+ * versions get the new columns automatically.
+ *
+ * When you add a column to OBSERVATIONAL_MEMORY_SCHEMA in @mastra/core,
+ * you MUST also add it here — the unit test `om-migration-columns.test.ts`
+ * will fail otherwise.
+ */
+export const OM_MIGRATION_COLUMNS: string[] = [
+  'observedMessageIds',
+  'observedTimezone',
+  'bufferedObservations',
+  'bufferedObservationTokens',
+  'bufferedMessageIds',
+  'bufferedReflection',
+  'bufferedReflectionTokens',
+  'bufferedReflectionInputTokens',
+  'reflectedObservationLineCount',
+  'bufferedObservationChunks',
+  'isBufferingObservation',
+  'isBufferingReflection',
+  'lastBufferedAtTokens',
+  'lastBufferedAtTime',
+  'metadata',
+];
 
 /**
  * Try to import the OM schema statically. On older @mastra/core versions that
@@ -47,6 +78,7 @@ import type {
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
   BufferedObservationChunk,
   CreateObservationalMemoryInput,
   UpdateActiveObservationsInput,
@@ -56,6 +88,7 @@ import type {
   UpdateBufferedReflectionInput,
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -99,6 +132,25 @@ function inPlaceholders(count: number, startIndex = 1): string {
   return Array.from({ length: count }, (_, i) => `$${i + startIndex}`).join(', ');
 }
 
+function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
+  const deduped = new Map<string, MastraDBMessage>();
+  for (const message of messages) {
+    const existing = deduped.get(message.id);
+    if (existing) {
+      deduped.set(message.id, {
+        ...message,
+        createdAt: existing.createdAt,
+      });
+    } else {
+      deduped.set(message.id, {
+        ...message,
+        createdAt: message.createdAt || new Date(),
+      });
+    }
+  }
+  return Array.from(deduped.values());
+}
+
 export class MemoryPG extends MemoryStorage {
   readonly supportsObservationalMemory = true;
 
@@ -125,14 +177,13 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Dynamically import OM schema to avoid breaking older @mastra/core versions
-    let omSchema: Record<string, any> | undefined;
-    try {
-      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
-      omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
-    } catch {
-      // OM not available in this version of core
-    }
+    // Reuse the module-level `_omTableSchema` set via the top-of-file
+    // `createRequire` shim. `await import('@mastra/core/storage')` here used
+    // to deadlock `mastra build` output: bundlers rewrite the dynamic import
+    // to point at the entry chunk that statically depends on this file, so
+    // the cycle never resolves when storage initializes during module
+    // evaluation (#18298).
+    const omSchema = _omTableSchema?.[OM_TABLE];
 
     if (omSchema) {
       await this.#db.createTable({
@@ -143,22 +194,7 @@ export class MemoryPG extends MemoryStorage {
       await this.#db.alterTable({
         tableName: OM_TABLE as any,
         schema: omSchema,
-        ifNotExists: [
-          'observedMessageIds',
-          'observedTimezone',
-          'bufferedObservations',
-          'bufferedObservationTokens',
-          'bufferedMessageIds',
-          'bufferedReflection',
-          'bufferedReflectionTokens',
-          'bufferedReflectionInputTokens',
-          'bufferedObservationChunks',
-          'isBufferingObservation',
-          'isBufferingReflection',
-          'lastBufferedAtTokens',
-          'lastBufferedAtTime',
-          'metadata',
-        ],
+        ifNotExists: OM_MIGRATION_COLUMNS,
       });
     }
     await this.#db.alterTable({
@@ -311,13 +347,27 @@ export class MemoryPG extends MemoryStorage {
     };
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
 
+      let query = `SELECT * FROM ${tableName} WHERE id = $1`;
+      let params: any[] = [threadId];
+
+      if (resourceId !== undefined) {
+        query += ` AND "resourceId" = $2`;
+        params.push(resourceId);
+      }
+
       const thread = await this.#db.client.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-        `SELECT * FROM ${tableName} WHERE id = $1`,
-        [threadId],
+        query,
+        params,
       );
 
       if (!thread) {
@@ -427,7 +477,7 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY COALESCE("${field}Z", "${field}") ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -556,7 +606,7 @@ export class MemoryPG extends MemoryStorage {
     };
 
     try {
-      const now = new Date().toISOString();
+      const now = new Date();
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET
@@ -857,7 +907,7 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1024,7 +1074,7 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByStatement = `ORDER BY COALESCE("${field}Z", "${field}") ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1040,13 +1090,13 @@ export class MemoryPG extends MemoryStorage {
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
-        conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt") ${startOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
-        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt") ${endOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
       }
 
@@ -1168,67 +1218,90 @@ export class MemoryPG extends MemoryStorage {
       });
     }
 
-    const thread = await this.getThreadById({ threadId });
-    if (!thread) {
-      throw new MastraError({
-        id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.THIRD_PARTY,
-        text: `Thread ${threadId} not found`,
-        details: {
-          threadId,
-        },
-      });
-    }
-
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+      const threadIds = new Set<string>();
+      for (const message of messages) {
+        if (!message.threadId) {
+          throw new Error(
+            `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
+        if (!message.resourceId) {
+          throw new Error(
+            `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
+        threadIds.add(message.threadId);
+      }
+
+      for (const threadIdToCheck of threadIds) {
+        const thread = await this.getThreadById({ threadId: threadIdToCheck });
+        if (!thread) {
+          throw new MastraError({
+            id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `Thread ${threadIdToCheck} not found`,
+            details: {
+              threadId: threadIdToCheck,
+            },
+          });
+        }
+      }
+
+      const messagesToSave = dedupeMessagesForSave(messages);
       await this.#db.client.tx(async t => {
-        // Insert messages sequentially to avoid concurrent queries on the same pg client
-        for (const message of messages) {
-          if (!message.threadId) {
-            throw new Error(
-              `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
-            );
-          }
-          if (!message.resourceId) {
-            throw new Error(
-              `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
-            );
-          }
+        for (let offset = 0; offset < messagesToSave.length; offset += MAX_MESSAGES_PER_INSERT) {
+          const batch = messagesToSave.slice(offset, offset + MAX_MESSAGES_PER_INSERT);
+          const values: unknown[] = [];
+          const valuePlaceholders = batch
+            .map((message, messageIndex) => {
+              const createdAt = message.createdAt || new Date();
+              values.push(
+                message.id,
+                message.threadId,
+                typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+                createdAt,
+                createdAt,
+                message.role,
+                message.type || 'v2',
+                message.resourceId,
+              );
+
+              const paramOffset = messageIndex * MESSAGE_INSERT_BIND_PARAMETERS;
+              return `(${Array.from(
+                { length: MESSAGE_INSERT_BIND_PARAMETERS },
+                (_, paramIndex) => `$${paramOffset + paramIndex + 1}`,
+              ).join(', ')})`;
+            })
+            .join(', ');
+
           await t.none(
             `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             VALUES ${valuePlaceholders}
              ON CONFLICT (id) DO UPDATE SET
               thread_id = EXCLUDED.thread_id,
               content = EXCLUDED.content,
               role = EXCLUDED.role,
               type = EXCLUDED.type,
               "resourceId" = EXCLUDED."resourceId"`,
-            [
-              message.id,
-              message.threadId,
-              typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-              message.createdAt || new Date().toISOString(),
-              message.createdAt || new Date().toISOString(),
-              message.role,
-              message.type || 'v2',
-              message.resourceId,
-            ],
+            values,
           );
         }
 
-        // Update thread timestamp
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-        const nowStr = new Date().toISOString();
-        await t.none(
-          `UPDATE ${threadTableName}
-            SET
-              "updatedAt" = $1,
-              "updatedAtZ" = $2
-            WHERE id = $3`,
-          [nowStr, nowStr, threadId],
-        );
+        const now = new Date();
+        for (const threadIdToUpdate of threadIds) {
+          await t.none(
+            `UPDATE ${threadTableName}
+              SET
+                "updatedAt" = $1,
+                "updatedAtZ" = $2
+              WHERE id = $3`,
+            [now, now, threadIdToUpdate],
+          );
+        }
       });
 
       const messagesWithParsedContent = messages.map(message => {
@@ -1245,6 +1318,9 @@ export class MemoryPG extends MemoryStorage {
       const list = new MessageList().add(messagesWithParsedContent as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
     } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'SAVE_MESSAGES', 'FAILED'),
@@ -1793,6 +1869,7 @@ export class MemoryPG extends MemoryStorage {
     threadId: string | null,
     resourceId: string,
     limit: number = 10,
+    options?: ObservationalMemoryHistoryOptions,
   ): Promise<ObservationalMemoryRecord[]> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
@@ -1800,10 +1877,32 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      const result = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} WHERE "lookupKey" = $1 ORDER BY "generationCount" DESC LIMIT $2`,
-        [lookupKey, limit],
-      );
+
+      const conditions = [`"lookupKey" = $1`];
+      const params: unknown[] = [lookupKey];
+      let paramIndex = 2;
+
+      if (options?.from) {
+        conditions.push(`"createdAtZ" >= $${paramIndex}`);
+        params.push(options.from.toISOString());
+        paramIndex++;
+      }
+      if (options?.to) {
+        conditions.push(`"createdAtZ" <= $${paramIndex}`);
+        params.push(options.to.toISOString());
+        paramIndex++;
+      }
+
+      params.push(limit);
+      let sql = `SELECT * FROM ${tableName} WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" DESC LIMIT $${paramIndex}`;
+      paramIndex++;
+
+      if (options?.offset != null) {
+        params.push(options.offset);
+        sql += ` OFFSET $${paramIndex}`;
+      }
+
+      const result = await this.#db.client.manyOrNone(sql, params);
       if (!result) return [];
       return result.map(row => this.parseOMRow(row));
     } catch (error) {
@@ -2355,6 +2454,55 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    try {
+      const tableName = getTableName({
+        indexName: OM_TABLE,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      // Read current config
+      const selectResult = await this.#db.client.query(`SELECT config FROM ${tableName} WHERE id = $1`, [input.id]);
+
+      if (selectResult.rowCount === 0) {
+        throw new MastraError({
+          id: createStorageErrorId('PG', 'UPDATE_OM_CONFIG', 'NOT_FOUND'),
+          text: `Observational memory record not found: ${input.id}`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        });
+      }
+
+      const row = selectResult.rows[0];
+      const existing: Record<string, unknown> = row.config
+        ? typeof row.config === 'string'
+          ? JSON.parse(row.config)
+          : row.config
+        : {};
+      const merged = this.deepMergeConfig(existing, input.config);
+      const nowStr = new Date().toISOString();
+
+      await this.#db.client.query(
+        `UPDATE ${tableName} SET config = $1, "updatedAt" = $2, "updatedAtZ" = $3 WHERE id = $4`,
+        [JSON.stringify(merged), nowStr, nowStr, input.id],
+      );
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_OM_CONFIG', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: input.id },
+        },
+        error,
+      );
+    }
+  }
+
   // ============================================
   // Async Buffering Methods
   // ============================================
@@ -2379,6 +2527,7 @@ export class MemoryPG extends MemoryStorage {
         createdAt: new Date(),
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
       };
 
       // Append chunk to existing array using JSONB concatenation

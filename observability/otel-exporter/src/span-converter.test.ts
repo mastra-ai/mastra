@@ -6,6 +6,7 @@ import { SpanType } from '@mastra/core/observability';
 import type {
   ExportedSpan,
   ModelGenerationAttributes,
+  RagEmbeddingAttributes,
   AgentRunAttributes,
   ToolCallAttributes,
   MCPToolCallAttributes,
@@ -15,6 +16,7 @@ import type {
 import { SpanKind } from '@opentelemetry/api';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
 import { SpanConverter } from './span-converter.js';
 
 // Mock the Resource class
@@ -69,6 +71,48 @@ describe('SpanConverter', () => {
 
       const result = await converter.convertSpan(span);
       expect(result.name).toBe('chat gpt-4');
+    });
+
+    it('should format RAG embedding span names with the embedding model', async () => {
+      const span: ExportedSpan<SpanType.RAG_EMBEDDING> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'rag embed: query',
+        type: SpanType.RAG_EMBEDDING,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: false,
+        attributes: {
+          model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
+          provider: 'openai',
+          mode: 'query',
+          inputCount: 1,
+        } as RagEmbeddingAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      expect(result.name).toBe(`embeddings ${MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__}`);
+    });
+
+    it('should fall back to sanitized span name for RAG embedding spans without a model', async () => {
+      const span: ExportedSpan<SpanType.RAG_EMBEDDING> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'rag embed: query',
+        type: SpanType.RAG_EMBEDDING,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: false,
+        attributes: {
+          mode: 'query',
+          inputCount: 1,
+        } as RagEmbeddingAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      expect(result.name).toBe('rag embed query');
     });
 
     it('should format tool call span names correctly', async () => {
@@ -196,6 +240,26 @@ describe('SpanConverter', () => {
       expect(result.kind).toBe(SpanKind.CLIENT);
     });
 
+    it('should use CLIENT for RAG embedding spans', async () => {
+      const span: ExportedSpan<SpanType.RAG_EMBEDDING> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'rag-embedding',
+        type: SpanType.RAG_EMBEDDING,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: false,
+        attributes: {
+          model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
+          provider: 'openai',
+        } as RagEmbeddingAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      expect(result.kind).toBe(SpanKind.CLIENT);
+    });
+
     it('should use INTERNAL for tool calls', async () => {
       const span: ExportedSpan<SpanType.TOOL_CALL> = {
         id: 'span-1',
@@ -265,11 +329,12 @@ describe('SpanConverter', () => {
       expect(attrs['gen_ai.usage.input_tokens']).toBe(100);
       expect(attrs['gen_ai.usage.output_tokens']).toBe(50);
       expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(20);
-      expect(attrs['gen_ai.usage.cached_input_tokens']).toBe(30);
+      expect(attrs['gen_ai.usage.cache_read.input_tokens']).toBe(30);
 
       // Should NOT have old naming
       expect(attrs['llm.usage.prompt_tokens']).toBeUndefined();
       expect(attrs['gen_ai.usage.prompt_tokens']).toBeUndefined();
+      expect(attrs['gen_ai.usage.cached_input_tokens']).toBeUndefined();
     });
   });
 
@@ -295,6 +360,43 @@ describe('SpanConverter', () => {
 
       const result = await converter.convertSpan(span);
       expect(result.attributes['gen_ai.operation.name']).toBe('chat');
+    });
+
+    it('should map RAG embedding attributes to OTEL GenAI conventions', async () => {
+      const span: ExportedSpan<SpanType.RAG_EMBEDDING> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'rag-embedding',
+        type: SpanType.RAG_EMBEDDING,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: false,
+        attributes: {
+          model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
+          provider: 'OpenAI',
+          mode: 'query',
+          dimensions: 1536,
+          inputCount: 1,
+          usage: {
+            inputTokens: 12,
+            inputDetails: { cacheRead: 4 },
+          },
+        } as RagEmbeddingAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      const attrs = result.attributes;
+
+      expect(attrs['gen_ai.operation.name']).toBe('embeddings');
+      expect(attrs['gen_ai.request.model']).toBe(MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__);
+      expect(attrs['gen_ai.provider.name']).toBe('openai');
+      expect(attrs['gen_ai.usage.input_tokens']).toBe(12);
+      expect(attrs['gen_ai.usage.cache_read.input_tokens']).toBe(4);
+      expect(attrs['gen_ai.embeddings.dimension.count']).toBe(1536);
+      expect(attrs['mastra.rag_embedding.mode']).toBe('query');
+      expect(attrs['mastra.rag_embedding.dimensions']).toBe(1536);
+      expect(attrs['mastra.rag_embedding.input_count']).toBe(1);
     });
 
     it('should map LLM parameters to OTEL conventions', async () => {

@@ -7,7 +7,6 @@ const meta: Meta<typeof Select> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
@@ -31,7 +30,7 @@ export const Default: Story = {
 export const Experimental: Story = {
   render: () => (
     <Select>
-      <SelectTrigger className="w-[180px]" size="default">
+      <SelectTrigger className="w-[180px]" size="md">
         <SelectValue placeholder="Select option" />
       </SelectTrigger>
       <SelectContent>
@@ -40,6 +39,50 @@ export const Experimental: Story = {
         <SelectItem value="option3">Option 3</SelectItem>
       </SelectContent>
     </Select>
+  ),
+};
+
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-3">
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+        <Select key={size}>
+          <SelectTrigger className="w-[180px]" size={size}>
+            <SelectValue placeholder={size} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="option1">Option 1</SelectItem>
+            <SelectItem value="option2">Option 2</SelectItem>
+            <SelectItem value="option3">Option 3</SelectItem>
+          </SelectContent>
+        </Select>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * A select is a field, so it offers the same button looks as everywhere:
+ * `default` (the filled Button surface, the default here too), `outline`
+ * (bordered, transparent) and `ghost` (borderless, for dense toolbars). It does
+ * not expose the high-emphasis `primary` look.
+ */
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-3">
+      {(['default', 'outline', 'ghost'] as const).map(variant => (
+        <Select key={variant}>
+          <SelectTrigger className="w-[180px]" variant={variant}>
+            <SelectValue placeholder={variant} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="option1">Option 1</SelectItem>
+            <SelectItem value="option2">Option 2</SelectItem>
+            <SelectItem value="option3">Option 3</SelectItem>
+          </SelectContent>
+        </Select>
+      ))}
+    </div>
   ),
 };
 

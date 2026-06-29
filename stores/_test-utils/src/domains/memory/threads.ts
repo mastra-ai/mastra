@@ -29,6 +29,20 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(retrievedThread?.title).toEqual(thread.title);
     });
 
+    // Regression test for https://github.com/mastra-ai/mastra/issues/15998
+    // Core gates auto-generated thread titles on `!thread.title`, so adapters
+    // must preserve an empty title round-trip rather than substituting a
+    // placeholder like `Thread <id>`.
+    it('should preserve an empty thread title (issue #15998)', async () => {
+      const thread = { ...createSampleThread(), title: '' };
+
+      const savedThread = await memoryStorage.saveThread({ thread });
+      expect(savedThread.title).toBe('');
+
+      const retrievedThread = await memoryStorage.getThreadById({ threadId: thread.id });
+      expect(retrievedThread?.title).toBe('');
+    });
+
     it('should create and retrieve a thread with the same given threadId and resourceId', async () => {
       const exampleThreadId = '1346362547862769664';
       const exampleResourceId = '532374164040974346';
@@ -64,6 +78,51 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       expect(result).toBeNull();
     });
 
+    describe('resourceId isolation in getThreadById', () => {
+      it('should return thread when resourceId matches (tenant match)', async () => {
+        const id = `thread-match-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId });
+        expect(result).not.toBeNull();
+        expect(result?.id).toBe(id);
+      });
+
+      it('should return null when resourceId does not match (tenant mismatch)', async () => {
+        const id = `thread-mismatch-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const otherResourceId = `tenant-other-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId: otherResourceId });
+        expect(result).toBeNull();
+      });
+
+      it('should treat an empty string resourceId as an explicit scope', async () => {
+        const id = `thread-empty-resourceId-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id, resourceId: '' });
+        expect(result).toBeNull();
+      });
+
+      it('should return thread when resourceId is not provided (backwards compatibility)', async () => {
+        const id = `thread-no-resourceId-${randomUUID()}`;
+        const resourceId = `tenant-${randomUUID()}`;
+        const thread = createSampleThreadWithParams(id, resourceId, new Date(), new Date());
+        await memoryStorage.saveThread({ thread });
+
+        const result = await memoryStorage.getThreadById({ threadId: id });
+        expect(result).not.toBeNull();
+        expect(result?.id).toBe(id);
+      });
+    });
+
     it('should get threads by resource ID', async () => {
       const thread1 = createSampleThread();
       const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
@@ -84,6 +143,11 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
       const thread = createSampleThread();
       await memoryStorage.saveThread({ thread });
 
+      const originalUpdatedAtTime = new Date(thread.updatedAt).getTime();
+
+      // Wait a small amount to ensure a different timestamp
+      await new Promise(resolve => setTimeout(resolve, 10));
+
       const newMetadata = { newKey: 'newValue' };
       const updatedThread = await memoryStorage.updateThread({
         id: thread.id,
@@ -96,11 +160,12 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
         ...thread.metadata,
         ...newMetadata,
       });
+      expect(new Date(updatedThread.updatedAt).getTime()).toBeGreaterThan(originalUpdatedAtTime);
 
       // Verify persistence
       const retrievedThread = await memoryStorage.getThreadById({ threadId: thread.id });
-      console.log('retrievedThread', retrievedThread);
       expect(retrievedThread).toEqual(updatedThread);
+      expect(new Date(retrievedThread!.updatedAt).getTime()).toBeGreaterThan(originalUpdatedAtTime);
     });
 
     it('should return consistent timestamps from getThreadById and listThreads (issue #11496)', async () => {
@@ -1075,5 +1140,7 @@ export function createThreadsTest({ storage }: { storage: MastraStorage }) {
 
 function isStorageSupportsSort(storage: MastraStorage): boolean {
   const storageType = storage.constructor.name;
-  return ['LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore'].includes(storageType);
+  return ['InMemoryStore', 'LibSQLStore', 'PostgresStore', 'MSSQLStore', 'DynamoDBStore', 'MySQLStore'].includes(
+    storageType,
+  );
 }
