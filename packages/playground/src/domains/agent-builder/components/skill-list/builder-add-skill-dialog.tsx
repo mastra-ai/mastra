@@ -1,5 +1,4 @@
 import type { BuilderRegistrySkillSummary } from '@mastra/client-js';
-import { SkillIcon, cn } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -12,6 +11,8 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, Download, ExternalLink, Github, Loader2, Package, Search } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

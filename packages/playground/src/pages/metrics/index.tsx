@@ -7,12 +7,9 @@ import {
   createMetricsPropertyFilterFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
-  is401UnauthorizedError,
-  is403ForbiddenError,
   isValidPreset,
   loadMetricsFiltersFromStorage,
   saveMetricsFiltersToStorage,
-  toast,
   useAgentRunsKpiMetrics,
   useMetrics,
   useEntityNames,
@@ -30,6 +27,8 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -54,6 +53,7 @@ const ANALYTICS_OBSERVABILITY_TYPES = new Set([
   'ObservabilityStorageDuckDB',
   'ObservabilityInMemory',
   'ObservabilitySpanner',
+  'ObservabilityStoragePostgresVNext',
 ]);
 
 const PERIOD_PARAM = 'period';
@@ -318,7 +318,7 @@ function MetricsContent() {
           <EmptyState
             iconSlot={<CircleSlashIcon />}
             titleSlot="Metrics are not available with your current storage"
-            descriptionSlot="Metrics require ClickHouse, DuckDB, Spanner, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+            descriptionSlot="Metrics require ClickHouse, DuckDB, Postgres v-next, Spanner, or in-memory storage for observability. Other relational databases (LibSQL, MSSQL) and document stores (MongoDB) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
             actionSlot={
               <Button
                 variant="ghost"
@@ -338,7 +338,7 @@ function MetricsContent() {
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>
                 This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse, DuckDB, or Spanner.
+                persistent metrics, switch the observability storage to ClickHouse, DuckDB, Postgres v-next, or Spanner.
               </Notice.Message>
             </Notice>
           )}

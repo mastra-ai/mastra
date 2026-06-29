@@ -1,6 +1,6 @@
 import type { WorkflowRuns } from '@mastra/core/storage';
-import { toast } from '@mastra/playground-ui';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';

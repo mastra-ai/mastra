@@ -1,6 +1,4 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import type { RuleGroup, JsonSchema } from '@mastra/playground-ui';
-import { Icon, cn } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
@@ -17,6 +15,10 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { GripVertical, X, BookmarkPlus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';

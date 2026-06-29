@@ -6,5 +6,5 @@
     "noCheck": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "**/*.test.ts", "**/__tests__/**/*"]
+  "exclude": ["node_modules", "**/*.test.ts", "**/__tests__/**/*", "src/web/ui", "src/web/vite.config.ts", "src/shared"]
 }

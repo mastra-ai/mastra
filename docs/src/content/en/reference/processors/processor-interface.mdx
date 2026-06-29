@@ -1132,6 +1132,13 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
     isOptional: true,
   },
   {
+    name: 'providerMetadata',
+    type: 'ProviderMetadata',
+    description:
+      'Provider-specific metadata for the finishing step (e.g. AWS Bedrock guardrail trace). Present when the model step produced provider metadata, including on content-filter blocks where `steps` is empty.',
+    isOptional: true,
+  },
+  {
     name: 'toolCalls',
     type: 'ToolCallInfo[]',
     description: 'Tool calls made in this step (if any).',

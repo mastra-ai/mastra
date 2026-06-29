@@ -303,10 +303,20 @@ export class Tool<
     if (opts.execute) {
       const originalExecute = opts.execute;
       this.execute = async (inputData: TSchemaIn, context?: any) => {
-        // Validate input if schema exists
-        const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
-        if (error) {
-          return error;
+        // When a tool is being resumed (resumeData present in context), skip input
+        // validation. The original args were already validated during the initial
+        // execution, and during resume the tool's execute function checks resumeData
+        // and returns early without using the input args.
+        const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
+
+        let data: any = inputData;
+        if (!isResuming) {
+          // Validate input if schema exists
+          const validationResult = validateToolInput(this.inputSchema, inputData, this.id);
+          if (validationResult.error) {
+            return validationResult.error;
+          }
+          data = validationResult.data;
         }
 
         // Validate request context if schema exists

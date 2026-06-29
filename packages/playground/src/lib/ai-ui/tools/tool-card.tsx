@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
+import { AskUserTool } from './ask-user-tool';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -53,6 +54,8 @@ export interface ToolCardProps {
   /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
   dataParts?: ReadonlyArray<DataMessagePart>;
 }
+
+const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 
 export const ToolCard = (props: ToolCardProps) => {
   return (
@@ -164,6 +167,17 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   if (toolName === 'updateWorkingMemory') {
     // Hide the updateWorkingMemory tool call in the UI.
     return null;
+  }
+
+  // Task tool calls are rendered in the docked TaskPanel (bottom of chat) instead
+  // of inline to avoid repetition. Hide them entirely here.
+  if (TASK_TOOL_NAMES.has(toolName)) {
+    return null;
+  }
+
+  // ask_user tool renders a dedicated interactive component for answering questions.
+  if (toolName === 'ask_user') {
+    return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
   }
 
   if (isBackgroundTaskResult) {

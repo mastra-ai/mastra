@@ -11,7 +11,7 @@ function applyCurrentModeColorToRenderedTools(ctx: SlashCommandContext): void {
 }
 
 export async function handleModeCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const modes = ctx.harness.listModes();
+  const modes = ctx.controller.listModes();
   if (modes.length <= 1) {
     ctx.showInfo('Only one mode available');
     return;

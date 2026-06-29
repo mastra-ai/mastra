@@ -794,6 +794,36 @@
       "source": "/docs/streaming/background-task-streaming",
       "destination": "/docs/agents/background-tasks#subscribe-to-all-task-events",
       "permanent": true
+    },
+    {
+      "source": "/docs/harness/modes",
+      "destination": "/docs/agent-controller/modes",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/overview",
+      "destination": "/docs/agent-controller/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/session",
+      "destination": "/docs/agent-controller/session",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/subagents",
+      "destination": "/docs/agent-controller/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/threads-and-state",
+      "destination": "/docs/agent-controller/threads-and-state",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/tool-approvals",
+      "destination": "/docs/agent-controller/tool-approvals",
+      "permanent": true
     }
   ]
 }
