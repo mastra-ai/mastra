@@ -2,19 +2,14 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import {
-  Icon,
-  SpanDataPanelView,
-  TraceDataPanelView,
-  cn,
-  toast,
-  useSpanDetail,
-  useTraceSpanNavigation,
-} from '@mastra/playground-ui';
+import { SpanDataPanelView, TraceDataPanelView, useSpanDetail, useTraceSpanNavigation } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ClipboardCheck } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 

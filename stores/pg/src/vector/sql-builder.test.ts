@@ -22,7 +22,7 @@ describe('buildFilterQuery - numeric range operators', () => {
       expect(values).toEqual([0, 10, 50]);
       expect(sql).toContain(`jsonb_typeof(metadata#>'{price}') = 'number'`);
       expect(sql).toContain(`(metadata#>>'{price}')::numeric ${symbol} $3::numeric`);
-      expect(sql).toContain('ELSE FALSE');
+      expect(sql).toContain('ELSE NULL');
       // The bare, unguarded cast must no longer appear on its own.
       expect(sql).not.toMatch(/(?<!THEN )\(metadata#>>'\{price\}'\)::numeric/);
     });

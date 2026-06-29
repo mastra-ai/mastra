@@ -79,16 +79,16 @@ export function persistOmObserveAttachments(value: 'auto' | boolean): void {
 }
 
 export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
-  const availableModels = await ctx.state.harness.listAvailableModels();
+  const availableModels = await ctx.state.controller.listAvailableModels();
 
-  const harnessState = ctx.state.session.state.get() as Record<string, unknown> | undefined;
+  const agentControllerState = ctx.state.session.state.get() as Record<string, unknown> | undefined;
   const config = {
     observerModelId: ctx.state.session.om.observer.modelId() ?? '',
     reflectorModelId: ctx.state.session.om.reflector.modelId() ?? '',
     observationThreshold: ctx.state.session.om.observer.threshold() ?? 30_000,
     reflectionThreshold: ctx.state.session.om.reflector.threshold() ?? 40_000,
-    cavemanObservations: (harnessState?.cavemanObservations as boolean | undefined) ?? false,
-    observeAttachments: (harnessState?.observeAttachments as 'auto' | boolean | undefined) ?? 'auto',
+    cavemanObservations: (agentControllerState?.cavemanObservations as boolean | undefined) ?? false,
+    observeAttachments: (agentControllerState?.observeAttachments as 'auto' | boolean | undefined) ?? 'auto',
   };
 
   return new Promise<void>(resolve => {

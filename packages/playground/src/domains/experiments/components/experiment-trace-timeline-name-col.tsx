@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ExperimentUISpan, ExperimentUISpanStyle } from '../types';
 import { ExperimentTraceTimelineStructureSign } from './experiment-trace-timeline-structure-sign';
 

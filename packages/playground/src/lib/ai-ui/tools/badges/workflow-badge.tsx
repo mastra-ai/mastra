@@ -1,7 +1,7 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { WorkflowIcon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
