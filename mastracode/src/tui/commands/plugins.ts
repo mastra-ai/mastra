@@ -1,9 +1,13 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
+import type { MastraCodePluginConfigOption, MastraCodePluginConfigValue } from '../../plugin.js';
 import type { LoadedPlugin, PluginScope } from '../../plugins/types.js';
+import { ModelSelectorComponent } from '../components/model-selector.js';
+import type { ModelItem } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import { getSelectListTheme, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -101,6 +105,10 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
   if (plugin.version) container.addChild(new Text(`version: ${plugin.version}`, 0, 0));
   if (plugin.description) container.addChild(new Text(`description: ${plugin.description}`, 0, 0));
   container.addChild(new Text(`tools: ${plugin.toolNames.length ? plugin.toolNames.join(', ') : '(none)'}`, 0, 0));
+  const configEntries = Object.entries(plugin.configSchema ?? {});
+  if (configEntries.length) {
+    container.addChild(new Text(`config: ${configEntries.map(([key]) => key).join(', ')}`, 0, 0));
+  }
   if (plugin.error) container.addChild(new Text(theme.fg('error', `error: ${plugin.error}`), 0, 0));
   if (plugin.status === 'blocked')
     container.addChild(new Text(theme.fg('warning', 'blocked by plugins.json disabledPlugins'), 0, 0));
@@ -110,6 +118,7 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
 
   const actionLabel = plugin.enabled ? 'Deactivate' : 'Activate';
   const actionItems: SelectItem[] = [
+    ...(configEntries.length && plugin.status !== 'blocked' ? [{ value: 'configure', label: '  Configure' }] : []),
     ...(plugin.status === 'blocked' ? [] : [{ value: 'toggle', label: `  ${actionLabel}` }]),
     { value: 'uninstall', label: '  Uninstall' },
     { value: BACK_VALUE, label: '  Back' },
@@ -120,6 +129,11 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
     if (item.value === BACK_VALUE) {
       ctx.state.ui.hideOverlay();
       showPluginsList(ctx);
+      return;
+    }
+    if (item.value === 'configure') {
+      ctx.state.ui.hideOverlay();
+      void configurePluginFlow(ctx, plugin);
       return;
     }
     if (item.value === 'toggle') {
@@ -144,6 +158,98 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
   const modal = container as Box & { handleInput: (data: string) => void };
   modal.handleInput = (data: string) => actions.handleInput(data);
   showModalOverlay(ctx.state.ui, modal, { maxHeight: '80%' });
+}
+
+async function configurePluginFlow(ctx: SlashCommandContext, plugin: LoadedPlugin): Promise<void> {
+  if (!ctx.pluginManager || !plugin.configSchema) return;
+  const entries = Object.entries(plugin.configSchema);
+  const selected = await askModalQuestion(ctx.state.ui, {
+    question: `Configure ${plugin.name ?? plugin.id}:`,
+    options: entries.map(([key, option]) => ({
+      label: option.label ?? key,
+      description: formatConfigDescription(key, option, plugin.configValues?.[key]),
+    })),
+  });
+  if (!selected) return;
+
+  const entry = entries.find(([key, option]) => selected === (option.label ?? key));
+  if (!entry) return;
+  const [key, option] = entry;
+  const value = await askPluginConfigValue(ctx, plugin, key, option);
+  if (value === undefined) return;
+  await ctx.pluginManager.setConfigValue(plugin.id, plugin.scope, key, value);
+  ctx.showInfo(`Updated plugin setting ${key}.`);
+}
+
+function formatConfigDescription(
+  key: string,
+  option: MastraCodePluginConfigOption,
+  value: MastraCodePluginConfigValue,
+): string {
+  const current = value === undefined ? '(unset)' : String(value);
+  return `${option.type} · ${option.description ?? key} · current: ${current}`;
+}
+
+async function askPluginConfigValue(
+  ctx: SlashCommandContext,
+  plugin: LoadedPlugin,
+  key: string,
+  option: MastraCodePluginConfigOption,
+): Promise<MastraCodePluginConfigValue> {
+  const current = plugin.configValues?.[key];
+  if (option.type === 'boolean') {
+    const answer = await askModalQuestion(ctx.state.ui, {
+      question: option.label ?? key,
+      options: [
+        { label: 'On', description: 'true' },
+        { label: 'Off', description: 'false' },
+      ],
+    });
+    if (!answer) return undefined;
+    return answer === 'On';
+  }
+
+  if (option.type === 'model') {
+    return askPluginModelValue(ctx, option.label ?? key, typeof current === 'string' ? current : undefined);
+  }
+
+  const answer = await askModalQuestion(ctx.state.ui, {
+    question: option.label ?? key,
+    defaultValue: typeof current === 'string' ? current : undefined,
+    allowCustomResponse: true,
+    allowEmptyInput: true,
+  });
+  return answer ?? undefined;
+}
+
+async function askPluginModelValue(
+  ctx: SlashCommandContext,
+  title: string,
+  currentModelId?: string,
+): Promise<string | undefined> {
+  const availableModels = await ctx.state.controller.listAvailableModels();
+  if (availableModels.length === 0) return undefined;
+
+  return new Promise<string | undefined>(resolve => {
+    const selector = new ModelSelectorComponent({
+      tui: ctx.state.ui,
+      models: availableModels,
+      currentModelId,
+      title,
+      onSelect: async (model: ModelItem) => {
+        ctx.state.ui.hideOverlay();
+        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
+        resolve(model.id);
+      },
+      onCancel: () => {
+        ctx.state.ui.hideOverlay();
+        resolve(undefined);
+      },
+    });
+
+    showModalOverlay(ctx.state.ui, selector, { maxHeight: '75%' });
+    selector.focused = true;
+  });
 }
 
 async function installPluginFlow(ctx: SlashCommandContext): Promise<void> {

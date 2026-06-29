@@ -2,7 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { MastraCodePlugin, MastraCodePluginContext, MastraCodePluginTools } from '../plugin.js';
+import type {
+  MastraCodePlugin,
+  MastraCodePluginConfigSchema,
+  MastraCodePluginConfigValues,
+  MastraCodePluginContext,
+  MastraCodePluginTools,
+} from '../plugin.js';
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
@@ -48,10 +54,13 @@ export async function loadPluginRecord(
       throw new Error(`Plugin id mismatch: registry has "${record.id}" but module exports "${plugin.id}"`);
     }
 
+    const configSchema = validatePluginConfigSchema(plugin.config);
+    const configValues = resolvePluginConfigValues(configSchema, record.config);
     const context: MastraCodePluginContext = {
       cwd: options.projectRoot,
       scope: record.scope,
       pluginDir: path.dirname(entryPath),
+      config: configValues,
     };
     const tools = await resolvePluginTools(plugin, context);
 
@@ -63,6 +72,8 @@ export async function loadPluginRecord(
       status: 'active',
       tools,
       toolNames: Object.keys(tools).sort(),
+      configSchema,
+      configValues,
     };
   } catch (error) {
     return {
@@ -128,6 +139,40 @@ async function resolvePluginTools(
     throw new Error('Plugin tools function must return an object');
   }
   return tools;
+}
+
+function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSchema | undefined {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return undefined;
+  const validated: MastraCodePluginConfigSchema = {};
+  for (const [key, option] of Object.entries(schema)) {
+    if (!option || typeof option !== 'object' || Array.isArray(option)) continue;
+    const record = option as Record<string, unknown>;
+    if (record.type !== 'model' && record.type !== 'boolean' && record.type !== 'string') continue;
+    validated[key] = {
+      type: record.type,
+      ...(typeof record.label === 'string' ? { label: record.label } : {}),
+      ...(typeof record.description === 'string' ? { description: record.description } : {}),
+      ...(typeof record.default === 'string' || typeof record.default === 'boolean' ? { default: record.default } : {}),
+    };
+  }
+  return Object.keys(validated).length > 0 ? validated : undefined;
+}
+
+function resolvePluginConfigValues(
+  schema: MastraCodePluginConfigSchema | undefined,
+  recordValues: Record<string, unknown> | undefined,
+): MastraCodePluginConfigValues {
+  const values: MastraCodePluginConfigValues = {};
+  if (!schema) return values;
+  for (const [key, option] of Object.entries(schema)) {
+    const value = recordValues?.[key];
+    if (option.type === 'boolean') {
+      values[key] = typeof value === 'boolean' ? value : typeof option.default === 'boolean' ? option.default : false;
+      continue;
+    }
+    values[key] = typeof value === 'string' ? value : typeof option.default === 'string' ? option.default : undefined;
+  }
+  return values;
 }
 
 export function collectActivePluginTools(plugins: LoadedPlugin[]): MastraCodePluginTools {
