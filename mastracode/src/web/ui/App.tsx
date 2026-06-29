@@ -225,7 +225,13 @@ export default function App() {
     lastEntry.message.role === 'assistant' &&
     lastEntry.message.content.parts.some(part => part.type === 'text' && part.text.trim().length > 0);
   const showWorkingIndicator =
-    busy && !(lastEntry?.kind === 'message' && lastEntry.message.role === 'assistant' && lastEntry.streaming && lastEntryHasText);
+    busy &&
+    !(
+      lastEntry?.kind === 'message' &&
+      lastEntry.message.role === 'assistant' &&
+      lastEntry.streaming &&
+      lastEntryHasText
+    );
 
   // A restored active project from a pre-resourceId build won't have one yet;
   // backfill it so the session can connect. Runs once per project that needs it.

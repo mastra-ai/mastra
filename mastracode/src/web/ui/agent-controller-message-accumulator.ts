@@ -127,7 +127,7 @@ function isErrorEvent(event: AgentControllerEvent): event is Extract<AgentContro
 }
 
 function toHarnessErrorMessage(event: Extract<AgentControllerEvent, { type: 'error' }>): MastraDBMessage {
-  const message = typeof event.error === 'string' ? event.error : event.error.message ?? 'Controller error';
+  const message = typeof event.error === 'string' ? event.error : (event.error.message ?? 'Controller error');
   const id = `error-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const harnessContent: AgentControllerMessageContent[] = [
     { type: 'harness-error', text: message, ...(event.errorType ? { errorType: event.errorType } : {}) },

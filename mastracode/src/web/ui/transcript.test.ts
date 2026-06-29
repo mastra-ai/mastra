@@ -13,7 +13,9 @@ function messageParts(entry: unknown): unknown[] {
 }
 
 function isMessageEntry(entry: unknown): entry is MessageEntryFixture {
-  return typeof entry === 'object' && entry !== null && 'kind' in entry && entry.kind === 'message' && 'message' in entry;
+  return (
+    typeof entry === 'object' && entry !== null && 'kind' in entry && entry.kind === 'message' && 'message' in entry
+  );
 }
 
 describe('transcript reducer message entries', () => {
@@ -43,7 +45,11 @@ describe('transcript reducer message entries', () => {
     expect(state.entries[1]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: false });
     expect(messageParts(state.entries[1])).toEqual([
       { type: 'text', text: 'I will inspect it.' },
-      { type: 'reasoning', reasoning: 'Need the file first.', details: [{ type: 'text', text: 'Need the file first.' }] },
+      {
+        type: 'reasoning',
+        reasoning: 'Need the file first.',
+        details: [{ type: 'text', text: 'Need the file first.' }],
+      },
       {
         type: 'tool-invocation',
         toolInvocation: {
@@ -58,7 +64,11 @@ describe('transcript reducer message entries', () => {
   });
 
   it('streams message updates without replacing non-message transcript state', () => {
-    const withNotice = transcriptReducer(initialTranscript, { type: 'localNotice', level: 'info', text: 'Command handled' });
+    const withNotice = transcriptReducer(initialTranscript, {
+      type: 'localNotice',
+      level: 'info',
+      text: 'Command handled',
+    });
 
     const state = transcriptReducer(withNotice, {
       type: 'event',
@@ -71,9 +81,7 @@ describe('transcript reducer message entries', () => {
     expect(state.pending).toBe(false);
     expect(state.entries[0]).toMatchObject({ kind: 'notice', text: 'Command handled' });
     expect(state.entries[1]).toMatchObject({ kind: 'message', id: 'assistant-1', streaming: true });
-    expect(messageParts(state.entries[1])).toEqual([
-      { type: 'text', text: 'Streaming text' },
-    ]);
+    expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'Streaming text' }]);
   });
 
   it('keeps tool lifecycle events visible inline before a message update re-emits the tool call', () => {
@@ -118,7 +126,9 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: {
         type: 'task_updated',
-        tasks: [{ id: 'task-1', content: 'Refactor transcript', status: 'in_progress', activeForm: 'Refactoring transcript' }],
+        tasks: [
+          { id: 'task-1', content: 'Refactor transcript', status: 'in_progress', activeForm: 'Refactoring transcript' },
+        ],
       },
     });
     const state = transcriptReducer(withTask, {

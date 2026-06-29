@@ -581,7 +581,9 @@ function hasAssistantText(state: TranscriptState): boolean {
   if (idx === -1) return false;
   const entry = state.entries[idx];
   if (entry.kind !== 'message') return false;
-  return entry.message.content.parts.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0);
+  return entry.message.content.parts.some(
+    part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
+  );
 }
 
 /** Find the latest assistant entry, creating one if none exists. */
@@ -616,7 +618,8 @@ function withTool(
 
   const parts = [...entry.message.content.parts];
   const runtimeTools = { ...(entry.runtimeTools ?? {}) };
-  const existing = runtimeTools[toolCallId] ?? toolCallFromPart(parts.find(part => toolCallIdForPart(part) === toolCallId));
+  const existing =
+    runtimeTools[toolCallId] ?? toolCallFromPart(parts.find(part => toolCallIdForPart(part) === toolCallId));
   const tool = update(
     existing ?? {
       toolCallId,

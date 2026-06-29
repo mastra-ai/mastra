@@ -73,7 +73,9 @@ function useAgentControllerHandlers({
   events?: AgentControllerEvent[];
 } = {}) {
   server.use(
-    http.post(`${API}/sessions`, () => HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID })),
+    http.post(`${API}/sessions`, () =>
+      HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
+    ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
@@ -138,7 +140,12 @@ describe('MastraCode message rendering', () => {
     useAgentControllerHandlers({
       events: [
         { type: 'tool_input_start', toolCallId: 'tool-live', toolName: 'execute_command' },
-        { type: 'tool_input_delta', toolCallId: 'tool-live', argsTextDelta: '{"command":"pnpm test"}', toolName: 'execute_command' },
+        {
+          type: 'tool_input_delta',
+          toolCallId: 'tool-live',
+          argsTextDelta: '{"command":"pnpm test"}',
+          toolName: 'execute_command',
+        },
         { type: 'tool_start', toolCallId: 'tool-live', toolName: 'execute_command', args: { command: 'pnpm test' } },
         { type: 'shell_output', toolCallId: 'tool-live', output: 'passing tests', stream: 'stdout' },
         { type: 'tool_end', toolCallId: 'tool-live', result: 'ok' },

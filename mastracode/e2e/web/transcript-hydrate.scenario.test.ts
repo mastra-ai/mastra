@@ -53,7 +53,12 @@ describe('transcript hydrate (thread history rendering)', () => {
     expect(state.entries).toHaveLength(2);
     expect(state.entries[0]).toMatchObject({ kind: 'message', id: 'u1', message: { role: 'user' } });
     expect(messageText(state.entries[0])).toBe('hello there');
-    expect(state.entries[1]).toMatchObject({ kind: 'message', id: 'a1', message: { role: 'assistant' }, streaming: false });
+    expect(state.entries[1]).toMatchObject({
+      kind: 'message',
+      id: 'a1',
+      message: { role: 'assistant' },
+      streaming: false,
+    });
     expect(messageText(state.entries[1])).toBe('hi, how can I help?');
   });
 

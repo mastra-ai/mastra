@@ -533,10 +533,6 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       part.type === 'file',
   );
 
-  const status = statusMetadata(entry);
-  if (status) return <StatusMetadataCard status={status} />;
-  if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
-
   const lastTextPart = (() => {
     for (let i = parts.length - 1; i >= 0; i--) {
       if (parts[i].type === 'text') return parts[i];
@@ -620,6 +616,10 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
     }),
     [allExpanded, entry.message.role, entry.runtimeTools, entry.streaming, lastTextPart],
   );
+
+  const status = statusMetadata(entry);
+  if (status) return <StatusMetadataCard status={status} />;
+  if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
 }
