@@ -2236,6 +2236,11 @@ export class Agent extends BaseResource {
                   type: 'tool-result' as const,
                   toolCallId: toolCall.toolCallId,
                   toolName: toolCall.toolName,
+                  // Carry args under both names: `input` is the AI SDK v5 field, but
+                  // the UI->DB persistence path keys off the result's `args`. Sending
+                  // both keeps the original args on the persisted tool-result so a
+                  // later replay never reconstructs `args: {}` (issue #16017).
+                  args: toolCall.args,
                   input: toolCall.args,
                   result,
                   ...(modelOutput != null
@@ -3218,6 +3223,11 @@ export class Agent extends BaseResource {
                       type: 'tool-result' as const,
                       toolCallId: toolCall.toolCallId,
                       toolName: toolCall.toolName,
+                      // Carry args under both names: `input` is the AI SDK v5 field, but
+                      // the UI->DB persistence path keys off the result's `args`. Sending
+                      // both keeps the original args on the persisted tool-result so a
+                      // later replay never reconstructs `args: {}` (issue #16017).
+                      args: toolCall.args,
                       input: toolCall.args,
                       result,
                       ...(observability ? { __mastraObservability: observability } : {}),

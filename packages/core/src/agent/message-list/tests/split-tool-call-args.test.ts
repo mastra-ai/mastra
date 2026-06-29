@@ -218,4 +218,47 @@ describe('MessageList - Split tool call args across messages (#12405)', () => {
       }
     }
   });
+
+  it('should use args carried on a standalone tool-result when the matching call is absent (client-tool recursion replay)', () => {
+    // The client-tool recursion path replays a persisted tool-result on its own,
+    // without the originating tool-call in the converted window. The result carries
+    // the original args directly (attached by @mastra/client-js). The adapter must
+    // reconstruct the tool-call from those args instead of fabricating `args: {}`,
+    // which would otherwise be persisted and poison the model via in-context
+    // learning (issue #16017).
+    const messageList = new MessageList();
+
+    messageList.add({ role: 'user', content: 'Rename wire W001 to CAN_HIGH' }, 'input');
+
+    messageList.add(
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'updateWire',
+            // args attached directly to the result; no preceding tool-call message.
+            args: { edgeId: 'e1', referenceName: 'CAN_HIGH' },
+            result: { updated: true },
+          } as any,
+        ],
+      },
+      'response',
+    );
+
+    const modelMessages = messageList.get.all.aiV5.model();
+
+    const toolResultMsg = modelMessages.find(msg => msg.role === 'tool');
+    expect(toolResultMsg).toBeDefined();
+
+    if (toolResultMsg && Array.isArray(toolResultMsg.content)) {
+      const toolResultPart = toolResultMsg.content.find((part: any) => part.type === 'tool-result');
+      expect(toolResultPart).toBeDefined();
+      if (toolResultPart) {
+        // @ts-expect-error - input field exists on StaticToolResult
+        expect(toolResultPart.input).toEqual({ edgeId: 'e1', referenceName: 'CAN_HIGH' });
+      }
+    }
+  });
 });
