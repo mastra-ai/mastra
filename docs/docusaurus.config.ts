@@ -247,12 +247,6 @@ Below is an overview of all available documentation.`,
 					docsPluginId: 'reference',
 				},
 				{
-					type: 'custom-pillLink',
-					position: 'left',
-					label: 'Learn',
-					to: '/learn',
-				},
-				{
 					type: 'docSidebar',
 					sidebarId: 'platformSidebar',
 					position: 'left',

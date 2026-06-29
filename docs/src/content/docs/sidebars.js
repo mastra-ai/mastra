@@ -48,7 +48,7 @@ const sidebars = {
 		},
 		{
 			type: 'category',
-			label: 'Core Primitives',
+			label: 'Core',
 			collapsed: false,
 			collapsible: false,
 			customProps: {
@@ -302,6 +302,53 @@ const sidebars = {
 						},
 					],
 				},
+				{
+					type: 'category',
+					label: 'Studio',
+					items: [
+						{
+							type: 'doc',
+							id: 'studio/overview',
+							label: 'Overview',
+						},
+						{
+							type: 'doc',
+							id: 'studio/deployment',
+							label: 'Deployment',
+						},
+						{
+							type: 'doc',
+							id: 'studio/auth',
+							label: 'Auth',
+						},
+						{
+							type: 'doc',
+							id: 'studio/observability',
+							label: 'Observability',
+						},
+						{
+							type: 'category',
+							label: 'Editor',
+							items: [
+								{
+									type: 'doc',
+									id: 'editor/overview',
+									label: 'Overview',
+								},
+								{
+									type: 'doc',
+									id: 'editor/tools',
+									label: 'Tools',
+								},
+								{
+									type: 'doc',
+									id: 'editor/prompts',
+									label: 'Prompts',
+								},
+							],
+						},
+					],
+				},
 			],
 		},
 		{
@@ -406,267 +453,95 @@ const sidebars = {
 						},
 					],
 				},
-			],
-		},
-		{
-			type: 'category',
-			label: 'Studio',
-			items: [
-				{
-					type: 'doc',
-					id: 'studio/overview',
-					label: 'Overview',
-				},
-				{
-					type: 'doc',
-					id: 'studio/deployment',
-					label: 'Deployment',
-				},
-				{
-					type: 'doc',
-					id: 'studio/auth',
-					label: 'Auth',
-				},
-				{
-					type: 'doc',
-					id: 'studio/observability',
-					label: 'Observability',
-				},
 				{
 					type: 'category',
-					label: 'Editor',
-					items: [
-						{
-							type: 'doc',
-							id: 'editor/overview',
-							label: 'Overview',
-						},
-						{
-							type: 'doc',
-							id: 'editor/tools',
-							label: 'Tools',
-						},
-						{
-							type: 'doc',
-							id: 'editor/prompts',
-							label: 'Prompts',
-						},
-					],
-				},
-			],
-		},
-		{
-			type: 'category',
-			label: 'Server',
-			items: [
-				{
-					type: 'doc',
-					id: 'server/mastra-server',
-					label: 'Overview',
-				},
-				{
-					type: 'doc',
-					id: 'server/server-adapters',
-					label: 'Server Adapters',
-				},
-				{
-					type: 'doc',
-					id: 'server/custom-adapters',
-					label: 'Custom Adapters',
-				},
-				{
-					type: 'doc',
-					id: 'server/middleware',
-					label: 'Middleware',
-				},
-				{
-					type: 'doc',
-					id: 'server/request-context',
-					label: 'Request Context',
-				},
-				{
-					type: 'doc',
-					id: 'server/pubsub',
-					label: 'PubSub',
+					label: 'Agent Builder',
 					customProps: {
 						badge: 'new',
 					},
-				},
-				{
-					type: 'doc',
-					id: 'server/custom-api-routes',
-					label: 'Custom API Routes',
-				},
-				{
-					type: 'doc',
-					id: 'server/mastra-client',
-					label: 'Mastra Client',
+					items: [
+						{ type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+						{ type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+						{ type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+						{ type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+						{ type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+						{ type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+						{ type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+						{ type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+						{ type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
+						{ type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+						{ type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
+					],
 				},
 				{
 					type: 'category',
-					label: 'Auth',
+					label: 'AgentController',
+					customProps: {
+						badge: 'beta',
+					},
 					items: [
 						{
 							type: 'doc',
-							id: 'server/auth/index',
+							id: 'agent-controller/overview',
 							label: 'Overview',
 						},
 						{
 							type: 'doc',
-							id: 'server/auth/auth0',
-							label: 'Auth0',
+							id: 'agent-controller/session',
+							label: 'Session',
 						},
 						{
 							type: 'doc',
-							id: 'server/auth/better-auth',
-							label: 'Better Auth',
+							id: 'agent-controller/modes',
+							label: 'Modes',
 						},
 						{
 							type: 'doc',
-							id: 'server/auth/clerk',
-							label: 'Clerk',
+							id: 'agent-controller/threads-and-state',
+							label: 'Threads and State',
 						},
 						{
 							type: 'doc',
-							id: 'server/auth/composite-auth',
-							label: 'Composite Auth',
+							id: 'agent-controller/subagents',
+							label: 'Subagents',
 						},
 						{
 							type: 'doc',
-							id: 'server/auth/custom-auth-provider',
-							label: 'Custom Auth Provider',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/firebase',
-							label: 'Firebase',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/fga',
-							label: 'Fine-Grained Authorization',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/google',
-							label: 'Google',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/jwt',
-							label: 'JSON Web Token',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/okta',
-							label: 'Okta',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/simple-auth',
-							label: 'Simple Auth',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/supabase',
-							label: 'Supabase',
-						},
-						{
-							type: 'doc',
-							id: 'server/auth/workos',
-							label: 'WorkOS',
+							id: 'agent-controller/tool-approvals',
+							label: 'Tool Approvals',
 						},
 					],
 				},
-			],
-		},
-		{
-			type: 'category',
-			label: 'Agent Builder',
-			customProps: {
-				badge: 'new',
-			},
-			items: [
-				{ type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-				{ type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-				{ type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-				{ type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-				{ type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-				{ type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-				{ type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-				{ type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-				{ type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-				{ type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-				{ type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-			],
-		},
-		{
-			type: 'category',
-			label: 'AgentController',
-			customProps: {
-				badge: 'beta',
-			},
-			items: [
 				{
-					type: 'doc',
-					id: 'agent-controller/overview',
-					label: 'Overview',
-				},
-				{
-					type: 'doc',
-					id: 'agent-controller/session',
-					label: 'Session',
-				},
-				{
-					type: 'doc',
-					id: 'agent-controller/modes',
-					label: 'Modes',
-				},
-				{
-					type: 'doc',
-					id: 'agent-controller/threads-and-state',
-					label: 'Threads and State',
-				},
-				{
-					type: 'doc',
-					id: 'agent-controller/subagents',
-					label: 'Subagents',
-				},
-				{
-					type: 'doc',
-					id: 'agent-controller/tool-approvals',
-					label: 'Tool Approvals',
-				},
-			],
-		},
-		{
-			type: 'category',
-			label: 'RAG',
-			items: [
-				{
-					type: 'doc',
-					id: 'rag/overview',
-					label: 'Overview',
-				},
-				{
-					type: 'doc',
-					id: 'rag/chunking-and-embedding',
-					label: 'Chunking and Embedding',
-				},
-				{
-					type: 'doc',
-					id: 'rag/vector-databases',
-					label: 'Vector Databases',
-				},
-				{
-					type: 'doc',
-					id: 'rag/retrieval',
-					label: 'Retrieval',
-				},
-				{
-					type: 'doc',
-					id: 'rag/graph-rag',
-					label: 'GraphRAG',
+					type: 'category',
+					label: 'RAG',
+					items: [
+						{
+							type: 'doc',
+							id: 'rag/overview',
+							label: 'Overview',
+						},
+						{
+							type: 'doc',
+							id: 'rag/chunking-and-embedding',
+							label: 'Chunking and Embedding',
+						},
+						{
+							type: 'doc',
+							id: 'rag/vector-databases',
+							label: 'Vector Databases',
+						},
+						{
+							type: 'doc',
+							id: 'rag/retrieval',
+							label: 'Retrieval',
+						},
+						{
+							type: 'doc',
+							id: 'rag/graph-rag',
+							label: 'GraphRAG',
+						},
+					],
 				},
 			],
 		},
@@ -679,6 +554,131 @@ const sidebars = {
 				displayAsGroup: true,
 			},
 			items: [
+				{
+					type: 'category',
+					label: 'Server',
+					items: [
+						{
+							type: 'doc',
+							id: 'server/mastra-server',
+							label: 'Overview',
+						},
+						{
+							type: 'doc',
+							id: 'server/server-adapters',
+							label: 'Server Adapters',
+						},
+						{
+							type: 'doc',
+							id: 'server/custom-adapters',
+							label: 'Custom Adapters',
+						},
+						{
+							type: 'doc',
+							id: 'server/middleware',
+							label: 'Middleware',
+						},
+						{
+							type: 'doc',
+							id: 'server/request-context',
+							label: 'Request Context',
+						},
+						{
+							type: 'doc',
+							id: 'server/pubsub',
+							label: 'PubSub',
+							customProps: {
+								badge: 'new',
+							},
+						},
+						{
+							type: 'doc',
+							id: 'server/custom-api-routes',
+							label: 'Custom API Routes',
+						},
+						{
+							type: 'doc',
+							id: 'server/mastra-client',
+							label: 'Mastra Client',
+						},
+						{
+							type: 'category',
+							label: 'Auth',
+							items: [
+								{
+									type: 'doc',
+									id: 'server/auth/index',
+									label: 'Overview',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/auth0',
+									label: 'Auth0',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/better-auth',
+									label: 'Better Auth',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/clerk',
+									label: 'Clerk',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/composite-auth',
+									label: 'Composite Auth',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/custom-auth-provider',
+									label: 'Custom Auth Provider',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/firebase',
+									label: 'Firebase',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/fga',
+									label: 'Fine-Grained Authorization',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/google',
+									label: 'Google',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/jwt',
+									label: 'JSON Web Token',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/okta',
+									label: 'Okta',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/simple-auth',
+									label: 'Simple Auth',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/supabase',
+									label: 'Supabase',
+								},
+								{
+									type: 'doc',
+									id: 'server/auth/workos',
+									label: 'WorkOS',
+								},
+							],
+						},
+					],
+				},
 				{
 					type: 'category',
 					label: 'Observability',
