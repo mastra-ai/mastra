@@ -46,7 +46,11 @@ function cliResult(overrides: Partial<AppleContainerCliResult> = {}): AppleConta
   };
 }
 
-function inspectResult(status: string, id = 'container-123'): Partial<AppleContainerCliResult> {
+function inspectResult(
+  status: string,
+  id = 'container-123',
+  labels: Record<string, string> = {},
+): Partial<AppleContainerCliResult> {
   return {
     stdout: JSON.stringify([
       {
@@ -60,6 +64,7 @@ function inspectResult(status: string, id = 'container-123'): Partial<AppleConta
           labels: {
             'mastra.sandbox': 'true',
             'mastra.sandbox.id': 'apple-test',
+            ...labels,
           },
           resources: {
             cpus: 2,
@@ -103,8 +108,35 @@ describe('AppleContainerSandbox', () => {
     expect(sandbox.getInstructions()).toContain('Apple container sandbox');
   });
 
+  it('returns serializable provider config from getInfo metadata', async () => {
+    const sandbox = new AppleContainerSandbox({
+      id: 'apple-test',
+      image: 'node:22-slim',
+      env: { NODE_ENV: 'test' },
+      volumes: { '/host/project': '/workspace' },
+      workingDir: '/workspace',
+      deleteOnDestroy: false,
+      runner: createRunner(),
+    });
+
+    const info = await sandbox.getInfo();
+
+    expect(info.metadata).toMatchObject({
+      id: 'apple-test',
+      image: 'node:22-slim',
+      command: ['sleep', 'infinity'],
+      env: { NODE_ENV: 'test' },
+      volumes: { '/host/project': '/workspace' },
+      workingDir: '/workspace',
+      timeout: 300_000,
+      deleteOnDestroy: false,
+    });
+    expect(info.metadata).not.toHaveProperty('containerId');
+    expect(info.metadata).not.toHaveProperty('containerName');
+  });
+
   it('creates a long-lived Apple container when none exists', async () => {
-    const runner = createRunner([missingContainerResult(), { stdout: 'created\n' }]);
+    const runner = createRunner([missingContainerResult(), { stdout: 'created\n' }, inspectResult('running'), {}]);
     const sandbox = new AppleContainerSandbox({
       id: 'apple-test',
       image: 'python:3.12-slim',
@@ -127,7 +159,7 @@ describe('AppleContainerSandbox', () => {
       virtualization: true,
       capAdd: ['NET_BIND_SERVICE'],
       capDrop: ['MKNOD'],
-      tmpfs: ['/tmp:rw,size=64m'],
+      tmpfs: ['/tmp'],
       dns: ['1.1.1.1'],
       dnsSearch: ['example.test'],
       noDns: true,
@@ -147,7 +179,7 @@ describe('AppleContainerSandbox', () => {
       '--workdir',
       '/workspace',
       '--env',
-      'NODE_ENV=test',
+      'NODE_ENV',
       '--volume',
       '/host/project:/workspace',
       '--mount',
@@ -158,6 +190,8 @@ describe('AppleContainerSandbox', () => {
       'mastra.sandbox=true',
       '--label',
       'mastra.sandbox.id=apple-test',
+      '--label',
+      expect.stringMatching(/^mastra\.sandbox\.config-hash=/),
       '--publish',
       '127.0.0.1:8080:80',
       '--publish-socket',
@@ -167,7 +201,7 @@ describe('AppleContainerSandbox', () => {
       '--cap-drop',
       'MKNOD',
       '--tmpfs',
-      '/tmp:rw,size=64m',
+      '/tmp',
       '--dns',
       '1.1.1.1',
       '--dns-search',
@@ -194,12 +228,15 @@ describe('AppleContainerSandbox', () => {
       'sleep',
       '9999',
     ]);
+    expect(runner.run).toHaveBeenNthCalledWith(2, expect.any(Array), expect.objectContaining({ env: { NODE_ENV: 'test' } }));
     expect(sandbox.status).toBe('running');
   });
 
   it('keeps status in sync when plain lifecycle methods are called', async () => {
     const runner = createRunner([
       missingContainerResult(),
+      {},
+      inspectResult('running'),
       {},
       inspectResult('running'),
       {},
@@ -219,7 +256,7 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('reconnects to an existing stopped container', async () => {
-    const runner = createRunner([inspectResult('stopped', 'existing-id'), {}]);
+    const runner = createRunner([inspectResult('stopped', 'existing-id'), {}, inspectResult('running', 'existing-id'), {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await sandbox._start();
@@ -253,6 +290,31 @@ describe('AppleContainerSandbox', () => {
     expect(runner.run).toHaveBeenCalledOnce();
   });
 
+  it('refuses to reconnect when a Mastra-owned container has incompatible immutable config', async () => {
+    const runner = createRunner([
+      inspectResult('running', 'existing-id', { 'mastra.sandbox.config-hash': 'different-config' }),
+    ]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await expect(sandbox.start()).rejects.toMatchObject({
+      name: 'SandboxExecutionError',
+      message: expect.stringContaining('immutable configuration does not match'),
+    });
+    expect(sandbox.status).toBe('error');
+  });
+
+  it('cleans up a newly created container that exits before readiness', async () => {
+    const runner = createRunner([missingContainerResult(), {}, inspectResult('stopped'), {}]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await expect(sandbox.start()).rejects.toMatchObject({
+      name: 'SandboxExecutionError',
+      message: expect.stringContaining('is stopped'),
+    });
+    expect(sandbox.status).toBe('error');
+    expectCliCall(runner, 4, ['delete', '--force', 'apple-test']);
+  });
+
   it('throws when reconnecting to a stopped container fails', async () => {
     const runner = createRunner([
       inspectResult('stopped', 'existing-id'),
@@ -268,8 +330,14 @@ describe('AppleContainerSandbox', () => {
     expect(sandbox.status).toBe('error');
   });
 
+  it('rejects Docker-style tmpfs specs because Apple container expects paths', () => {
+    expect(() => new AppleContainerSandbox({ id: 'apple-test', tmpfs: ['/tmp:rw,size=64m'] })).toThrow(
+      'Apple container --tmpfs accepts container paths only',
+    );
+  });
+
   it('executes commands with env, cwd, timeout, streaming and retained output options', async () => {
-    const runner = createRunner([missingContainerResult(), {}, { stdout: 'hello\n' }]);
+    const runner = createRunner([missingContainerResult(), {}, inspectResult('running'), {}, { stdout: 'hello\n' }]);
     const onStdout = vi.fn();
     const sandbox = new AppleContainerSandbox({
       id: 'apple-test',
@@ -299,43 +367,44 @@ describe('AppleContainerSandbox', () => {
       [
         'exec',
         '--env',
-        'BASE=1',
+        'BASE',
         '--env',
-        'EXTRA=2',
+        'EXTRA',
         '--workdir',
         '/app',
         'apple-test',
         'sh',
         '-lc',
-        expect.stringContaining("timeout 1.234s sh -lc 'node -e '\\''console.log(\"hello\")'\\'''"),
+        expect.stringContaining('timeout 1.234s sh -lc'),
       ],
       expect.objectContaining({
         timeout: 11_234,
+        env: { BASE: '1', EXTRA: '2' },
         onStdout,
         maxRetainedBytes: 16,
       }),
     );
   });
 
-  it('quotes args before executing through the shell', async () => {
-    const runner = createRunner([missingContainerResult(), {}, {}]);
+  it('quotes command and args before executing through the shell', async () => {
+    const runner = createRunner([missingContainerResult(), {}, inspectResult('running'), {}, {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await sandbox._start();
     runner.run.mockClear();
 
-    await sandbox.executeCommand('printf', ['hello; touch /tmp/pwned']);
+    const result = await sandbox.executeCommand('node; touch /tmp/pwned', ['-v']);
 
     const [cliArgs, cliOptions] = runner.run.mock.calls[0];
     expect(cliArgs.slice(0, -1)).toEqual(['exec', '--workdir', '/workspace', 'apple-test', 'sh', '-lc']);
-    expect(cliArgs.at(-1)).toContain('printf');
-    expect(cliArgs.at(-1)).toContain('hello; touch /tmp/pwned');
-    expect(cliArgs.at(-1)).toContain("'\\''hello; touch /tmp/pwned'\\'''");
+    expect(result.command).toBe("'node; touch /tmp/pwned' -v");
+    expect(cliArgs.at(-1)).toContain('node; touch /tmp/pwned');
+    expect(cliArgs.at(-1)).toContain('-v');
     expect(cliOptions).toEqual(expect.objectContaining({ timeout: 310_000 }));
   });
 
   it('preserves shell command strings when no args are provided', async () => {
-    const runner = createRunner([missingContainerResult(), {}, {}]);
+    const runner = createRunner([missingContainerResult(), {}, inspectResult('running'), {}, {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await sandbox._start();
@@ -358,7 +427,13 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('marks in-container timeout exits as timed out', async () => {
-    const runner = createRunner([missingContainerResult(), {}, { success: false, exitCode: 124, stderr: 'Terminated' }]);
+    const runner = createRunner([
+      missingContainerResult(),
+      {},
+      inspectResult('running'),
+      {},
+      { success: false, exitCode: 124, stderr: 'Terminated\n__MASTRA_APPLE_CONTAINER_TIMEOUT__\n' },
+    ]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     const result = await sandbox.executeCommand('sleep', ['30'], { timeout: 10 });
@@ -366,6 +441,7 @@ describe('AppleContainerSandbox', () => {
     expect(result).toMatchObject({
       success: false,
       exitCode: 124,
+      stderr: 'Terminated',
       timedOut: true,
       killed: true,
     });
@@ -377,10 +453,30 @@ describe('AppleContainerSandbox', () => {
         'apple-test',
         'sh',
         '-lc',
-        expect.stringContaining("timeout 0.01s sh -lc 'sleep 30'"),
+        expect.stringContaining('timeout 0.01s sh -lc'),
       ],
       expect.objectContaining({ timeout: 10_010 }),
     );
+  });
+
+  it('does not mark a legitimate exit 124 as a timeout without the timeout marker', async () => {
+    const runner = createRunner([
+      missingContainerResult(),
+      {},
+      inspectResult('running'),
+      {},
+      { success: false, exitCode: 124, timedOut: false, killed: false },
+    ]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    const result = await sandbox.executeCommand('sh -lc "exit 124"', [], { timeout: 1_000 });
+
+    expect(result).toMatchObject({
+      success: false,
+      exitCode: 124,
+      timedOut: false,
+      killed: false,
+    });
   });
 
   it('stops instead of deletes when deleteOnDestroy is disabled', async () => {
@@ -394,7 +490,9 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('does not stop when the container is already stopped or missing', async () => {
-    const stoppedRunner = createRunner([inspectResult('stopped')]);
+    const stoppedRunner = createRunner([
+      inspectResult('stopped', 'container-123', { 'mastra.sandbox.id': 'apple-stopped' }),
+    ]);
     const missingRunner = createRunner([missingContainerResult()]);
 
     await new AppleContainerSandbox({ id: 'apple-stopped', runner: stoppedRunner }).stop();
@@ -402,6 +500,17 @@ describe('AppleContainerSandbox', () => {
 
     expect(stoppedRunner.run).toHaveBeenCalledOnce();
     expect(missingRunner.run).toHaveBeenCalledOnce();
+  });
+
+  it('refuses to stop a stopped container without matching Mastra labels', async () => {
+    const runner = createRunner([unownedInspectResult('stopped')]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await expect(sandbox.stop()).rejects.toMatchObject({
+      name: 'SandboxExecutionError',
+      message: expect.stringContaining('not labeled as Mastra sandbox apple-test'),
+    });
+    expect(sandbox.status).toBe('error');
   });
 
   it('ignores a missing container race while stopping', async () => {
@@ -521,12 +630,14 @@ describe('appleContainerSandboxProvider', () => {
 
   it('creates an AppleContainerSandbox from serializable config', () => {
     const sandbox = appleContainerSandboxProvider.createSandbox({
+      id: 'apple-test',
       image: 'node:22-slim',
       env: { NODE_ENV: 'test' },
       readonlyRootfs: true,
     });
 
     expect(sandbox).toBeInstanceOf(AppleContainerSandbox);
+    expect(sandbox.id).toBe('apple-test');
   });
 
   it('exposes an exact serializable Studio schema', () => {
@@ -548,6 +659,7 @@ describe('appleContainerSandboxProvider', () => {
         'dnsSearch',
         'env',
         'image',
+        'id',
         'init',
         'labels',
         'memory',
@@ -588,6 +700,16 @@ describe('runAppleContainerCli', () => {
       timedOut: false,
       killed: false,
     });
+  });
+
+  it('passes child environment variables to the CLI process', async () => {
+    const result = await runAppleContainerCli(
+      process.execPath,
+      ['-e', 'process.stdout.write(process.env.MASTRA_APPLE_CONTAINER_ENV_TEST ?? "missing");'],
+      { env: { MASTRA_APPLE_CONTAINER_ENV_TEST: 'available' } },
+    );
+
+    expect(result.stdout).toBe('available');
   });
 
   it('retains only the newest output when maxRetainedBytes is set', async () => {

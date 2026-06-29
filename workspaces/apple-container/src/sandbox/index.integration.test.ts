@@ -92,6 +92,41 @@ describe.skipIf(!hasAppleContainerCli)('AppleContainerSandbox integration', () =
     expect(pgrep.success).toBe(false);
   }, 120_000);
 
+  it('does not mark a command that exits 124 as a timeout', async () => {
+    const sandbox = createSandbox();
+
+    await sandbox._start();
+    const result = await sandbox.executeCommand('sh -lc "exit 124"', [], { timeout: 5_000 });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(124);
+    expect(result.timedOut).not.toBe(true);
+  }, 120_000);
+
+  it('fails startup and cleans up when the init command exits', async () => {
+    const sandbox = createSandbox({ command: ['false'] });
+
+    await expect(sandbox._start()).rejects.toThrow(/is stopped|did not become ready|disappeared/);
+
+    const inspect = spawnSync('container', ['inspect', sandbox.containerId], { encoding: 'utf8' });
+    expect(inspect.status).not.toBe(0);
+    expect(inspect.stderr).toMatch(/not found|no such|does not exist|unknown container/i);
+  }, 120_000);
+
+  it('stops but preserves the Apple container when deleteOnDestroy is disabled', async () => {
+    const sandbox = createSandbox({ deleteOnDestroy: false });
+
+    await sandbox._start();
+    const containerId = sandbox.containerId;
+    await sandbox._destroy();
+
+    expect(sandbox.status).toBe('destroyed');
+    expect(inspectContainerState(containerId)).toBe('stopped');
+
+    const cleanup = spawnSync('container', ['delete', '--force', containerId], { encoding: 'utf8' });
+    expect(cleanup.status, cleanup.stderr).toBe(0);
+  }, 120_000);
+
   it('deletes the Apple container on destroy', async () => {
     const sandbox = createSandbox();
 

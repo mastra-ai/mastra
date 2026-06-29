@@ -8,6 +8,7 @@ import type { AppleContainerSandboxOptions } from './sandbox';
 
 export type AppleContainerProviderConfig = Pick<
   AppleContainerSandboxOptions,
+  | 'id'
   | 'image'
   | 'name'
   | 'command'
@@ -47,6 +48,10 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
     type: 'object',
     additionalProperties: false,
     properties: {
+      id: {
+        type: 'string',
+        description: 'Stable sandbox ID used for reconnecting to the same Apple container.',
+      },
       image: {
         type: 'string',
         description: 'OCI image to use',
@@ -147,7 +152,7 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
       },
       tmpfs: {
         type: 'array',
-        description: 'tmpfs mount specs',
+        description: 'tmpfs destination paths',
         items: { type: 'string' },
       },
       dns: {
@@ -189,6 +194,7 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
   },
   createSandbox: config => {
     const {
+      id,
       image,
       name,
       command,
@@ -221,6 +227,7 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
     } = config;
 
     return new AppleContainerSandbox({
+      id,
       image,
       name,
       command,

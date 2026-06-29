@@ -65,7 +65,7 @@ await workspace.destroy();
 | `virtualization`  | `boolean`                    | Expose virtualization capabilities to the container.               |
 | `capAdd`          | `string[]`                   | Linux capabilities to add.                                         |
 | `capDrop`         | `string[]`                   | Linux capabilities to drop.                                        |
-| `tmpfs`           | `string[]`                   | tmpfs mount specs.                                                 |
+| `tmpfs`           | `string[]`                   | tmpfs destination paths, for example `/tmp`.                       |
 | `dns`             | `string[]`                   | DNS nameserver IPs.                                                |
 | `dnsSearch`       | `string[]`                   | DNS search domains.                                                |
 | `noDns`           | `boolean`                    | Do not configure DNS in the container.                             |
@@ -74,12 +74,12 @@ await workspace.destroy();
 | `timeout`         | `number`                     | Default command timeout in milliseconds.                           |
 | `deleteOnDestroy` | `boolean`                    | Delete the Apple container on destroy. Defaults to `true`.         |
 | `containerBinary` | `string`                     | Path or name for the Apple container CLI. Defaults to `container`. |
-| `runner`          | `AppleContainerCommandRunner` | Custom command runner, primarily for tests.                       |
 | `onStart`         | `({ sandbox }) => unknown`   | Lifecycle hook called after the sandbox reaches `running`.         |
 | `onStop`          | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox stops.                    |
 | `onDestroy`       | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox is destroyed.             |
 | `instructions`    | `string \| (opts) => string` | Override or extend the default workspace sandbox instructions.     |
 
+Apple `--tmpfs` accepts container paths only, such as `/tmp`; it does not accept Docker-style option specs like `/tmp:rw,size=256m`.
 When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
 
 ## Security model
@@ -87,22 +87,25 @@ When `readonlyRootfs` is enabled, make sure `workingDir` points to a path suppli
 This provider runs local containers through the host Apple `container` service. Treat constructor options as trusted server-side configuration:
 
 - `volumes`, `mounts`, and `publishedSockets` can expose host paths to containerized code.
+- `publishedPorts` can expose in-container services on the host or network; bind to `127.0.0.1` when only local access is intended.
 - `ssh` forwards the host SSH agent socket.
 - `capAdd` and `virtualization` can expand what containerized code can do.
 - `containerBinary` is intentionally a constructor-only escape hatch for trusted code and is not part of the serializable editor provider schema.
 
-Use the narrowest mounts and capabilities your workload needs. Existing containers are only reconnected when they carry Mastra ownership labels for the sandbox ID.
+Use the narrowest mounts and capabilities your workload needs. Existing containers are only reconnected when they carry Mastra ownership labels for the sandbox ID. Containers created by this provider also include a config-hash label; when that label is present, reconnect fails if immutable runtime options such as image, command, mounts, ports, capabilities, or working directory changed.
 
 ## Limitations
 
 `AppleContainerSandbox` implements foreground workspace command execution with `executeCommand()`. It does not yet expose a `SandboxProcessManager` for background processes or LSP sessions.
+
+Command timeouts are enforced inside the container so timed-out commands are cleaned up by the container runtime. Abort signals cancel the host CLI wait path and should not be used as a substitute for command timeouts when in-container cleanup matters.
 
 ## Editor provider
 
 Register the provider with `MastraEditor` to hydrate stored sandbox configs:
 
 ```typescript
-import { MastraEditor } from '@mastra/core/editor';
+import { MastraEditor } from '@mastra/editor';
 import { appleContainerSandboxProvider } from '@mastra/apple-container';
 
 const editor = new MastraEditor({
