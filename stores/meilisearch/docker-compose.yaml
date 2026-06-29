@@ -1,0 +1,17 @@
+services:
+  meilisearch:
+    # v1.13+ ships the vector store as GA (no experimental flag needed).
+    image: getmeili/meilisearch:v1.13
+    ports:
+      - '7700:7700'
+    environment:
+      - MEILI_MASTER_KEY=masterKey
+      - MEILI_NO_ANALYTICS=true
+      - MEILI_ENV=development
+    volumes:
+      - meilisearch_data:/meili_data
+    restart: always
+
+volumes:
+  meilisearch_data:
+    driver: local
