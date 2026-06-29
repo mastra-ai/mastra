@@ -142,7 +142,7 @@ const sidebars = {
 					id: 'agents/goals',
 					label: 'Goals',
 					customProps: {
-						tags: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -155,7 +155,7 @@ const sidebars = {
 					id: 'agents/durable-agents',
 					label: 'Durable Agents',
 					customProps: {
-						tags: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -178,7 +178,7 @@ const sidebars = {
 					id: 'agents/sdk-agents',
 					label: 'SDK Agents',
 					customProps: {
-						tags: ['new'],
+						badge: 'new',
 					},
 				},
 				{
@@ -191,7 +191,7 @@ const sidebars = {
 					id: 'agents/code-mode',
 					label: 'Code Mode',
 					customProps: {
-						tags: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -199,7 +199,7 @@ const sidebars = {
 					id: 'agents/signals',
 					label: 'Signals',
 					customProps: {
-						tags: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -207,7 +207,7 @@ const sidebars = {
 					id: 'agents/signal-providers',
 					label: 'Signal Providers',
 					customProps: {
-						tags: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -215,7 +215,7 @@ const sidebars = {
 					id: 'agents/networks',
 					label: 'Networks',
 					customProps: {
-						tags: ['deprecated'],
+						badge: 'deprecated',
 					},
 				},
 			],
@@ -327,7 +327,7 @@ const sidebars = {
 			type: 'category',
 			label: 'Agent Builder',
 			customProps: {
-				tags: ['new'],
+				badge: 'new',
 			},
 			items: [
 				{ type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
@@ -364,7 +364,7 @@ const sidebars = {
 			type: 'category',
 			label: 'AgentController',
 			customProps: {
-				tags: ['beta'],
+				badge: 'beta',
 			},
 			items: [
 				{
@@ -500,7 +500,7 @@ const sidebars = {
 					id: 'server/pubsub',
 					label: 'PubSub',
 					customProps: {
-						tags: ['new'],
+						badge: 'new',
 					},
 				},
 				{
@@ -931,7 +931,7 @@ const sidebars = {
 					id: 'mastra-platform/github',
 					label: 'GitHub integration',
 					customProps: {
-						tags: ['new'],
+						badge: 'new',
 					},
 				},
 				{
