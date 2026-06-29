@@ -91,6 +91,27 @@ describe('PluginManager', () => {
     expect(manager.getPluginTools()).toBe(pluginTools);
   });
 
+  it('does not expose tools for plugins blocked by project config', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    writePlugin(pluginDir, 'alexandria', 'mastra_expert');
+    const manager = new PluginManager({ projectRoot, homeDir });
+
+    await manager.installLocal(pluginDir, 'global');
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({ plugins: {}, disabledPlugins: ['alexandria'] }),
+    );
+
+    await manager.reload();
+
+    expect(await manager.listPlugins()).toMatchObject([{ id: 'alexandria', scope: 'global', status: 'blocked' }]);
+    expect(Object.keys(manager.getPluginTools())).toEqual([]);
+  });
+
   it('polls GitHub plugin checkouts and reloads changed tools', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

@@ -22,6 +22,10 @@ export async function loadPlugins(options: LoadPluginsOptions): Promise<LoadedPl
   const loaded: LoadedPlugin[] = [];
 
   for (const record of records) {
+    if (record.blocked) {
+      loaded.push({ ...record, status: 'blocked', tools: {}, toolNames: [] });
+      continue;
+    }
     if (!record.enabled) {
       loaded.push({ ...record, status: 'inactive', tools: {}, toolNames: [] });
       continue;
