@@ -279,6 +279,16 @@ describe('MesaFilesystem', () => {
       expect(mesaFs.writeFile).not.toHaveBeenCalled();
     });
 
+    it('does not treat arbitrary exists failures as missing for overwrite=false', async () => {
+      const { fs, mesaFs } = createFs();
+      mesaFs.exists.mockRejectedValueOnce(new Error('network failed'));
+
+      await expect(fs.writeFile('/acme/docs/existing.txt', 'data', { overwrite: false })).rejects.toThrow(
+        /network failed/,
+      );
+      expect(mesaFs.writeFile).not.toHaveBeenCalled();
+    });
+
     it('honors expectedMtime with a preflight stat check', async () => {
       const { fs, mesaFs } = createFs();
       mesaFs.stat.mockResolvedValueOnce(createStat({ mtime: new Date('2025-06-02T00:00:00.000Z') }));
@@ -387,6 +397,13 @@ describe('MesaFilesystem', () => {
 
       await expect(fs.exists('acme/docs/file.txt')).resolves.toBe(true);
       await expect(fs.realpath('acme/docs/file.txt')).resolves.toBe('/acme/docs/file.txt');
+    });
+
+    it('returns false when exists receives a Mesa not-found error', async () => {
+      const { fs, mesaFs } = createFs();
+      mesaFs.exists.mockRejectedValueOnce(notFound('/acme/docs/missing.txt'));
+
+      await expect(fs.exists('/acme/docs/missing.txt')).resolves.toBe(false);
     });
 
     it('maps stat results to Mastra FileStat', async () => {

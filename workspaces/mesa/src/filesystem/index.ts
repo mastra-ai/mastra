@@ -444,10 +444,13 @@ export class MesaFilesystem extends MastraFilesystem {
 
   async exists(inputPath: string): Promise<boolean> {
     await this.ensureReady();
+    const target = normalizePath(inputPath);
+
     try {
-      return await this.filesystem.exists(normalizePath(inputPath));
-    } catch {
-      return false;
+      return await this.filesystem.exists(target);
+    } catch (error) {
+      if (getMesaErrorKind(error) === 'notFound') return false;
+      throw mapMesaError(error, inputPath);
     }
   }
 
