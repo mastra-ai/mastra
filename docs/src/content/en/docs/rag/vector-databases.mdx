@@ -8,6 +8,7 @@ packages:
   - "@mastra/couchbase"
   - "@mastra/elasticsearch"
   - "@mastra/lance"
+  - "@mastra/meilisearch"
   - "@mastra/mongodb"
   - "@mastra/opensearch"
   - "@mastra/pg"
@@ -245,6 +246,29 @@ After generating embeddings, you need to store them in a database that supports 
     import { OpenSearchVector } from '@mastra/opensearch'
 
     const store = new OpenSearchVector({ id: 'opensearch', node: process.env.OPENSEARCH_URL })
+
+    await store.createIndex({
+      indexName: 'my-collection',
+      dimension: 1536,
+    })
+
+    await store.upsert({
+      indexName: 'my-collection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="meilisearch" label="Meilisearch">
+    ```ts title="vector-store.ts"
+    import { MeilisearchVector } from '@mastra/meilisearch'
+
+    const store = new MeilisearchVector({
+      id: 'meilisearch',
+      host: process.env.MEILISEARCH_HOST,
+      apiKey: process.env.MEILISEARCH_API_KEY,
+    })
 
     await store.createIndex({
       indexName: 'my-collection',
@@ -504,6 +528,15 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my-index-123` is valid
     - Example: `My_Index` is not valid (contains uppercase letters)
     - Example: `_myindex` is not valid (begins with underscore)
+  </TabItem>
+
+  <TabItem value="meilisearch" label="Meilisearch">
+    Index names (Meilisearch index UIDs) must:
+
+    - Contain only alphanumeric characters (`a-z`, `A-Z`, `0-9`), hyphens (`-`), and underscores (`_`)
+    - Not exceed 512 bytes
+    - Example: `my-index_123` is valid
+    - Example: `my index` is not valid (contains a space)
   </TabItem>
 
   <TabItem value="elasticsearch" label="Elasticsearch">
