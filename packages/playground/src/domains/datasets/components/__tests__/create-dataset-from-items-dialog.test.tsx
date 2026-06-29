@@ -3,7 +3,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, PropsWithChildren } from 'react';
+import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CreateDatasetFromItemsDialog } from '../create-dataset-from-items-dialog';
@@ -12,24 +12,16 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-// Thin stubs for playground-ui atoms so this test focuses on the real client + mutation behavior.
-vi.mock('@mastra/playground-ui', () => {
+// Thin stub for the heavy Dialog atom so this test focuses on the real client + mutation behavior.
+vi.mock('@mastra/playground-ui/components/Dialog', () => {
   const Dialog = ({ open, children }: PropsWithChildren<{ open: boolean }>) => (open ? <div>{children}</div> : null);
 
   return {
-    Button: ({ variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
-      <button {...props} />
-    ),
     Dialog,
     DialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
     DialogBody: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    Input: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-    Label: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLLabelElement>>) => (
-      <label {...props}>{children}</label>
-    ),
-    toast: { error: vi.fn(), success: vi.fn() },
   };
 });
 

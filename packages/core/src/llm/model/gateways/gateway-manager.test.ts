@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { MastraError } from '../../../error/index.js';
 import type {
   GatewayAuthRequest,
   GatewayAuthResult,
@@ -75,6 +76,33 @@ describe('GatewayManager', () => {
       const manager = new GatewayManager([enabled, disabled]);
       expect(manager.gateways.map(g => g.id)).not.toContain('off-gateway');
       expect(manager.gateways.map(g => g.id)).toContain('on-gateway');
+    });
+
+    it('deduplicates by gateway id — first (custom) gateway wins', () => {
+      const custom = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['custom-model'] });
+      const defaultLike = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['default-model'] });
+      const manager = new GatewayManager([custom, defaultLike]);
+      expect(manager.gateways).toHaveLength(1);
+      expect(manager.gateways[0]).toBe(custom);
+    });
+
+    it('removes later duplicates when custom appears before defaults', () => {
+      const custom = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['custom-model'] });
+      const other = createFakeGateway({ id: 'models.dev', provider: 'openai' });
+      const duplicate = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['dup-model'] });
+      const manager = new GatewayManager([custom, other, duplicate]);
+      expect(manager.gateways.map(g => g.id)).toEqual(['netlify', 'models.dev']);
+      expect(manager.gateways[0]).toBe(custom);
+    });
+
+    it('does not reserve a gateway id from a disabled gateway before an enabled duplicate', () => {
+      const disabled = createFakeGateway({ id: 'shared', enabled: false, models: ['disabled-model'] });
+      const enabled = createFakeGateway({ id: 'shared', models: ['enabled-model'] });
+      const manager = new GatewayManager([disabled, enabled]);
+      // The disabled gateway is filtered out before dedup, so the enabled
+      // duplicate is kept — not removed by the disabled one's id.
+      expect(manager.gateways).toHaveLength(1);
+      expect(manager.gateways[0]).toBe(enabled);
     });
   });
 
@@ -236,6 +264,64 @@ describe('GatewayManager', () => {
     it('returns false instead of throwing on an unknown model', async () => {
       const manager = new GatewayManager([createFakeGateway({ id: 'test-gateway' })]);
       expect(await manager.hasAuth('unknown/garbage/model')).toBe(false);
+    });
+
+    it('returns false when resolveAuth throws a MastraError for a missing API key', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        resolveAuth: () => {
+          throw new MastraError({
+            id: 'MASTRA_GATEWAY_NO_API_KEY',
+            domain: 'LLM',
+            category: 'UNKNOWN',
+            text: 'Could not find API key',
+          });
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
+    });
+
+    it('returns false when getApiKey throws a plain Error for a missing env var', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        apiKey: () => {
+          throw new Error('Missing OPENAI_API_KEY environment variable');
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
+    });
+
+    it('re-throws unexpected gateway failures (e.g. token exchange)', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        resolveAuth: () => {
+          throw new Error('token exchange failed');
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      await expect(manager.hasAuth('test-gateway/acme/sonic-fast')).rejects.toThrow('token exchange failed');
+    });
+
+    it('re-throws unexpected MastraError IDs (e.g. token exchange error)', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        resolveAuth: () => {
+          throw new MastraError({
+            id: 'NETLIFY_GATEWAY_TOKEN_ERROR',
+            domain: 'LLM',
+            category: 'UNKNOWN',
+            text: 'token exchange failed',
+          });
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      await expect(manager.hasAuth('test-gateway/acme/sonic-fast')).rejects.toThrow('token exchange failed');
     });
   });
 
