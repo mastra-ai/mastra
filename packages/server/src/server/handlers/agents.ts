@@ -2490,21 +2490,27 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
 
       // Validate ownership/FGA before honoring a thread filter — without this a
       // caller could probe another user's suspended approvals (including
-      // tool-call args) by guessing a threadId.
+      // tool-call args) by guessing a threadId. Reject when ownership cannot be
+      // verified (no memory configured, or the thread does not exist) so a
+      // thread-scoped query is never honored unchecked.
       if (effectiveThreadId) {
         const memory = await agent.getMemory({ requestContext });
-        if (memory) {
-          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-            });
-          }
+        if (!memory) {
+          throw new HTTPException(403, {
+            message: 'Access denied: agent has no memory configured to validate thread ownership',
+          });
         }
+        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+        if (!thread) {
+          throw new HTTPException(403, { message: 'Access denied: thread not found' });
+        }
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId,
+          thread,
+          effectiveResourceId,
+        });
       }
 
       return await agent.listSuspendedRuns({
