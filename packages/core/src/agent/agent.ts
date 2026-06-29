@@ -4949,7 +4949,18 @@ export class Agent<
                         resumeSchema = chunk.data.resumeSchema;
                       }
                     } else {
-                      await context.writer.write(chunk);
+                      const chunkFromSubAgent =
+                        chunk.type === 'text-start' || chunk.type === 'text-delta' || chunk.type === 'text-end'
+                          ? {
+                              ...chunk,
+                              metadata: {
+                                ...chunk.metadata,
+                                subAgentId: agent.id,
+                                __mastraExcludeFromOutputText: true,
+                              },
+                            }
+                          : chunk;
+                      await context.writer.write(chunkFromSubAgent);
                       if (chunk.type === 'tool-call-approval') {
                         suspendedPayload = {};
                         requireToolApproval = true;
@@ -5057,7 +5068,18 @@ export class Agent<
                       // Write data chunks directly to original stream to bubble up
                       await context.writer.custom(chunk as any);
                     } else {
-                      await context.writer.write(chunk);
+                      const chunkFromSubAgent =
+                        chunk.type === 'text-start' || chunk.type === 'text-delta' || chunk.type === 'text-end'
+                          ? {
+                              ...chunk,
+                              metadata: {
+                                ...chunk.metadata,
+                                subAgentId: agent.id,
+                                __mastraExcludeFromOutputText: true,
+                              },
+                            }
+                          : chunk;
+                      await context.writer.write(chunkFromSubAgent);
                     }
                   }
 
