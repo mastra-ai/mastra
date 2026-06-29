@@ -20,13 +20,19 @@ vi.mock('react-router', async importOriginal => {
   };
 });
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/ee/signals/components/signal-details-utils', () => ({
   getSignalName: (signalId: string) => (signalId === 'tasks' ? 'Tasks' : signalId),
+}));
+
+vi.mock('@mastra/playground-ui/ee/signals/components/signals-overview-page', () => ({
   SignalsOverviewPage: ({ onSignalSelect }: { onSignalSelect: (signal: { id: string }) => void }) => (
     <button type="button" onClick={() => onSignalSelect({ id: 'tasks' })}>
       Select signal
     </button>
   ),
+}));
+
+vi.mock('@mastra/playground-ui/ee/signals/components/signal-details-page', () => ({
   SignalDetailsPage: ({
     signalId,
     selectedTraceId,

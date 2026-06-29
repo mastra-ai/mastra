@@ -540,26 +540,9 @@ export class AgentLegacyHandler {
           threadId,
         });
 
-        const messageListResponses = new MessageList({
-          threadId,
-          resourceId,
-          generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-expect-error Flag for agent network messages
-          _agentNetworkAppend: this.capabilities._agentNetworkAppend,
-        })
-          .add(result.response.messages, 'response')
-          .get.all.core();
-
-        const usedWorkingMemory = messageListResponses?.some(
-          m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
-        );
-        // working memory updates the thread, so we need to get the latest thread if we used it
+        // re-read the latest thread so metadata written mid-run (working memory, processors) isn't overwritten
         const memory = await this.capabilities.getMemory({ requestContext });
-        const thread = usedWorkingMemory
-          ? threadId
-            ? await memory?.getThreadById({ threadId })
-            : undefined
-          : threadAfter;
+        const thread = (threadId ? await memory?.getThreadById({ threadId }) : undefined) ?? threadAfter;
 
         if (memory && resourceId && thread) {
           try {
