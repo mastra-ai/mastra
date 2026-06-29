@@ -1,5 +1,38 @@
 # @mastra/core
 
+## 1.48.0-alpha.4
+
+### Patch Changes
+
+- Bring `InngestAgent` (Inngest-backed durable agent) to parity with `DurableAgent` for per-call execution options, abort handling, idle-aware resume, and `generate()`. ([#18615](https://github.com/mastra-ai/mastra/pull/18615))
+
+  `InngestAgent.stream()` and `resume()` now accept the same execution-option surface as `DurableAgent`, including `stopWhen`, `activeTools`, `structuredOutput`, `versions`, `system`, `disableBackgroundTasks`, `tracingOptions`, `actor`, `transform`, `prepareStep`, `isTaskComplete`, `delegation`, function-form `requireToolApproval`, and the lifecycle callbacks `onAbort` / `onIterationComplete`. Closure-shaped options (`prepareStep`, `transform`, function-form `isTaskComplete` / `requireToolApproval`, `stopWhen` callbacks) continue to work in-process; they degrade after a worker hop the same way they do for in-memory `DurableAgent`.
+
+  ```ts
+  const result = await inngestAgent.stream(messages, {
+    runId: 'run-1',
+    abortSignal: controller.signal,
+    stopWhen: stepCountIs(5),
+    onIterationComplete: ({ iteration }) => console.log('done', iteration),
+  });
+
+  // Cancel a live run from the caller
+  result.abort();
+
+  // Resume and drive the run to completion in a single call
+  await inngestAgent.resume({ runId: 'run-1', resumeData, untilIdle: true });
+
+  // Durable equivalents of Agent.generate / resumeGenerate
+  const out = await inngestAgent.generate(messages, { runId: 'run-2' });
+  const resumed = await inngestAgent.resumeGenerate({ runId: 'run-2', resumeData });
+  ```
+
+  `@mastra/core` re-exports `globalRunRegistry` and `runResumeDurableStreamUntilIdle` from `@mastra/core/agent/durable` so durable-agent integrations can share the same registry and idle-wrapper plumbing.
+
+- Amazon Bedrock models now appear under their own `amazon-bedrock/<model>` provider in the model picker instead of the `mastracode/amazon-bedrock/<model>` namespace. Bedrock is resolved through a dedicated Amazon Bedrock gateway that authenticates with the AWS credential chain (SigV4) and surfaces models from the public models.dev catalog. Saved model selections using the previous `mastracode/amazon-bedrock/...` IDs are still resolved at runtime, so existing config keeps working. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+- Fixed custom model gateways being overridden by default gateways. GatewayManager now deduplicates gateways by ID (first-wins) so custom gateways take precedence over defaults. Narrowed the auth-availability check to only swallow expected missing-credential errors instead of all errors, so real gateway failures surface during debugging. ([#18602](https://github.com/mastra-ai/mastra/pull/18602))
+
 ## 1.48.0-alpha.3
 
 ### Patch Changes

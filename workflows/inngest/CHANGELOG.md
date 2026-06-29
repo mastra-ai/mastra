@@ -1,5 +1,39 @@
 # @mastra/inngest
 
+## 1.8.0-alpha.1
+
+### Minor Changes
+
+- Bring `InngestAgent` (Inngest-backed durable agent) to parity with `DurableAgent` for per-call execution options, abort handling, idle-aware resume, and `generate()`. ([#18615](https://github.com/mastra-ai/mastra/pull/18615))
+
+  `InngestAgent.stream()` and `resume()` now accept the same execution-option surface as `DurableAgent`, including `stopWhen`, `activeTools`, `structuredOutput`, `versions`, `system`, `disableBackgroundTasks`, `tracingOptions`, `actor`, `transform`, `prepareStep`, `isTaskComplete`, `delegation`, function-form `requireToolApproval`, and the lifecycle callbacks `onAbort` / `onIterationComplete`. Closure-shaped options (`prepareStep`, `transform`, function-form `isTaskComplete` / `requireToolApproval`, `stopWhen` callbacks) continue to work in-process; they degrade after a worker hop the same way they do for in-memory `DurableAgent`.
+
+  ```ts
+  const result = await inngestAgent.stream(messages, {
+    runId: 'run-1',
+    abortSignal: controller.signal,
+    stopWhen: stepCountIs(5),
+    onIterationComplete: ({ iteration }) => console.log('done', iteration),
+  });
+
+  // Cancel a live run from the caller
+  result.abort();
+
+  // Resume and drive the run to completion in a single call
+  await inngestAgent.resume({ runId: 'run-1', resumeData, untilIdle: true });
+
+  // Durable equivalents of Agent.generate / resumeGenerate
+  const out = await inngestAgent.generate(messages, { runId: 'run-2' });
+  const resumed = await inngestAgent.resumeGenerate({ runId: 'run-2', resumeData });
+  ```
+
+  `@mastra/core` re-exports `globalRunRegistry` and `runResumeDurableStreamUntilIdle` from `@mastra/core/agent/durable` so durable-agent integrations can share the same registry and idle-wrapper plumbing.
+
+### Patch Changes
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+
 ## 1.7.1-alpha.0
 
 ### Patch Changes
