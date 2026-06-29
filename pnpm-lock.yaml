@@ -2057,6 +2057,9 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: ^0.21.0
         version: 0.21.0(zod@4.4.3)
+      '@ai-sdk/amazon-bedrock':
+        specifier: ^3.0.102
+        version: 3.0.102(zod@4.4.3)
       '@ai-sdk/anthropic':
         specifier: ^3.0.82
         version: 3.0.82(zod@4.4.3)
@@ -2069,6 +2072,9 @@ importers:
       '@ast-grep/napi':
         specifier: ^0.42.0
         version: 0.42.2
+      '@aws-sdk/credential-providers':
+        specifier: ^3.864.0
+        version: 3.1006.0
       '@earendil-works/pi-tui':
         specifier: ^0.79.4
         version: 0.79.4
@@ -9072,6 +9078,12 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/amazon-bedrock@3.0.102':
+    resolution: {integrity: sha512-CeNdbx2gmtwnWdRoHQNbLbly2n43hgytqM4J1OqsBLLEkuSgPDaf+ZrFcQBgxZKv9xQX606yaNN43FGS4VSIpQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/amazon-bedrock@3.0.99':
     resolution: {integrity: sha512-d/WsYOlqjQeEwTewawjrlhoWfHt3q1vRT5/XdFJ6U+KYd/3HnAlrA3rg0+T7xMk98XmctaILJb45Ct/8zrGxSA==}
     engines: {node: '>=18'}
@@ -9092,6 +9104,12 @@ packages:
 
   '@ai-sdk/anthropic@2.0.81':
     resolution: {integrity: sha512-0iqx9hZc9xqdhxOdZkYJAKuCs9o+5a86gStYl0M7IBZzmx6jTDrynXiOigDjH3SQrmLclLCspTjW5E6YFrlyHQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/anthropic@2.0.82':
+    resolution: {integrity: sha512-bMiG4rUwdgQ6+E2klFSaJ1BHO65zCrfHRqC/hkdhA19tmx8FqLoAmXpx92dcWsADFMtAzQd3Q9kRJ8zk4/PpnA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9290,6 +9308,12 @@ packages:
 
   '@ai-sdk/provider-utils@3.0.25':
     resolution: {integrity: sha512-CvsRu+32Y8a167s+lrIBtsybvgTHp8j9y+6BeTvLeoW3Q+okw/b4CnNUFOLIXsRaKHQKAH+IHNJPYWywfpw0LA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.0.26':
+    resolution: {integrity: sha512-dNciNI4knep6z3cqDNng7yORCcBnEDBHZYj8rJLcLn9pLzEtNVkf6WLg9HR6AnVDDRxHsUeGAEqyF8M+FAtRgg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -28905,6 +28929,16 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
       zod: 4.4.3
 
+  '@ai-sdk/amazon-bedrock@3.0.102(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/anthropic': 2.0.82(zod@4.4.3)
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.26(zod@4.4.3)
+      '@smithy/eventstream-codec': 4.2.14
+      '@smithy/util-utf8': 4.2.2
+      aws4fetch: 1.0.20
+      zod: 4.4.3
+
   '@ai-sdk/amazon-bedrock@3.0.99(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)':
     dependencies:
       '@ai-sdk/anthropic': 2.0.79(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)
@@ -28976,6 +29010,12 @@ snapshots:
       - jsdom
       - typescript
       - vite
+
+  '@ai-sdk/anthropic@2.0.82(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.26(zod@4.4.3)
+      zod: 4.4.3
 
   '@ai-sdk/anthropic@3.0.82(zod@4.4.3)':
     dependencies:
@@ -29552,6 +29592,13 @@ snapshots:
       - jsdom
       - typescript
       - vite
+
+  '@ai-sdk/provider-utils@3.0.26(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.8
+      zod: 4.4.3
 
   '@ai-sdk/provider-utils@4.0.27(zod@3.25.76)':
     dependencies:
@@ -38908,7 +38955,6 @@ snapshots:
       '@smithy/types': 4.14.3
       '@smithy/util-hex-encoding': 4.2.2
       tslib: 2.8.1
-    optional: true
 
   '@smithy/fetch-http-handler@5.4.6':
     dependencies:
@@ -42070,8 +42116,7 @@ snapshots:
 
   aws4@1.13.2: {}
 
-  aws4fetch@1.0.20:
-    optional: true
+  aws4fetch@1.0.20: {}
 
   axe-core@4.11.4: {}
 
