@@ -31,7 +31,7 @@ export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVecto
   /**
    * Number of candidates the HNSW graph considers before selecting the
    * top-K results. Higher values improve recall at the cost of latency.
-   * Must be >= topK. Defaults to 10 * topK, capped at 10000.
+   * Must be >= topK. Defaults to 20 * topK, capped at 10000.
    * See: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/
    */
   numCandidates?: number;
@@ -361,7 +361,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @param documentFilter - Optional filter applied to the `document` text
    *   field, independent of `filter`.
    * @param numCandidates - HNSW candidate pool size. Higher values improve
-   *   recall at the cost of latency. Defaults to 10 * topK, capped at 10000.
+   *   recall at the cost of latency. Defaults to 20 * topK, capped at 10000.
    * @returns Array of results ordered by descending similarity score.
    */
   async query({
@@ -395,7 +395,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         index: indexNameInternal,
         queryVector: queryVector,
         path: this.embeddingFieldName,
-        numCandidates: Math.min(10000, Math.max(topK, numCandidates ?? topK * 10)),
+        numCandidates: Math.min(10000, Math.max(topK, numCandidates ?? topK * 20)),
         limit: Math.min(10000, topK),
       };
 
