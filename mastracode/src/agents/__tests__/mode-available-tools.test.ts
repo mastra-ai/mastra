@@ -1,10 +1,15 @@
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
 
 import { MC_TOOLS } from '../../tool-names.js';
 import { buildMode } from '../modes/build.js';
 import { fastMode } from '../modes/explore.js';
 import { planMode } from '../modes/plan.js';
-import { EXPLORE_MODE_AVAILABLE_TOOLS, PLAN_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
+import {
+  EXPLORE_MODE_AVAILABLE_TOOLS,
+  guardPlanModePlanFileWrites,
+  PLAN_MODE_AVAILABLE_TOOLS,
+} from '../tool-availability.js';
 
 describe('mode availableTools configuration', () => {
   describe('plan mode', () => {
@@ -37,6 +42,107 @@ describe('mode availableTools configuration', () => {
       const tools = planMode.availableTools!;
       expect(tools).toContain(MC_TOOLS.WRITE_FILE);
       expect(tools).toContain(MC_TOOLS.STRING_REPLACE_LSP);
+    });
+
+    it('allows plan-mode writes to any .md file inside .mastracode/plans/', () => {
+      const projectPath = '/tmp/mastracode-plan-guard';
+      // Mirror the real HarnessRequestContext shape: session.modeId is a string
+      // property and live state is read via session.state.get() (see harness/types.ts).
+      const context = {
+        requestContext: {
+          harness: {
+            session: {
+              modeId: 'plan',
+              state: { get: () => ({ projectPath }) },
+            },
+          },
+        },
+      };
+
+      // A named relative plan file is allowed.
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: '.mastracode/plans/add-dark-mode.md' },
+          context,
+        }),
+      ).toBeUndefined();
+
+      // A different named plan file (absolute) is also allowed.
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.STRING_REPLACE_LSP,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
+          input: { path: `${projectPath}/.mastracode/plans/another-plan.md` },
+          context,
+        }),
+      ).toBeUndefined();
+
+      // A project file outside the plans dir is rejected.
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: 'src/index.ts' },
+          context,
+        }),
+      ).toMatchObject({
+        proceed: false,
+        output: 'Plan mode can only write plan files inside .mastracode/plans/. Refusing to edit src/index.ts.',
+      });
+    });
+
+    it('rejects plan-mode writes to non-markdown or nested paths inside the plans dir', () => {
+      const projectPath = '/tmp/mastracode-plan-guard';
+      const context = {
+        requestContext: {
+          harness: {
+            session: {
+              modeId: 'plan',
+              state: { get: () => ({ projectPath }) },
+            },
+          },
+        },
+      };
+
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: '.mastracode/plans/notes.txt' },
+          context,
+        }),
+      ).toMatchObject({ proceed: false });
+
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: '.mastracode/plans/sub/plan.md' },
+          context,
+        }),
+      ).toMatchObject({ proceed: false });
+    });
+
+    it('does not restrict file writes outside plan mode', () => {
+      expect(
+        guardPlanModePlanFileWrites({
+          toolName: MC_TOOLS.WRITE_FILE,
+          workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+          input: { path: 'src/index.ts' },
+          context: {
+            requestContext: {
+              harness: {
+                session: {
+                  modeId: 'build',
+                  state: { get: () => ({ projectPath: '/tmp/mastracode-plan-guard' }) },
+                },
+              },
+            },
+          },
+        }),
+      ).toBeUndefined();
     });
 
     it('excludes mutating and execution tools', () => {

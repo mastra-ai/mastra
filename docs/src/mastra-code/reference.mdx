@@ -5,7 +5,7 @@ description: "Complete API reference for createMastraCode() factory function and
 
 # API Reference
 
-The `createMastraCode()` factory function bootstraps Mastra Code and returns a configured harness, MCP manager, and other components. Use it to embed Mastra Code in custom applications or extend its functionality.
+The `createMastraCode()` factory function bootstraps Mastra Code and returns a configured controller, MCP manager, and other components. Use it to embed Mastra Code in custom applications or extend its functionality.
 
 ## `createMastraCode()`
 
@@ -13,7 +13,7 @@ The `createMastraCode()` factory function bootstraps Mastra Code and returns a c
 import { createMastraCode } from 'mastracode'
 
 const {
-  harness,
+  controller,
   mcpManager,
   hookManager,
   authStorage,
@@ -35,7 +35,7 @@ const {
 
 | Property | Type | Description |
 | - | - | - |
-| `harness` | `Harness` | The main orchestrator for modes, threads, messages, and tools |
+| `controller` | `AgentController` | The main orchestrator for modes, threads, messages, and tools |
 | `mcpManager` | `MCPManager` | Manager for MCP server connections |
 | `hookManager` | `HookManager` | Manager for lifecycle hooks |
 | `authStorage` | `AuthStorage` | Storage for OAuth credentials |
@@ -50,15 +50,15 @@ const {
 | Option | Type | Default | Description |
 | - | - | - | - |
 | `cwd` | `string` | `process.cwd()` | Working directory for the agent |
-| `modes` | `HarnessMode[]` | Build, Plan, Fast | Custom mode configurations |
+| `modes` | `AgentControllerMode[]` | Build, Plan, Fast | Custom mode configurations |
 | `extraTools` | `ToolsInput` | `{}` | Additional tools merged with built-in tools |
-| `subagents` | `HarnessSubagent[]` | Explore, Plan, Execute | Custom subagent definitions |
+| `subagents` | `AgentControllerSubagent[]` | Explore, Plan, Execute | Custom subagent definitions |
 | `storage` | `StorageConfig` | Local LibSQL | Database configuration |
-| `initialState` | `Partial<MastraCodeState>` | Default state | Initial harness state values |
+| `initialState` | `Partial<MastraCodeState>` | Default state | Initial controller state values |
 | `heartbeatHandlers` | `HeartbeatHandler[]` | Default handlers | Background task definitions |
 | `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Default resolver | Custom model resolution function |
 
-#### `HarnessMode`
+#### `AgentControllerMode`
 
 Each mode defines an agent configuration and display properties.
 
@@ -71,7 +71,7 @@ Each mode defines an agent configuration and display properties.
 | `color` | `string` | No | Hex color for mode indicator (e.g., `"#7c3aed"`) |
 | `agent` | `Agent \| ((state) => Agent)` | Yes | Agent instance or factory function |
 
-#### `HarnessSubagent`
+#### `AgentControllerSubagent`
 
 Subagent definitions for spawning focused child agents.
 
@@ -82,7 +82,7 @@ Subagent definitions for spawning focused child agents.
 | `description` | `string` | Yes | What this subagent does |
 | `instructions` | `string` | Yes | System prompt for the subagent |
 | `tools` | `ToolsInput` | No | Tools available to this subagent |
-| `allowedHarnessTools` | `string[]` | No | Tool IDs from harness tools this subagent can use |
+| `allowedControllerTools` | `string[]` | No | Tool IDs from controller tools this subagent can use |
 | `defaultModelId` | `string` | No | Default model for this subagent type |
 | `maxSteps` | `number` | No | Optional maximum number of steps for the spawned subagent; defaults to `50` |
 | `stopWhen` | `LoopOptions['stopWhen']` | No | Optional stop condition for the spawned subagent loop |
@@ -98,7 +98,7 @@ Database connection configuration.
 
 #### `MastraCodeState`
 
-Harness state fields available through `initialState`.
+AgentController state fields available through `initialState`.
 
 | Field | Type | Default | Description |
 | - | - | - | - |
@@ -138,9 +138,9 @@ Background task definition.
 | `intervalMs` | `number` | Yes | Interval between executions in milliseconds |
 | `handler` | `() => Promise<void>` | Yes | Async function to execute |
 
-### Harness
+### AgentController
 
-The `Harness` instance returned by `createMastraCode()` is the main orchestrator. See the [Harness Class reference](https://mastra.ai/reference/harness/harness-class) for the complete API.
+The `AgentController` instance returned by `createMastraCode()` is the main orchestrator. See the [AgentController Class reference](https://mastra.ai/reference/agent-controller/agent-controller-class) for the complete API.
 
 ## MastraTUI
 
@@ -150,10 +150,10 @@ The `MastraTUI` class provides the terminal interface. Import it separately to b
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { harness, mcpManager, hookManager, authStorage } = await createMastraCode()
+const { controller, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
-  harness,
+  controller,
   hookManager,
   authStorage,
   mcpManager,
@@ -168,7 +168,7 @@ tui.run()
 
 | Option | Type | Required | Description |
 | - | - | - | - |
-| `harness` | `Harness` | Yes | The harness instance |
+| `controller` | `AgentController` | Yes | The controller instance |
 | `hookManager` | `HookManager` | Yes | Hook manager from `createMastraCode()` |
 | `authStorage` | `AuthStorage` | Yes | Auth storage from `createMastraCode()` |
 | `mcpManager` | `MCPManager` | Yes | MCP manager from `createMastraCode()` |
@@ -182,20 +182,20 @@ tui.run()
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = await createMastraCode({
+const { controller } = await createMastraCode({
   cwd: '/path/to/project',
 })
 
-await harness.init()
-await harness.selectOrCreateThread()
+await controller.init()
+await controller.selectOrCreateThread()
 
-harness.subscribe(event => {
+controller.subscribe(event => {
   if (event.type === 'message_update') {
     console.log(event.message.content)
   }
 })
 
-await harness.sendMessage({ content: 'Explain the auth module' })
+await controller.sendMessage({ content: 'Explain the auth module' })
 ```
 
 ### Custom mode
@@ -211,7 +211,7 @@ const reviewAgent = new Agent({
   model: 'anthropic/claude-sonnet-4-6',
 })
 
-const { harness } = await createMastraCode({
+const { controller } = await createMastraCode({
   modes: [
     {
       id: 'review',
@@ -244,7 +244,7 @@ const deployTool = createTool({
   },
 })
 
-const { harness } = await createMastraCode({
+const { controller } = await createMastraCode({
   extraTools: { deploy: deployTool },
 })
 ```
@@ -254,7 +254,7 @@ const { harness } = await createMastraCode({
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = await createMastraCode({
+const { controller } = await createMastraCode({
   storage: {
     url: 'libsql://my-db.turso.io',
     authToken: process.env.TURSO_AUTH_TOKEN,
@@ -267,7 +267,7 @@ const { harness } = await createMastraCode({
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { harness } = await createMastraCode({
+const { controller } = await createMastraCode({
   initialState: {
     yolo: false,
     permissionRules: {

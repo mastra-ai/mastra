@@ -352,7 +352,7 @@ describe('ACP Event Mapper', () => {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
         toolName: 'submit_plan',
-        args: { title: 'My Plan' },
+        args: { path: '.mastracode/plans/my-plan.md' },
         suspendPayload: {},
       };
 
@@ -364,7 +364,7 @@ describe('ACP Event Mapper', () => {
           toolCall: {
             toolCallId: 'tool-123',
             title: 'submit_plan',
-            rawInput: JSON.stringify({ title: 'My Plan' }),
+            rawInput: JSON.stringify({ path: '.mastracode/plans/my-plan.md' }),
           },
           options: [
             { optionId: 'approve', name: 'Approve Plan', kind: 'allow_once' },

@@ -643,6 +643,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tinfoil',
+          label: 'Tinfoil',
+        },
+        {
+          type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
         },

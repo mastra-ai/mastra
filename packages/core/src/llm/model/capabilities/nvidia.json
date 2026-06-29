@@ -9,6 +9,7 @@
     "meta/llama-3.2-90b-vision-instruct",
     "meta/llama-4-maverick-17b-128e-instruct",
     "meta/llama-guard-4-12b",
+    "minimaxai/minimax-m3",
     "mistralai/mistral-large-3-675b-instruct-2512",
     "mistralai/mistral-medium-3-instruct",
     "mistralai/mistral-small-4-119b-2603",
