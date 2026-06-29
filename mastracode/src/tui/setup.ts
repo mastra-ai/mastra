@@ -31,6 +31,7 @@ export function setupKeyboardShortcuts(
     stop: () => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
+    voiceHold?: () => boolean;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -156,6 +157,23 @@ export function setupKeyboardShortcuts(
     const current = (state.harness.getState() as any).yolo === true;
     state.harness.setState({ yolo: !current } as any);
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
+  });
+
+  // Hold Space in an empty composer to stream speech into the editor.
+  state.editor.onAction('voiceHold', () => {
+    if (!callbacks.voiceHold) return false;
+
+    if (isGoalJudgeInputLocked(state)) {
+      showGoalJudgeInputLockInfo(state);
+      state.ui.requestRender();
+      return true;
+    }
+
+    if (state.activeInlinePlanApproval || state.activeInlineQuestion || state.activeOnboarding || state.pendingApprovalDismiss) {
+      return true;
+    }
+
+    return callbacks.voiceHold();
   });
 
   // Enter - submit immediately. The submit handler decides whether active input

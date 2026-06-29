@@ -299,6 +299,69 @@ describe('CustomEditor image paste handling', () => {
     expect(output).toContain('[rgb:22,200,88]/');
   });
 
+  it('renders the voice recording glyph in the prompt slot', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    editor.getText = vi.fn(() => '');
+    editor.getModeColor = vi.fn(() => '#16c858');
+    editor.getVoicePromptState = vi.fn(() => ({ active: true, glyph: '●', color: '#ff5555' }));
+
+    const output = editor.render(20).join('\n');
+
+    expect(output).toContain('[rgb:255,85,85]●');
+    expect(output).not.toContain('›');
+  });
+
+  it('routes Space in an empty composer to voice hold and swallows it', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const voiceHold = vi.fn(() => true);
+    editor.onAction('voiceHold', voiceHold);
+    editor.getText = vi.fn(() => '');
+    editor.isShowingAutocomplete = vi.fn(() => false);
+
+    editor.handleInput(' ');
+
+    expect(voiceHold).toHaveBeenCalledTimes(1);
+    expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+
+  it('keeps the first Space as normal text while typing', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const voiceHold = vi.fn(() => true);
+    editor.onAction('voiceHold', voiceHold);
+    editor.getText = vi.fn(() => 'hello');
+
+    editor.handleInput(' ');
+
+    expect(voiceHold).not.toHaveBeenCalled();
+    expect(mocks.superHandleInput).toHaveBeenCalledWith(' ');
+  });
+
+  it('routes repeated Space while typing to voice hold', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const voiceHold = vi.fn(() => true);
+    editor.onAction('voiceHold', voiceHold);
+    editor.getText = vi.fn(() => 'hello');
+
+    editor.handleInput(' ');
+    editor.handleInput(' ');
+
+    expect(voiceHold).toHaveBeenCalledTimes(1);
+    expect(mocks.superHandleInput).toHaveBeenCalledTimes(1);
+    expect(mocks.superHandleInput).toHaveBeenCalledWith(' ');
+  });
+
+  it('routes Space immediately to voice hold when text already ends with whitespace', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const voiceHold = vi.fn(() => true);
+    editor.onAction('voiceHold', voiceHold);
+    editor.getText = vi.fn(() => 'hello ');
+
+    editor.handleInput(' ');
+
+    expect(voiceHold).toHaveBeenCalledTimes(1);
+    expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+
   it('converts a pasted local image path into an image attachment', () => {
     mocks.getClipboardImage.mockReturnValue({ data: 'clipboard-image', mimeType: 'image/png' });
 

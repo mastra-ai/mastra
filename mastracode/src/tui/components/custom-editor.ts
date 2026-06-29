@@ -38,7 +38,14 @@ export type AppAction =
   | 'followUp'
   | 'queueFollowUp'
   | 'cycleMode'
-  | 'toggleYolo';
+  | 'toggleYolo'
+  | 'voiceHold';
+
+export interface VoicePromptState {
+  active: boolean;
+  glyph: string;
+  color?: string;
+}
 
 // Pre-compiled constants (avoid re-creation per render)
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
@@ -50,6 +57,7 @@ function parseHex(hex: string): [number, number, number] {
 }
 
 const DEFAULT_PROMPT_ICON = '•';
+const TEXT_SPACE_HOLD_WINDOW_MS = 650;
 const PROMPT_ICON_CHOICES = [
   '☯',
   '✺',
@@ -93,12 +101,14 @@ export class CustomEditor extends Editor {
   public onImagePaste?: (image: ClipboardImage) => void;
   public getModeColor?: () => string | undefined;
   public getPromptAnimator?: () => GradientAnimator | undefined;
+  public getVoicePromptState?: () => VoicePromptState | undefined;
   private pendingBracketedPaste: string | null = null;
 
   private _cachedModeColorHex?: string;
   private _cachedColorFn?: (s: string) => string;
   private promptIcon = DEFAULT_PROMPT_ICON;
   private lastPromptWasInvisible = false;
+  private lastTextSpaceAt = 0;
 
   constructor(tui: TUI, theme: EditorTheme) {
     super(tui, theme);
@@ -184,16 +194,20 @@ export class CustomEditor extends Editor {
     }
     this.lastPromptWasInvisible = promptIsInvisible;
 
-    const promptChar = isSlash
-      ? '/'
-      : isAt
-        ? '@'
-        : chevronBrightness > 0.05
-          ? '›'
-          : dotBrightness > 0.05
-            ? this.promptIcon
-            : ' ';
-    const promptBrightness = isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
+    const voicePromptState = this.getVoicePromptState?.();
+    const promptChar = voicePromptState?.active
+      ? voicePromptState.glyph
+      : isSlash
+        ? '/'
+        : isAt
+          ? '@'
+          : chevronBrightness > 0.05
+            ? '›'
+            : dotBrightness > 0.05
+              ? this.promptIcon
+              : ' ';
+    const promptBrightness = voicePromptState?.active ? 1 : isPromptAnimated ? Math.max(chevronBrightness, dotBrightness) : 1;
+    const promptColor = voicePromptState?.active ? voicePromptState.color || color : color;
 
     // Cache colorFn and prompt — only recreate when color changes
     if (this._cachedModeColorHex !== color) {
@@ -202,7 +216,7 @@ export class CustomEditor extends Editor {
     }
     const colorFn = this._cachedColorFn!;
     const b = colorFn;
-    const [r, g, bValue] = parseHex(color);
+    const [r, g, bValue] = parseHex(promptColor);
     const prompt = chalk.bold.rgb(
       Math.round(r * promptBrightness),
       Math.round(g * promptBrightness),
@@ -488,6 +502,25 @@ export class CustomEditor extends Editor {
     return wasSlashCommand;
   }
 
+  private shouldRouteSpaceToVoiceHold(): boolean {
+    if (this.isShowingAutocomplete()) {
+      return false;
+    }
+
+    const text = this.getText();
+    if (text.trim().length === 0) {
+      return true;
+    }
+
+    const now = Date.now();
+    if (/\s$/.test(text) || now - this.lastTextSpaceAt <= TEXT_SPACE_HOLD_WINDOW_MS) {
+      return true;
+    }
+
+    this.lastTextSpaceAt = now;
+    return false;
+  }
+
   handleInput(data: string): void {
     if (this.maybeHandleBracketedPaste(data)) {
       return;
@@ -496,6 +529,17 @@ export class CustomEditor extends Editor {
     if (matchesKey(data, 'ctrl+v') || matchesKey(data, 'alt+v')) {
       this.handleExplicitPaste();
       return;
+    }
+
+    if (data === ' ' && this.shouldRouteSpaceToVoiceHold()) {
+      const handler = this.actionHandlers.get('voiceHold');
+      if (handler && handler() !== false) {
+        return;
+      }
+    }
+
+    if (data !== ' ') {
+      this.lastTextSpaceAt = 0;
     }
 
     if (matchesKey(data, 'ctrl+c')) {

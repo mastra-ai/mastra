@@ -72,6 +72,7 @@ import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
+import { VoiceManager } from './voice/voice-manager.js';
 
 // =============================================================================
 // Types
@@ -124,6 +125,7 @@ export class MastraTUI {
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
   private lastStreamError: string | null = null;
+  private voiceManager!: VoiceManager;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -172,10 +174,26 @@ export class MastraTUI {
     };
     this.state.editor.getPromptAnimator = () => this.state.gradientAnimator;
 
+    this.voiceManager = new VoiceManager({
+      editor: this.state.editor,
+      setState: voiceInput => {
+        this.state.voiceInput = voiceInput;
+      },
+      requestRender: () => this.state.ui.requestRender(),
+      canStart: () =>
+        !isGoalJudgeInputLocked(this.state) &&
+        !this.state.activeInlinePlanApproval &&
+        !this.state.activeInlineQuestion &&
+        !this.state.activeOnboarding &&
+        !this.state.pendingApprovalDismiss,
+    });
+    this.state.editor.getVoicePromptState = () => this.voiceManager.getPromptState();
+
     setupKeyboardShortcuts(this.state, {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
       queueFollowUpMessage: text => this.queueFollowUpMessage(text),
+      voiceHold: () => this.voiceManager.handleHoldSpace(),
     });
   }
 
@@ -439,6 +457,7 @@ export class MastraTUI {
    * Stop the TUI and clean up.
    */
   stop(): void {
+    void this.voiceManager.stop();
     this.stopCaffeinate();
 
     // Run SessionEnd hooks (best-effort, don't await)

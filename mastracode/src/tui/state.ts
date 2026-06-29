@@ -37,6 +37,17 @@ import type { UserMessageComponent } from './components/user-message.js';
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 
+export type VoiceInputStatus = 'idle' | 'arming' | 'recording' | 'transcribing' | 'error';
+
+export interface VoiceInputState {
+  status: VoiceInputStatus;
+  partialText?: string;
+  finalText?: string;
+  baseText?: string;
+  error?: string;
+  level?: number;
+}
+
 export interface PendingSignalMessage {
   component: Component;
   text: string;
@@ -143,6 +154,9 @@ export interface TUIState {
   quietModeMaxToolPreviewLines: number;
   /** Active goal judge status-line override while evaluating the last turn. */
   activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
+
+  // ── Voice input ───────────────────────────────────────────────────────
+  voiceInput: VoiceInputState;
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
@@ -280,6 +294,9 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     hideThinkingBlock: true,
     quietMode: false,
     quietModeMaxToolPreviewLines: 2,
+
+    // Voice input
+    voiceInput: { status: 'idle' },
 
     // Thread / conversation
     pendingNewThread: false,
