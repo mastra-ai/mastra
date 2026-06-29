@@ -25,6 +25,7 @@ Avoid marketing-page composition, decorative dashboards, over-branded controls, 
 - Keep Studio as the product surface; the desktop shell should feel like lightweight chrome around it.
 - Prefer familiar app-shell affordances over custom navigation inventions.
 - Make local-first setup obvious, but keep hosted Platform access available when connected.
+- Keep bundled local Studio usable offline when the local runtime and local model server are available.
 - Preserve density and speed for repeated developer workflows.
 - Use restrained polish: clear hover, focus, loading, and disabled states without decoration.
 

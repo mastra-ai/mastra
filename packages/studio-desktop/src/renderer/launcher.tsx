@@ -8,6 +8,7 @@ import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 
 import { LOCAL_MODEL_PRESETS } from '../shared/model-presets';
 import type { LocalModelProviderId } from '../shared/model-presets';
+import { getOfflineReadiness } from '../shared/offline-readiness';
 import type { DesktopState, DesktopTab, PlatformProject, ProbeModelsResult } from '../shared/types';
 
 export interface LauncherActions {
@@ -70,6 +71,34 @@ function RuntimeStatus({ current }: { current: DesktopState }) {
     <StatusBadge variant={current.runtime.state === 'running' ? 'success' : 'neutral'} size="sm" withDot>
       {label}
     </StatusBadge>
+  );
+}
+
+function OfflineReadinessStatus({
+  current,
+  isLocalModelApplied,
+  localModelProbe,
+  providerName,
+}: {
+  current: DesktopState;
+  isLocalModelApplied: boolean;
+  localModelProbe: ProbeModelsResult | undefined;
+  providerName: string;
+}) {
+  const readiness = getOfflineReadiness({
+    isLocalModelApplied,
+    modelProbe: localModelProbe,
+    providerName,
+    runtimeState: current.runtime.state,
+  });
+
+  return (
+    <div className="offline-readiness">
+      <StatusBadge variant={readiness.variant} size="sm" withDot={readiness.variant === 'success'}>
+        {readiness.label}
+      </StatusBadge>
+      <p>{readiness.message}</p>
+    </div>
   );
 }
 
@@ -161,7 +190,15 @@ function LocalModelSetup({
     <section className="local-model-setup" aria-label="Local model setup">
       <header className="inline-section-header">
         <h3>Local model setup</h3>
-        <RuntimeStatus current={current} />
+        <div className="runtime-statuses">
+          <RuntimeStatus current={current} />
+          <OfflineReadinessStatus
+            current={current}
+            isLocalModelApplied={isLocalModelApplied}
+            localModelProbe={localModelProbe}
+            providerName={selectedProvider.name}
+          />
+        </div>
       </header>
 
       <ButtonsGroup className="provider-tabs" spacing="default" aria-label="Local model provider">
@@ -181,27 +218,30 @@ function LocalModelSetup({
       <p className="setup-guidance">{selectedProvider.guidance}</p>
 
       <div className="setup-grid">
-        <label>
+        <label htmlFor="local-model-base-url">
           <span>Base URL</span>
           <Input
+            id="local-model-base-url"
             value={localModelUrl}
             placeholder="http://localhost:1234/v1"
             size="sm"
             onChange={event => actions.onLocalModelUrlChange(event.currentTarget.value)}
           />
         </label>
-        <label>
+        <label htmlFor="local-model-id">
           <span>Model ID</span>
           <Input
+            id="local-model-id"
             value={localModelId}
             placeholder="Loaded model ID"
             size="sm"
             onChange={event => actions.onLocalModelIdChange(event.currentTarget.value)}
           />
         </label>
-        <label>
+        <label htmlFor="local-model-api-key">
           <span>API key</span>
           <Input
+            id="local-model-api-key"
             value={localModelApiKey}
             placeholder="not-needed"
             size="sm"
@@ -257,9 +297,10 @@ function LocalStudioSection(props: LauncherProps) {
         />
 
         <div className="manual-server-row">
-          <label>
+          <label htmlFor="manual-server-url">
             <span>Connect local server</span>
             <Input
+              id="manual-server-url"
               value={manualServerUrl}
               placeholder={current.settings.devServerUrl}
               size="sm"
@@ -320,9 +361,10 @@ function PlatformRows({
           onClick={actions.onPlatformLogin}
         />
         <div className="manual-server-row">
-          <label>
+          <label htmlFor="platform-api-url">
             <span>Platform API URL</span>
             <Input
+              id="platform-api-url"
               value={platformBaseUrl || current.settings.platformBaseUrl}
               size="sm"
               onChange={event => actions.onPlatformBaseUrlChange(event.currentTarget.value)}

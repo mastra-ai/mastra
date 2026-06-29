@@ -159,7 +159,7 @@ export function createStudioShellServer(options: StudioServerOptions) {
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
     .replaceAll('%%MASTRA_AUTO_DETECT_URL%%', 'false')
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', 'true')
-    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
+    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', 'true')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', '')
     .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', 'false')
     .replaceAll('%%MASTRA_AGENT_SIGNALS%%', 'true');

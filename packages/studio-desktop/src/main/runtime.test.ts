@@ -68,6 +68,7 @@ describe('ManagedMastraRuntime', () => {
           ELECTRON_RUN_AS_NODE: '1',
           HOST: '127.0.0.1',
           PORT: '4112',
+          MASTRA_TELEMETRY_DISABLED: 'true',
           MASTRA_DESKTOP_MODEL_ID: DEFAULT_SETTINGS.modelId,
           MASTRA_DESKTOP_MODEL_URL: DEFAULT_SETTINGS.modelUrl,
           MASTRA_DESKTOP_STORAGE_DIR: join(dir, 'storage'),
