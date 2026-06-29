@@ -12,6 +12,7 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
+import type { WorkflowRunState } from '../../workflows/types';
 import { Agent } from '../agent';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
@@ -324,6 +325,50 @@ describe.each([
       const listedByB = await agentB.listSuspendedRuns({ resourceId: 'shared-resource' });
       expect(listedByB.runs.map(run => run.runId)).toEqual([runB]);
       expect(listedByB.total).toBe(1);
+    }, 30000);
+
+    it('hides snapshots without an owning agent id from every agent (default-deny)', async () => {
+      const storage = new InMemoryStore();
+      const agentA = new Agent({
+        id: 'agent-a',
+        name: 'Agent A',
+        instructions: 'You find users.',
+        model: createMockModel(),
+        tools: { findUserTool: createFindUserTool() },
+      });
+      const agentB = new Agent({
+        id: 'agent-b',
+        name: 'Agent B',
+        instructions: 'You find users.',
+        model: createMockModel(),
+        tools: { findUserTool: createFindUserTool() },
+      });
+      new Mastra({ agents: { agentA, agentB }, logger: false, storage });
+
+      const { runId } = await suspendRun(agentA, 'thread-a', 'shared-resource');
+
+      // Simulate a legacy snapshot persisted before __agentId was introduced by
+      // stripping it from every suspended step's payload, then re-persisting.
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      expect(run).not.toBeNull();
+      const snapshot = run!.snapshot as WorkflowRunState;
+      for (const key in snapshot.context) {
+        const step = snapshot.context[key];
+        if (step?.status === 'suspended' && step.suspendPayload) {
+          delete (step.suspendPayload as Record<string, unknown>).__agentId;
+        }
+      }
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId,
+        resourceId: 'shared-resource',
+        snapshot,
+      });
+
+      // A snapshot with no owning agent id must not leak to any agent.
+      expect((await agentA.listSuspendedRuns({ resourceId: 'shared-resource' })).total).toBe(0);
+      expect((await agentB.listSuspendedRuns({ resourceId: 'shared-resource' })).total).toBe(0);
     }, 30000);
 
     it('rejects invalid pagination inputs', async () => {

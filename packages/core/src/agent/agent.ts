@@ -7444,9 +7444,10 @@ export class Agent<
 
       // Snapshots persist the owning agent's id, so runs started by other
       // agents sharing the same agentic-loop snapshot storage are skipped.
-      // Snapshots created before the id was persisted stay visible.
+      // Default-deny: a snapshot whose owning agent id is missing or does not
+      // match is not surfaced, so runs cannot leak across agents.
       const runAgentId = this.#getSnapshotAgentId(snapshot);
-      if (runAgentId && runAgentId !== this.id) continue;
+      if (runAgentId !== this.id) continue;
 
       // thread/resource info travels in the suspended stream state; the run row's
       // resourceId column is used as the primary source when present.
