@@ -162,11 +162,19 @@ describe('PluginManager', () => {
       }),
     );
     execaMock.mockImplementation(async (_cmd: string, args: string[], options: { cwd?: string } = {}) => {
-      if (args[0] === 'rev-parse') {
-        return { stdout: execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse').length === 1 ? 'old' : 'new' };
+      expect(options.cwd).toBe(checkoutDir);
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return {
+          stdout:
+            execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse' && call[1][1] === 'HEAD').length === 1
+              ? 'old'
+              : 'new',
+        };
       }
-      if (args[0] === 'pull') {
-        expect(options.cwd).toBe(checkoutDir);
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') {
         writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
       }
       return { stdout: '' };
@@ -180,7 +188,115 @@ describe('PluginManager', () => {
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(pluginTools.github_tool?.description).toBe('second');
-    expect(execaMock).toHaveBeenCalledWith('git', ['pull', '--ff-only'], { cwd: checkoutDir });
+    expect(execaMock).toHaveBeenCalledWith('git', ['fetch', 'origin'], { cwd: checkoutDir });
+    expect(execaMock).toHaveBeenCalledWith('git', ['reset', '--hard', 'origin/main'], { cwd: checkoutDir });
+  });
+
+  it('backs up divergent GitHub plugin checkouts before forcing them to origin', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (_cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      expect(options.cwd).toBe(checkoutDir);
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return { stdout: 'abc1234567890' };
+      }
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '1\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') {
+        writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+        return { stdout: '' };
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
+
+    const branchCall = execaMock.mock.calls.find(call => call[1][0] === 'branch');
+    expect(branchCall?.[1][1]).toMatch(/^mastracode\/plugin-backup\/.*-abc12345$/);
+    expect(branchCall?.[1][2]).toBe('HEAD');
+    expect(execaMock).toHaveBeenCalledWith('git', ['reset', '--hard', 'origin/main'], { cwd: checkoutDir });
+    expect(manager.getPluginTools().github_tool?.description).toBe('first');
+  });
+
+  it('commits dirty GitHub plugin checkout changes on the backup branch before reset', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (_cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      expect(options.cwd).toBe(checkoutDir);
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: 'abc1234567890' };
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: ' M src/index.ts' };
+      if (args[0] === 'branch') return { stdout: 'main' };
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
+
+    expect(execaMock.mock.calls.map(call => call[1][0])).toEqual([
+      'rev-parse',
+      'fetch',
+      'rev-parse',
+      'rev-list',
+      'status',
+      'branch',
+      'switch',
+      'add',
+      '-c',
+      'switch',
+      'reset',
+      'rev-parse',
+    ]);
+    expect(execaMock.mock.calls.find(call => call[1][0] === 'switch')?.[1][2]).toMatch(
+      /^mastracode\/plugin-backup\/.*-abc12345$/,
+    );
+    expect(execaMock).toHaveBeenCalledWith('git', ['switch', 'main'], { cwd: checkoutDir });
+    expect(execaMock).toHaveBeenCalledWith('git', ['reset', '--hard', 'origin/main'], { cwd: checkoutDir });
   });
 
   it('removes GitHub checkout directories when uninstalling GitHub plugins', async () => {
