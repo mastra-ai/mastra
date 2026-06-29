@@ -1,4 +1,4 @@
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItem } from '@mastra/core/signals';
 import { CheckCircle2, Circle, ListChecks, Loader2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';

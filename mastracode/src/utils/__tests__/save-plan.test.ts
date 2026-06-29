@@ -1,7 +1,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, it, expect, afterEach, afterAll } from 'vitest';
-import { savePlanToDisk, savePlanSnapshot, getPlanFilename } from '../plans.js';
+import {
+  savePlanToDisk,
+  getPlanFilename,
+  getLocalPlansDir,
+  isPlanFilePath,
+  readPlanFile,
+  approvePlanFile,
+} from '../plans.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
 const tmpDir = path.join(projectRoot, '.test-tmp-plans');
@@ -148,72 +155,101 @@ describe('savePlanToDisk', () => {
   });
 });
 
-describe('savePlanSnapshot', () => {
-  it('writes a title-based filename to the local project plans dir', async () => {
-    const filename = await savePlanSnapshot({
+function writePlanFile(filename: string, content: string): string {
+  const filePath = path.join(getLocalPlansDir(tmpProjectPath), filename);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, 'utf-8');
+  return filePath;
+}
+
+describe('isPlanFilePath', () => {
+  it('accepts a .md file directly inside .mastracode/plans/', () => {
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/add-dark-mode.md')).toBe(true);
+  });
+
+  it('accepts an absolute path inside .mastracode/plans/', () => {
+    const abs = path.join(getLocalPlansDir(tmpProjectPath), 'feature.md');
+    expect(isPlanFilePath(tmpProjectPath, abs)).toBe(true);
+  });
+
+  it('rejects files outside .mastracode/plans/', () => {
+    expect(isPlanFilePath(tmpProjectPath, 'src/index.ts')).toBe(false);
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/other.md')).toBe(false);
+  });
+
+  it('rejects non-markdown files and nested subdirectories', () => {
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/notes.txt')).toBe(false);
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/sub/plan.md')).toBe(false);
+  });
+
+  it('rejects path traversal out of the plans directory', () => {
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/../../evil.md')).toBe(false);
+  });
+});
+
+describe('readPlanFile', () => {
+  it('returns undefined when the file does not exist', async () => {
+    expect(await readPlanFile(path.join(getLocalPlansDir(tmpProjectPath), 'missing.md'))).toBeUndefined();
+  });
+
+  it('parses the leading heading as the title and the rest as the body', async () => {
+    const file = writePlanFile('my-plan.md', '# My plan\n\nStep 1\nStep 2\n');
+
+    expect(await readPlanFile(file)).toEqual({ title: 'My plan', plan: 'Step 1\nStep 2' });
+  });
+
+  it('returns an empty title when there is no leading heading', async () => {
+    const file = writePlanFile('no-heading.md', 'Just a body with no heading\n');
+
+    expect(await readPlanFile(file)).toEqual({ title: '', plan: 'Just a body with no heading' });
+  });
+});
+
+describe('approvePlanFile', () => {
+  it('archives the plan to the global plans dir and leaves the local file in place', async () => {
+    const file = writePlanFile('my-plan.md', '# My plan\n\nStep 1\nStep 2\n');
+
+    const filename = await approvePlanFile({
+      planPath: file,
       title: 'My plan',
-      plan: 'Step 1\nStep 2',
-      projectPath: tmpProjectPath,
-    });
-
-    expect(filename).toBe('my-plan.md');
-    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'my-plan.md');
-    expect(fs.existsSync(filePath)).toBe(true);
-
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('# My plan');
-    expect(content).toContain('Step 1');
-    expect(content).toContain('Step 2');
-  });
-
-  it('overwrites the snapshot on resubmission with the same title', async () => {
-    await savePlanSnapshot({
-      title: 'Plan v1',
-      plan: 'Original content',
-      projectPath: tmpProjectPath,
-    });
-
-    await savePlanSnapshot({
-      title: 'Plan v1',
-      plan: 'Updated content',
-      projectPath: tmpProjectPath,
-    });
-
-    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'plan-v1.md');
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('# Plan v1');
-    expect(content).toContain('Updated content');
-    expect(content).not.toContain('Original content');
-  });
-
-  it('creates separate files for different plan titles', async () => {
-    await savePlanSnapshot({
-      title: 'Plan A',
-      plan: 'Content A',
-      projectPath: tmpProjectPath,
-    });
-
-    await savePlanSnapshot({
-      title: 'Plan B',
-      plan: 'Content B',
-      projectPath: tmpProjectPath,
-    });
-
-    const plansDir = path.join(tmpProjectPath, '.mastracode', 'plans');
-    expect(fs.existsSync(path.join(plansDir, 'plan-a.md'))).toBe(true);
-    expect(fs.existsSync(path.join(plansDir, 'plan-b.md'))).toBe(true);
-  });
-
-  it('respects plansDir override', async () => {
-    await savePlanSnapshot({
-      title: 'Custom dir plan',
-      plan: 'Custom location.',
-      projectPath: tmpProjectPath,
+      resourceId: 'resource-1',
       plansDir: tmpDir,
     });
 
-    const filePath = path.join(tmpDir, 'custom-dir-plan.md');
-    expect(fs.existsSync(filePath)).toBe(true);
+    expect(filename).toBe('my-plan.md');
+
+    // The local named plan file is preserved so the user can review it later.
+    expect(fs.existsSync(file)).toBe(true);
+
+    // Global archive (timestamped) was written under the resource dir.
+    const resourceDir = path.join(tmpDir, 'resource-1');
+    expect(fs.existsSync(resourceDir)).toBe(true);
+    const globalFiles = fs.readdirSync(resourceDir);
+    expect(globalFiles.some(f => f.endsWith('-my-plan.md'))).toBe(true);
+  });
+
+  it('uses the title from the file when no title is provided', async () => {
+    const file = writePlanFile('file-title.md', '# File title\n\nBody\n');
+
+    const filename = await approvePlanFile({
+      planPath: file,
+      title: '',
+      resourceId: 'resource-2',
+      plansDir: tmpDir,
+    });
+
+    expect(filename).toBe('file-title.md');
+  });
+
+  it('returns undefined when the plan file does not exist', async () => {
+    const filename = await approvePlanFile({
+      planPath: path.join(getLocalPlansDir(tmpProjectPath), 'missing.md'),
+      title: 'Anything',
+      resourceId: 'resource-3',
+      plansDir: tmpDir,
+    });
+
+    expect(filename).toBeUndefined();
   });
 });
 

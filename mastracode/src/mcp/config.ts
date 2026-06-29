@@ -100,6 +100,19 @@ function expandHeaderEnvVars(headers: Record<string, unknown>): Record<string, s
 }
 
 /**
+ * Expand `${VAR}` and `$VAR` references in every string-valued environment
+ * variable passed to a stdio server, so that secrets can be referenced from the
+ * host environment instead of being hardcoded in `mcp.json`.
+ */
+function expandEnvValues(env: Record<string, unknown>): Record<string, string> {
+  const expanded: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') expanded[key] = expandEnvVars(value);
+  }
+  return expanded;
+}
+
+/**
  * Classify a raw server entry as stdio, http, or skip (with reason).
  */
 export function classifyServerEntry(raw: unknown): { kind: 'stdio' | 'http' | 'skip'; reason?: string } {
@@ -121,7 +134,7 @@ export function classifyServerEntry(raw: unknown): { kind: 'stdio' | 'http' | 's
 
   if (hasUrl) {
     try {
-      new URL(obj.url as string);
+      new URL(expandEnvVars(obj.url as string));
     } catch {
       return { kind: 'skip', reason: `Invalid URL: "${obj.url}"` };
     }
@@ -149,7 +162,8 @@ export function validateConfig(raw: unknown): McpConfig {
       servers[name] = {
         command: e.command as string,
         args: Array.isArray(e.args) ? (e.args as string[]) : undefined,
-        env: typeof e.env === 'object' && e.env !== null ? (e.env as Record<string, string>) : undefined,
+        env:
+          typeof e.env === 'object' && e.env !== null ? expandEnvValues(e.env as Record<string, unknown>) : undefined,
       };
     } else if (classification.kind === 'http') {
       const e = entry as Record<string, unknown>;
@@ -159,7 +173,7 @@ export function validateConfig(raw: unknown): McpConfig {
         continue;
       }
       servers[name] = {
-        url: e.url as string,
+        url: expandEnvVars(e.url as string),
         headers:
           typeof e.headers === 'object' && e.headers !== null
             ? expandHeaderEnvVars(e.headers as Record<string, unknown>)

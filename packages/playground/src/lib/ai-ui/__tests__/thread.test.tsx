@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';

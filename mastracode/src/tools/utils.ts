@@ -16,16 +16,16 @@ export function isPathAllowed(targetPath: string, projectRoot: string, allowedPa
 }
 
 /**
- * Read allowed paths from the Mastra harness runtime context.
+ * Read allowed paths from the Mastra controller runtime context.
  * Combines skill paths (computed dynamically from projectPath and configDir)
- * with user-approved sandbox paths from harness state so that both parent
+ * with user-approved sandbox paths from controller state so that both parent
  * and subagent tools have the same access.
  * Returns default skill paths when the context is unavailable (e.g. in tests).
  */
 export function getAllowedPathsFromContext(
   toolContext: { requestContext?: { get: (key: string) => unknown } } | undefined,
 ): string[] {
-  const harnessCtx = toolContext?.requestContext?.get('harness') as
+  const agentControllerCtx = toolContext?.requestContext?.get('controller') as
     | {
         getState?: () => { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string };
         session?: {
@@ -33,7 +33,7 @@ export function getAllowedPathsFromContext(
         };
       }
     | undefined;
-  const state = harnessCtx?.getState?.() ?? harnessCtx?.session?.state?.get?.();
+  const state = agentControllerCtx?.getState?.() ?? agentControllerCtx?.session?.state?.get?.();
   const projectPath = state?.projectPath ? path.resolve(state.projectPath) : process.cwd();
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const skillPaths = buildSkillPaths(projectPath, configDir);

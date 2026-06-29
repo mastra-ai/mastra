@@ -11,19 +11,19 @@ import type {
   ContentBlock,
 } from '@agentclientprotocol/sdk';
 import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessMode, Session } from '@mastra/core/harness';
-import { handleHarnessEvent } from './event-mapper.js';
+import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
+import { handleAgentControllerEvent } from './event-mapper.js';
 import type { PromptState } from './event-mapper.js';
 
 /**
- * ACP Agent implementation that wraps a mastracode Harness.
+ * ACP Agent implementation that wraps a mastracode Controller.
  * Each instance represents one ACP connection from a client.
  */
 export class MastraCodeAcpAgent implements Agent {
   private readonly connection: AgentSideConnection;
-  private readonly harness: Harness;
+  private readonly controller: AgentController;
   private readonly session: Session;
-  private readonly modes: HarnessMode[];
+  private readonly modes: AgentControllerMode[];
   private readonly unsubscribeSessionEvents: () => void;
   private readonly sessionMap = new Map<string, string>(); // sessionId -> threadId
   private currentPromptState: PromptState | null = null;
@@ -37,15 +37,20 @@ export class MastraCodeAcpAgent implements Agent {
     return threadId;
   }
 
-  constructor(connection: AgentSideConnection, harness: Harness, session: Session, modes: HarnessMode[]) {
+  constructor(
+    connection: AgentSideConnection,
+    controller: AgentController,
+    session: Session,
+    modes: AgentControllerMode[],
+  ) {
     this.connection = connection;
-    this.harness = harness;
+    this.controller = controller;
     this.session = session;
     this.modes = modes;
 
     // Register persistent event listener
     this.unsubscribeSessionEvents = this.session.subscribe(event => {
-      handleHarnessEvent(event, this.currentPromptState, this.connection, this.session);
+      handleAgentControllerEvent(event, this.currentPromptState, this.connection, this.session);
     });
   }
 
@@ -80,7 +85,7 @@ export class MastraCodeAcpAgent implements Agent {
     await this.session.thread.switch({ threadId: thread.id });
 
     // Build modes list from constructor param
-    const availableModes = this.modes.map((m: HarnessMode) => ({
+    const availableModes = this.modes.map((m: AgentControllerMode) => ({
       id: m.id,
       name: m.name ?? m.id,
     }));
@@ -90,7 +95,7 @@ export class MastraCodeAcpAgent implements Agent {
     // Build models list (best-effort)
     let models: NewSessionResponse['models'];
     try {
-      const availableModels = await this.harness.listAvailableModels();
+      const availableModels = await this.controller.listAvailableModels();
       const currentModelId = this.session.model.get();
       models = {
         currentModelId: currentModelId ?? '',

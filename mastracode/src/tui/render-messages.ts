@@ -5,11 +5,13 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
-import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
-import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
+import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/core/agent-controller';
+import { parseSubagentMeta } from '@mastra/core/agent-controller';
+import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
+import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
-import { getPlanFilename } from '../utils/plans.js';
+import { readPlanFile, resolvePlanPath } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -49,7 +51,7 @@ function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
 }
 
-type MessageWithAttributes = HarnessMessage & {
+type MessageWithAttributes = AgentControllerMessage & {
   attributes?: Record<string, string | number | boolean | null | undefined>;
 };
 
@@ -352,13 +354,13 @@ function unescapeSkillBoundary(text: string): string {
   return text.replaceAll('&lt;/skill&gt;', '</skill>');
 }
 
-export function addUserMessage(state: TUIState, message: HarnessMessage, options?: { label?: string }): void {
+export function addUserMessage(state: TUIState, message: AgentControllerMessage, options?: { label?: string }): void {
   if (state.messageComponentsById.has(message.id)) {
     return;
   }
 
   const reminderPart = message.content.find(
-    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> =>
+    (content): content is Extract<AgentControllerMessageContent, { type: 'system_reminder' }> =>
       content.type === 'system_reminder',
   );
 
@@ -711,7 +713,7 @@ function applyTaskToolResult(
 
 const STARTUP_MESSAGE_WINDOW_SIZE = 200;
 
-function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
+function getLatestMessageTimestamp(messages: AgentControllerMessage[]): number | undefined {
   let latest: number | undefined;
   for (const message of messages) {
     const time = new Date(message.createdAt).getTime();
@@ -722,7 +724,7 @@ function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefin
 }
 
 /**
- * Re-render all existing messages from the harness thread into the chat container.
+ * Re-render all existing messages from the controller thread into the chat container.
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
@@ -751,7 +753,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     } else if (message.role === 'assistant') {
       // Render content in order - interleaving text and tool calls
       // Accumulate text/thinking until we hit a tool call, then render both
-      let accumulatedContent: HarnessMessageContent[] = [];
+      let accumulatedContent: AgentControllerMessageContent[] = [];
 
       for (const content of message.content) {
         if (content.type === 'text' || content.type === 'thinking') {
@@ -759,7 +761,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         } else if (content.type === 'tool_call') {
           // Render accumulated text first if any
           if (accumulatedContent.length > 0) {
-            const textMessage: HarnessMessage = {
+            const textMessage: AgentControllerMessage = {
               ...message,
               content: accumulatedContent,
             };
@@ -889,18 +891,22 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // If this was submit_plan, show the plan with approval status
           if (content.name === 'submit_plan' && toolResult?.type === 'tool_result') {
-            const args = content.args as { title?: string; plan?: string } | undefined;
+            const args = content.args as { path?: string } | undefined;
             // Result could be a string or an object with content property
             let resultText = '';
+            let submittedPlan: { title?: string; path?: string; plan?: string } | undefined;
             if (typeof toolResult.result === 'string') {
               resultText = toolResult.result;
-            } else if (
-              typeof toolResult.result === 'object' &&
-              toolResult.result !== null &&
-              'content' in toolResult.result &&
-              typeof (toolResult.result as any).content === 'string'
-            ) {
-              resultText = (toolResult.result as any).content;
+            } else if (typeof toolResult.result === 'object' && toolResult.result !== null) {
+              if ('content' in toolResult.result && typeof (toolResult.result as any).content === 'string') {
+                resultText = (toolResult.result as any).content;
+              }
+              if (
+                'submittedPlan' in toolResult.result &&
+                typeof (toolResult.result as any).submittedPlan === 'object'
+              ) {
+                submittedPlan = (toolResult.result as any).submittedPlan;
+              }
             }
             // The approved result starts with "Plan approved." while rejected
             // results start with "Plan was not approved" — a naive `includes`
@@ -915,19 +921,32 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               feedback = feedbackMatch?.[1] || 'Revision requested';
             }
 
-            if (args?.title && args?.plan) {
+            const submittedPath = submittedPlan?.path || args?.path;
+            if (submittedPath) {
+              // Prefer the submitted plan snapshot persisted in the tool result.
+              // Older history entries may not have it, so fall back to reading the
+              // submitted file from disk.
+              const sessionState = state.session.state.get() as any;
+              const projectPath = sessionState?.projectPath as string | undefined;
+              const recoverAbsPath = !submittedPlan?.plan
+                ? resolvePlanPath(projectPath ?? process.cwd(), submittedPath)
+                : undefined;
+              const recovered = recoverAbsPath ? await readPlanFile(recoverAbsPath) : undefined;
+              const planBody = submittedPlan?.plan ?? recovered?.plan ?? '';
+              const planTitle = submittedPlan?.title || recovered?.title || 'Implementation Plan';
               const planResult = new PlanResultComponent({
-                title: args.title,
-                plan: args.plan,
-                planFilename: getPlanFilename(args.title),
+                title: planTitle,
+                plan: planBody,
+                planFilename: submittedPath,
                 isApproved,
                 feedback,
               });
               state.chatContainer.addChild(planResult);
               replacedWithInline = true;
-              // Restore previousPlanSnapshot so that if the agent resubmits after
-              // a restart, the diff can be computed against the last known plan.
-              state.previousPlanSnapshot = { title: args.title, plan: args.plan };
+              // Restore previousPlanSnapshot (keyed by submitted path) so that if the
+              // agent resubmits after a restart, the diff can be computed against
+              // the last submitted plan body, not whatever the mutable file now contains.
+              state.previousPlanSnapshot = { path: submittedPath, plan: planBody };
             }
           }
 
@@ -951,7 +970,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // Render accumulated text first if any
           if (accumulatedContent.length > 0) {
-            const textMessage: HarnessMessage = {
+            const textMessage: AgentControllerMessage = {
               ...message,
               content: accumulatedContent,
             };
@@ -998,7 +1017,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
       // Render any remaining text after the last tool call
       if (accumulatedContent.length > 0) {
-        const textMessage: HarnessMessage = {
+        const textMessage: AgentControllerMessage = {
           ...message,
           content: accumulatedContent,
         };
@@ -1020,7 +1039,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
       try {
         await state.session.state.set({ tasks: previousTasksAcc });
       } catch {
-        // Custom harness state schemas may not accept TUI replayed task state.
+        // Custom controller state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.
       }
     }

@@ -22,7 +22,6 @@ export const RESOURCES = [
   'datasets',
   'embedders',
   'experiments',
-  'harness',
   'infrastructure',
   'logs',
   'mcp',
@@ -109,8 +108,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:*': 'embedders:*',
   /** Full access to experiments */
   'experiments:*': 'experiments:*',
-  /** Full access to harness sessions */
-  'harness:*': 'harness:*',
   /** Full access to infrastructure */
   'infrastructure:*': 'infrastructure:*',
   /** Full access to logs */
@@ -199,10 +196,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:read': 'embedders:read',
   /** View experiments */
   'experiments:read': 'experiments:read',
-  /** Execute harness sessions */
-  'harness:execute': 'harness:execute',
-  /** View harness sessions */
-  'harness:read': 'harness:read',
   /** View infrastructure */
   'infrastructure:read': 'infrastructure:read',
   /** View logs */
@@ -373,8 +366,6 @@ export const PERMISSIONS = [
   'datasets:write',
   'embedders:read',
   'experiments:read',
-  'harness:execute',
-  'harness:read',
   'infrastructure:read',
   'logs:read',
   'mcp:execute',
@@ -493,10 +484,6 @@ export const MastraFGAPermissions = {
   EMBEDDERS_READ: 'embedders:read',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
-  /** Execute harness sessions */
-  HARNESS_EXECUTE: 'harness:execute',
-  /** View harness sessions */
-  HARNESS_READ: 'harness:read',
   /** View infrastructure */
   INFRASTRUCTURE_READ: 'infrastructure:read',
   /** View logs */

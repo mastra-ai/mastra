@@ -614,6 +614,36 @@ export interface RunRegistryEntry {
    * allowing them.
    */
   requireToolApproval?: RequireToolApproval;
+  /**
+   * Abort signal for the run. Non-serializable, so it lives only on the
+   * in-process registry; cross-process resumes cannot recover it.
+   *
+   * `DurableAgent.stream()` always installs an internal `AbortController`
+   * here so the result's `abort()` method has something to flip. If the
+   * caller also passed an external `abortSignal`, its `abort` event is
+   * forwarded to the internal controller and both signals end up aborted
+   * together.
+   *
+   * The durable LLM-execution step reads this slot to thread the signal
+   * into `model.doStream({ abortSignal })`, into input-processor runs, and
+   * into the abort short-circuits in the inner and outer catch blocks.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Internal `AbortController` backing `abortSignal`. Owned by the
+   * `DurableAgent` instance — callers should not flip it directly; they
+   * should call `result.abort()` instead, which routes through here.
+   */
+  abortController?: AbortController;
+  /**
+   * Promise tracking the in-flight workflow execution (or resume) for this
+   * run. Resolves once the workflow has fully settled (finished, errored,
+   * suspended-and-persisted, or aborted). Used by `generate()` /
+   * `resumeGenerate()` to make sure a SUSPENDED snapshot is persisted
+   * before they hand control back to the caller. Not part of the public
+   * surface — purely an internal coordination primitive.
+   */
+  workflowExecution?: Promise<unknown>;
 }
 
 /**

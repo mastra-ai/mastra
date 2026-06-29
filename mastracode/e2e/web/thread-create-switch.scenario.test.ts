@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Thread lifecycle: create a new thread, send a message, create a second thread,

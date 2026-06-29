@@ -1,0 +1,106 @@
+import { fireEvent, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { describe, expect, it, vi } from 'vitest';
+
+import { server } from '../../../e2e/web-ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '../../../e2e/web-ui/render';
+import type { DirectoryListing } from '../../shared/api/types';
+import { DirectoryBrowser } from './DirectoryPicker';
+
+const FS_URL = `${TEST_BASE_URL}/api/web/fs/list`;
+
+const rootListing: DirectoryListing = {
+  root: '/projects',
+  path: '/projects',
+  parent: null,
+  entries: [
+    { name: 'alpha', path: '/projects/alpha' },
+    { name: 'beta', path: '/projects/beta' },
+  ],
+};
+
+const alphaListing: DirectoryListing = {
+  root: '/projects',
+  path: '/projects/alpha',
+  parent: '/projects',
+  entries: [{ name: 'src', path: '/projects/alpha/src' }],
+};
+
+function listingFor(path: string | null): DirectoryListing {
+  if (path === '/projects/alpha') return alphaListing;
+  return rootListing;
+}
+
+describe('DirectoryBrowser', () => {
+  describe('when it opens', () => {
+    it('lists the server root', async () => {
+      server.use(
+        http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
+      );
+
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+
+      expect(await screen.findByText('alpha')).toBeInTheDocument();
+      expect(screen.getByText('beta')).toBeInTheDocument();
+    });
+  });
+
+  describe('when a folder is clicked', () => {
+    it('navigates into it and shows its children', async () => {
+      server.use(
+        http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+
+      await user.click(await screen.findByText('alpha'));
+
+      expect(await screen.findByText('src')).toBeInTheDocument();
+      expect(screen.getByText('Up a level')).toBeInTheDocument();
+    });
+  });
+
+  describe('when a folder is double-clicked', () => {
+    it('picks that folder', async () => {
+      server.use(
+        http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
+      );
+
+      const onPick = vi.fn();
+      renderWithProviders(<DirectoryBrowser onPick={onPick} onCancel={vi.fn()} />);
+
+      fireEvent.doubleClick(await screen.findByText('alpha'));
+
+      expect(onPick).toHaveBeenCalledWith('/projects/alpha', 'alpha');
+    });
+  });
+
+  describe('when "Use this folder" is clicked', () => {
+    it('picks the current listing path', async () => {
+      server.use(
+        http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
+      );
+
+      const onPick = vi.fn();
+      const user = userEvent.setup();
+      renderWithProviders(<DirectoryBrowser onPick={onPick} onCancel={vi.fn()} />);
+
+      await screen.findByText('alpha');
+      await user.click(screen.getByRole('button', { name: 'Use this folder' }));
+
+      expect(onPick).toHaveBeenCalledWith('/projects', 'projects');
+    });
+  });
+
+  describe('when listing fails', () => {
+    it('shows an error', async () => {
+      server.use(http.get(FS_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
+
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+
+      expect(await screen.findByText('nope')).toBeInTheDocument();
+    });
+  });
+});

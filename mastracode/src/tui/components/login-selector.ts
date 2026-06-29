@@ -8,7 +8,7 @@ import { theme } from '../theme.js';
 
 /**
  * Interface for auth provider that the selector needs.
- * Can be satisfied by Harness or AuthStorage.
+ * Can be satisfied by AgentController or AuthStorage.
  */
 export interface AuthProviderSource {
   getOAuthProviders(): OAuthProviderInterface[];

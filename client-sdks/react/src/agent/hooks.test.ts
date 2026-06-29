@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItem } from '@mastra/core/signals';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
