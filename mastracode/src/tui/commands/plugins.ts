@@ -169,14 +169,24 @@ async function configurePluginFlow(ctx: SlashCommandContext, plugin: LoadedPlugi
       label: option.label ?? key,
       description: formatConfigDescription(key, option, plugin.configValues?.[key]),
     })),
+    allowCustomResponse: false,
   });
-  if (!selected) return;
+  if (!selected) {
+    showPluginDetail(ctx, plugin);
+    return;
+  }
 
   const entry = entries.find(([key, option]) => selected === (option.label ?? key));
-  if (!entry) return;
+  if (!entry) {
+    showPluginDetail(ctx, plugin);
+    return;
+  }
   const [key, option] = entry;
   const value = await askPluginConfigValue(ctx, plugin, key, option);
-  if (value === undefined) return;
+  if (value === undefined) {
+    await configurePluginFlow(ctx, plugin);
+    return;
+  }
   await ctx.pluginManager.setConfigValue(plugin.id, plugin.scope, key, value);
   ctx.showInfo(`Updated plugin setting ${key}.`);
 }
@@ -190,6 +200,11 @@ function formatConfigDescription(
   return `${option.type} · ${option.description ?? key} · current: ${current}`;
 }
 
+function formatConfigValueQuestion(key: string, option: MastraCodePluginConfigOption): string {
+  const label = option.label ?? key;
+  return option.description ? `${label}\n${theme.fg('dim', option.description)}` : label;
+}
+
 async function askPluginConfigValue(
   ctx: SlashCommandContext,
   plugin: LoadedPlugin,
@@ -199,22 +214,27 @@ async function askPluginConfigValue(
   const current = plugin.configValues?.[key];
   if (option.type === 'boolean') {
     const answer = await askModalQuestion(ctx.state.ui, {
-      question: option.label ?? key,
+      question: formatConfigValueQuestion(key, option),
       options: [
         { label: 'On', description: 'true' },
         { label: 'Off', description: 'false' },
       ],
+      allowCustomResponse: false,
     });
     if (!answer) return undefined;
     return answer === 'On';
   }
 
   if (option.type === 'model') {
-    return askPluginModelValue(ctx, option.label ?? key, typeof current === 'string' ? current : undefined);
+    return askPluginModelValue(
+      ctx,
+      formatConfigValueQuestion(key, option),
+      typeof current === 'string' ? current : undefined,
+    );
   }
 
   const answer = await askModalQuestion(ctx.state.ui, {
-    question: option.label ?? key,
+    question: formatConfigValueQuestion(key, option),
     defaultValue: typeof current === 'string' ? current : undefined,
     allowCustomResponse: true,
     allowEmptyInput: true,
@@ -227,6 +247,17 @@ async function askPluginModelValue(
   title: string,
   currentModelId?: string,
 ): Promise<string | undefined> {
+  const action = await askModalQuestion(ctx.state.ui, {
+    question: title,
+    options: [
+      { label: 'Select model', description: currentModelId ? `current: ${currentModelId}` : 'Choose a specific model' },
+      { label: 'Inherit parent model', description: 'Clear this setting and use the active session model' },
+    ],
+    allowCustomResponse: false,
+  });
+  if (!action) return undefined;
+  if (action === 'Inherit parent model') return '';
+
   const availableModels = await ctx.state.controller.listAvailableModels();
   if (availableModels.length === 0) return undefined;
 

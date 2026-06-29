@@ -329,7 +329,8 @@ export class PluginManager {
     } else {
       config[key] = value;
     }
-    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, { ...record, config }));
+    const nextRecord = { ...record, config: Object.keys(config).length > 0 ? config : undefined };
+    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, nextRecord));
     await this.reload();
   }
 

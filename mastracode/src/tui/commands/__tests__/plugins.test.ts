@@ -140,6 +140,158 @@ describe('handlePluginsCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith('Updated plugin setting prompt.');
   });
 
+  it('returns from plugin config selection to plugin detail on escape', async () => {
+    const plugin = {
+      id: 'acme.foo',
+      name: 'Foo Tools',
+      scope: 'project',
+      source: 'local',
+      specifier: '../foo',
+      enabled: true,
+      status: 'active',
+      path: '../foo',
+      entry: 'src/index.ts',
+      tools: {},
+      toolNames: ['foo_search'],
+      configSchema: { answerModel: { type: 'model', label: 'Answer model' } },
+      configValues: { answerModel: 'openai/broken' },
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => [plugin]),
+      setConfigValue: vi.fn(async () => undefined),
+    };
+    modal.askModalQuestion.mockResolvedValueOnce(null);
+    const ctx = {
+      pluginManager,
+      state: {
+        controller: { listAvailableModels: vi.fn(async () => [{ id: 'model-a', name: 'Model A' }]) },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+    } as any;
+
+    await handlePluginsCommand(ctx, ['acme.foo']);
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    actions.onSelect({ value: 'configure' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(overlay.showModalOverlay).toHaveBeenCalledTimes(2);
+    expect(pluginManager.setConfigValue).not.toHaveBeenCalled();
+  });
+
+  it('returns from a nested plugin config value view to config selection on escape', async () => {
+    const plugin = {
+      id: 'acme.foo',
+      name: 'Foo Tools',
+      scope: 'project',
+      source: 'local',
+      specifier: '../foo',
+      enabled: true,
+      status: 'active',
+      path: '../foo',
+      entry: 'src/index.ts',
+      tools: {},
+      toolNames: ['foo_search'],
+      configSchema: { answerModel: { type: 'model', label: 'Answer model' } },
+      configValues: { answerModel: 'openai/broken' },
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => [plugin]),
+      setConfigValue: vi.fn(async () => undefined),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Answer model')
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    const ctx = {
+      pluginManager,
+      state: {
+        controller: { listAvailableModels: vi.fn(async () => [{ id: 'model-a', name: 'Model A' }]) },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+    } as any;
+
+    await handlePluginsCommand(ctx, ['acme.foo']);
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    actions.onSelect({ value: 'configure' });
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(
+      3,
+      ctx.state.ui,
+      expect.objectContaining({ question: 'Configure Foo Tools:' }),
+    );
+    expect(pluginManager.setConfigValue).not.toHaveBeenCalled();
+  });
+
+  it('clears plugin model settings to inherit the parent model', async () => {
+    const plugin = {
+      id: 'acme.foo',
+      name: 'Foo Tools',
+      scope: 'project',
+      source: 'local',
+      specifier: '../foo',
+      enabled: true,
+      status: 'active',
+      path: '../foo',
+      entry: 'src/index.ts',
+      tools: {},
+      toolNames: ['foo_search'],
+      configSchema: {
+        answerModel: {
+          type: 'model',
+          label: 'Answer model',
+          description: 'Model mastra_expert uses to answer questions against the Alexandria repo.',
+        },
+      },
+      configValues: { answerModel: 'openai/broken' },
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => [plugin]),
+      setConfigValue: vi.fn(async () => undefined),
+    };
+    modal.askModalQuestion.mockResolvedValueOnce('Answer model').mockResolvedValueOnce('Inherit parent model');
+    const ctx = {
+      pluginManager,
+      authStorage: {},
+      state: {
+        controller: { listAvailableModels: vi.fn(async () => [{ id: 'model-a', name: 'Model A' }]) },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+    } as any;
+
+    await handlePluginsCommand(ctx, ['acme.foo']);
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    actions.onSelect({ value: 'configure' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(
+      1,
+      ctx.state.ui,
+      expect.objectContaining({ allowCustomResponse: false }),
+    );
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(
+      2,
+      ctx.state.ui,
+      expect.objectContaining({
+        question: expect.stringContaining('Model mastra_expert uses to answer questions against the Alexandria repo.'),
+        allowCustomResponse: false,
+      }),
+    );
+    expect(pluginManager.setConfigValue).toHaveBeenCalledWith('acme.foo', 'project', 'answerModel', '');
+    expect(ctx.state.controller.listAvailableModels).not.toHaveBeenCalled();
+    expect(ctx.showInfo).toHaveBeenCalledWith('Updated plugin setting answerModel.');
+  });
+
   it('asks for an entry path and retries local install when auto-detection fails', async () => {
     const entryError = new Error('Could not find a plugin entry file. Tried: src/index.ts, index.ts');
     const pluginManager = {

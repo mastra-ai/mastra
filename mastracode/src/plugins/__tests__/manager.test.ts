@@ -97,6 +97,13 @@ describe('PluginManager', () => {
     expect(
       loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins['acme.config']?.config,
     ).toEqual({ answerModel: 'chosen-model' });
+
+    await manager.setConfigValue('acme.config', 'project', 'answerModel', '');
+
+    expect(manager.getPluginTools().config_tool?.description).toBe('default-model');
+    expect(
+      loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins['acme.config']?.config,
+    ).toBeUndefined();
   });
 
   it('hot reloads local plugin source changes into the stable tools object', async () => {
