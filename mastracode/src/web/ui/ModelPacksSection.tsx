@@ -1,16 +1,13 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
-import { useEffect, useState } from 'react';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
+import { useState } from 'react';
 
+import {
+  useActivateModelPack,
+  useModelPacksQuery,
+  useRemoveModelPack,
+  useSaveModelPack,
+} from '../../shared/hooks/use-model-packs';
 import { CheckIcon, PlusIcon } from './icons';
-
-interface ModelPackInfo {
-  id: string;
-  name: string;
-  description: string;
-  models: { build: string; plan: string; fast: string };
-  custom: boolean;
-  active: boolean;
-}
 
 interface DraftPack {
   name: string;
@@ -28,75 +25,45 @@ const EMPTY_DRAFT: DraftPack = { name: '', build: '', plan: '', fast: '' };
  * session's per-mode models — so it needs the active project's resourceId.
  */
 export function ModelPacksSection({
-  baseUrl = '',
   resourceId,
   models,
 }: {
-  baseUrl?: string;
   resourceId?: string;
-  models: HarnessAvailableModel[];
+  models: AgentControllerAvailableModel[];
 }) {
-  const [packs, setPacks] = useState<ModelPackInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const packsQuery = useModelPacksQuery(resourceId);
+  const activateMutation = useActivateModelPack(resourceId);
+  const removeMutation = useRemoveModelPack();
+  const saveMutation = useSaveModelPack();
+
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftPack | null>(null);
 
-  const load = async () => {
-    try {
-      const qs = resourceId ? `?resourceId=${encodeURIComponent(resourceId)}` : '';
-      const res = await fetch(`${baseUrl}/api/web/config/model-packs${qs}`);
-      if (!res.ok) throw new Error(`Failed to load model packs (${res.status})`);
-      const data = (await res.json()) as { packs: ModelPackInfo[] };
-      setPacks(data.packs ?? []);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [baseUrl, resourceId]);
+  const packs = packsQuery.data?.packs ?? [];
+  const loading = packsQuery.isPending;
+  const busy = activateMutation.isPending || removeMutation.isPending || saveMutation.isPending;
+  const queryError = packsQuery.error instanceof Error ? packsQuery.error.message : null;
+  const error = draftError ?? queryError;
 
   const activate = async (id: string) => {
     if (!resourceId) {
-      setError('Open a project first to activate a pack.');
+      setDraftError('Open a project first to activate a pack.');
       return;
     }
-    setBusy(true);
+    setDraftError(null);
     try {
-      const res = await fetch(`${baseUrl}/api/web/config/model-packs/${encodeURIComponent(id)}/activate`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ resourceId }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Failed to activate pack (${res.status})`);
-      }
-      await load();
+      await activateMutation.mutateAsync({ id });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setDraftError(e instanceof Error ? e.message : String(e));
     }
   };
 
   const remove = async (id: string) => {
-    setBusy(true);
+    setDraftError(null);
     try {
-      const res = await fetch(`${baseUrl}/api/web/config/model-packs/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error(`Failed to remove pack (${res.status})`);
-      await load();
+      await removeMutation.mutateAsync({ id });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setDraftError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -104,26 +71,15 @@ export function ModelPacksSection({
     if (!draft) return;
     const name = draft.name.trim();
     if (!name || !draft.build || !draft.plan || !draft.fast) {
-      setError('Name and a model for each of build, plan and fast are required.');
+      setDraftError('Name and a model for each of build, plan and fast are required.');
       return;
     }
-    setBusy(true);
+    setDraftError(null);
     try {
-      const res = await fetch(`${baseUrl}/api/web/config/model-packs`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name, models: { build: draft.build, plan: draft.plan, fast: draft.fast } }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Failed to save pack (${res.status})`);
-      }
+      await saveMutation.mutateAsync({ name, models: { build: draft.build, plan: draft.plan, fast: draft.fast } });
       setDraft(null);
-      await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      setDraftError(e instanceof Error ? e.message : String(e));
     }
   };
 

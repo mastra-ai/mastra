@@ -6,7 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
-import type { Harness, HarnessMessage, Session } from '@mastra/core/harness';
+import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import type { MastraCodeAnalytics } from '../analytics.js';
@@ -89,10 +89,10 @@ export function getGithubPrSubscriptionsFromMetadata(
 // =============================================================================
 
 export interface MastraTUIOptions {
-  /** The harness instance to control */
-  harness: Harness<any>;
+  /** The controller instance */
+  controller: AgentController<any>;
 
-  /** The session created from the harness that all work runs through */
+  /** The session created from the controller that all work runs through */
   session: Session<any>;
 
   /** Hook manager for session lifecycle hooks */
@@ -108,8 +108,8 @@ export interface MastraTUIOptions {
   mcpManager?: McpManager;
 
   /**
-   * @deprecated Workspace is now obtained from the Harness.
-   * Configure workspace via HarnessConfig.workspace instead.
+   * @deprecated Workspace is now obtained from the AgentController.
+   * Configure workspace via AgentControllerConfig.workspace instead.
    * Kept as fallback for backward compatibility.
    */
   workspace?: Workspace;
@@ -142,7 +142,7 @@ export interface MastraTUIOptions {
 
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
-  harness: Harness<any>;
+  controller: AgentController<any>;
   session: Session<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
@@ -166,7 +166,7 @@ export interface TUIState {
   isInitialized: boolean;
   gradientAnimator?: GradientAnimator;
   streamingComponent?: AssistantMessageComponent;
-  streamingMessage?: HarnessMessage;
+  streamingMessage?: AgentControllerMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
   /** Task tools are hidden on success but promoted to normal tool boxes on errors */
   pendingTaskToolIds: Set<string>;
@@ -223,8 +223,8 @@ export interface TUIState {
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: Component;
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
-  /** Previous plan snapshot for diff display on resubmission */
-  previousPlanSnapshot?: { title: string; plan: string };
+  /** Previous plan snapshot (keyed by plan file path) for diff display on resubmission */
+  previousPlanSnapshot?: { path: string; plan: string };
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -291,6 +291,12 @@ export interface TUIState {
   lastCtrlCTime: number;
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */
   userInitiatedAbort: boolean;
+  /**
+   * Set when the run is aborted because the user clicked "Request Changes" on a
+   * plan approval. Suppresses the "Interrupted" abort UI so the rejection ends
+   * cleanly and the user can type revision feedback.
+   */
+  planRejectionAbort: boolean;
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   unsubscribe?: () => void;
@@ -323,7 +329,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editor = new CustomEditor(ui, getEditorTheme());
   const result: TUIState = {
     // Core dependencies
-    harness: options.harness,
+    controller: options.controller,
     session: options.session,
     options,
     hookManager: options.hookManager,
@@ -401,6 +407,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
+    planRejectionAbort: false,
   };
   editor.getModeColor = () => {
     if (result.activeGoalJudge) {

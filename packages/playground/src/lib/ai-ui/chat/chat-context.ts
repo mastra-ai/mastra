@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { TaskItem } from '@mastra/core/harness';
 import type { CoreUserMessage } from '@mastra/core/llm';
+import type { TaskItem } from '@mastra/core/signals';
 import { createContext, useContext } from 'react';
 
 /**

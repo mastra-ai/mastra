@@ -766,6 +766,34 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   ]),
 );
 
+const PLAYGROUND_UI_ROOT_IMPORT_MESSAGE =
+  'Import from an exact @mastra/playground-ui subpath instead of the root barrel.';
+
+const restrictedPlaygroundUiRootSelectors = [
+  {
+    selector: 'ImportDeclaration[source.value="@mastra/playground-ui"]',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector: 'ExportNamedDeclaration[source.value="@mastra/playground-ui"]',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector: 'ExportAllDeclaration[source.value="@mastra/playground-ui"]',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="vi"][callee.property.name="mock"] > Literal[value="@mastra/playground-ui"]:first-child',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+  {
+    selector:
+      'CallExpression[callee.object.name="vi"][callee.property.name="importActual"] > Literal[value="@mastra/playground-ui"]:first-child',
+    message: PLAYGROUND_UI_ROOT_IMPORT_MESSAGE,
+  },
+];
+
 // Enforce the playground testing contract (packages/playground/AGENTS.md + the
 // `playground-msw-tests` skill): drive the real @mastra/client-js + React Query
 // stack and ONLY mock the network. Mocking our own data hooks/services/auth
@@ -797,6 +825,104 @@ const prohibitedMockModulePatterns = [
   '^@mastra\\/react$',
 ];
 
+// Enforce the Playwright E2E BDD shape, including modifier forms like `test.skip('...')`.
+const E2E_BDD_MESSAGE =
+  "E2E BDD: every test()/it() must live inside a test.describe('when …') precondition block. " +
+  "Outer test.describe = the unit, inner test.describe('when …') = ONE precondition, each test = ONE outcome. " +
+  'See the e2e-tests-studio skill.';
+
+const testFunctionNames = new Set(['test', 'it']);
+const testDeclarationModifiers = new Set(['skip', 'only', 'fixme', 'fail', 'slow']);
+
+function isStaticTestTitle(node) {
+  return (
+    (node.type === 'Literal' && typeof node.value === 'string') ||
+    (node.type === 'TemplateLiteral' && node.quasis.length >= 1)
+  );
+}
+
+function isTestDeclarationCall(node) {
+  if (node.type !== 'CallExpression') return false;
+
+  const callee = node.callee;
+  if (callee.type === 'Identifier' && testFunctionNames.has(callee.name)) return true;
+
+  if (
+    callee.type === 'MemberExpression' &&
+    callee.property.type === 'Identifier' &&
+    testDeclarationModifiers.has(callee.property.name) &&
+    callee.object.type === 'Identifier' &&
+    testFunctionNames.has(callee.object.name)
+  ) {
+    // Guard-style annotations like `test.skip(true, 'reason')` do not declare test cases.
+    return isStaticTestTitle(node.arguments[0]);
+  }
+
+  return false;
+}
+
+/** True when a CallExpression is a `describe(...)`, `test.describe(...)`, or `it.describe(...)` call. */
+function isDescribeCall(node) {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee;
+  if (callee.type === 'Identifier' && callee.name === 'describe') return true;
+  if (
+    callee.type === 'MemberExpression' &&
+    callee.property.type === 'Identifier' &&
+    callee.property.name === 'describe' &&
+    callee.object.type === 'Identifier' &&
+    (callee.object.name === 'test' || callee.object.name === 'it')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Extract the leading static text of a describe() first argument, or null.
+ * For template literals with interpolation (e.g. `when the ${name} …`) we only
+ * need the leading static quasi to verify the title starts with "when".
+ */
+function describeTitle(node) {
+  const arg = node.arguments[0];
+  if (!arg) return null;
+  if (arg.type === 'Literal' && typeof arg.value === 'string') return arg.value;
+  if (arg.type === 'TemplateLiteral' && arg.quasis.length >= 1) return arg.quasis[0].value.cooked;
+  return null;
+}
+
+const e2eBddPlugin = {
+  rules: {
+    'test-needs-when-describe': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'Require test()/it() to be nested in a describe("when …") block.' },
+        schema: [],
+      },
+      create(context) {
+        return {
+          CallExpression(node) {
+            if (!isTestDeclarationCall(node)) return;
+            // Walk ancestors to find the nearest enclosing describe.
+            const ancestors = context.sourceCode.getAncestors(node);
+            let nearestDescribe = null;
+            for (let i = ancestors.length - 1; i >= 0; i--) {
+              if (isDescribeCall(ancestors[i])) {
+                nearestDescribe = ancestors[i];
+                break;
+              }
+            }
+            const title = nearestDescribe && describeTitle(nearestDescribe);
+            if (!nearestDescribe || title == null || !/^when\b/.test(title)) {
+              context.report({ node, message: E2E_BDD_MESSAGE });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 const restrictedTestMockSelectors = [
   {
     selector: prohibitedMockModulePatterns
@@ -819,7 +945,19 @@ const restrictedTestMockSelectors = [
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
-  { ignores: ['e2e/**'] },
+  // Only the Playwright spec files under e2e/tests are linted (for BDD
+  // structure enforcement below). The kitchen-sink app, test utils, config,
+  // scripts, and build output under e2e remain unlinted as before.
+  {
+    ignores: [
+      'e2e/kitchen-sink/**',
+      'e2e/scripts/**',
+      'e2e/playwright-report/**',
+      'e2e/test-results/**',
+      'e2e/playwright.config.ts',
+      'e2e/tests/__utils__/**',
+    ],
+  },
   ...config,
   {
     plugins: {
@@ -830,7 +968,11 @@ export default [
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      'no-restricted-syntax': ['error', ...restrictedPlaygroundUiBarrelImportSpecifiers],
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedPlaygroundUiRootSelectors,
+        ...restrictedPlaygroundUiBarrelImportSpecifiers,
+      ],
     },
   },
   {
@@ -838,9 +980,33 @@ export default [
     rules: {
       'no-restricted-syntax': [
         'error',
+        ...restrictedPlaygroundUiRootSelectors,
         ...restrictedPlaygroundUiBarrelImportSpecifiers,
         ...restrictedTestMockSelectors,
       ],
+    },
+  },
+  {
+    // Playwright E2E specs: enforce the BDD structure described in the
+    // e2e-tests-studio skill (every test()/it() nested in a describe('when …')).
+    // These files are not part of the type-aware tsconfig program, so disable
+    // the TypeScript project service here and only run the syntactic BDD rule.
+    files: ['e2e/tests/**/*.spec.{js,jsx,ts,tsx}'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: false,
+      },
+    },
+    plugins: {
+      'e2e-bdd': e2eBddPlugin,
+    },
+    rules: {
+      // These specs are not part of a type-aware tsconfig program, so disable
+      // the @typescript-eslint rules that require type information.
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+      'e2e-bdd/test-needs-when-describe': 'error',
     },
   },
 ];

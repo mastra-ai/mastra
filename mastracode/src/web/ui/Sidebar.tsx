@@ -1,4 +1,4 @@
-import type { HarnessThreadInfo } from '@mastra/client-js';
+import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { useEffect, useRef, useState } from 'react';
 
 import { CloseIcon, EllipsisIcon, FolderIcon, PlusIcon, Wordmark } from './icons';
@@ -26,7 +26,7 @@ interface SidebarProps {
   activeProjectId: string | null;
   /** Open the app-level Projects modal (add / manage / switch). */
   onManageProjects: () => void;
-  threads: HarnessThreadInfo[];
+  threads: AgentControllerThreadInfo[];
   activeThreadId?: string;
   onSwitchThread: (threadId: string) => void;
   onCreateThread: (title?: string) => void;
@@ -70,7 +70,7 @@ export function Sidebar({
     };
   }, [menuFor]);
 
-  const startRename = (t: HarnessThreadInfo) => {
+  const startRename = (t: AgentControllerThreadInfo) => {
     setMenuFor(null);
     setRenamingId(t.id);
     setRenameDraft(t.title ?? '');

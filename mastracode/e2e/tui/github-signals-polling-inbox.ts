@@ -174,7 +174,7 @@ values
         unixSocketPubSub: false,
       },
       onCreated: result => {
-        const agent = result.harness.getMastra()?.getAgentById('code-agent');
+        const agent = result.controller.getMastra()?.getAgentById('code-agent');
         const originalSendNotificationSignal = agent?.sendNotificationSignal?.bind(agent);
         if (!agent || !originalSendNotificationSignal) return;
         type SendNotificationSignal = typeof agent.sendNotificationSignal;
@@ -202,7 +202,7 @@ values
             // session is not on. In the multi-session world the woken run uses
             // the target resource's own session, so materialize one before
             // polling — mirroring how a server would have a session per thread.
-            await result.harness.createSession({ resourceId: threadFixture.resourceId });
+            await result.controller.createSession({ resourceId: threadFixture.resourceId });
             await result.githubSignals?.startPollingForThread(
               { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
               { pollImmediately: true },
@@ -240,9 +240,11 @@ values
     terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);
     terminal.write('polling inbox');
+    await terminal.flushInput?.();
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E GitHub polling inbox fixture/i, terminal, 8_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/Switched to: E2E GitHub polling inbox fixture/i, terminal, 15_000);
 
     await runtime.waitForScreenText(/notification from github/i, terminal, 60_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 60_000);

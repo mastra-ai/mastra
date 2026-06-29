@@ -1,4 +1,3 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -73,19 +72,17 @@ vi.mock('../../context', async () => {
   };
 });
 
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
+vi.mock('@mastra/playground-ui/resize/collapsible-panel', () => ({
+  CollapsiblePanel: ({ id, className, children }: { id?: string; className?: string; children: ReactNode }) => (
+    <aside data-testid={`collapsible-${id}`} className={className}>
+      {children}
+    </aside>
+  ),
+}));
 
-  return {
-    ...actual,
-    CollapsiblePanel: ({ id, className, children }: { id?: string; className?: string; children: ReactNode }) => (
-      <aside data-testid={`collapsible-${id}`} className={className}>
-        {children}
-      </aside>
-    ),
-    PanelSeparator: () => <div data-testid="panel-separator" />,
-  };
-});
+vi.mock('@mastra/playground-ui/resize/separator', () => ({
+  PanelSeparator: () => <div data-testid="panel-separator" />,
+}));
 
 afterEach(() => {
   cleanup();

@@ -2,11 +2,14 @@
 
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { SpanDataPanelView, TraceDataPanelView, useSpanDetail, useTraceSpanNavigation } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
+import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
+import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';

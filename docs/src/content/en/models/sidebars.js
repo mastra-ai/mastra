@@ -618,6 +618,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/subconscious',
+          label: 'Subconscious',
+        },
+        {
+          type: 'doc',
           id: 'providers/submodel',
           label: 'submodel',
         },
@@ -640,6 +645,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/the-grid-ai',
           label: 'The Grid AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tinfoil',
+          label: 'Tinfoil',
         },
         {
           type: 'doc',

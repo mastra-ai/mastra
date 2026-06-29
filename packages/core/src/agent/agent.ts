@@ -47,7 +47,6 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import { isWorkingMemoryToolName } from '../memory/working-memory-utils';
 import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
 import {
   createNotificationSignal,
@@ -55,7 +54,7 @@ import {
   summarizeNotifications,
 } from '../notifications/signals';
 import type { SendNotificationSignalInput } from '../notifications/types';
-import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
+import type { DefinitionSource, TracingProperties, ObservabilityContext, TracingPolicy } from '../observability';
 import {
   EntityType,
   InternalSpans,
@@ -177,6 +176,50 @@ import { createPrepareStreamWorkflow } from './workflows/prepare-stream';
 import type { AgentCapabilities } from './workflows/prepare-stream/schema';
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
+
+const createSubAgentInputSchema = () =>
+  z.object({
+    prompt: z.string().describe('The prompt to send to the agent'),
+    // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
+    threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
+    resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
+    instructions: z
+      .string()
+      .nullish()
+      .describe(
+        'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
+      ),
+    maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+    // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
+    // to return a proper llm response
+  });
+
+const createSubAgentOutputSchema = () =>
+  z.object({
+    text: z.string().describe('The response from the agent'),
+    subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
+    subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
+    subAgentToolResults: z
+      .array(
+        z.object({
+          toolName: z.string().describe('The name of the tool'),
+          toolCallId: z.string().describe('The ID of the tool call'),
+          result: z.unknown().describe('The result of the tool call'),
+          args: z.unknown().describe('The arguments of the tool call').optional(),
+          isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
+        }),
+      )
+      .describe("The results from the agent's tool calls")
+      .optional(),
+  });
+
+type SubAgentToolSchemas = {
+  inputSchema: StandardSchemaWithJSON<SubAgentToolInput>;
+  outputSchema: StandardSchemaWithJSON<SubAgentToolOutput>;
+};
+
+type SubAgentToolInput = z.infer<ReturnType<typeof createSubAgentInputSchema>>;
+type SubAgentToolOutput = z.infer<ReturnType<typeof createSubAgentOutputSchema>>;
 
 type ModelFallbacks = {
   id: string;
@@ -416,6 +459,7 @@ export class Agent<
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
+  #subAgentToolSchemas?: SubAgentToolSchemas;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -983,7 +1027,7 @@ export class Agent<
 
   /**
    * Returns true if this agent was configured with its own browser instance.
-   * Used by Harness to avoid overwriting agent-level browser configuration.
+   * Used by AgentController to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
     return this.#hasExplicitBrowser;
@@ -2229,6 +2273,17 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Returns the tracing policy configured at agent construction time.
+   *
+   * Exposed so out-of-process consumers (e.g. the durable agent runner) can
+   * forward the same policy onto AGENT_RUN spans without reaching into private
+   * fields.
+   */
+  public getTracingPolicy(): TracingPolicy | undefined {
+    return this.#options?.tracingPolicy;
   }
 
   /**
@@ -4318,6 +4373,20 @@ export class Agent<
       .filter((message): message is MastraDBMessage => Boolean(message));
   }
 
+  private getSubAgentToolSchemas(): SubAgentToolSchemas {
+    if (!this.#subAgentToolSchemas) {
+      const inputSchema = createSubAgentInputSchema();
+      const outputSchema = createSubAgentOutputSchema();
+
+      this.#subAgentToolSchemas = {
+        inputSchema: toStandardSchema(inputSchema),
+        outputSchema: toStandardSchema(outputSchema),
+      };
+    }
+
+    return this.#subAgentToolSchemas;
+  }
+
   /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
@@ -4348,43 +4417,11 @@ export class Agent<
 
     if (Object.keys(agents).length > 0) {
       for (const [agentName, agent] of Object.entries(agents)) {
-        const agentInputSchema = z.object({
-          prompt: z.string().describe('The prompt to send to the agent'),
-          // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
-          threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
-          resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
-          instructions: z
-            .string()
-            .nullish()
-            .describe(
-              'Additional instructions to append to the agent instructions. Only provide if you have specific guidance beyond what the agent already knows. Leave empty in most cases.',
-            ),
-          maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
-          // using minimum of 3 to ensure if the agent has a tool call, the llm gets executed again after the tool call step, using the tool call result
-          // to return a proper llm response
-        });
-
-        const agentOutputSchema = z.object({
-          text: z.string().describe('The response from the agent'),
-          subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
-          subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
-          subAgentToolResults: z
-            .array(
-              z.object({
-                toolName: z.string().describe('The name of the tool'),
-                toolCallId: z.string().describe('The ID of the tool call'),
-                result: z.unknown().describe('The result of the tool call'),
-                args: z.unknown().describe('The arguments of the tool call').optional(),
-                isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
-              }),
-            )
-            .describe("The results from the agent's tool calls")
-            .optional(),
-        });
+        const { inputSchema: agentInputSchema, outputSchema: agentOutputSchema } = this.getSubAgentToolSchemas();
 
         const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
           ? undefined
-          : (output: z.infer<typeof agentOutputSchema>) => ({
+          : (output: SubAgentToolOutput) => ({
               type: 'text' as const,
               value: output.text,
             });
@@ -4398,7 +4435,7 @@ export class Agent<
           ...(toModelOutput ? { toModelOutput } : {}),
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
-          execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+          execute: async (inputData: SubAgentToolInput, context) => {
             const invocationActor = getInvocationActor(context);
             const startTime = Date.now();
             const toolCallId = context?.agent?.toolCallId || randomUUID();
@@ -5551,6 +5588,8 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
+    delegation?: DelegationConfig;
+    methodType?: AgentMethodType;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -5581,7 +5620,10 @@ export class Agent<
       requestContext,
       memoryConfig: options.memoryConfig ?? mergedMemory?.options,
       autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
-      methodType: 'stream',
+      // Use the deep-merged delegation so default callbacks (e.g. messageFilter)
+      // survive when callers pass a partial per-call delegation override.
+      delegation: mergedOptions.delegation,
+      methodType: options.methodType ?? 'stream',
     });
   }
 
@@ -6723,14 +6765,9 @@ export class Agent<
       resourceId,
     });
 
-    const messageListResponses = messageList.get.response.aiV4.core();
-
-    const usedWorkingMemory = messageListResponses.some(
-      m => m.role === 'tool' && m.content.some(c => isWorkingMemoryToolName(c.toolName)),
-    );
-    // working memory updates the thread, so we need to get the latest thread if we used it
+    // re-read the latest thread so metadata written mid-run (working memory, processors) isn't overwritten
     const memory = await this.getMemory({ requestContext });
-    const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
+    const thread = (!readOnlyMemory && threadId ? await memory?.getThreadById({ threadId }) : undefined) ?? threadAfter;
 
     // Add LLM response messages to the list
     // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
@@ -6808,13 +6845,17 @@ export class Agent<
             ).then(
               async title => {
                 if (title) {
-                  await memory.createThread({
-                    threadId: thread.id,
-                    resourceId,
-                    memoryConfig,
-                    title,
-                    metadata: thread.metadata,
-                  });
+                  try {
+                    await memory.createThread({
+                      threadId: thread.id,
+                      resourceId,
+                      memoryConfig,
+                      title,
+                      metadata: thread.metadata,
+                    });
+                  } catch (error) {
+                    this.logger.error('Error persisting generated title:', error);
+                  }
                 }
               },
               error => {
@@ -7447,7 +7488,7 @@ export class Agent<
       const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
         this as Agent<any, any, any, any>,
         signal,
-        target,
+        { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'low' ? 'persist' : 'wake' } },
         this.getPubSub(),
       );
       let delivered: SendAgentSignalAccepted<OUTPUT>;
@@ -7499,6 +7540,20 @@ export class Agent<
     }
 
     return results;
+  }
+
+  /**
+   * @experimental Agent notification signal APIs are experimental and may change in a future release.
+   *
+   * Resolves stream options for deferred notification dispatch. Called by the
+   * notification dispatcher so idle-thread wakes carry the requestContext and
+   * model configuration the agent needs.
+   */
+  getNotificationStreamOptions(target: {
+    resourceId: string;
+    threadId: string;
+  }): Record<string, unknown> | Promise<Record<string, unknown> | undefined> | undefined {
+    return this.#notifications?.getNotificationStreamOptions?.(target);
   }
 
   /**

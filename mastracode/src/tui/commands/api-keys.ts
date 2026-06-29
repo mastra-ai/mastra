@@ -80,7 +80,7 @@ function buildItems(providers: ProviderInfo[]): SelectItem[] {
 }
 
 export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<void> {
-  let models = await ctx.state.harness.listAvailableModels();
+  let models = await ctx.state.controller.listAvailableModels();
   let providers = getProviderList(ctx, models);
 
   if (providers.length === 0) {
@@ -151,8 +151,8 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
             if (info.envVar && process.env[info.envVar] === storedKey) {
               delete process.env[info.envVar];
             }
-            ctx.state.harness.invalidateAvailableModelsCache();
-            models = await ctx.state.harness.listAvailableModels();
+            ctx.state.controller.invalidateAvailableModelsCache();
+            models = await ctx.state.controller.listAvailableModels();
             providers = getProviderList(ctx, models);
             ctx.showInfo(`API key removed for ${info.provider}`);
             rebuildList();

@@ -12,7 +12,7 @@ function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): 
   } as unknown as AuthStorage;
 }
 
-function makeHarness(models: { provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }[]) {
+function makeAgentController(models: { provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }[]) {
   return { listAvailableModels: async () => models };
 }
 
@@ -28,7 +28,7 @@ describe('listProviders', () => {
     const auth = makeAuthStorage({ loggedIn: ['anthropic'], storedKeys: ['anthropic'] });
 
     const list = await listProviders(
-      makeHarness([{ provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      makeAgentController([{ provider: 'anthropic', hasApiKey: true, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
       auth,
     );
 
@@ -40,7 +40,7 @@ describe('listProviders', () => {
     const auth = makeAuthStorage({ loggedIn: ['openai-codex'] });
 
     const list = await listProviders(
-      makeHarness([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
+      makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
       auth,
     );
 
@@ -51,7 +51,7 @@ describe('listProviders', () => {
     const auth = makeAuthStorage({ storedKeys: ['anthropic'] });
 
     const list = await listProviders(
-      makeHarness([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
       auth,
     );
 
@@ -63,7 +63,7 @@ describe('listProviders', () => {
     const auth = makeAuthStorage({});
 
     const list = await listProviders(
-      makeHarness([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
       auth,
     );
 
@@ -75,7 +75,7 @@ describe('listProviders', () => {
     const auth = makeAuthStorage({});
 
     const list = await listProviders(
-      makeHarness([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
+      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
       auth,
     );
 

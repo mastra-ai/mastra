@@ -21,7 +21,7 @@ function createMockState() {
       thread: { detachFromCurrent: vi.fn() },
       displayState: { get: vi.fn(() => ({ modifiedFiles: new Map([['f', true]]) })) },
     },
-    harness: {
+    controller: {
       abort: vi.fn(),
       session: {
         thread: { detachFromCurrent: vi.fn() },
