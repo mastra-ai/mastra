@@ -91,7 +91,7 @@ Grants are intentionally in-memory and reset when the session restarts. See [Too
 
 ```typescript
 if (agentController.session.run.isRunning()) {
-  // show a stop button
+	// show a stop button
 }
 
 // Abort the active run (AgentController orchestration clears related state)
@@ -132,9 +132,9 @@ const snapshot = agentController.session.displayState.get()
 
 // Re-render from the snapshot on every change
 agentController.subscribe(event => {
-  if (event.type === 'display_state_changed') {
-    render(agentController.session.displayState.get())
-  }
+	if (event.type === 'display_state_changed') {
+		render(agentController.session.displayState.get())
+	}
 })
 ```
 

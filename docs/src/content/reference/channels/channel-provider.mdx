@@ -16,12 +16,12 @@ import { Mastra } from '@mastra/core/mastra'
 import { SlackProvider } from '@mastra/slack'
 
 export const mastra = new Mastra({
-  channels: {
-    slack: new SlackProvider({
-      refreshToken: process.env.SLACK_REFRESH_TOKEN!,
-      baseUrl: process.env.MASTRA_BASE_URL,
-    }),
-  },
+	channels: {
+		slack: new SlackProvider({
+			refreshToken: process.env.SLACK_REFRESH_TOKEN!,
+			baseUrl: process.env.MASTRA_BASE_URL,
+		}),
+	},
 })
 ```
 
@@ -33,12 +33,12 @@ The provider's `baseUrl` is the public URL the platform sends webhooks and event
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description:
-      "Unique identifier for this channel type, for example 'slack' or 'discord'. Used as the key when routing events and looking the provider up from Mastra.",
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description:
+			"Unique identifier for this channel type, for example 'slack' or 'discord'. Used as the key when routing events and looking the provider up from Mastra.",
+	},
 ]}
 />
 
@@ -46,52 +46,52 @@ The provider's `baseUrl` is the public URL the platform sends webhooks and event
 
 <PropertiesTable
   content={[
-  {
-    name: 'getRoutes',
-    type: '() => ApiRoute[]',
-    description:
-      "Returns the API routes for this channel (OAuth, webhooks, events). These are merged into the server's apiRoutes automatically.",
-  },
-  {
-    name: 'initialize',
-    type: '() => Promise<void>',
-    isOptional: true,
-    description:
-      'Called during Mastra initialization after all agents are registered. Use it for async setup such as restoring active installations. Does not provision new apps.',
-  },
-  {
-    name: 'configure',
-    type: '(credentials: Record<string, unknown> | null) => void | Promise<void>',
-    isOptional: true,
-    description:
-      'Provides or clears platform credentials at runtime. Pass null to clear credentials and delete stored tokens.',
-  },
-  {
-    name: 'getInfo',
-    type: '() => ChannelPlatformInfo',
-    isOptional: true,
-    description:
-      'Returns discovery metadata for the editor UI: platform name, configuration status, and the connect options schema.',
-  },
-  {
-    name: 'connect',
-    type: '(agentId: string, options?: Record<string, unknown>) => Promise<ChannelConnectResult>',
-    isOptional: true,
-    description:
-      'Connects an agent to the platform. Returns a discriminated result describing the authorization flow required to finish the connection.',
-  },
-  {
-    name: 'disconnect',
-    type: '(agentId: string) => Promise<void>',
-    isOptional: true,
-    description: 'Disconnects an agent from the platform. Deletes the platform app and cleans up stored state.',
-  },
-  {
-    name: 'listInstallations',
-    type: '() => Promise<ChannelInstallationInfo[]>',
-    isOptional: true,
-    description: 'Lists active installations for this platform. Returns public info only, never secrets.',
-  },
+	{
+		name: 'getRoutes',
+		type: '() => ApiRoute[]',
+		description:
+			"Returns the API routes for this channel (OAuth, webhooks, events). These are merged into the server's apiRoutes automatically.",
+	},
+	{
+		name: 'initialize',
+		type: '() => Promise<void>',
+		isOptional: true,
+		description:
+			'Called during Mastra initialization after all agents are registered. Use it for async setup such as restoring active installations. Does not provision new apps.',
+	},
+	{
+		name: 'configure',
+		type: '(credentials: Record<string, unknown> | null) => void | Promise<void>',
+		isOptional: true,
+		description:
+			'Provides or clears platform credentials at runtime. Pass null to clear credentials and delete stored tokens.',
+	},
+	{
+		name: 'getInfo',
+		type: '() => ChannelPlatformInfo',
+		isOptional: true,
+		description:
+			'Returns discovery metadata for the editor UI: platform name, configuration status, and the connect options schema.',
+	},
+	{
+		name: 'connect',
+		type: '(agentId: string, options?: Record<string, unknown>) => Promise<ChannelConnectResult>',
+		isOptional: true,
+		description:
+			'Connects an agent to the platform. Returns a discriminated result describing the authorization flow required to finish the connection.',
+	},
+	{
+		name: 'disconnect',
+		type: '(agentId: string) => Promise<void>',
+		isOptional: true,
+		description: 'Disconnects an agent from the platform. Deletes the platform app and cleans up stored state.',
+	},
+	{
+		name: 'listInstallations',
+		type: '() => Promise<ChannelInstallationInfo[]>',
+		isOptional: true,
+		description: 'Lists active installations for this platform. Returns public info only, never secrets.',
+	},
 ]}
 />
 

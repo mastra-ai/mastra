@@ -35,12 +35,12 @@ The `toolCategoryResolver` maps tool names to categories. Pass it to the AgentCo
 
 ```typescript title="src/mastra/agent-controller.ts"
 const agentController = new AgentController({
-  id: 'my-agent',
-  toolCategoryResolver: toolName => {
-    if (toolName.includes('write') || toolName.includes('delete')) return 'edit'
-    if (toolName.includes('execute')) return 'execute'
-    return 'read'
-  },
+	id: 'my-agent',
+	toolCategoryResolver: toolName => {
+		if (toolName.includes('write') || toolName.includes('delete')) return 'edit'
+		if (toolName.includes('execute')) return 'execute'
+		return 'read'
+	},
 })
 ```
 
@@ -52,10 +52,10 @@ When a tool's policy is `ask`, the AgentController emits a `tool_approval_requir
 
 ```typescript
 agentController.subscribe(event => {
-  if (event.type === 'tool_approval_required') {
-    // Show approval UI...
-    agentController.session.respondToToolApproval({ decision: 'approve' })
-  }
+	if (event.type === 'tool_approval_required') {
+		// Show approval UI...
+		agentController.session.respondToToolApproval({ decision: 'approve' })
+	}
 })
 ```
 
@@ -87,14 +87,14 @@ Interactive built-in tools (`ask_user`, `submit_plan`) use the native tool-suspe
 
 ```typescript
 agentController.subscribe(event => {
-  if (event.type === 'tool_suspended' && event.toolName === 'ask_user') {
-    const { question } = event.suspendPayload as { question: string }
-    // Show question to user, then resume:
-    agentController.respondToToolSuspension({
-      toolCallId: event.toolCallId,
-      resumeData: 'User response here',
-    })
-  }
+	if (event.type === 'tool_suspended' && event.toolName === 'ask_user') {
+		const { question } = event.suspendPayload as { question: string }
+		// Show question to user, then resume:
+		agentController.respondToToolSuspension({
+			toolCallId: event.toolCallId,
+			resumeData: 'User response here',
+		})
+	}
 })
 ```
 
@@ -105,14 +105,14 @@ The `submit_plan` tool suspends via the same mechanism. Resume with an `action` 
 ```typescript
 // Approve the plan
 agentController.respondToToolSuspension({
-  toolCallId: event.toolCallId,
-  resumeData: { action: 'approved' },
+	toolCallId: event.toolCallId,
+	resumeData: { action: 'approved' },
 })
 
 // Reject with feedback
 agentController.respondToToolSuspension({
-  toolCallId: event.toolCallId,
-  resumeData: { action: 'rejected', feedback: 'Needs more detail' },
+	toolCallId: event.toolCallId,
+	resumeData: { action: 'rejected', feedback: 'Needs more detail' },
 })
 ```
 
@@ -134,8 +134,8 @@ Disable specific built-in tools with `disableBuiltinTools`:
 
 ```typescript
 const agentController = new AgentController({
-  id: 'no-plans',
-  disableBuiltinTools: ['submit_plan'],
+	id: 'no-plans',
+	disableBuiltinTools: ['submit_plan'],
 })
 ```
 

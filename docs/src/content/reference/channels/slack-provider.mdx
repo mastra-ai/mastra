@@ -18,13 +18,13 @@ import { Mastra } from '@mastra/core/mastra'
 import { SlackProvider } from '@mastra/slack'
 
 export const mastra = new Mastra({
-  storage,
-  channels: {
-    slack: new SlackProvider({
-      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
-      baseUrl: process.env.MASTRA_BASE_URL,
-    }),
-  },
+	storage,
+	channels: {
+		slack: new SlackProvider({
+			refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+			baseUrl: process.env.MASTRA_BASE_URL,
+		}),
+	},
 })
 ```
 
@@ -34,7 +34,7 @@ When credentials aren't available at construction time (for example, entered thr
 const slack = new SlackProvider()
 
 await slack.configure({
-  refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+	refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
 })
 ```
 
@@ -44,142 +44,142 @@ await slack.configure({
 
 <PropertiesTable
   content={[
-  {
-    name: 'refreshToken',
-    type: 'string',
-    isOptional: true,
-    description:
-      'Slack App Configuration refresh token, used for automatic token rotation. Single-use; each rotation returns a new pair. Can also be provided later via `configure()`. If omitted, the provider starts unconfigured and cannot create apps until `configure()` is called or tokens are loaded from storage. Generate it under "Your App Configuration Tokens" at api.slack.com/apps.',
-  },
-  {
-    name: 'token',
-    type: 'string',
-    isOptional: true,
-    description:
-      'Slack App Configuration access token for programmatic app creation. Optional, because the provider rotates to a fresh token on startup using `refreshToken`.',
-  },
-  {
-    name: 'baseUrl',
-    type: 'string',
-    isOptional: true,
-    description:
-      'Public base URL for webhook and OAuth callbacks. Required when calling `connect()` to create apps. Can also be set via `setBaseUrl()` or auto-detected from the Mastra server config. For local development, use a tunnel such as `cloudflared`.',
-  },
-  {
-    name: 'encryptionKey',
-    type: 'string',
-    isOptional: true,
-    description:
-      'Encryption key for sensitive stored data (client secret, signing secret, bot token). Use a 32+ character random string. Can be set via the `MASTRA_ENCRYPTION_KEY` env var. If omitted, secrets are stored in plaintext (not recommended for production).',
-  },
-  {
-    name: 'storage',
-    type: 'ChannelsStorage',
-    isOptional: true,
-    description:
-      "Custom storage for installations. Defaults to Mastra's `ChannelsStorage` from the global storage. Throws if no persistent storage is available.",
-  },
-  {
-    name: 'redirectPath',
-    type: 'string',
-    isOptional: true,
-    defaultValue: '"/"',
-    description: 'Path to redirect to after OAuth completion.',
-  },
-  {
-    name: 'onInstall',
-    type: '(installation: SlackInstallation) => Promise<void>',
-    isOptional: true,
-    description: 'Called when a workspace successfully installs the app.',
-  },
-  {
-    name: 'streaming',
-    type: 'StreamingConfig | false',
-    isOptional: true,
-    defaultValue: 'true',
-    description:
-      "Stream agent text deltas to Slack as they're generated. Pass `{ updateIntervalMs }` to customize the post-and-edit interval, or `false` to buffer text until step-finish. Disabling streaming restricts `toolDisplay` to static modes.",
-  },
-  {
-    name: 'toolDisplay',
-    type: 'ToolDisplay',
-    isOptional: true,
-    defaultValue: "'grouped'",
-    description:
-      "How tool calls are rendered in Slack: `'cards'`, `'text'`, `'timeline'`, `'grouped'`, `'hidden'`, or a function. `'hidden'` suppresses tool call/result rendering entirely. `'timeline'` and `'grouped'` require streaming. With `streaming: false`, only static modes are available and the default is `'cards'`.",
-  },
-  {
-    name: 'typingStatus',
-    type: 'boolean | TypingStatusFn',
-    isOptional: true,
-    defaultValue: 'true',
-    description:
-      'Show a typing indicator while the agent works. Set `false` to disable, or pass a function to return custom status text per stream chunk (return `undefined` to fall back to the default for that chunk).',
-  },
-  {
-    name: 'waitUntil',
-    type: 'WaitUntilFn',
-    isOptional: true,
-    description:
-      "Returns a `waitUntil` for the current Slack webhook request. Required on serverless runtimes where Hono can't bridge the platform's `ExecutionContext` (Vercel, AWS Lambda). Without it, the invocation freezes after the 200 ack and kills the run mid-flight. Pass the bare `waitUntil(promise)` from your platform SDK (for example, `@vercel/functions`). Cloudflare Workers and Netlify users typically don't need this.",
-  },
-  {
-    name: 'resolveWaitUntil',
-    type: 'WaitUntilResolver',
-    isOptional: true,
-    description:
-      "Resolve `waitUntil` from the request's Hono `Context` when the runtime exposes it through the request and core's default doesn't cover it. Resolution order: `waitUntil` → `resolveWaitUntil` → core default.",
-  },
-  {
-    name: 'handlers',
-    type: 'ChannelHandlers',
-    isOptional: true,
-    description:
-      'Override built-in event handlers (`onDirectMessage`, `onMention`). Forwarded to `AgentChannels` for every agent connected via this provider.',
-  },
-  {
-    name: 'inlineMedia',
-    type: "ChannelConfig['inlineMedia']",
-    isOptional: true,
-    description: 'Which media types to send inline to the model.',
-  },
-  {
-    name: 'inlineLinks',
-    type: "ChannelConfig['inlineLinks']",
-    isOptional: true,
-    description: 'Promote URLs in message text to file parts.',
-  },
-  {
-    name: 'threadContext',
-    type: "ChannelConfig['threadContext']",
-    isOptional: true,
-    description: 'Fetch recent thread messages from Slack when the agent joins mid-conversation.',
-  },
-  {
-    name: 'tools',
-    type: "ChannelConfig['tools']",
-    isOptional: true,
-    description: 'Whether to include channel tools (`add_reaction`, `remove_reaction`).',
-  },
-  {
-    name: 'state',
-    type: "ChannelConfig['state']",
-    isOptional: true,
-    description:
-      "State adapter for message deduplication, locking, and subscriptions. Defaults to the `MastraStateAdapter` backed by the Mastra instance's configured storage, so subscriptions persist across restarts.",
-  },
-  {
-    name: 'chatOptions',
-    type: "ChannelConfig['chatOptions']",
-    isOptional: true,
-    description: 'Additional options passed directly to the Chat SDK.',
-  },
-  {
-    name: 'logger',
-    type: "SlackAdapterConfig['logger']",
-    isOptional: true,
-    description: "Logger forwarded to the underlying `SlackAdapter`. Defaults to the adapter's `ConsoleLogger`.",
-  },
+	{
+		name: 'refreshToken',
+		type: 'string',
+		isOptional: true,
+		description:
+			'Slack App Configuration refresh token, used for automatic token rotation. Single-use; each rotation returns a new pair. Can also be provided later via `configure()`. If omitted, the provider starts unconfigured and cannot create apps until `configure()` is called or tokens are loaded from storage. Generate it under "Your App Configuration Tokens" at api.slack.com/apps.',
+	},
+	{
+		name: 'token',
+		type: 'string',
+		isOptional: true,
+		description:
+			'Slack App Configuration access token for programmatic app creation. Optional, because the provider rotates to a fresh token on startup using `refreshToken`.',
+	},
+	{
+		name: 'baseUrl',
+		type: 'string',
+		isOptional: true,
+		description:
+			'Public base URL for webhook and OAuth callbacks. Required when calling `connect()` to create apps. Can also be set via `setBaseUrl()` or auto-detected from the Mastra server config. For local development, use a tunnel such as `cloudflared`.',
+	},
+	{
+		name: 'encryptionKey',
+		type: 'string',
+		isOptional: true,
+		description:
+			'Encryption key for sensitive stored data (client secret, signing secret, bot token). Use a 32+ character random string. Can be set via the `MASTRA_ENCRYPTION_KEY` env var. If omitted, secrets are stored in plaintext (not recommended for production).',
+	},
+	{
+		name: 'storage',
+		type: 'ChannelsStorage',
+		isOptional: true,
+		description:
+			"Custom storage for installations. Defaults to Mastra's `ChannelsStorage` from the global storage. Throws if no persistent storage is available.",
+	},
+	{
+		name: 'redirectPath',
+		type: 'string',
+		isOptional: true,
+		defaultValue: '"/"',
+		description: 'Path to redirect to after OAuth completion.',
+	},
+	{
+		name: 'onInstall',
+		type: '(installation: SlackInstallation) => Promise<void>',
+		isOptional: true,
+		description: 'Called when a workspace successfully installs the app.',
+	},
+	{
+		name: 'streaming',
+		type: 'StreamingConfig | false',
+		isOptional: true,
+		defaultValue: 'true',
+		description:
+			"Stream agent text deltas to Slack as they're generated. Pass `{ updateIntervalMs }` to customize the post-and-edit interval, or `false` to buffer text until step-finish. Disabling streaming restricts `toolDisplay` to static modes.",
+	},
+	{
+		name: 'toolDisplay',
+		type: 'ToolDisplay',
+		isOptional: true,
+		defaultValue: "'grouped'",
+		description:
+			"How tool calls are rendered in Slack: `'cards'`, `'text'`, `'timeline'`, `'grouped'`, `'hidden'`, or a function. `'hidden'` suppresses tool call/result rendering entirely. `'timeline'` and `'grouped'` require streaming. With `streaming: false`, only static modes are available and the default is `'cards'`.",
+	},
+	{
+		name: 'typingStatus',
+		type: 'boolean | TypingStatusFn',
+		isOptional: true,
+		defaultValue: 'true',
+		description:
+			'Show a typing indicator while the agent works. Set `false` to disable, or pass a function to return custom status text per stream chunk (return `undefined` to fall back to the default for that chunk).',
+	},
+	{
+		name: 'waitUntil',
+		type: 'WaitUntilFn',
+		isOptional: true,
+		description:
+			"Returns a `waitUntil` for the current Slack webhook request. Required on serverless runtimes where Hono can't bridge the platform's `ExecutionContext` (Vercel, AWS Lambda). Without it, the invocation freezes after the 200 ack and kills the run mid-flight. Pass the bare `waitUntil(promise)` from your platform SDK (for example, `@vercel/functions`). Cloudflare Workers and Netlify users typically don't need this.",
+	},
+	{
+		name: 'resolveWaitUntil',
+		type: 'WaitUntilResolver',
+		isOptional: true,
+		description:
+			"Resolve `waitUntil` from the request's Hono `Context` when the runtime exposes it through the request and core's default doesn't cover it. Resolution order: `waitUntil` → `resolveWaitUntil` → core default.",
+	},
+	{
+		name: 'handlers',
+		type: 'ChannelHandlers',
+		isOptional: true,
+		description:
+			'Override built-in event handlers (`onDirectMessage`, `onMention`). Forwarded to `AgentChannels` for every agent connected via this provider.',
+	},
+	{
+		name: 'inlineMedia',
+		type: "ChannelConfig['inlineMedia']",
+		isOptional: true,
+		description: 'Which media types to send inline to the model.',
+	},
+	{
+		name: 'inlineLinks',
+		type: "ChannelConfig['inlineLinks']",
+		isOptional: true,
+		description: 'Promote URLs in message text to file parts.',
+	},
+	{
+		name: 'threadContext',
+		type: "ChannelConfig['threadContext']",
+		isOptional: true,
+		description: 'Fetch recent thread messages from Slack when the agent joins mid-conversation.',
+	},
+	{
+		name: 'tools',
+		type: "ChannelConfig['tools']",
+		isOptional: true,
+		description: 'Whether to include channel tools (`add_reaction`, `remove_reaction`).',
+	},
+	{
+		name: 'state',
+		type: "ChannelConfig['state']",
+		isOptional: true,
+		description:
+			"State adapter for message deduplication, locking, and subscriptions. Defaults to the `MastraStateAdapter` backed by the Mastra instance's configured storage, so subscriptions persist across restarts.",
+	},
+	{
+		name: 'chatOptions',
+		type: "ChannelConfig['chatOptions']",
+		isOptional: true,
+		description: 'Additional options passed directly to the Chat SDK.',
+	},
+	{
+		name: 'logger',
+		type: "SlackAdapterConfig['logger']",
+		isOptional: true,
+		description: "Logger forwarded to the underlying `SlackAdapter`. Defaults to the adapter's `ConsoleLogger`.",
+	},
 ]}
 />
 
@@ -193,7 +193,7 @@ Creates a new Slack app for the agent via the Manifest API and returns an OAuth 
 
 ```typescript
 const result = await slack.connect('support-agent', {
-  name: 'Support Bot',
+	name: 'Support Bot',
 })
 
 // Redirect the user to result.authorizationUrl to install the app
@@ -203,9 +203,9 @@ Returns: `Promise<ChannelConnectResult>`
 
 ```typescript
 interface ChannelConnectResult {
-  type: 'oauth'
-  installationId: string
-  authorizationUrl: string
+	type: 'oauth'
+	installationId: string
+	authorizationUrl: string
 }
 ```
 
@@ -213,39 +213,39 @@ interface ChannelConnectResult {
 
 <PropertiesTable
   content={[
-  {
-    name: 'name',
-    type: 'string',
-    isOptional: true,
-    description: 'Display name for the Slack bot. Defaults to the agent name, then the agent ID.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: true,
-    description: 'Bot description shown in Slack. Defaults to "{name} - Powered by Mastra".',
-  },
-  {
-    name: 'iconUrl',
-    type: 'string',
-    isOptional: true,
-    description:
-      'URL to a square image (min 512x512) for the app icon. Downloaded and uploaded to Slack automatically.',
-  },
-  {
-    name: 'manifest',
-    type: '(defaults: SlackAppManifest) => SlackAppManifest',
-    isOptional: true,
-    description:
-      'Customize the Slack app manifest before it is sent to the Manifest API. Receives the default manifest and returns the final one. Use it for custom scopes, additional events, or interactivity settings.',
-  },
-  {
-    name: 'redirectUrl',
-    type: 'string',
-    isOptional: true,
-    description:
-      "URL to redirect to after successful OAuth completion. Defaults to the provider's `redirectPath` or `/`.",
-  },
+	{
+		name: 'name',
+		type: 'string',
+		isOptional: true,
+		description: 'Display name for the Slack bot. Defaults to the agent name, then the agent ID.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: true,
+		description: 'Bot description shown in Slack. Defaults to "{name} - Powered by Mastra".',
+	},
+	{
+		name: 'iconUrl',
+		type: 'string',
+		isOptional: true,
+		description:
+			'URL to a square image (min 512x512) for the app icon. Downloaded and uploaded to Slack automatically.',
+	},
+	{
+		name: 'manifest',
+		type: '(defaults: SlackAppManifest) => SlackAppManifest',
+		isOptional: true,
+		description:
+			'Customize the Slack app manifest before it is sent to the Manifest API. Receives the default manifest and returns the final one. Use it for custom scopes, additional events, or interactivity settings.',
+	},
+	{
+		name: 'redirectUrl',
+		type: 'string',
+		isOptional: true,
+		description:
+			"URL to redirect to after successful OAuth completion. Defaults to the provider's `redirectPath` or `/`.",
+	},
 ]}
 />
 

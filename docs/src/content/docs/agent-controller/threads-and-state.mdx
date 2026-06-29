@@ -65,15 +65,15 @@ Pass a `threadLock` to the AgentController constructor to prevent concurrent acc
 
 ```typescript title="src/mastra/agent-controller.ts"
 const agentController = new AgentController({
-  id: 'my-agent',
-  threadLock: {
-    acquire: async threadId => {
-      /* acquire lock or throw */
-    },
-    release: async threadId => {
-      /* release lock */
-    },
-  },
+	id: 'my-agent',
+	threadLock: {
+		acquire: async threadId => {
+			/* acquire lock or throw */
+		},
+		release: async threadId => {
+			/* release lock */
+		},
+	},
 })
 ```
 
@@ -91,19 +91,19 @@ import { AgentController } from '@mastra/core/agent-controller'
 import { z } from 'zod'
 
 const agent = new Agent({
-  name: 'assistant',
-  instructions: 'Help the user manage a stateful session.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	name: 'assistant',
+	instructions: 'Help the user manage a stateful session.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const agentController = new AgentController({
-  id: 'stateful-agent',
-  agent,
-  modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
-  stateSchema: z.object({
-    currentModelId: z.string().optional(),
-    theme: z.enum(['light', 'dark']).default('dark'),
-  }),
+	id: 'stateful-agent',
+	agent,
+	modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
+	stateSchema: z.object({
+		currentModelId: z.string().optional(),
+		theme: z.enum(['light', 'dark']).default('dark'),
+	}),
 })
 ```
 
@@ -127,8 +127,8 @@ Threads are scoped to a resource ID, which groups a conversation's threads by pr
 
 ```typescript
 const agentController = new AgentController({
-  id: 'my-agent',
-  resourceId: 'project-xyz',
+	id: 'my-agent',
+	resourceId: 'project-xyz',
 })
 ```
 

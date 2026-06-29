@@ -24,28 +24,28 @@ const agent = new Agent({
 })
 
 const agentController = new AgentController({
-  id: 'with-subagents',
-  agent,
-  modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
-  subagents: [
-    {
-      id: 'explore',
-      name: 'Explore',
-      description: 'Reads files and gathers context without making changes.',
-      instructions: 'You are a read-only exploration agent.',
-      allowedWorkspaceTools: ['read_file', 'list_directory', 'grep_search'],
-      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-      maxSteps: 30,
-    },
-    {
-      id: 'execute',
-      name: 'Execute',
-      description: 'Makes changes to files and runs commands.',
-      instructions: 'You are an execution agent.',
-      allowedWorkspaceTools: ['read_file', 'write_file', 'execute_command'],
-      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-    },
-  ],
+	id: 'with-subagents',
+	agent,
+	modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
+	subagents: [
+		{
+			id: 'explore',
+			name: 'Explore',
+			description: 'Reads files and gathers context without making changes.',
+			instructions: 'You are a read-only exploration agent.',
+			allowedWorkspaceTools: ['read_file', 'list_directory', 'grep_search'],
+			defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+			maxSteps: 30,
+		},
+		{
+			id: 'execute',
+			name: 'Execute',
+			description: 'Makes changes to files and runs commands.',
+			instructions: 'You are an execution agent.',
+			allowedWorkspaceTools: ['read_file', 'write_file', 'execute_command'],
+			defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+		},
+	],
 })
 ```
 
@@ -97,8 +97,8 @@ await agentController.session.subagents.model.set({ modelId: '__GATEWAY_ANTHROPI
 
 // Per-type override
 await agentController.session.subagents.model.set({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-  agentType: 'explore',
+	modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+	agentType: 'explore',
 })
 
 // Read current model

@@ -28,19 +28,18 @@ import { AgentController } from '@mastra/core/agent-controller'
 import { myAgent } from './agents'
 
 const agentController = new AgentController({
-  id: 'multi-mode',
-  agent: myAgent,
-  // highlight-start
-  modes: [
-    {
-      id: 'plan',
-      name: 'Plan',
-      metadata: { default: true },
-      instructions: 'Reason about the task before making changes.',
-    },
-    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
-  ],
-  // highlight-end
+	id: 'multi-mode',
+	agent: myAgent,
+	// [!code highlight:9]
+	modes: [
+		{
+			id: 'plan',
+			name: 'Plan',
+			metadata: { default: true },
+			instructions: 'Reason about the task before making changes.',
+		},
+		{ id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
+	],
 })
 
 await agentController.init()
@@ -54,23 +53,23 @@ Each mode requires an `id`. When a top-level `agent` is provided, modes layer in
 import { AgentController } from '@mastra/core/agent-controller'
 
 const agentController = new AgentController({
-  id: 'multi-mode',
-  agent: myAgent,
-  modes: [
-    {
-      id: 'plan',
-      name: 'Plan',
-      metadata: { default: true },
-      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-      instructions: 'Reason about the task before making changes.',
-    },
-    {
-      id: 'build',
-      name: 'Build',
-      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-      instructions: 'Implement the approved plan.',
-    },
-  ],
+	id: 'multi-mode',
+	agent: myAgent,
+	modes: [
+		{
+			id: 'plan',
+			name: 'Plan',
+			metadata: { default: true },
+			defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+			instructions: 'Reason about the task before making changes.',
+		},
+		{
+			id: 'build',
+			name: 'Build',
+			defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+			instructions: 'Implement the approved plan.',
+		},
+	],
 })
 ```
 
