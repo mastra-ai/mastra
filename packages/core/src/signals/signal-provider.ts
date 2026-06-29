@@ -1,4 +1,5 @@
 import type { Agent } from '../agent/agent';
+import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { AgentSignalIfIdleOptions } from '../agent/types';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
@@ -211,6 +212,42 @@ export abstract class SignalProvider<TId extends string = string> {
    * ```
    */
   getTools?(): Record<string, unknown>;
+
+  /**
+   * The notification `source` value carried by records this provider produces.
+   *
+   * Defaults to the provider `id`. Override when the emitted `source` differs
+   * (e.g. GithubSignals has id `github-signals` but emits records with
+   * `source: 'github'`). The dispatcher routes a due record to its provider by
+   * matching `record.source === provider.notificationSource`.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  get notificationSource(): string {
+    return this.id;
+  }
+
+  /**
+   * Resolve the stream options used when a deferred notification produced by
+   * this provider wakes an idle thread.
+   *
+   * A wake starts a fresh run, but the dispatcher carries no request context or
+   * model selection — which surfaces as "No model selected". The dispatcher
+   * matches a due record back to the provider that produced it (via
+   * `record.source === provider.notificationSource`) and calls this method to
+   * obtain the stream options (typically `requestContext`, `memory`, and model
+   * settings) attached to the wake target's `ifIdle.streamOptions`.
+   *
+   * Resolved at dispatch time because the stream options carry live, non-
+   * serializable state (e.g. a `RequestContext`) that cannot be persisted on
+   * the notification record at enqueue time.
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  getNotificationStreamOptions?(target: {
+    resourceId: string;
+    threadId: string;
+  }): AgentExecutionOptions | undefined | Promise<AgentExecutionOptions | undefined>;
 
   // ── Subscription tracking ──────────────────────────────────────────
 

@@ -1067,6 +1067,10 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
 export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly id = 'github-signals' as const;
   override readonly name = 'GitHub Signals';
+  /** Records emitted by this provider carry `source: 'github'`; the dispatcher routes them here. */
+  override get notificationSource(): string {
+    return 'github';
+  }
   #ghMastra?: GithubSignalsMastra;
 
   static signals = {
@@ -1147,6 +1151,20 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     super.connect(agent);
     this.#agent = agent as unknown as GithubSignalAgent;
   }
+
+  /**
+   * Resolves the stream options for a deferred notification that wakes an idle
+   * thread. The dispatcher calls this (matching `record.source` against
+   * `notificationSource`, i.e. `'github'`) so a woken run carries the request
+   * context and model selection it needs ("No model selected" otherwise).
+   */
+  getNotificationStreamOptions(target: {
+    resourceId: string;
+    threadId: string;
+  }): GithubNotificationStreamOptions | Promise<GithubNotificationStreamOptions> | undefined {
+    return this.#agentOptions.getNotificationStreamOptions?.(target);
+  }
+
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
     return [this as unknown as InputProcessorOrWorkflow];
