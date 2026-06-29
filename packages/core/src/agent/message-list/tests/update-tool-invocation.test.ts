@@ -690,4 +690,47 @@ describe('MessageList.updateToolInvocation', () => {
     expect(providerPart.toolInvocation.state).toBe('result');
     expect(providerPart.toolInvocation.args).toEqual({ who: 'provider' });
   });
+
+  it('should keep the legacy toolInvocations array in sync when the toolCallId is reconciled', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'provider-call',
+          toolName: 'file_search',
+          args: { query: 'spec' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    // Legacy AIV4 array, keyed by the original id the part had before reconciliation.
+    (msg.content as any).toolInvocations = [
+      { state: 'call', toolCallId: 'provider-call', toolName: 'file_search', args: { query: 'spec' } },
+    ];
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'result-id',
+        toolName: 'file_search',
+        args: {},
+        result: { documents: ['doc1'] },
+      },
+      providerExecuted: true,
+    } as any);
+
+    expect(updated).toBe(true);
+    const content = messageList.get.all.db()[0]?.content as any;
+    // The legacy array entry is resynced: reconciled id, result state, preserved args.
+    const legacy = content.toolInvocations?.[0];
+    expect(legacy.toolCallId).toBe('result-id');
+    expect(legacy.state).toBe('result');
+    expect(legacy.args).toEqual({ query: 'spec' });
+    expect(legacy.result).toEqual({ documents: ['doc1'] });
+  });
 });

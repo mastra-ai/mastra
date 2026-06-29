@@ -1126,8 +1126,11 @@ export class MessageList {
           candidate.toolInvocation.toolName === inputToolName
         ) {
           // Reconcile the stored id so downstream replay uses the result's id.
+          // Pass the prior id so the legacy `toolInvocations` array can be
+          // resynced from its old key (it still holds the original id).
+          const previousToolCallId = candidate.toolInvocation.toolCallId;
           candidate.toolInvocation.toolCallId = toolCallId;
-          this.mergeToolResultIntoPart(msg, i, inputPart, metadata);
+          this.mergeToolResultIntoPart(msg, i, inputPart, metadata, previousToolCallId);
           return true;
         }
       }
@@ -1150,8 +1153,12 @@ export class MessageList {
     i: number,
     inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
     metadata?: Record<string, unknown>,
+    previousToolCallId?: string,
   ): void {
     const part = msg.content.parts![i] as Extract<MastraMessagePart, { type: 'tool-invocation' }>;
+    // The legacy `content.toolInvocations` array (AIV4) is keyed by the id the
+    // part had BEFORE any reconciliation; default to the part's current id.
+    const priorToolCallId = previousToolCallId ?? part.toolInvocation.toolCallId;
     // Cast to access providerExecuted/providerMetadata which exist at runtime but aren't in the base type
     const originalPart = part as typeof part & { providerExecuted?: boolean; providerMetadata?: unknown };
     const inputPartWithMeta = inputPart as typeof inputPart & {
@@ -1197,6 +1204,26 @@ export class MessageList {
         ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
         : {}),
     };
+
+    // Keep the legacy AIV4 `content.toolInvocations` array in sync so a later
+    // transformMessageForTranscript() can still map this part back: carry over
+    // the result and the (possibly reconciled) toolCallId, matching the entry by
+    // the id it held before reconciliation. Spread the legacy entry first to
+    // preserve its type, then override only the fields that change here.
+    if (Array.isArray(msg.content.toolInvocations) && inputPart.toolInvocation.state === 'result') {
+      const resultInvocation = inputPart.toolInvocation;
+      msg.content.toolInvocations = msg.content.toolInvocations.map(invocation =>
+        invocation.toolCallId === priorToolCallId
+          ? {
+              ...invocation,
+              toolCallId: resultInvocation.toolCallId,
+              state: 'result' as const,
+              args: part.toolInvocation.args,
+              result: resultInvocation.result,
+            }
+          : invocation,
+      );
+    }
 
     // Move the message to the response source so it gets
     // picked up by drainUnsavedMessages for re-saving.
