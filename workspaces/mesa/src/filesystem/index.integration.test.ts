@@ -20,6 +20,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MesaFilesystem } from './index';
 
+const hasMesaApiKey = Boolean(process.env.MESA_API_KEY);
+const describeMesa = hasMesaApiKey ? describe : describe.skip;
+
 interface MesaTestEnv {
   apiKey: string;
   org: string;
@@ -33,13 +36,16 @@ function createTestRepoName(): string {
   return `mastra-test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function isNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const err = error as { code?: string; name?: string };
+  return err.code === 'ENOENT' || err.name === 'NotFound' || /\b(not found|no such)\b/i.test(error.message);
+}
+
 beforeAll(async () => {
-  const apiKey = process.env.MESA_API_KEY;
+  if (!hasMesaApiKey) return;
 
-  if (!apiKey) {
-    throw new Error('MesaFilesystem integration tests require MESA_API_KEY.');
-  }
-
+  const apiKey = process.env.MESA_API_KEY!;
   const mesa = new Mesa({ apiKey });
   const org = await mesa.resolveOrg();
   const repo = createTestRepoName();
@@ -64,7 +70,9 @@ function getMesaTestEnv(): MesaTestEnv {
 
 async function deleteMesaTestRepo(): Promise<void> {
   if (!mesaTestEnv) return;
-  await mesaTestEnv.mesa.repos.delete({ repo: mesaTestEnv.repo }).catch(() => {});
+  await mesaTestEnv.mesa.repos.delete({ repo: mesaTestEnv.repo }).catch(error => {
+    if (!isNotFoundError(error)) throw error;
+  });
 }
 
 afterAll(async () => {
@@ -138,7 +146,9 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
   }
 
   async destroy(): Promise<void> {
-    await this.filesystem.rmdir(this.root, { recursive: true, force: true }).catch(() => {});
+    await this.filesystem.rmdir(this.root, { recursive: true, force: true }).catch(error => {
+      if (!isNotFoundError(error)) throw error;
+    });
     await this.filesystem._destroy();
   }
 
@@ -229,7 +239,7 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
   }
 }
 
-describe('MesaFilesystem integration', () => {
+describeMesa('MesaFilesystem integration', () => {
   it('creates an isolated Mesa repo for the test run', () => {
     const env = getMesaTestEnv();
 
@@ -259,24 +269,28 @@ describe('MesaFilesystem integration', () => {
   });
 });
 
-createFilesystemTestSuite({
-  suiteName: 'MesaFilesystem Conformance',
-  createFilesystem: async () => {
-    const testRoot = mesaRepoPath(`conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-    return new RootedMesaFilesystem(createMesaFilesystem(), testRoot);
-  },
-  cleanupFilesystem: async fs => {
-    await fs.rmdir('/', { recursive: true, force: true }).catch(() => {});
-  },
-  capabilities: {
-    supportsAppend: true,
-    supportsBinaryFiles: true,
-    supportsMounting: false,
-    supportsForceDelete: true,
-    supportsOverwrite: true,
-    supportsConcurrency: true,
-    supportsEmptyDirectories: true,
-    deleteThrowsOnMissing: true,
-  },
-  testTimeout: 30000,
-});
+if (hasMesaApiKey) {
+  createFilesystemTestSuite({
+    suiteName: 'MesaFilesystem Conformance',
+    createFilesystem: async () => {
+      const testRoot = mesaRepoPath(`conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+      return new RootedMesaFilesystem(createMesaFilesystem(), testRoot);
+    },
+    cleanupFilesystem: async fs => {
+      await fs.rmdir('/', { recursive: true, force: true }).catch(error => {
+        if (!isNotFoundError(error)) throw error;
+      });
+    },
+    capabilities: {
+      supportsAppend: true,
+      supportsBinaryFiles: true,
+      supportsMounting: false,
+      supportsForceDelete: true,
+      supportsOverwrite: true,
+      supportsConcurrency: true,
+      supportsEmptyDirectories: true,
+      deleteThrowsOnMissing: true,
+    },
+    testTimeout: 30000,
+  });
+}

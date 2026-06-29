@@ -18,6 +18,7 @@ export const mesaFilesystemProvider: FilesystemProvider<MesaFilesystemOptions> =
       org: { type: 'string', description: 'Mesa org slug' },
       repos: {
         type: 'array',
+        minItems: 1,
         description: 'Mesa repos to mount',
         items: {
           type: 'object',

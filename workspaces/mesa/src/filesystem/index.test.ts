@@ -433,6 +433,7 @@ describe('MesaFilesystem', () => {
       ['moveFile', (fs: MesaFilesystem) => fs.moveFile('/acme/docs/file.txt', '/acme/docs/moved.txt')],
       ['mkdir', (fs: MesaFilesystem) => fs.mkdir('/acme/docs/new')],
       ['rmdir', (fs: MesaFilesystem) => fs.rmdir('/acme/docs/old')],
+      ['bash', (fs: MesaFilesystem) => fs.bash()],
     ])('blocks %s', async (_name, operation) => {
       const { fs } = createFs({ readOnly: true });
 

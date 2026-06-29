@@ -446,8 +446,9 @@ export class MesaFilesystem extends MastraFilesystem {
     await this.ensureReady();
     try {
       return await this.filesystem.exists(normalizePath(inputPath));
-    } catch {
-      return false;
+    } catch (error) {
+      if (getMesaErrorKind(error) === 'notFound') return false;
+      throw mapMesaError(error, inputPath);
     }
   }
 
@@ -477,6 +478,7 @@ export class MesaFilesystem extends MastraFilesystem {
    */
   async bash(options?: MesaBashOptions): Promise<Bash> {
     await this.ensureReady();
+    this.assertWritable('bash');
     return this.filesystem.bash(options);
   }
 

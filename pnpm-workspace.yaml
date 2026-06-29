@@ -108,6 +108,9 @@ trustPolicyExclude:
   - 'prettier-plugin-tailwindcss@0.7.4'
   # Required for the Mesa workspace filesystem provider. 0.38.0 is published
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
+  # TODO(2025-09-30): revisit — request @mesadev to re-enable trusted publishing
+  # for future releases and remove this exclusion once a version with provenance
+  # attestation is available.
   - '@mesadev/sdk@0.38.0'
 overrides:
   typescript: ^6.0.3
@@ -230,6 +233,7 @@ allowBuilds:
   '@fingerprintjs/fingerprintjs-pro-react': false
   '@firebase/util': false
   '@google/genai': false
+  '@mongodb-js/zstd': true
   '@nestjs/core': false
   '@parcel/watcher': false
   '@scarf/scarf': false
@@ -249,6 +253,7 @@ allowBuilds:
   koffi: false
   msgpackr-extract: false
   msw: false
+  node-liblzma: true
   node-pty: true
   onnxruntime-node: false
   protobufjs: false
