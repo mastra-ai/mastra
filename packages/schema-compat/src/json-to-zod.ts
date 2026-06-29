@@ -257,7 +257,7 @@ const parserOverride = (schema: JsonSchemaObject, refs: Refs) => {
         if (discriminators.length > 0) {
           const discriminator = discriminators[0];
           if (discriminator) {
-            parsed = `z.discriminatedUnion("${discriminator}", [${schema.anyOf
+            parsed = `z.discriminatedUnion(${JSON.stringify(discriminator)}, [${schema.anyOf
               .map((schema, i) =>
                 parseSchema(schema, {
                   ...refs,

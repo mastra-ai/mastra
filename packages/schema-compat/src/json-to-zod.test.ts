@@ -283,6 +283,43 @@ describe('jsonSchemaToZod', () => {
       // Should use the first common discriminator (category)
       expect(result).toContain('"category"');
     });
+
+    it('should escape the discriminator property name so the generated code stays valid', () => {
+      // A JSON Schema property name can contain a double quote. Object keys, descriptions
+      // and defaults in the output are serialized with JSON.stringify, but the
+      // discriminatedUnion key was interpolated raw, producing code that throws a
+      // SyntaxError when evaluated at runtime with Function().
+      const schema: JsonSchema = {
+        anyOf: [
+          {
+            type: 'object',
+            properties: {
+              'ty"pe': { const: 'cat' },
+              name: { type: 'string' },
+            },
+            required: ['ty"pe', 'name'],
+          },
+          {
+            type: 'object',
+            properties: {
+              'ty"pe': { const: 'dog' },
+              name: { type: 'string' },
+            },
+            required: ['ty"pe', 'name'],
+          },
+        ],
+      };
+
+      const result = jsonSchemaToZod(schema);
+      expect(result).toContain('z.discriminatedUnion');
+      // The discriminator key is escaped the same way as the object key.
+      expect(result).toContain(JSON.stringify('ty"pe'));
+
+      // The generated string is evaluated at runtime with Function(); it must not throw.
+      const build = () => new Function('z', `return ${result}`)(z);
+      expect(build).not.toThrow();
+      expect(build().safeParse({ 'ty"pe': 'cat', name: 'Tom' }).success).toBe(true);
+    });
   });
 
   describe('Object Parsing', () => {
