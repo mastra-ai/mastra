@@ -20,6 +20,25 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'AgentController',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'agent-controller/agent-controller-class',
+          label: 'AgentController Class',
+          customProps: { tags: ['beta'] },
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/session',
+          label: 'Session Class',
+          customProps: { tags: ['beta'] },
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       collapsed: true,
       items: [
@@ -74,7 +93,11 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
         { type: 'doc', id: 'ai-sdk/with-mastra', label: 'withMastra()' },
         { type: 'doc', id: 'ai-sdk/workflow-route', label: 'workflowRoute()' },
-        { type: 'doc', id: 'ai-sdk/workflow-snapshot-to-stream', label: 'workflowSnapshotToStream()' },
+        {
+          type: 'doc',
+          id: 'ai-sdk/workflow-snapshot-to-stream',
+          label: 'workflowSnapshotToStream()',
+        },
       ],
     },
     {
@@ -86,6 +109,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
+        { type: 'doc', id: 'auth/google', label: 'Google' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
         { type: 'doc', id: 'auth/okta', label: 'Okta' },
         { type: 'doc', id: 'auth/supabase', label: 'Supabase' },
@@ -101,6 +125,15 @@ const sidebars = {
         { type: 'doc', id: 'browser/browser-viewer', label: 'BrowserViewer' },
         { type: 'doc', id: 'browser/mastra-browser', label: 'MastraBrowser Class' },
         { type: 'doc', id: 'browser/stagehand-browser', label: 'StagehandBrowser' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Channel Providers',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
+        { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
       ],
     },
     {
@@ -303,25 +336,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Harness',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'harness/harness-class',
-          label: 'Harness Class',
-          customProps: { tags: ['beta'] },
-        },
-        {
-          type: 'doc',
-          id: 'harness/session',
-          label: 'Session Class',
-          customProps: { tags: ['beta'] },
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Mastra platform',
       collapsed: true,
       items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
@@ -493,6 +507,7 @@ const sidebars = {
         { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },
         { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
         { type: 'doc', id: 'pubsub/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+        { type: 'doc', id: 'pubsub/lease-provider', label: 'LeaseProvider' },
         { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
         { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
         { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
@@ -541,7 +556,12 @@ const sidebars = {
           label: 'createNotificationInboxTool()',
           customProps: { tags: ['beta'] },
         },
-        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['beta'] } },
+        {
+          type: 'doc',
+          id: 'signals/signal-provider',
+          label: 'SignalProvider',
+          customProps: { tags: ['beta'] },
+        },
         {
           type: 'doc',
           id: 'signals/task-signal-provider',
@@ -624,7 +644,12 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
-        { type: 'doc', id: 'tools/create-code-mode', label: 'createCodeMode()', customProps: { tags: ['beta'] } },
+        {
+          type: 'doc',
+          id: 'tools/create-code-mode',
+          label: 'createCodeMode()',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/document-chunker-tool', label: 'createDocumentChunkerTool()' },
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },

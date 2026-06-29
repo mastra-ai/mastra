@@ -606,9 +606,7 @@ export type StepWithComponent = Step<string, any, any, any, any, any> & {
   steps?: Record<string, StepWithComponent>;
 };
 
-type InferParsedPublicSchema<TSchema extends PublicSchema<any>> = TSchema extends { _output: infer Output }
-  ? Output
-  : InferPublicSchema<TSchema>;
+type InferParsedPublicSchema<TSchema extends PublicSchema<any>> = InferPublicSchema<TSchema>;
 
 /**
  * StepParams with schema-based inference for better type errors.
@@ -868,6 +866,50 @@ export type WorkflowConfig<
    * `requestContextSchema` respectively.
    */
   schedule?: WorkflowScheduleInput<NoInfer<TInput>, NoInfer<TState>, NoInfer<TRequestContext>>;
+};
+
+/**
+ * Infers the output type from a schema type that may be `undefined`.
+ * Returns `unknown` when no schema is provided.
+ */
+export type InferSchemaOutput<T> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+
+/**
+ * Schema-typed variant of `WorkflowConfig` used by `createWorkflow` factories.
+ *
+ * Instead of inferring output types through the `PublicSchema<TOutput>` union
+ * (which forces TypeScript to distribute across 8+ union members and triggers
+ * TS2589 "Type instantiation is excessively deep"), this type infers the
+ * **schema type itself** (shallow inference) and defers output-type extraction
+ * to `InferSchemaOutput` / `InferPublicSchema` (which use `_output` / `_type`
+ * / `~standard` fast paths).
+ */
+export type CreateWorkflowParams<
+  TWorkflowId extends string = string,
+  TStateSchema extends PublicSchema<any> | undefined = undefined,
+  TInputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TOutputSchema extends PublicSchema<any> = PublicSchema<any>,
+  TSteps extends Step[] = Step[],
+  TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+> = {
+  mastra?: Mastra;
+  id: TWorkflowId;
+  description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
+  inputSchema: TInputSchema;
+  outputSchema: TOutputSchema;
+  stateSchema?: TStateSchema;
+  requestContextSchema?: TRequestContextSchema;
+  executionEngine?: ExecutionEngine;
+  steps?: TSteps;
+  retryConfig?: { attempts?: number; delay?: number };
+  options?: WorkflowOptions;
+  type?: WorkflowType;
+  schedule?: WorkflowScheduleInput<
+    NoInfer<InferSchemaOutput<TInputSchema>>,
+    NoInfer<InferSchemaOutput<TStateSchema>>,
+    NoInfer<InferSchemaOutput<TRequestContextSchema>>
+  >;
 };
 
 /**

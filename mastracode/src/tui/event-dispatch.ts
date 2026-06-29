@@ -89,10 +89,14 @@ export async function dispatchEvent(
       break;
 
     case 'message_update':
-      // Mark when decoding began for the current step (first streamed content
-      // delta). tokens/sec is then measured over decode time only — excluding
-      // TTFT before this point and tool/scheduling gaps between steps.
-      if (state.decodeStartedAt === 0) {
+      // Only open the decode window when the message carries actual streamed
+      // text — tool-result-only updates (e.g. plan approval resume) must not
+      // count toward tokens/sec. This mirrors the web UI's hasAssistantText()
+      // guard in transcriptReducer.
+      if (
+        state.decodeStartedAt === 0 &&
+        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0)
+      ) {
         state.decodeStartedAt = Date.now();
       }
       handleMessageUpdate(ectx, event.message);
@@ -442,7 +446,7 @@ export async function dispatchEvent(
           payload.selectionMode as AskUserSelectionMode | undefined,
         );
       } else if (event.toolName === 'submit_plan') {
-        await handlePlanApproval(ectx, event.toolCallId, String(payload.title ?? ''), String(payload.plan ?? ''));
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.path ?? ''));
       }
       break;
     }
