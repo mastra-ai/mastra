@@ -404,9 +404,9 @@ describe('Custom Gateway Integration', () => {
     it('should handle gateway resolution errors gracefully', () => {
       const customGateway = new TestCustomGateway();
 
-      // Invalid model ID format (missing parts)
+      // Invalid model ID format (missing model part)
       expect(() => {
-        new ModelRouterLanguageModel('custom/invalid', [customGateway]);
+        new ModelRouterLanguageModel('custom/', [customGateway]);
       }).toThrow();
     });
 
