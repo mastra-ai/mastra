@@ -134,7 +134,7 @@ export function classifyServerEntry(raw: unknown): { kind: 'stdio' | 'http' | 's
 
   if (hasUrl) {
     try {
-      new URL(obj.url as string);
+      new URL(expandEnvVars(obj.url as string));
     } catch {
       return { kind: 'skip', reason: `Invalid URL: "${obj.url}"` };
     }
@@ -173,7 +173,7 @@ export function validateConfig(raw: unknown): McpConfig {
         continue;
       }
       servers[name] = {
-        url: e.url as string,
+        url: expandEnvVars(e.url as string),
         headers:
           typeof e.headers === 'object' && e.headers !== null
             ? expandHeaderEnvVars(e.headers as Record<string, unknown>)
