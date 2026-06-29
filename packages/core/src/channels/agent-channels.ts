@@ -1205,9 +1205,10 @@ export class AgentChannels {
     const thread = await memoryStore.getThreadById({ threadId });
     if (!thread) return null;
 
-    const platform = thread.metadata?.channel_platform as string | undefined;
-    const externalThreadId = thread.metadata?.channel_externalThreadId as string | undefined;
-    if (!platform || !externalThreadId) return null;
+    const platform = thread.metadata?.channel_platform;
+    const externalThreadId = thread.metadata?.channel_externalThreadId;
+    if (typeof platform !== 'string' || platform.length === 0) return null;
+    if (typeof externalThreadId !== 'string' || externalThreadId.length === 0) return null;
     if (!this.adapters[platform]) return null;
 
     const chat = this.chat;

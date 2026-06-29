@@ -1692,6 +1692,20 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
     expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
   });
 
+  it('passes through when channel metadata is present but not a string', async () => {
+    // `thread.metadata` is persisted `unknown`; a truthy non-string value must
+    // not slip past the guard into `chat.thread(...)`.
+    const { channels, calls } = await makeFallbackChannels({
+      channel_platform: 123,
+      channel_externalThreadId: { nested: true },
+    });
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'bad metadata' } }], {
+      threadId: FALLBACK_THREAD_ID,
+    });
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
   it('passes through when the thread does not exist in storage', async () => {
     const { channels, calls } = await makeFallbackChannels(null);
     await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'orphan run' } }], {
