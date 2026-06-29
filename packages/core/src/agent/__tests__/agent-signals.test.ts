@@ -2768,6 +2768,7 @@ describe('Agent signals', () => {
       pubsub,
     );
 
+    await pubsub.acquireLease('remote-resource\u0000remote-thread', 'remote-run-1', 15000);
     ownerRuntime.registerRun(
       owner,
       output,
@@ -2806,6 +2807,7 @@ describe('Agent signals', () => {
 
     finishRun();
     await waitForRemoteRun;
+    await pubsub.releaseLease('remote-resource\u0000remote-thread', 'remote-run-1');
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
   });
