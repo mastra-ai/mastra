@@ -152,4 +152,14 @@ describe('MemoryStorageMongoDB — index definitions and metadata storage', () =
 
     await expect(okMemory.createDefaultIndexes()).resolves.toBeUndefined();
   });
+
+  test.todo(
+    'F3: concurrent swapBufferedToActive calls must not duplicate observation chunks ' +
+      '(non-deterministic: requires two goroutine-equivalent async tasks to read the same snapshot)',
+  );
+
+  test.todo(
+    'F4: concurrent updateBufferedReflection calls must not lose one write ' +
+      '(non-deterministic: lost update requires two writes to race on the same document)',
+  );
 });

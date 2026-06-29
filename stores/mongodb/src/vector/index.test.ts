@@ -387,16 +387,6 @@ describe('MongoDBVector Integration Tests', () => {
     );
 
     test.todo(
-      'F3: concurrent swapBufferedToActive calls must not duplicate observation chunks ' +
-        '(non-deterministic: requires two goroutine-equivalent async tasks to read the same snapshot)',
-    );
-
-    test.todo(
-      'F4: concurrent updateBufferedReflection calls must not lose one write ' +
-        '(non-deterministic: lost update requires two writes to race on the same document)',
-    );
-
-    test.todo(
       'F6: query with a pre-filter matching >370 000 documents must not hit the 16 MB BSON limit ' +
         '(requires seeding ~400 000 documents — impractical in CI; fix is to pass combinedFilter directly to $vectorSearch)',
     );
