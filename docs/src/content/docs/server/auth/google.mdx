@@ -67,9 +67,9 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthGoogle } from '@mastra/auth-google'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthGoogle(),
-  },
+	server: {
+		auth: new MastraAuthGoogle(),
+	},
 })
 ```
 
@@ -88,14 +88,14 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthGoogle } from '@mastra/auth-google'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthGoogle({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      redirectUri: process.env.GOOGLE_REDIRECT_URI,
-      allowedDomains: ['example.com'],
-    }),
-  },
+	server: {
+		auth: new MastraAuthGoogle({
+			clientId: process.env.GOOGLE_CLIENT_ID,
+			clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+			redirectUri: process.env.GOOGLE_REDIRECT_URI,
+			allowedDomains: ['example.com'],
+		}),
+	},
 })
 ```
 
@@ -108,22 +108,22 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthGoogle, MastraRBACGoogle } from '@mastra/auth-google'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthGoogle(),
-    rbac: new MastraRBACGoogle({
-      serviceAccount: {
-        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
-        privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
-        subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
-      },
-      roleMapping: {
-        'admins@example.com': ['*'],
-        'engineering@example.com': ['agents:*', 'workflows:*', 'tools:*'],
-        'viewers@example.com': ['agents:read', 'workflows:read'],
-        _default: [], // users with unmapped groups get no permissions
-      },
-    }),
-  },
+	server: {
+		auth: new MastraAuthGoogle(),
+		rbac: new MastraRBACGoogle({
+			serviceAccount: {
+				clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+				privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+				subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+			},
+			roleMapping: {
+				'admins@example.com': ['*'],
+				'engineering@example.com': ['agents:*', 'workflows:*', 'tools:*'],
+				'viewers@example.com': ['agents:read', 'workflows:read'],
+				_default: [], // users with unmapped groups get no permissions
+			},
+		}),
+	},
 })
 ```
 
@@ -137,27 +137,27 @@ import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 import { MastraRBACGoogle } from '@mastra/auth-google'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthAuth0(),
-    rbac: new MastraRBACGoogle({
-      getUserKey: user => {
-        if (!user || typeof user !== 'object') return undefined
+	server: {
+		auth: new MastraAuthAuth0(),
+		rbac: new MastraRBACGoogle({
+			getUserKey: user => {
+				if (!user || typeof user !== 'object') return undefined
 
-        const { email } = user as { email?: unknown }
-        return typeof email === 'string' ? email : undefined
-      },
-      serviceAccount: {
-        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
-        privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
-        subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
-      },
-      roleMapping: {
-        'engineering@example.com': ['agents:*', 'workflows:*'],
-        'admins@example.com': ['*'],
-        _default: [],
-      },
-    }),
-  },
+				const { email } = user as { email?: unknown }
+				return typeof email === 'string' ? email : undefined
+			},
+			serviceAccount: {
+				clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+				privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+				subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+			},
+			roleMapping: {
+				'engineering@example.com': ['agents:*', 'workflows:*'],
+				'admins@example.com': ['*'],
+				_default: [],
+			},
+		}),
+	},
 })
 ```
 
@@ -173,19 +173,19 @@ The `roleMapping` option maps Google Workspace group email addresses to arrays o
 
 ```typescript
 const rbac = new MastraRBACGoogle({
-  roleMapping: {
-    // full access to everything
-    'admins@example.com': ['*'],
+	roleMapping: {
+		// full access to everything
+		'admins@example.com': ['*'],
 
-    // full access to agents and workflows
-    'engineering@example.com': ['agents:*', 'workflows:*'],
+		// full access to agents and workflows
+		'engineering@example.com': ['agents:*', 'workflows:*'],
 
-    // read-only access
-    'viewers@example.com': ['agents:read', 'workflows:read'],
+		// read-only access
+		'viewers@example.com': ['agents:read', 'workflows:read'],
 
-    // users whose groups don't match any key above
-    _default: [],
-  },
+		// users whose groups don't match any key above
+		_default: [],
+	},
 })
 ```
 
@@ -201,13 +201,13 @@ For cross-origin requests (for example, a frontend on `:3000` calling Mastra on 
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthGoogle(),
-    cors: {
-      origin: 'http://localhost:3000',
-      credentials: true,
-    },
-  },
+	server: {
+		auth: new MastraAuthGoogle(),
+		cors: {
+			origin: 'http://localhost:3000',
+			credentials: true,
+		},
+	},
 })
 ```
 
@@ -217,8 +217,8 @@ Configure the client to include credentials:
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'http://localhost:4111',
-  credentials: 'include',
+	baseUrl: 'http://localhost:4111',
+	credentials: 'include',
 })
 ```
 
@@ -230,12 +230,12 @@ You can also pass a Google ID token as a Bearer token. Mastra verifies the token
 import { MastraClient } from '@mastra/client-js'
 
 export const createMastraClient = (idToken: string) => {
-  return new MastraClient({
-    baseUrl: 'http://localhost:4111',
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
-  })
+	return new MastraClient({
+		baseUrl: 'http://localhost:4111',
+		headers: {
+			Authorization: `Bearer ${idToken}`,
+		},
+	})
 }
 ```
 

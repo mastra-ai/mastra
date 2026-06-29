@@ -189,13 +189,13 @@ On Vercel, pass `waitUntil` from `@vercel/functions`:
 import { waitUntil } from '@vercel/functions'
 
 export const agent = new Agent({
-  // ...
-  channels: {
-    adapters: {
-      slack: createSlackAdapter(),
-    },
-    waitUntil,
-  },
+	// ...
+	channels: {
+		adapters: {
+			slack: createSlackAdapter(),
+		},
+		waitUntil,
+	},
 })
 ```
 
@@ -212,11 +212,11 @@ import { Mastra } from '@mastra/core'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
 
 export const mastra = new Mastra({
-  agents: { agent },
-  pubsub: new RedisStreamsPubSub({
-    url: process.env.REDIS_URL,
-    keyPrefix: 'mastra:my-app',
-  }),
+	agents: { agent },
+	pubsub: new RedisStreamsPubSub({
+		url: process.env.REDIS_URL,
+		keyPrefix: 'mastra:my-app',
+	}),
 })
 ```
 
