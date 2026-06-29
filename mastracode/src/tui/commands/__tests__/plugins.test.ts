@@ -29,6 +29,13 @@ vi.mock('../../overlay.js', () => ({ showModalOverlay: overlay.showModalOverlay 
 
 const modal = vi.hoisted(() => ({ askModalQuestion: vi.fn() }));
 vi.mock('../../modal-question.js', () => ({ askModalQuestion: modal.askModalQuestion }));
+vi.mock('../../prompt-api-key.js', () => ({ promptForApiKeyIfNeeded: vi.fn(async () => undefined) }));
+vi.mock('../../components/model-selector.js', () => ({
+  ModelSelectorComponent: class {
+    focused = false;
+    constructor(public options: any) {}
+  },
+}));
 vi.mock('../../theme.js', () => ({
   getSelectListTheme: () => ({}),
   theme: {
@@ -84,6 +91,53 @@ describe('handlePluginsCommand', () => {
     expect(list.items[1].label).toContain('acme.foo');
     expect(list.items[1].label).toContain('project');
     expect(list.items[1].label).toContain('active');
+  });
+
+  it('configures plugin string and boolean settings from the detail view', async () => {
+    const plugin = {
+      id: 'acme.foo',
+      name: 'Foo Tools',
+      scope: 'project',
+      source: 'local',
+      specifier: '../foo',
+      enabled: true,
+      status: 'active',
+      path: '../foo',
+      entry: 'src/index.ts',
+      tools: {},
+      toolNames: ['foo_search'],
+      configSchema: {
+        answerModel: { type: 'model', label: 'Answer model', default: 'default-model' },
+        enabled: { type: 'boolean', label: 'Enabled', default: true },
+        prompt: { type: 'string', label: 'Prompt', default: 'hello' },
+      },
+      configValues: { answerModel: 'default-model', enabled: true, prompt: 'hello' },
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => [plugin]),
+      setConfigValue: vi.fn(async () => undefined),
+    };
+    modal.askModalQuestion.mockResolvedValueOnce('Prompt').mockResolvedValueOnce('updated prompt');
+    const ctx = {
+      pluginManager,
+      authStorage: {},
+      state: {
+        controller: { listAvailableModels: vi.fn(async () => [{ id: 'model-a', name: 'Model A' }]) },
+        ui: { hideOverlay: vi.fn() },
+      },
+      showInfo: vi.fn(),
+    } as any;
+
+    await handlePluginsCommand(ctx, ['acme.foo']);
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    expect(actions.items.map((item: any) => item.value)).toContain('configure');
+    actions.onSelect({ value: 'configure' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(pluginManager.setConfigValue).toHaveBeenCalledWith('acme.foo', 'project', 'prompt', 'updated prompt');
+    expect(ctx.showInfo).toHaveBeenCalledWith('Updated plugin setting prompt.');
   });
 
   it('asks for an entry path and retries local install when auto-detection fails', async () => {
