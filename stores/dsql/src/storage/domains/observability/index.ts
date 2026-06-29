@@ -534,8 +534,8 @@ export class ObservabilityDSQL extends ObservabilityStorage {
       const sortDirection = orderBy?.direction ?? 'DESC';
       const orderClause =
         sortField === 'durationMs'
-          ? `ORDER BY CASE WHEN r."endedAtZ" IS NULL THEN 1 ELSE 0 END, GREATEST(0, EXTRACT(EPOCH FROM (r."endedAtZ"::timestamptz - r."startedAtZ"::timestamptz)) * 1000) ${sortDirection}`
-          : `ORDER BY r."${sortField}Z" ${sortDirection}`;
+          ? `ORDER BY CASE WHEN r."endedAtZ" IS NULL THEN 1 ELSE 0 END, GREATEST(0, EXTRACT(EPOCH FROM (r."endedAtZ"::timestamptz - r."startedAtZ"::timestamptz)) * 1000) ${sortDirection}, r."traceId" ${sortDirection}, r."spanId" ${sortDirection}`
+          : `ORDER BY r."${sortField}Z" ${sortDirection}, r."traceId" ${sortDirection}, r."spanId" ${sortDirection}`;
 
       // Get total count
       const countResult = await this.#db.client.oneOrNone<{ count: string }>(

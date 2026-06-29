@@ -566,12 +566,12 @@ export class ObservabilitySpanner extends ObservabilityStorage {
       // emulation is needed there.
       const orderSql =
         orderField === 'durationMs'
-          ? `ORDER BY CASE WHEN ${rAlias}.${quoteIdent('endedAt', 'column name')} IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN TIMESTAMP_DIFF(${rAlias}.${quoteIdent('endedAt', 'column name')}, ${rAlias}.${quoteIdent('startedAt', 'column name')}, MILLISECOND) < 0 THEN 0 ELSE TIMESTAMP_DIFF(${rAlias}.${quoteIdent('endedAt', 'column name')}, ${rAlias}.${quoteIdent('startedAt', 'column name')}, MILLISECOND) END ${sortDirection}, ${rAlias}.${quoteIdent('spanId', 'column name')} ${sortDirection}`
+          ? `ORDER BY CASE WHEN ${rAlias}.${quoteIdent('endedAt', 'column name')} IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN TIMESTAMP_DIFF(${rAlias}.${quoteIdent('endedAt', 'column name')}, ${rAlias}.${quoteIdent('startedAt', 'column name')}, MILLISECOND) < 0 THEN 0 ELSE TIMESTAMP_DIFF(${rAlias}.${quoteIdent('endedAt', 'column name')}, ${rAlias}.${quoteIdent('startedAt', 'column name')}, MILLISECOND) END ${sortDirection}, ${rAlias}.${quoteIdent('traceId', 'column name')} ${sortDirection}, ${rAlias}.${quoteIdent('spanId', 'column name')} ${sortDirection}`
           : `ORDER BY ${
               orderField === 'endedAt'
                 ? `(${rAlias}.${quoteIdent(orderField, 'column name')} IS NULL) ${sortDirection === 'DESC' ? 'DESC' : 'ASC'}, `
                 : ''
-            }${rAlias}.${quoteIdent(orderField, 'column name')} ${sortDirection}, ${rAlias}.${quoteIdent('spanId', 'column name')} ${sortDirection}`;
+            }${rAlias}.${quoteIdent(orderField, 'column name')} ${sortDirection}, ${rAlias}.${quoteIdent('traceId', 'column name')} ${sortDirection}, ${rAlias}.${quoteIdent('spanId', 'column name')} ${sortDirection}`;
 
       const [countRows] = await this.database.run({
         sql: `SELECT COUNT(*) AS count FROM ${tableName} ${rAlias} ${whereSql}`,

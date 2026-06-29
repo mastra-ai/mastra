@@ -674,14 +674,14 @@ export class ObservabilityPG extends ObservabilityStorage {
       const sortDirection = orderBy?.direction ?? 'DESC';
       let orderClause: string;
       if (orderField === 'durationMs') {
-        orderClause = `ORDER BY CASE WHEN r."endedAtZ" IS NULL THEN 1 ELSE 0 END, GREATEST(0, EXTRACT(EPOCH FROM (r."endedAtZ"::timestamptz - r."startedAtZ"::timestamptz)) * 1000) ${sortDirection}`;
+        orderClause = `ORDER BY CASE WHEN r."endedAtZ" IS NULL THEN 1 ELSE 0 END, GREATEST(0, EXTRACT(EPOCH FROM (r."endedAtZ"::timestamptz - r."startedAtZ"::timestamptz)) * 1000) ${sortDirection}, r."traceId" ${sortDirection}, r."spanId" ${sortDirection}`;
       } else if (orderField === 'endedAt') {
         const sortField = `${orderField}Z`;
         const nullsOrder = sortDirection === 'DESC' ? 'NULLS FIRST' : 'NULLS LAST';
-        orderClause = `ORDER BY r."${sortField}" ${sortDirection} ${nullsOrder}`;
+        orderClause = `ORDER BY r."${sortField}" ${sortDirection} ${nullsOrder}, r."traceId" ${sortDirection}, r."spanId" ${sortDirection}`;
       } else {
         const sortField = `${orderField}Z`;
-        orderClause = `ORDER BY r."${sortField}" ${sortDirection}`;
+        orderClause = `ORDER BY r."${sortField}" ${sortDirection}, r."traceId" ${sortDirection}, r."spanId" ${sortDirection}`;
       }
 
       // Get total count

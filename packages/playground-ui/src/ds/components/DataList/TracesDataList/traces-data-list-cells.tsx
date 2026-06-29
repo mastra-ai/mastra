@@ -99,7 +99,7 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
  *  Examples: "0ms", "123ms", "1.23s", "2m 5s", "1h 12m" */
 function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(2)}s`;
+  if (ms < 60_000) return `${(Math.floor(ms / 10) / 100).toFixed(2)}s`;
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
