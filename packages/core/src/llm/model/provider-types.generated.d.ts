@@ -1488,18 +1488,22 @@ export type ProviderModelsMap = {
   readonly neuralwatt: readonly [
     'Qwen/Qwen3.5-397B-A17B-FP8',
     'Qwen/Qwen3.6-35B-A3B',
-    'glm-5-fast',
-    'glm-5.1-fast',
     'glm-5.2',
+    'glm-5.2-fast',
+    'glm-5.2-flex',
     'glm-5.2-short',
+    'glm-5.2-short-fast',
+    'glm-5.2-short-fast-flex',
+    'glm-5.2-short-flex',
     'kimi-k2.5-fast',
     'kimi-k2.6-fast',
+    'kimi-k2.6-flex',
+    'kimi-k2.7-code-flex',
     'moonshotai/Kimi-K2.5',
     'moonshotai/Kimi-K2.6',
     'moonshotai/Kimi-K2.7-Code',
     'qwen3.5-397b-fast',
     'qwen3.6-35b-fast',
-    'zai-org/GLM-5.1-FP8',
   ];
   readonly 'siliconflow-cn': readonly [
     'ByteDance-Seed/Seed-OSS-36B-Instruct',
@@ -1926,7 +1930,6 @@ export type ProviderModelsMap = {
     'grok-build-0-1',
     'kimi-k2',
     'kimi-k2-thinking',
-    'kimi-k2-thinking-turbo',
     'kimi-k2.5',
     'kimi-k2.6',
     'kimi-k2.7-code',
@@ -2390,8 +2393,10 @@ export type ProviderModelsMap = {
   readonly inceptron: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'moonshotai/Kimi-K2.6',
-    'nvidia/llama-3.3-70b-instruct-fp8',
+    'moonshotai/Kimi-K2.6-Fast',
+    'moonshotai/Kimi-K2.7-Code',
     'zai-org/GLM-5.1-FP8',
+    'zai-org/GLM-5.2',
   ];
   readonly llama: readonly [
     'cerebras-llama-4-maverick-17b-128e-instruct',
@@ -2658,14 +2663,17 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.6',
   ];
   readonly gmicloud: readonly [
+    'Qwen/Qwen3.7-Max',
     'anthropic/claude-opus-4.6',
     'anthropic/claude-opus-4.7',
     'anthropic/claude-sonnet-4.6',
     'deepseek-ai/DeepSeek-V4-Flash',
     'deepseek-ai/DeepSeek-V4-Pro',
     'moonshotai/Kimi-K2.6',
+    'moonshotai/kimi-k2.7-code-highspeed',
     'zai-org/GLM-5-FP8',
     'zai-org/GLM-5.1-FP8',
+    'zai-org/GLM-5.2-FP8',
   ];
   readonly 'xiaomi-token-plan-cn': readonly [
     'mimo-v2-tts',
