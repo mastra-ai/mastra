@@ -495,9 +495,11 @@ describe('Custom Gateway Integration', () => {
       expect(shadowGateway.resolveAuth).not.toHaveBeenCalled(); // not called at construction time
     });
 
-    it('does not reserve a gateway id from a disabled custom gateway before an enabled default', () => {
+    it('does not reserve a gateway id from a disabled custom gateway before an enabled default', async () => {
       // A disabled custom gateway with the same id as a default should not
-      // block the enabled default from being used.
+      // block the enabled default from being used. Use a netlify-prefixed id
+      // so resolution depends on the netlify gateway (openai/gpt-4o would
+      // fall back to models.dev and hide a regression here).
       const disabledGateway: MastraModelGatewayInterface = {
         id: 'netlify',
         name: 'disabled-netlify-override',
@@ -508,13 +510,33 @@ describe('Custom Gateway Integration', () => {
         resolveLanguageModel: vi.fn(() => ({}) as any),
       };
 
-      // With the disabled custom gateway first, the default Netlify gateway
-      // should still be available (not blocked by the disabled id).
-      const model = new ModelRouterLanguageModel('openai/gpt-4o', [disabledGateway]);
+      // Ensure the default Netlify gateway's getApiKey throws predictably
+      // (missing token) instead of attempting a network token exchange.
+      const prevToken = process.env['NETLIFY_TOKEN'];
+      const prevSiteId = process.env['NETLIFY_SITE_ID'];
+      delete process.env['NETLIFY_TOKEN'];
+      delete process.env['NETLIFY_SITE_ID'];
 
-      expect(model).toBeDefined();
-      // Should resolve via models.dev (default) since the disabled gateway is filtered.
-      expect(model.provider).toBe('openai');
+      try {
+        const model = new ModelRouterLanguageModel('netlify/openai/gpt-4o', [disabledGateway]);
+
+        expect(model).toBeDefined();
+        expect(model.gatewayId).toBe('netlify');
+
+        // Driving resolution: the default Netlify gateway is retained (its
+        // getApiKey throws on the missing token), so resolveLanguageModel is
+        // never reached. If the disabled gateway were incorrectly retained,
+        // its getApiKey would return 'should-not-be-used' and
+        // resolveLanguageModel would be called — failing this assertion.
+        await model.supportedUrls;
+        expect(disabledGateway.resolveLanguageModel).not.toHaveBeenCalled();
+        expect(disabledGateway.getApiKey).not.toHaveBeenCalled();
+      } finally {
+        if (prevToken !== undefined) process.env['NETLIFY_TOKEN'] = prevToken;
+        else delete process.env['NETLIFY_TOKEN'];
+        if (prevSiteId !== undefined) process.env['NETLIFY_SITE_ID'] = prevSiteId;
+        else delete process.env['NETLIFY_SITE_ID'];
+      }
     });
   });
 });
