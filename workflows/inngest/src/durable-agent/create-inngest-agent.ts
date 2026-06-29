@@ -76,6 +76,15 @@ import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './cr
  */
 const CLOSE_ON_SUSPEND = Symbol('mastra.durable.inngest.closeOnSuspend');
 
+/**
+ * Internal symbol used by `generate()` / `resumeGenerate()` to tear down the
+ * pubsub subscription on suspend without removing the run-registry entry.
+ * The public `cleanup()` does both; this lets the generate wrappers keep the
+ * registry alive across `suspend` → `resumeGenerate()` while still releasing
+ * the local stream subscription.
+ */
+const STREAM_CLEANUP = Symbol('mastra.durable.inngest.streamCleanup');
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -770,12 +779,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onChunk: streamOptions?.onChunk,
         onStepFinish: streamOptions?.onStepFinish,
         onFinish: async result => {
-          await streamOptions?.onFinish?.(result);
-          finalizeGlobalRegistry();
+          try {
+            await streamOptions?.onFinish?.(result);
+          } finally {
+            finalizeGlobalRegistry();
+          }
         },
         onError: async error => {
-          await streamOptions?.onError?.(error);
-          finalizeGlobalRegistry();
+          try {
+            await streamOptions?.onError?.(error);
+          } finally {
+            finalizeGlobalRegistry();
+          }
         },
         onSuspended: streamOptions?.onSuspended,
         onAbort: async data => {
@@ -835,6 +850,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         get fullStream() {
           return output.fullStream;
         },
+        // Internal: stream-only cleanup for generate()/resumeGenerate() to
+        // release the subscription on suspend without dropping the registry.
+        [STREAM_CLEANUP]: streamCleanup,
       };
 
       return result as InngestAgentStreamResult<TOutput>;
@@ -877,11 +895,33 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           );
         }
       }
-      const existingEntry = globalRunRegistry.get(runId);
-      if (existingEntry) {
-        existingEntry.abortController = abortController;
-        existingEntry.abortSignal = abortController.signal;
+      // Ensure a registry entry exists for this resumed segment. On Inngest,
+      // a resume frequently runs in a fresh process where no prior stream()
+      // entry is in memory — without this, the abort controller would be
+      // silently dropped and the durable LLM step (when co-located) would
+      // have nothing to react to.
+      let existingEntry = globalRunRegistry.get(runId);
+      if (!existingEntry) {
+        existingEntry = {
+          // Minimal placeholder fields. The durable LLM step recreates tools
+          // and model from the workflow input; this slot exists primarily to
+          // carry the abort controller across the resumed segment.
+          tools: {},
+          model: undefined as any,
+        };
+        globalRunRegistry.set(runId, existingEntry);
       }
+      existingEntry.abortController = abortController;
+      existingEntry.abortSignal = abortController.signal;
+
+      // Track cleanup state for the resumed segment so terminal events
+      // (finish/error/abort/cleanup) always tear down the registry entry.
+      let resumeCleanedUp = false;
+      const finalizeResumeRegistry = () => {
+        if (resumeCleanedUp) return;
+        resumeCleanedUp = true;
+        globalRunRegistry.delete(runId);
+      };
 
       // Re-subscribe to the stream
       const {
@@ -901,10 +941,28 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         resourceId: resumeOptions?.resourceId,
         onChunk: resumeOptions?.onChunk,
         onStepFinish: resumeOptions?.onStepFinish,
-        onFinish: resumeOptions?.onFinish,
-        onError: resumeOptions?.onError,
+        onFinish: async result => {
+          try {
+            await resumeOptions?.onFinish?.(result);
+          } finally {
+            finalizeResumeRegistry();
+          }
+        },
+        onError: async error => {
+          try {
+            await resumeOptions?.onError?.(error);
+          } finally {
+            finalizeResumeRegistry();
+          }
+        },
         onSuspended: resumeOptions?.onSuspended,
-        onAbort: resumeOptions?.onAbort as ((data: any) => void | Promise<void>) | undefined,
+        onAbort: async data => {
+          try {
+            await (resumeOptions?.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+          } finally {
+            finalizeResumeRegistry();
+          }
+        },
         closeOnSuspend: (resumeOptions as any)?.[CLOSE_ON_SUSPEND] === true,
       });
 
@@ -947,14 +1005,17 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           void emitError(runId, error);
         });
 
-      if (existingEntry) {
-        existingEntry.workflowExecution = workflowExecution;
-      }
+      existingEntry.workflowExecution = workflowExecution;
 
       const abort = (reason?: unknown) => {
         if (!abortController.signal.aborted) {
           abortController.abort(reason);
         }
+      };
+
+      const cleanup = () => {
+        streamCleanup();
+        finalizeResumeRegistry();
       };
 
       return {
@@ -965,9 +1026,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
-        cleanup: streamCleanup,
+        cleanup,
         abort,
-      };
+        // Internal: stream-only cleanup for resumeGenerate() to release the
+        // subscription on suspend without dropping the resumed registry entry.
+        [STREAM_CLEANUP]: streamCleanup,
+      } as InngestAgentStreamResult<TOutput>;
     },
 
     async prepare(messages, prepareOptions) {
@@ -1068,17 +1132,26 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
         return fullOutput;
       } finally {
-        // Keep the registry entry alive on suspend so resumeGenerate() can
-        // pick it up. Other outcomes clean up via the stream's finalize hooks.
-        if (!suspended) {
+        // Always release the local stream subscription. On suspend, keep the
+        // registry entry alive so resumeGenerate() can pick it up; other
+        // outcomes run the full public cleanup (which also finalizes the
+        // registry).
+        if (suspended) {
+          const streamOnlyCleanup = (result as unknown as { [STREAM_CLEANUP]?: () => void })[STREAM_CLEANUP];
+          streamOnlyCleanup?.();
+        } else {
           result.cleanup();
         }
       }
     },
 
     async resumeGenerate(runId, resumeData, resumeOptions): Promise<FullOutput<TOutput>> {
+      // `resumeGenerate` is a one-shot drain; strip `untilIdle` so the
+      // underlying resume() never delegates to the idle-loop wrapper.
+      const { untilIdle, ...rest } = resumeOptions ?? {};
+      void untilIdle;
       const result = await proxyRef!.resume(runId, resumeData, {
-        ...(resumeOptions ?? {}),
+        ...rest,
         [CLOSE_ON_SUSPEND]: true,
       } as InngestAgentResumeOptions<TOutput>);
 
@@ -1097,7 +1170,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
         return fullOutput;
       } finally {
-        if (!suspended) {
+        if (suspended) {
+          const streamOnlyCleanup = (result as unknown as { [STREAM_CLEANUP]?: () => void })[STREAM_CLEANUP];
+          streamOnlyCleanup?.();
+        } else {
           result.cleanup();
         }
       }

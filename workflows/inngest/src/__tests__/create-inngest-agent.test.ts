@@ -584,11 +584,16 @@ describe('InngestAgent parity surface', () => {
 
     const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
     try {
-      // Wait a tick so the `ready.then(() => triggerWorkflow(...))` chain has
-      // a chance to attach to the registry entry.
-      await new Promise(resolve => setTimeout(resolve, 20));
-
-      const entry = globalRunRegistry.get(result.runId);
+      // The `ready.then(() => triggerWorkflow(...))` chain attaches the
+      // workflowExecution promise on the next microtask after `ready` settles.
+      // Poll the registry until the promise lands instead of sleeping a fixed
+      // amount of time, so this stays deterministic across machine speeds.
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(result.runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(result.runId);
+      }
       expect(entry?.workflowExecution).toBeInstanceOf(Promise);
       // The promise should settle once inngest.send resolves (stubbed to
       // undefined). Awaiting it shouldn't throw.
