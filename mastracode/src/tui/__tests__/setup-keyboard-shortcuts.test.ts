@@ -60,7 +60,7 @@ vi.mock('../status-line.js', () => ({
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
-import { createMockState } from './harness-mock.js';
+import { createMockState } from './agent-controller-mock.js';
 
 const originalPlatform = process.platform;
 
@@ -138,7 +138,7 @@ describe('setupKeyboardShortcuts', () => {
     state.goalSkillCommands = [
       { name: 'review', description: 'Review code', path: '/skills/review', metadata: { goal: true } },
     ];
-    state.harness.listModes = vi.fn(() => ['default']);
+    state.controller.listModes = vi.fn(() => ['default']);
 
     setupAutocomplete(state);
 
@@ -243,9 +243,9 @@ describe('setupKeyboardShortcuts', () => {
     state.customSlashCommands = [];
     state.skillCommands = [];
     state.goalSkillCommands = [];
-    state.harness.getWorkspace = vi.fn(() => undefined);
-    state.harness.hasWorkspace = vi.fn(() => true);
-    state.harness.resolveWorkspace = vi.fn(async () => ({
+    state.controller.getWorkspace = vi.fn(() => undefined);
+    state.controller.hasWorkspace = vi.fn(() => true);
+    state.controller.resolveWorkspace = vi.fn(async () => ({
       skills: {
         list: vi.fn(async () => [
           { name: 'review', description: 'Review code', path: '/skills/review' },
@@ -272,7 +272,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(refreshedCommands).not.toContain('skill/internal-helper');
   });
 
-  it('submits immediately on Enter when the harness is idle', () => {
+  it('submits immediately on Enter when the controller is idle', () => {
     const { state, editor, actions } = createState(false);
     const queueFollowUpMessage = vi.fn();
 
@@ -291,7 +291,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
-  it('submits through the editor handler on Enter while the harness is running', () => {
+  it('submits through the editor handler on Enter while the controller is running', () => {
     const { state, editor, actions } = createState(true);
     const queueFollowUpMessage = vi.fn();
 
@@ -311,7 +311,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
-  it('queues follow-ups with Ctrl+F while the harness is running', () => {
+  it('queues follow-ups with Ctrl+F while the controller is running', () => {
     const { state, editor, actions } = createState(true);
     const queueFollowUpMessage = vi.fn();
 
@@ -375,7 +375,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
 
-  it('aborts an active goal judge even when the harness is idle', () => {
+  it('aborts an active goal judge even when the controller is idle', () => {
     const { state, editor, actions } = createState(false);
     const abortController = new AbortController();
     const component = { setInterrupted: vi.fn() };
@@ -435,7 +435,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
-  it('aborts the harness and persists a paused goal when clearing during goal judge evaluation', () => {
+  it('aborts the controller and persists a paused goal when clearing during goal judge evaluation', () => {
     const { state, actions } = createState(true);
     const abortController = { abort: vi.fn() };
     const component = { setInterrupted: vi.fn() };

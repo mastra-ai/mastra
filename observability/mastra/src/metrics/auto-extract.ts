@@ -65,6 +65,7 @@ export function emitAutoExtractedMetrics(span: AnySpan, metrics: MetricsContext)
   emitTokenMetrics(span, metrics);
 }
 
+/** Estimate costs and emit token usage metrics for a model-generation span. */
 function emitUsageMetrics(
   attrs: ModelGenerationAttributes,
   usage: NonNullable<ModelGenerationAttributes['usage']>,
@@ -85,6 +86,18 @@ function emitUsageMetrics(
           model,
           usage,
         });
+
+        if (isNoMatchingModelResult(metricCosts) && attrs.model && attrs.model !== model) {
+          const configuredModelCosts = estimateCosts({
+            provider,
+            model: attrs.model,
+            usage,
+          });
+
+          if (!isNoMatchingModelResult(configuredModelCosts)) {
+            metricCosts = configuredModelCosts;
+          }
+        }
       }
     } catch {
       metricCosts = new Map();
@@ -104,6 +117,13 @@ function emitUsageMetrics(
   for (const sample of getTokenMetricSamples(usage)) {
     emit(sample.name, sample.value);
   }
+}
+
+function isNoMatchingModelResult(metricCosts: Map<TokenMetrics, CostContext>): boolean {
+  return (
+    metricCosts.size > 0 &&
+    [...metricCosts.values()].every(costContext => costContext.costMetadata?.error === 'no_matching_model')
+  );
 }
 
 function getProvidedCostContext(

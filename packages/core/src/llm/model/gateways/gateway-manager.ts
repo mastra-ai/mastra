@@ -20,7 +20,7 @@ export interface GatewayModel {
 
 /**
  * Centralises the gateway-chain operations shared between
- * {@link ModelRouterLanguageModel} and the Harness: gateway merging, model
+ * {@link ModelRouterLanguageModel} and the AgentController: gateway merging, model
  * routing, auth resolution, and provider/model listing.
  *
  * The manager owns the *gateway registry* (which gateway owns a model, auth

@@ -4,7 +4,7 @@
  *
  * Root cause: state.activeInlineQuestion is a single property that gets
  * overwritten when multiple ask_question events arrive concurrently.
- * The Harness dispatches events fire-and-forget (no await), so multiple
+ * The AgentController dispatches events fire-and-forget (no await), so multiple
  * interactive handlers run concurrently, and the last one wins — earlier
  * prompts become unreachable.
  */
@@ -34,8 +34,8 @@ function createMockState(): TUIState {
 
   const session = { respondToToolSuspension: vi.fn() };
   return {
-    options: { inlineQuestions: true, harness: {} as any },
-    harness: { session },
+    options: { inlineQuestions: true, controller: {} as any },
+    controller: { session },
     session,
     chatContainer,
     ui: {

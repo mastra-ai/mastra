@@ -1,0 +1,286 @@
+---
+title: "Google | Auth"
+description: Authenticate your Mastra server and Studio using Google Workspace with hosted-domain checks and group-based RBAC.
+packages:
+  - "@mastra/auth-google"
+---
+
+# Google
+
+The `@mastra/auth-google` package provides authentication and role-based access control for Mastra using Google Workspace. It supports an OAuth 2.0 / OIDC login flow with encrypted session cookies, verifies Google ID tokens, and maps Google Workspace groups to Mastra permissions.
+
+Use it when your Studio users sign in with Google and access should be limited to one or more Google Workspace domains.
+
+## Prerequisites
+
+This guide uses Google Workspace authentication. Make sure to:
+
+1. Create or select a Google Cloud project
+1. Set up an OAuth client for web applications
+1. Add your Mastra SSO callback URL to the authorized redirect URIs
+1. Configure Google Workspace groups if you plan to use RBAC
+
+For Google Groups RBAC, also configure a Google Workspace service account with domain-wide delegation and grant it the Directory API read-only group scope:
+
+```text
+https://www.googleapis.com/auth/admin.directory.group.readonly
+```
+
+Make sure your environment variables are set.
+
+```env title=".env"
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:4111/api/auth/sso/callback
+GOOGLE_COOKIE_PASSWORD=a-random-string-at-least-32-characters-long
+GOOGLE_ALLOWED_DOMAINS=example.com
+
+GOOGLE_SERVICE_ACCOUNT_EMAIL=service-account@project.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_WORKSPACE_ADMIN_EMAIL=admin@example.com
+```
+
+:::note
+
+`GOOGLE_COOKIE_PASSWORD` encrypts session cookies. If omitted, an auto-generated value is used that doesn't survive server restarts. Set it explicitly for production.
+
+`MastraAuthGoogle` reads the `GOOGLE_*` auth variables automatically. The service-account variables shown above are read by the configuration code you pass to `MastraRBACGoogle`.
+
+:::
+
+## Installation
+
+Before you can use the `MastraAuthGoogle` class, install the `@mastra/auth-google` package.
+
+```bash npm2yarn
+npm install @mastra/auth-google
+```
+
+## Usage examples
+
+### Basic usage with environment variables
+
+With the environment variables above set, all constructor parameters are optional:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+	server: {
+		auth: new MastraAuthGoogle(),
+	},
+})
+```
+
+:::warning
+
+Use `allowedDomains` or `GOOGLE_ALLOWED_DOMAINS` to enforce Workspace access. Mastra checks Google's verified `hd` claim, not the email address suffix.
+
+:::
+
+### Custom configuration
+
+Pass constructor options directly if you don't want to rely on environment variables:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+	server: {
+		auth: new MastraAuthGoogle({
+			clientId: process.env.GOOGLE_CLIENT_ID,
+			clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+			redirectUri: process.env.GOOGLE_REDIRECT_URI,
+			allowedDomains: ['example.com'],
+		}),
+	},
+})
+```
+
+### Auth with Google Groups RBAC
+
+Add `MastraRBACGoogle` to map Google Workspace groups to Mastra permissions:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthGoogle, MastraRBACGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+	server: {
+		auth: new MastraAuthGoogle(),
+		rbac: new MastraRBACGoogle({
+			serviceAccount: {
+				clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+				privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+				subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+			},
+			roleMapping: {
+				'admins@example.com': ['*'],
+				'engineering@example.com': ['agents:*', 'workflows:*', 'tools:*'],
+				'viewers@example.com': ['agents:read', 'workflows:read'],
+				_default: [], // users with unmapped groups get no permissions
+			},
+		}),
+	},
+})
+```
+
+### Cross-provider usage
+
+Use a different auth provider (Auth0, Clerk, etc.) for login and Google Workspace groups for RBAC. Pass a `getUserKey` function to resolve the Google Directory API user key from the other provider's user object:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraAuthAuth0 } from '@mastra/auth-auth0'
+import { MastraRBACGoogle } from '@mastra/auth-google'
+
+export const mastra = new Mastra({
+	server: {
+		auth: new MastraAuthAuth0(),
+		rbac: new MastraRBACGoogle({
+			getUserKey: user => {
+				if (!user || typeof user !== 'object') return undefined
+
+				const { email } = user as { email?: unknown }
+				return typeof email === 'string' ? email : undefined
+			},
+			serviceAccount: {
+				clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+				privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+				subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+			},
+			roleMapping: {
+				'engineering@example.com': ['agents:*', 'workflows:*'],
+				'admins@example.com': ['*'],
+				_default: [],
+			},
+		}),
+	},
+})
+```
+
+:::info
+
+Visit [MastraAuthGoogle](/reference/auth/google) for all available configuration options.
+
+:::
+
+## Role mapping
+
+The `roleMapping` option maps Google Workspace group email addresses to arrays of Mastra permission strings. Permissions follow a `resource:action` pattern and support wildcards:
+
+```typescript
+const rbac = new MastraRBACGoogle({
+	roleMapping: {
+		// full access to everything
+		'admins@example.com': ['*'],
+
+		// full access to agents and workflows
+		'engineering@example.com': ['agents:*', 'workflows:*'],
+
+		// read-only access
+		'viewers@example.com': ['agents:read', 'workflows:read'],
+
+		// users whose groups don't match any key above
+		_default: [],
+	},
+})
+```
+
+Group email addresses are used as role IDs by default. Use `mapGroupToRoles` if you want to map by group name or another property. The `_default` key assigns permissions to users whose Google Workspace groups don't match any other key.
+
+## Client-side setup
+
+When auth is enabled, requests to Mastra routes require authentication. When SSO is enabled with `GOOGLE_CLIENT_SECRET`, `MastraAuthGoogle` uses Google sign-in and sets an encrypted session cookie after login.
+
+### Cookie session (recommended)
+
+For cross-origin requests (for example, a frontend on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+	server: {
+		auth: new MastraAuthGoogle(),
+		cors: {
+			origin: 'http://localhost:3000',
+			credentials: true,
+		},
+	},
+})
+```
+
+Configure the client to include credentials:
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const mastraClient = new MastraClient({
+	baseUrl: 'http://localhost:4111',
+	credentials: 'include',
+})
+```
+
+### Bearer token
+
+You can also pass a Google ID token as a Bearer token. Mastra verifies the token against Google's JSON Web Key Set (JWKS) endpoint:
+
+```typescript title="lib/mastra-client.ts"
+import { MastraClient } from '@mastra/client-js'
+
+export const createMastraClient = (idToken: string) => {
+	return new MastraClient({
+		baseUrl: 'http://localhost:4111',
+		headers: {
+			Authorization: `Bearer ${idToken}`,
+		},
+	})
+}
+```
+
+:::info
+
+Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
+
+:::
+
+### Making authenticated requests
+
+<Tabs>
+  <TabItem value="client" label="MastraClient">
+    ```typescript title="src/api/agents.ts"
+    import { mastraClient } from '../lib/mastra-client'
+
+    const agent = mastraClient.getAgent('weatherAgent')
+    const response = await agent.generate('Weather in London')
+    console.log(response)
+    ```
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <your-google-id-token>" \
+      -d '{
+        "messages": "Weather in London"
+      }'
+    ```
+  </TabItem>
+</Tabs>
+
+## Troubleshooting
+
+- **401 after sign-in**: Check that `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` match the Google Cloud OAuth client.
+- **Workspace users are rejected**: Verify `GOOGLE_ALLOWED_DOMAINS` matches the Google ID token `hd` claim.
+- **Consumer Gmail accounts are rejected**: This is expected when `allowedDomains` is configured because Gmail accounts don't have a Workspace `hd` claim.
+- **RBAC returns default permissions**: No roles were resolved for the user. Verify the user email or custom `getUserKey`, Google group membership, and `roleMapping`. If the Directory API lookup fails, the provider throws an error instead of returning `_default`.
+- **Cookies are not sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
+- **Session lost on restart**: Set `GOOGLE_COOKIE_PASSWORD` to a stable value of at least 32 characters. Without it, an auto-generated key is used in development and changes on each restart.
+
+## Related
+
+- [Auth overview](/docs/server/auth)
+- [Composite Auth](/docs/server/auth/composite-auth)
+- [MastraAuthGoogle reference](/reference/auth/google)

@@ -142,7 +142,7 @@ const sidebars = {
 					id: 'agents/goals',
 					label: 'Goals',
 					customProps: {
-						badge: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -155,7 +155,7 @@ const sidebars = {
 					id: 'agents/durable-agents',
 					label: 'Durable Agents',
 					customProps: {
-						badge: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -178,7 +178,7 @@ const sidebars = {
 					id: 'agents/sdk-agents',
 					label: 'SDK Agents',
 					customProps: {
-						badge: ['new'],
+						badge: 'new',
 					},
 				},
 				{
@@ -191,7 +191,7 @@ const sidebars = {
 					id: 'agents/code-mode',
 					label: 'Code Mode',
 					customProps: {
-						badge: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -199,7 +199,7 @@ const sidebars = {
 					id: 'agents/signals',
 					label: 'Signals',
 					customProps: {
-						badge: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -207,7 +207,7 @@ const sidebars = {
 					id: 'agents/signal-providers',
 					label: 'Signal Providers',
 					customProps: {
-						badge: ['beta'],
+						badge: 'beta',
 					},
 				},
 				{
@@ -215,7 +215,7 @@ const sidebars = {
 					id: 'agents/networks',
 					label: 'Networks',
 					customProps: {
-						badge: ['deprecated'],
+						badge: 'deprecated',
 					},
 				},
 			],
@@ -327,7 +327,7 @@ const sidebars = {
 			type: 'category',
 			label: 'Agent Builder',
 			customProps: {
-				badge: ['new'],
+				badge: 'new',
 			},
 			items: [
 				{ type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
@@ -362,39 +362,39 @@ const sidebars = {
 		},
 		{
 			type: 'category',
-			label: 'Harness',
+			label: 'AgentController',
 			customProps: {
-				badge: ['beta'],
+				badge: 'beta',
 			},
 			items: [
 				{
 					type: 'doc',
-					id: 'harness/overview',
+					id: 'agent-controller/overview',
 					label: 'Overview',
 				},
 				{
 					type: 'doc',
-					id: 'harness/session',
+					id: 'agent-controller/session',
 					label: 'Session',
 				},
 				{
 					type: 'doc',
-					id: 'harness/modes',
+					id: 'agent-controller/modes',
 					label: 'Modes',
 				},
 				{
 					type: 'doc',
-					id: 'harness/threads-and-state',
+					id: 'agent-controller/threads-and-state',
 					label: 'Threads and State',
 				},
 				{
 					type: 'doc',
-					id: 'harness/subagents',
+					id: 'agent-controller/subagents',
 					label: 'Subagents',
 				},
 				{
 					type: 'doc',
-					id: 'harness/tool-approvals',
+					id: 'agent-controller/tool-approvals',
 					label: 'Tool Approvals',
 				},
 			],
@@ -500,7 +500,7 @@ const sidebars = {
 					id: 'server/pubsub',
 					label: 'PubSub',
 					customProps: {
-						badge: ['new'],
+						badge: 'new',
 					},
 				},
 				{
@@ -556,6 +556,11 @@ const sidebars = {
 							type: 'doc',
 							id: 'server/auth/fga',
 							label: 'Fine-Grained Authorization',
+						},
+						{
+							type: 'doc',
+							id: 'server/auth/google',
+							label: 'Google',
 						},
 						{
 							type: 'doc',
@@ -926,7 +931,7 @@ const sidebars = {
 					id: 'mastra-platform/github',
 					label: 'GitHub integration',
 					customProps: {
-						badge: ['new'],
+						badge: 'new',
 					},
 				},
 				{

@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Web equivalent of MastraCode's `request_access` prompt flow: the agent calls

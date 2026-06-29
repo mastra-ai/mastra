@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Project switching scenario — verifies that setting `projectPath` on session
@@ -20,7 +20,7 @@ describe('web scenario: project-switch', () => {
       run: async ({ driver, workspaceRoot }) => {
         // Set the project path to the scenario's temp workspace dir.
         const client = driver.getClient();
-        const session = client.getHarness('code').session('web-scenario-project-switch');
+        const session = client.getAgentController('code').session('web-scenario-project-switch');
         await session.setState({ projectPath: workspaceRoot });
 
         // Send a message — the workspace factory reads projectPath from state.

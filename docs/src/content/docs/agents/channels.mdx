@@ -175,6 +175,53 @@ See [Channels reference](/reference/agents/channels#inline-media) for all `inlin
 
 :::
 
+## Serverless deployment
+
+On serverless platforms like Vercel, each request runs in a separate, short-lived instance. Channels need two things to work reliably in that environment: a way to keep the function alive while the agent responds, and a shared pub/sub so instances can coordinate.
+
+### Keep the function alive with `waitUntil`
+
+A channel webhook returns a `200` response right away, then the agent runs in the background to post its reply. On most serverless platforms the function is frozen as soon as it responds, which kills the run before the agent answers. Pass a `waitUntil` function so the platform keeps the instance alive until the run finishes.
+
+On Vercel, pass `waitUntil` from `@vercel/functions`:
+
+```typescript
+import { waitUntil } from '@vercel/functions'
+
+export const agent = new Agent({
+	// ...
+	channels: {
+		adapters: {
+			slack: createSlackAdapter(),
+		},
+		waitUntil,
+	},
+})
+```
+
+Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soon as the response is sent. Cloudflare Workers and Netlify Functions are detected automatically from the request context, so they don't need it. For runtimes where `waitUntil` lives on the request context but isn't detected automatically, use `resolveWaitUntil`. See the [Channels reference](/reference/agents/channels#parameters) for details.
+
+### Coordinate instances with a shared pub/sub
+
+Channels route messages through the agent's signal pipeline, and each run acquires a lease on its thread so a single run owns the conversation at a time. The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+
+Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+	agents: { agent },
+	pubsub: new RedisStreamsPubSub({
+		url: process.env.REDIS_URL,
+		keyPrefix: 'mastra:my-app',
+	}),
+})
+```
+
+Vercel's one-click Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+
 ## Related
 
 - [Guide: Building a Slack assistant](/guides/guide/slack-assistant)

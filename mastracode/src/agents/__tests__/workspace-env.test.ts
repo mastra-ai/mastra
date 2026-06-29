@@ -21,7 +21,7 @@ function createRequestContext(projectPath: string) {
     projectPath,
     sandboxAllowedPaths: [],
   });
-  requestContext.set('harness', {
+  requestContext.set('controller', {
     modeId: 'build',
     getState,
     session: {
