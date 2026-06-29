@@ -141,6 +141,35 @@ export class ScoresInMemory extends ScoresStorage {
     };
   }
 
+  async listScoresByDatasetId({
+    datasetId,
+    pagination,
+    filters,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    const scores = Array.from(this.db.scores.values()).filter(
+      score => score.datasetId === datasetId && matchesTenancy(score, filters),
+    );
+
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
+    return {
+      scores: scores.slice(start, end),
+      pagination: {
+        total: scores.length,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
+      },
+    };
+  }
+
   async listScoresByEntityId({
     entityId,
     entityType,

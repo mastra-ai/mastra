@@ -136,6 +136,10 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   // Batch handle: groups all per-trace scores produced by one batch scoring call.
   // Each score keeps its own per-execution `runId`; `batchId` is shared across the batch.
   batchId: { type: 'text', nullable: true },
+  // Dataset provenance: which curated dataset item this score was produced against.
+  // Lets baseline scores join back to dataset items (ground truth) without re-running.
+  datasetId: { type: 'text', nullable: true },
+  datasetItemId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
 };

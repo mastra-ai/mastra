@@ -98,4 +98,25 @@ export abstract class ScoresStorage extends StorageDomain {
       details: { batchId },
     });
   }
+
+  /**
+   * List all scores produced against a curated dataset (`datasetId`), so baseline
+   * scores can join back to their dataset items. Tenant-scoped via `filters`.
+   * Adapters that have not implemented this throw by default.
+   */
+  async listScoresByDatasetId({
+    datasetId,
+    pagination: _pagination,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    throw new MastraError({
+      id: 'SCORES_STORAGE_GET_SCORES_BY_DATASET_ID_NOT_IMPLEMENTED',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: { datasetId },
+    });
+  }
 }

@@ -11,6 +11,8 @@ export function createSampleScore({
   organizationId,
   projectId,
   batchId,
+  datasetId,
+  datasetItemId,
   runId,
 }: {
   scorerId: string;
@@ -22,6 +24,8 @@ export function createSampleScore({
   organizationId?: string;
   projectId?: string;
   batchId?: string;
+  datasetId?: string;
+  datasetItemId?: string;
   runId?: string;
 }): ScoreRowData {
   return {
@@ -34,6 +38,8 @@ export function createSampleScore({
     organizationId,
     projectId,
     batchId,
+    datasetId,
+    datasetItemId,
     createdAt: new Date(),
     updatedAt: new Date(),
     runId: runId ?? randomUUID(),

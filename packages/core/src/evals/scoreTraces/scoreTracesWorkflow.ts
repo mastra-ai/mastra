@@ -230,6 +230,8 @@ export async function runScorerOnTarget({
   scorer,
   target,
   batchId,
+  datasetId,
+  datasetItemId,
 }: {
   storage: MastraStorage;
   scorer: MastraScorer;
@@ -237,6 +239,11 @@ export async function runScorerOnTarget({
   /** Optional batch handle stamped on the persisted score so all scores from one
    * batch scoring call share a `batchId` (each keeps its own per-execution `runId`). */
   batchId?: string;
+  /** Optional dataset provenance stamped on the persisted score so baseline scores
+   * can join back to the curated dataset item that produced them. Top-level handles,
+   * independent of how the trace is resolved. */
+  datasetId?: string;
+  datasetItemId?: string;
 }) {
   const { trace, span } = await resolveTraceAndSpan({ storage, target });
   const tenancy = getSpanTenancy(span);
@@ -261,6 +268,8 @@ export async function runScorerOnTarget({
     ...(tenancy.organizationId ? { organizationId: tenancy.organizationId } : {}),
     ...(tenancy.projectId ? { projectId: tenancy.projectId } : {}),
     ...(batchId ? { batchId } : {}),
+    ...(datasetId ? { datasetId } : {}),
+    ...(datasetItemId ? { datasetItemId } : {}),
   };
 
   // Legacy score-store emission. This path is being deprecated.

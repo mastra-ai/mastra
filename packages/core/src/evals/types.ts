@@ -201,6 +201,10 @@ export const scoreRowDataSchema = z.object({
   // Batch handle shared across all per-trace scores produced by one batch scoring
   // call. `runId` stays per-execution; `batchId` groups the batch.
   batchId: z.string().nullish(),
+  // Dataset provenance: links a baseline score back to the curated dataset item it
+  // scored, so scores can join to ground truth without re-running the agent.
+  datasetId: z.string().nullish(),
+  datasetItemId: z.string().nullish(),
 
   // Additional ScoreRowData fields
   preprocessStepResult: optionalRecordSchema,

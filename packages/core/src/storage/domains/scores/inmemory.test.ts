@@ -137,3 +137,61 @@ describe('ScoresInMemory batchId', () => {
     expect(result.scores).toHaveLength(0);
   });
 });
+
+describe('ScoresInMemory datasetId', () => {
+  let db: InMemoryDB;
+  let scores: ScoresInMemory;
+
+  beforeEach(() => {
+    db = new InMemoryDB();
+    scores = new ScoresInMemory({ db });
+  });
+
+  it('persists datasetId and datasetItemId on saved scores', async () => {
+    const { score } = await scores.saveScore(basePayload({ datasetId: 'ds-1', datasetItemId: 'item-1' }));
+    expect(score.datasetId).toBe('ds-1');
+    expect(score.datasetItemId).toBe('item-1');
+  });
+
+  it('groups scores by datasetId', async () => {
+    await scores.saveScore(basePayload({ datasetId: 'ds-1', datasetItemId: 'item-1', runId: 'run-1' }));
+    await scores.saveScore(basePayload({ datasetId: 'ds-1', datasetItemId: 'item-2', runId: 'run-2' }));
+    await scores.saveScore(basePayload({ datasetId: 'ds-2', datasetItemId: 'item-3', runId: 'run-3' }));
+
+    const ds1 = await scores.listScoresByDatasetId({
+      datasetId: 'ds-1',
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(ds1.scores).toHaveLength(2);
+    expect(new Set(ds1.scores.map(s => s.datasetItemId))).toEqual(new Set(['item-1', 'item-2']));
+
+    const ds2 = await scores.listScoresByDatasetId({
+      datasetId: 'ds-2',
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(ds2.scores).toHaveLength(1);
+  });
+
+  it('scopes listScoresByDatasetId by tenancy', async () => {
+    await scores.saveScore(basePayload({ datasetId: 'ds-1', organizationId: 'org-a', projectId: 'proj-1' }));
+    await scores.saveScore(basePayload({ datasetId: 'ds-1', organizationId: 'org-b', projectId: 'proj-1' }));
+
+    const result = await scores.listScoresByDatasetId({
+      datasetId: 'ds-1',
+      pagination: { page: 0, perPage: 10 },
+      filters: { organizationId: 'org-a', projectId: 'proj-1' },
+    });
+    expect(result.scores).toHaveLength(1);
+    expect(result.scores[0]?.organizationId).toBe('org-a');
+  });
+
+  it('does not return scores without a matching datasetId', async () => {
+    await scores.saveScore(basePayload({ runId: 'run-1' }));
+
+    const result = await scores.listScoresByDatasetId({
+      datasetId: 'ds-1',
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(result.scores).toHaveLength(0);
+  });
+});

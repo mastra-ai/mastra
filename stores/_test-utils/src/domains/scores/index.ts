@@ -448,5 +448,52 @@ export function createScoresTest({
         expect(result.scores[0]?.organizationId).toBe('org-a');
       });
     });
+
+    describe('datasetId grouping', () => {
+      it('persists datasetId and datasetItemId on saved scores', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const { score: saved } = await scoresStorage.saveScore(
+          createSampleScore({ scorerId, datasetId: 'ds-1', datasetItemId: 'item-1' }),
+        );
+        expect(saved.datasetId).toBe('ds-1');
+        expect(saved.datasetItemId).toBe('item-1');
+      });
+
+      it('groups scores by datasetId', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const datasetId = `ds-${randomUUID()}`;
+        await scoresStorage.saveScore(createSampleScore({ scorerId, datasetId, datasetItemId: 'item-1' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, datasetId, datasetItemId: 'item-2' }));
+        await scoresStorage.saveScore(
+          createSampleScore({ scorerId, datasetId: `other-${randomUUID()}`, datasetItemId: 'item-3' }),
+        );
+
+        const result = await scoresStorage.listScoresByDatasetId({
+          datasetId,
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(result.scores).toHaveLength(2);
+        expect(new Set(result.scores.map(s => s.datasetItemId))).toEqual(new Set(['item-1', 'item-2']));
+      });
+
+      it('scopes listScoresByDatasetId by tenancy', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const datasetId = `ds-${randomUUID()}`;
+        await scoresStorage.saveScore(
+          createSampleScore({ scorerId, datasetId, organizationId: 'org-a', projectId: 'proj-1' }),
+        );
+        await scoresStorage.saveScore(
+          createSampleScore({ scorerId, datasetId, organizationId: 'org-b', projectId: 'proj-1' }),
+        );
+
+        const result = await scoresStorage.listScoresByDatasetId({
+          datasetId,
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-a', projectId: 'proj-1' },
+        });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]?.organizationId).toBe('org-a');
+      });
+    });
   });
 }
