@@ -19,6 +19,7 @@ export const mesaFilesystemProvider: FilesystemProvider<MesaFilesystemOptions> =
       repos: {
         type: 'array',
         description: 'Mesa repos to mount',
+        minItems: 1,
         items: {
           type: 'object',
           required: ['name'],

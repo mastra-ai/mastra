@@ -15,6 +15,15 @@ describe('mesaFilesystemProvider', () => {
     );
   });
 
+  it('requires at least one repo in provider config', () => {
+    expect(mesaFilesystemProvider.configSchema.properties?.repos).toEqual(
+      expect.objectContaining({
+        type: 'array',
+        minItems: 1,
+      }),
+    );
+  });
+
   it('creates MesaFilesystem instances', () => {
     const filesystem = mesaFilesystemProvider.createFilesystem({
       repos: [{ name: 'docs', bookmark: 'main' }],
