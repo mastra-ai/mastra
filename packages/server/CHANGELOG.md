@@ -1,5 +1,21 @@
 # @mastra/server
 
+## 1.48.0-alpha.3
+
+### Patch Changes
+
+- Fixed inline skills (created via createSkill()) not appearing in the Dev Portal. The server now uses agent.listSkills() and agent.getSkill() which return both inline and workspace skills, instead of only querying workspace skills. ([#18569](https://github.com/mastra-ai/mastra/pull/18569))
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+
+## 1.48.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+
 ## 1.48.0-alpha.1
 
 ### Patch Changes
