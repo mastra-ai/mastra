@@ -121,7 +121,7 @@ export class PluginManager {
   private updateLocalEntryWatchers(plugins: LoadedPlugin[]): void {
     const nextEntries = new Set<string>();
     for (const plugin of plugins) {
-      if (plugin.source !== 'local' || plugin.status === 'inactive') continue;
+      if (plugin.source !== 'local' || plugin.status === 'inactive' || plugin.status === 'blocked') continue;
       const entryPath = resolvePluginEntryPath(plugin, this.options);
       nextEntries.add(entryPath);
       this.localEntryVersions.set(entryPath, getEntryVersion(entryPath));
@@ -144,7 +144,9 @@ export class PluginManager {
   }
 
   private updateGithubPoller(plugins: LoadedPlugin[]): void {
-    const hasGithubPlugin = plugins.some(plugin => plugin.source === 'github' && plugin.enabled);
+    const hasGithubPlugin = plugins.some(
+      plugin => plugin.source === 'github' && plugin.status !== 'inactive' && plugin.status !== 'blocked',
+    );
     if (hasGithubPlugin && !this.githubPollTimer) {
       this.githubPollTimer = setInterval(() => {
         void this.pollGithubSourcesForUpdates().catch(() => undefined);
@@ -169,7 +171,7 @@ export class PluginManager {
     let changed = false;
     const seen = new Set<string>();
     for (const plugin of this.loadedPlugins) {
-      if (plugin.source !== 'github' || plugin.status === 'inactive') continue;
+      if (plugin.source !== 'github' || plugin.status === 'inactive' || plugin.status === 'blocked') continue;
       const checkoutPath = this.resolvePluginSourcePath(plugin);
       if (seen.has(checkoutPath) || !fs.existsSync(path.join(checkoutPath, '.git'))) continue;
       seen.add(checkoutPath);
