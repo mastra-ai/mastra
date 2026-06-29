@@ -160,11 +160,9 @@ describe('transcript hydrate (thread history rendering)', () => {
     const assistant = state.entries[0];
     if (assistant.kind !== 'message') throw new Error('expected assistant entry');
     const [tool] = toolParts(assistant);
-    expect(tool?.toolInvocation.state).toBe('result');
+    expect(tool?.toolInvocation.state).toBe('output-error');
     expect(tool?.toolInvocation.result).toBe('command not found');
-    expect(assistant.message.content.metadata?.harnessContent).toContainEqual(
-      expect.objectContaining({ type: 'tool_result', id: 'tc-9', isError: true }),
-    );
+    expect(tool?.toolInvocation.errorText).toBe('command not found');
   });
 
   it('produces an empty transcript for a thread with no history', () => {

@@ -301,8 +301,19 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
         }
       : undefined;
 
+  const optionsValue =
+    payload && typeof payload === 'object' && hasProperty(payload, 'options') ? payload.options : undefined;
+  const options = Array.isArray(optionsValue)
+    ? optionsValue.flatMap(option => {
+        const label = stringProperty(option, 'label');
+        if (!label) return [];
+        return [{ label, description: stringProperty(option, 'description') }];
+      })
+    : undefined;
+
   return {
     question: stringProperty(payload, 'question'),
+    options,
     requestedPath: stringProperty(payload, 'requestedPath'),
     reason: stringProperty(payload, 'reason'),
     title: stringProperty(payload, 'title'),
@@ -626,13 +637,15 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
 
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
   const invocation = part.toolInvocation;
+  const failed = invocation.state === 'output-error' || invocation.state === 'output-denied';
+  const persistedResult = 'result' in invocation ? invocation.result : undefined;
   return {
     toolCallId: invocation.toolCallId,
     toolName: invocation.toolName,
     argsText: runtime?.argsText ?? '',
     args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
-    status: runtime?.status ?? (invocation.state === 'result' ? 'done' : 'running'),
-    result: runtime?.result ?? ('result' in invocation ? invocation.result : undefined),
+    status: runtime?.status ?? (failed ? 'error' : invocation.state === 'result' ? 'done' : 'running'),
+    result: runtime?.result ?? persistedResult ?? invocation.errorText,
     output: runtime?.output ?? '',
   };
 }

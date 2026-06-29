@@ -547,7 +547,14 @@ function toMessageEntry(
 function upsertAssistant(state: TranscriptState, message: AgentControllerMessage, streaming: boolean): TranscriptState {
   if (message.role !== 'assistant') return state;
   const entries = [...state.entries];
-  const idx = entries.findIndex(e => e.kind === 'message' && e.message.role === 'assistant' && e.id === message.id);
+  let idx = entries.findIndex(e => e.kind === 'message' && e.message.role === 'assistant' && e.id === message.id);
+  if (idx === -1) {
+    const latestIdx = latestAssistantIndex(entries);
+    const latest = latestIdx === -1 ? undefined : entries[latestIdx];
+    if (latest?.kind === 'message' && latest.message.role === 'assistant' && latest.id.startsWith('assistant-tools-')) {
+      idx = latestIdx;
+    }
+  }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
   const nextMessage = preserveRuntimeToolParts(toMastraDBMessage(message), prevEntry?.message);

@@ -53,16 +53,21 @@ function sse(events: AgentControllerEvent[] = []): Response {
 function delayedSse(event: AgentControllerEvent) {
   const encoder = new TextEncoder();
   let emit: () => void = () => {};
+  let markReady: () => void = () => {};
+  const ready = new Promise<void>(resolve => {
+    markReady = resolve;
+  });
   const response = new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
         emit = () => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        markReady();
       },
       cancel() {},
     }),
     { headers: { 'content-type': 'text/event-stream' } },
   );
-  return { response, emit };
+  return { response, emit: () => ready.then(() => emit()) };
 }
 
 function useAgentControllerHandlers({
@@ -130,7 +135,7 @@ describe('MastraCode message rendering', () => {
     renderWithProviders(<App />);
 
     expect(await screen.findByText('ready')).toBeInTheDocument();
-    stream.emit();
+    await stream.emit();
 
     expect(await screen.findByText('Streaming now')).toBeInTheDocument();
   });

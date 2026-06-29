@@ -55,16 +55,29 @@ function toMastraMessageParts(content: AgentControllerMessageContent[]): MastraM
         const existingIndex = toolPartIndexById.get(toolCallId);
         const previousPart = existingIndex === undefined ? undefined : parts[existingIndex];
         const previousInvocation = previousPart?.type === 'tool-invocation' ? previousPart.toolInvocation : undefined;
-        const resultPart: MastraMessagePart = {
-          type: 'tool-invocation',
-          toolInvocation: {
-            state: 'result',
-            toolCallId,
-            toolName: part.name ?? previousInvocation?.toolName ?? '',
-            args: previousInvocation?.args,
-            result: part.result,
-          },
-        };
+        const toolName = part.name ?? previousInvocation?.toolName ?? '';
+        const resultPart: MastraMessagePart = part.isError
+          ? {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId,
+                toolName,
+                args: previousInvocation?.args,
+                result: part.result,
+                errorText: typeof part.result === 'string' ? part.result : JSON.stringify(part.result),
+              },
+            }
+          : {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId,
+                toolName,
+                args: previousInvocation?.args,
+                result: part.result,
+              },
+            };
 
         if (existingIndex === undefined) {
           toolPartIndexById.set(toolCallId, parts.length);
@@ -86,7 +99,7 @@ function toMastraMessageParts(content: AgentControllerMessageContent[]): MastraM
 }
 
 function isHarnessMetadataContent(part: AgentControllerMessageContent): boolean {
-  return !['text', 'thinking', 'tool_call'].includes(part.type);
+  return !['text', 'thinking', 'tool_call', 'tool_result'].includes(part.type);
 }
 
 function toStatusText(part: AgentControllerMessageContent): string | null {

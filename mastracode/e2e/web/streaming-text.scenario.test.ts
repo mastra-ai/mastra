@@ -20,7 +20,9 @@ const scenario: WebScenario = {
     const assistantEntries = state.entries.filter(e => e.kind === 'message' && e.message.role === 'assistant');
     const last = assistantEntries[assistantEntries.length - 1];
     if (!last || last.kind !== 'message') throw new Error('No assistant entry found');
-    if (last.streaming) throw new Error('Expected streaming=false after message_end, got true');
+    if (last.streaming !== false) {
+      throw new Error(`Expected streaming=false after message_end, got ${String(last.streaming)}`);
+    }
     const assistantText = last.message.content.parts
       .filter(part => part.type === 'text')
       .map(part => (part.type === 'text' ? part.text : ''))
