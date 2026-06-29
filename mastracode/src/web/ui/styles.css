@@ -1155,6 +1155,76 @@ body::before {
 
 /* ── Goal panel ─────────────────────────────────────────────────────────── */
 
+.branch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.branch-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.branch-panel-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.branch-panel-current {
+  font-size: 12.5px;
+}
+
+.branch-panel-muted {
+  color: var(--fg-dim);
+}
+
+.branch-panel-input {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.branch-panel-textarea {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 8px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.branch-panel-pr {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.branch-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.branch-panel-prlink {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.branch-panel-disabled {
+  flex-direction: row;
+  align-items: center;
+  color: var(--fg-dim);
+}
+
+.branch-panel-hint {
+  font-size: 12px;
+}
+
 .goal-bar {
   display: flex;
   align-items: center;

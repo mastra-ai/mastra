@@ -36,6 +36,13 @@ export interface Project {
   sandboxId?: string;
   sandboxWorkdir?: string;
   /**
+   * Active feature branch + worktree for a GitHub project, persisted after a
+   * worktree is created so a re-opened project rebinds the same worktree
+   * workspace (the agent edits the worktree path, not the repo root).
+   */
+  activeBranch?: string;
+  activeWorktreePath?: string;
+  /**
    * Server-resolved resourceId (TUI-compatible). May be absent on projects
    * created before this field existed; `ensureResourceId` backfills it.
    */

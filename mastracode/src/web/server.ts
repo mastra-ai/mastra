@@ -14,10 +14,12 @@ import type { MastraCodeConfig } from '../index.js';
 import { mountWebAuth } from './auth.js';
 import { mountConfigRoutes } from './config-routes.js';
 import { mountFsRoutes } from './fs-routes.js';
-import { isGithubFeatureEnabled } from './github/config.js';
+import { assertReplicaStableStateSecret, isGithubFeatureEnabled } from './github/config.js';
 import { ensureAppDbReady } from './github/db.js';
 import { mountGithubRoutes } from './github/routes.js';
 import { isSandboxEnabled } from './github/sandbox.js';
+import { TenantDispatcher } from './tenant-server.js';
+import { assertRemoteTenantDbIfRequired } from './tenant-storage.js';
 
 const CONTROLLER_ID = 'code';
 
@@ -95,6 +97,27 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   const webAuthEnabled = mountWebAuth(app, { redirectUri });
   process.stderr.write(`MastraCode web auth: ${webAuthEnabled ? 'enabled (WorkOS AuthKit)' : 'disabled'}\n`);
 
+  // Per-tenant isolation: when web auth is enabled, every authenticated user
+  // operates against their own Mastra bound to their own libSQL storage/vector
+  // pair so no tenant's threads/messages/memory/recall can leak into another's.
+  // The dispatcher intercepts the Mastra controller surface (`/api/*`), routes
+  // authenticated users to their isolated tenant app, and falls through to the
+  // shared adapter below for the auth-disabled / unauthenticated public path.
+  let tenantDispatcher: TenantDispatcher | undefined;
+  if (webAuthEnabled) {
+    // Fail loud if a remote tenant DB is required (multi-replica/ephemeral
+    // deploy) but only local-file tenant DBs are configured.
+    assertRemoteTenantDbIfRequired();
+    tenantDispatcher = new TenantDispatcher({
+      baseConfig: mastraCodeConfig,
+      controllerId: CONTROLLER_ID,
+    });
+    app.use('/api/*', tenantDispatcher.middleware());
+    process.stderr.write('MastraCode web storage: per-tenant libSQL (isolated)\n');
+  } else {
+    process.stderr.write('MastraCode web storage: shared (single store)\n');
+  }
+
   const adapter = new MastraServer({ app, mastra });
   await adapter.init();
 
@@ -114,6 +137,10 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // if the app DB can't be reached we log and leave the feature disabled rather
   // than crashing the server.
   if (isGithubFeatureEnabled()) {
+    // Fail loud if state signing wouldn't be stable across replicas. A random
+    // per-process secret silently breaks the OAuth/install callback on a replica
+    // that didn't sign the `state`.
+    assertReplicaStableStateSecret();
     const baseUrl = publicOrigin;
     let githubReady = false;
     try {
@@ -147,7 +174,11 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
     url: `http://localhost:${port}`,
     stop: async () => {
       await new Promise<void>(resolve => server.close(() => resolve()));
-      await Promise.allSettled([controller.getMastra()?.stopWorkers(), controller.stopHeartbeats()]);
+      await Promise.allSettled([
+        controller.getMastra()?.stopWorkers(),
+        controller.stopHeartbeats(),
+        tenantDispatcher?.stopAll(),
+      ]);
     },
   };
 }

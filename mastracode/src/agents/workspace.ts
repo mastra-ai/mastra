@@ -139,17 +139,25 @@ async function getSandboxWorkspace({
   githubProjectId,
   sandboxId,
   workdir,
+  worktreePath,
   mastra,
 }: {
   githubProjectId: string;
   sandboxId: string;
   workdir: string;
+  worktreePath?: string;
   mastra?: Mastra;
 }): Promise<Workspace> {
-  // Include the sandbox id in the reuse key: if the project is re-provisioned
-  // onto a new sandbox (e.g. the previous one expired), the key changes so we
-  // build a fresh Workspace instead of reusing one bound to the dead sandbox.
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}`;
+  // Bind the workspace to the active worktree when one is set, so file tools and
+  // command tools operate inside the feature branch's working tree rather than
+  // the base checkout. Falls back to the repo root when no worktree is active.
+  const boundWorkdir = worktreePath || workdir;
+
+  // Include the sandbox id *and* worktree path in the reuse key: a new sandbox
+  // (e.g. the previous one expired) or a different worktree must each get a
+  // fresh Workspace/ProcessManager instead of reusing one bound to a stale
+  // sandbox or the wrong working tree.
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}`;
 
   // Reuse the existing remote workspace if already registered (preserves the
   // reattached sandbox + ProcessManager state across re-opens).
@@ -164,7 +172,7 @@ async function getSandboxWorkspace({
   }
 
   const sandbox = await reattachProjectSandbox(sandboxId);
-  const filesystem = new SandboxFilesystem({ sandbox, workdir });
+  const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
 
   return new Workspace({
     id: workspaceId,
@@ -195,6 +203,7 @@ export async function getDynamicWorkspace({
       githubProjectId: state.githubProjectId,
       sandboxId: state.sandboxId,
       workdir: state.sandboxWorkdir,
+      worktreePath: state.worktreePath,
       mastra,
     });
   }

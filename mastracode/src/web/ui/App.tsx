@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { fetchAuthState, redirectToLogin } from './auth';
 import type { WebAuthState } from './auth';
+import { BranchPanel } from './BranchPanel';
+import type { BranchBinding } from './BranchPanel';
 import { CommandPalette } from './CommandPalette';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import type { SlashCommand } from './commands';
@@ -366,10 +368,34 @@ export default function App() {
         githubProjectId: activeProject.githubProjectId,
         sandboxId: binding?.sandboxId ?? activeProject.sandboxId,
         sandboxWorkdir: binding?.sandboxWorkdir ?? activeProject.sandboxWorkdir,
+        // Bind the agent's workspace to the active worktree when one exists, so
+        // file edits + commands run against the feature branch, not the repo root.
+        worktreePath: activeProject.activeWorktreePath,
+        branch: activeProject.activeBranch,
       };
     }
     return { projectPath: activeProject?.path ?? '' };
   }, [activeProject]);
+
+  // Persist a freshly created worktree onto the active GitHub project and push
+  // it into session state so the workspace rebinds to the worktree path.
+  const handleWorktreeReady = useCallback(
+    (binding: BranchBinding) => {
+      if (!activeProject || activeProject.source !== 'github') return;
+      const updated: Project = {
+        ...activeProject,
+        activeBranch: binding.branch,
+        activeWorktreePath: binding.worktreePath,
+      };
+      updateProject(updated);
+      setProjects(loadProjects());
+      void session.setState({
+        worktreePath: binding.worktreePath,
+        branch: binding.branch,
+      });
+    },
+    [activeProject, session],
+  );
 
   // After the session connects for a new project, push its workspace binding.
   // Only advance the tracked resourceId once the session is actually ready and
@@ -741,6 +767,17 @@ export default function App() {
                 onPauseGoal={() => void session.pauseGoal()}
                 onResumeGoal={() => void session.resumeGoal()}
                 onClearGoal={() => void session.clearGoal()}
+              />
+            )}
+
+            {activeProject.source === 'github' && activeProject.githubProjectId && (
+              <BranchPanel
+                githubProjectId={activeProject.githubProjectId}
+                sandboxEnabled={githubStatus.sandboxEnabled ?? false}
+                activeBranch={activeProject.activeBranch}
+                activeWorktreePath={activeProject.activeWorktreePath}
+                onWorktreeReady={handleWorktreeReady}
+                onNotice={toast}
               />
             )}
 
