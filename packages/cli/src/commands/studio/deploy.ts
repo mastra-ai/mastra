@@ -383,7 +383,6 @@ export async function deployAction(
   const autoAccept = opts.yes ?? isHeadless;
   const skipPreflight = opts.skipPreflight || process.env.MASTRA_SKIP_PREFLIGHT === '1';
 
-  p.log.warn('⚠️  mastra studio deploy is deprecated. Use "mastra deploy" instead.');
   p.intro('mastra studio deploy');
 
   // Gather context

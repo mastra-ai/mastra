@@ -267,7 +267,7 @@ program
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(unifiedDeployAction));
 
-// ---- Studio commands (legacy, will show deprecation warning) ----
+// ---- Studio commands ----
 
 const studioCommand = program
   .command('studio')
