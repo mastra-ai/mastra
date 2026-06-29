@@ -451,7 +451,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
     const bufferingLabel = isReflection ? 'Buffering reflection' : 'Buffering observations';
     return (
       <div
-        className="mt-4 mb-8"
+        className="mt-2 mb-8"
         data-om-badge={cycleId}
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}
@@ -483,7 +483,7 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
 
     return (
       <div
-        className="mt-4 mb-8"
+        className="mt-2 mb-8"
         data-om-badge={cycleId}
         data-om-state={state}
         data-om-type={isReflection ? 'reflection' : 'observation'}

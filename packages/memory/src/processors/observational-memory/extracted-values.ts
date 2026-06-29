@@ -257,6 +257,7 @@ export async function applyExtractorHooks(opts: {
         requestContext: opts.requestContext,
       });
       if (hookValue === undefined) {
+        // Undefined means the hook did not replace the extracted value.
         continue;
       }
       const parsed = extractor.schema.safeParse(hookValue);

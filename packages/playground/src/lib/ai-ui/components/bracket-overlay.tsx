@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 type OmType = 'observation' | 'reflection';
 
+const HIGHLIGHT_BADGE_PADDING = 12;
+
 /**
  * Renders absolutely-positioned background highlights behind messages that have
  * been observed by Observational Memory.
@@ -61,15 +63,13 @@ export function BracketOverlay({ containerRef }: { containerRef: React.RefObject
       let top: number;
       const anchorBadge = findPreviousBadge(badges, i, omType);
       if (anchorBadge) {
-        const anchorMarginBottom = parseFloat(getComputedStyle(anchorBadge).marginBottom) || 0;
-        top = anchorBadge.getBoundingClientRect().bottom + anchorMarginBottom - containerRect.top;
+        top = anchorBadge.getBoundingClientRect().bottom + HIGHLIGHT_BADGE_PADDING - containerRect.top;
       } else {
         top = 0;
       }
 
-      // Bottom: bottom of the current badge + its margin (highlight includes the badge and its spacing)
-      const badgeMarginBottom = parseFloat(getComputedStyle(badge).marginBottom) || 0;
-      const bottom = badgeRect.bottom + badgeMarginBottom - containerRect.top;
+      // Keep a little visual padding around the marker without measuring layout margins.
+      const bottom = badgeRect.bottom + HIGHLIGHT_BADGE_PADDING - containerRect.top;
       const height = bottom - top;
 
       if (height <= 0) continue;
