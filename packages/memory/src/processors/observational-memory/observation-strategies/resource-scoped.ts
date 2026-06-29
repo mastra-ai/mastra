@@ -3,7 +3,12 @@ import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
-import { applyExtractorHooks, filterUserExtractedValues, getPriorExtractedValues } from '../extracted-values';
+import {
+  applyExtractorHooks,
+  buildThreadMetadataFromExtractedValues,
+  getPriorExtractedValues,
+} from '../extracted-values';
+import type { Extractor } from '../extractor';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -37,6 +42,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       threadTitle?: string;
       extractedValues?: Record<string, unknown>;
       extractionFailures?: Array<{ slug: string; error: string }>;
+      extractors?: readonly Extractor<any>[];
     }
   >();
   private totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -51,6 +57,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       threadTitle?: string;
       extractedValues?: Record<string, unknown>;
       extractionFailures?: Array<{ slug: string; error: string }>;
+      extractors?: readonly Extractor<any>[];
     };
   }> = [];
   private priorMetadataByThread = new Map<
@@ -304,10 +311,13 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       const result = this.multiThreadResults.get(threadId);
       if (!result) continue;
 
-      const previousValues = getPriorExtractedValues(this.priorMetadataByThread.get(threadId));
+      const previousValues = getPriorExtractedValues(
+        this.priorMetadataByThread.get(threadId),
+        this.observationConfig.extractors,
+      );
       const hookedValues = await applyExtractorHooks({
         source: 'observer',
-        extractors: this.observationConfig.extractors,
+        extractors: result.extractors ?? this.observationConfig.extractors,
         values: result.extractedValues,
         failures: result.extractionFailures,
         previousValues,
@@ -355,6 +365,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         threadTitle: result.threadTitle,
         extracted: result.extractedValues,
         extractionFailures: result.extractionFailures,
+        extractors: result.extractors,
         lastObservedMessageCursor: getLastObservedMessageCursor(threadMessages),
       });
 
@@ -404,14 +415,18 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           const newTitle = update.threadTitle?.trim();
           const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
           const previousOmMetadata = getThreadOMMetadata(thread.metadata);
+          const metadataUpdate = buildThreadMetadataFromExtractedValues(
+            update.extractors ?? this.observationConfig.extractors,
+            update.extracted,
+          );
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: update.lastObservedAt,
-            suggestedResponse: update.suggestedResponse,
-            currentTask: update.currentTask,
-            threadTitle: update.threadTitle,
+            suggestedResponse: metadataUpdate.suggestedResponse ?? update.suggestedResponse,
+            currentTask: metadataUpdate.currentTask ?? update.currentTask,
+            threadTitle: metadataUpdate.threadTitle ?? update.threadTitle,
             extracted: {
               ...(previousOmMetadata?.extracted ?? {}),
-              ...(filterUserExtractedValues(update.extracted) ?? {}),
+              ...(metadataUpdate.extracted ?? {}),
             },
             lastObservedMessageCursor: update.lastObservedMessageCursor,
           });

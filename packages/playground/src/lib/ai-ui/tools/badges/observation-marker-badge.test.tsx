@@ -28,7 +28,6 @@ describe('ObservationMarkerBadge extraction rendering', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /observed/i }));
     fireEvent.click(screen.getByRole('button', { name: /extractions \(2\)/i }));
 
     expect(screen.getByText('mood')).toBeTruthy();
@@ -57,7 +56,6 @@ describe('ObservationMarkerBadge extraction rendering', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /buffered reflection/i }));
     fireEvent.click(screen.getByRole('button', { name: /extractions \(0\).*1 failed/i }));
 
     expect(screen.getByText('profile')).toBeTruthy();

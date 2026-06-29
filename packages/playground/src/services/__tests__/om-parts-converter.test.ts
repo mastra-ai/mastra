@@ -31,8 +31,8 @@ const assistantMessage = (parts: MastraMessagePart[], id = 'msg-1'): MastraDBMes
 const partsOf = (message: MastraDBMessage) => message.content.parts as Array<{ type: string; data?: any }>;
 
 const convertedOmData = (message: MastraDBMessage) => {
-  const part = message.content.parts[0] as any;
-  return part.output?.omData;
+  const part = message.content.parts.find((part: any) => part.type === 'dynamic-tool');
+  return (part as any)?.output?.omData;
 };
 
 describe('OM part conversion', () => {
@@ -162,6 +162,40 @@ describe('OM part conversion', () => {
       { slug: 'priority', error: 'missing value' },
     ]);
   });
+
+  it('keeps a completed buffering marker at the original start position after reload', () => {
+    const messages = [
+      assistantMessage(
+        [
+          { type: 'text', text: 'Before memory marker' },
+          omPart('om-buffering-start', { cycleId: 'cycle-first', operationType: 'observation' }),
+          { type: 'text', text: 'After memory marker' },
+        ],
+        'msg-first',
+      ),
+      assistantMessage(
+        [
+          { type: 'text', text: 'Later assistant response' },
+          omPart('om-buffering-end', {
+            cycleId: 'cycle-first',
+            operationType: 'observation',
+            observations: ['later observation'],
+            extractedValues: { workingMemory: { location: 'Sooke' } },
+          }),
+        ],
+        'msg-second',
+      ),
+    ];
+
+    const globalParts = buildGlobalOmPartsByCycleId(messages);
+    const firstMessage = convertOmPartsInMastraMessage(messages[0], globalParts);
+    const secondMessage = convertOmPartsInMastraMessage(messages[1], globalParts);
+
+    expect(firstMessage.content.parts.map(part => part.type)).toEqual(['text', 'dynamic-tool', 'text']);
+    expect(convertedOmData(firstMessage)?.observations).toEqual(['later observation']);
+    expect(convertedOmData(firstMessage)?.extractedValues).toEqual({ workingMemory: { location: 'Sooke' } });
+    expect(secondMessage.content.parts).toEqual([{ type: 'text', text: 'Later assistant response' }]);
+  });
 });
 
 describe('normalizeOmCycle', () => {
@@ -194,9 +228,10 @@ describe('normalizeOmCycle', () => {
     expect(
       normalizeOmCycle('cycle-buffer', { bufferingStart: start, bufferingEnd: end, activation }, 'buffering'),
     ).toMatchObject({
-      status: 'activated',
+      status: 'buffering-complete',
       isLoading: false,
-      omData: { tokensObserved: 42 },
+      extractedValues: { priority: 'high' },
+      omData: { tokensObserved: 42, extractedValues: { priority: 'high' } },
     });
   });
 

@@ -68,6 +68,42 @@ export function mergeExtractionFailures(
   return failures.length > 0 ? failures : undefined;
 }
 
+function getValueAtPath(metadata: ExtractedValueMetadata | undefined, keyPath: string | false): unknown {
+  if (!metadata || keyPath === false) {
+    return undefined;
+  }
+
+  let current: unknown = metadata;
+  for (const segment of keyPath.split('.').filter(Boolean)) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function setValueAtPath(metadata: ExtractedValueMetadata, keyPath: string | false, value: unknown): void {
+  if (keyPath === false || !isPresentExtractedValue(value)) {
+    return;
+  }
+
+  const segments = keyPath.split('.').filter(Boolean);
+  if (segments.length === 0) {
+    return;
+  }
+
+  let current = metadata as Record<string, unknown>;
+  for (const segment of segments.slice(0, -1)) {
+    const next = current[segment];
+    if (!next || typeof next !== 'object' || Array.isArray(next)) {
+      current[segment] = {};
+    }
+    current = current[segment] as Record<string, unknown>;
+  }
+  current[segments[segments.length - 1]!] = value;
+}
+
 function readBuiltInMetadataValues(metadata: ExtractedValueMetadata): Partial<Record<BuiltInExtractorSlug, unknown>> {
   const values: Partial<Record<BuiltInExtractorSlug, unknown>> = {};
   for (const slug of BUILT_IN_EXTRACTOR_SLUGS) {
@@ -77,12 +113,26 @@ function readBuiltInMetadataValues(metadata: ExtractedValueMetadata): Partial<Re
   return values;
 }
 
-export function getPriorExtractedValues(metadata?: ExtractedValueMetadata): Record<string, unknown> | undefined {
+export function getPriorExtractedValues(
+  metadata?: ExtractedValueMetadata,
+  extractors?: readonly Extractor<any>[],
+): Record<string, unknown> | undefined {
   if (!metadata) {
     return undefined;
   }
 
-  return mergeExtractedValues(readBuiltInMetadataValues(metadata), metadata.extracted);
+  if (!extractors) {
+    return mergeExtractedValues(readBuiltInMetadataValues(metadata), metadata.extracted);
+  }
+
+  const values: Record<string, unknown> = {};
+  for (const extractor of extractors) {
+    const value = getValueAtPath(metadata, extractor.metadataKeyPath);
+    if (isPresentExtractedValue(value)) {
+      values[extractor.slug] = value;
+    }
+  }
+  return normalizeExtractedValues(values);
 }
 
 function renderExtractedValue(value: unknown): string {
@@ -123,22 +173,41 @@ export function getBuiltInExtractedValues(values?: Record<string, unknown>): Ext
   return builtIns;
 }
 
-export function filterUserExtractedValues(values?: Record<string, unknown>): Record<string, unknown> | undefined {
+export function filterUserExtractedValues(
+  values?: Record<string, unknown>,
+  extractors?: readonly Extractor<any>[],
+): Record<string, unknown> | undefined {
   const normalized = normalizeExtractedValues(values);
   if (!normalized) {
     return undefined;
   }
 
-  const userValues = Object.fromEntries(Object.entries(normalized).filter(([slug]) => !isBuiltInExtractorSlug(slug)));
+  const userValues = Object.fromEntries(
+    Object.entries(normalized).filter(([slug]) => {
+      const extractor = extractors?.find(candidate => candidate.slug === slug);
+      return extractor
+        ? extractor.metadataKeyPath !== false && extractor.metadataKeyPath.startsWith('extracted.')
+        : !isBuiltInExtractorSlug(slug);
+    }),
+  );
   return Object.keys(userValues).length > 0 ? userValues : undefined;
 }
 
-export function buildThreadMetadataFromExtractedValues(values?: Record<string, unknown>): ExtractedValueMetadata {
-  const builtIns = getBuiltInExtractedValues(values);
-  const metadata: ExtractedValueMetadata = { extracted: filterUserExtractedValues(values) };
-  for (const slug of BUILT_IN_EXTRACTOR_SLUGS) {
-    const { metadataField, builtInField } = BUILT_IN_METADATA_FIELDS[slug]!;
-    metadata[metadataField] = builtIns[builtInField];
+export function buildThreadMetadataFromExtractedValues(
+  extractors: readonly Extractor<any>[],
+  values?: Record<string, unknown>,
+): ExtractedValueMetadata {
+  const metadata: ExtractedValueMetadata = {};
+  const normalized = normalizeExtractedValues(values);
+  if (!normalized) {
+    return metadata;
+  }
+
+  for (const extractor of extractors) {
+    if (!Object.prototype.hasOwnProperty.call(normalized, extractor.slug)) {
+      continue;
+    }
+    setValueAtPath(metadata, extractor.metadataKeyPath, normalized[extractor.slug]);
   }
   return metadata;
 }
@@ -188,8 +257,6 @@ export async function applyExtractorHooks(opts: {
         requestContext: opts.requestContext,
       });
       if (hookValue === undefined) {
-        // Undefined means the hook handled the side effect and this value should not be persisted as OM metadata.
-        delete values[extractor.slug];
         continue;
       }
       const parsed = extractor.schema.safeParse(hookValue);

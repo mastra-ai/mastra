@@ -161,16 +161,19 @@ export const ObservationMarkerBadge = ({ toolName, args, metadata }: Observation
   const isBufferingFailed = state === 'buffering-failed';
   const isActivated = state === 'activated';
   const isReflection = omData.operationType === 'reflection';
+  const hasExtractionContent =
+    getExtractedValueEntries(omData.extractedValues).length > 0 || (omData.extractionFailures?.length ?? 0) > 0;
+  const shouldAutoExpand = (isFailed && isReflection) || hasExtractionContent;
 
-  // Failed reflections should be expanded by default to draw attention to the error
-  const [isExpanded, setIsExpanded] = useState(isFailed && isReflection);
+  // Failed reflections and extraction-bearing markers should expand by default to draw attention to new details.
+  const [isExpanded, setIsExpanded] = useState(shouldAutoExpand);
 
-  // Auto-expand when a reflection fails (handles case where component was mounted during loading)
+  // Auto-expand when completion details arrive after the marker was mounted during loading.
   useEffect(() => {
-    if (isFailed && isReflection) {
+    if (shouldAutoExpand) {
       setIsExpanded(true);
     }
-  }, [isFailed, isReflection]);
+  }, [shouldAutoExpand]);
   const [isObservationsExpanded, setIsObservationsExpanded] = useState(true);
   const [isTaskExpanded, setIsTaskExpanded] = useState(false);
   const [isResponseExpanded, setIsResponseExpanded] = useState(false);

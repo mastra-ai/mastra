@@ -413,6 +413,13 @@ describe('ChatProvider', () => {
                 threadId: 'thread-1',
               },
             },
+            {
+              type: 'data-om-activation',
+              data: {
+                cycleId: 'cycle-reload',
+                operationType: 'observation',
+              },
+            },
           ],
           metadata: {},
         },
@@ -467,6 +474,93 @@ describe('ChatProvider', () => {
     expect(omPart?.state).toBe('output-available');
     expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);
     expect(omPart?.output?.omData?.extractedValues).toEqual({ priority: 'high' });
+  });
+
+  it('restores buffered extraction fields on reload when the persisted buffering-end has no extraction payload', async () => {
+    const renderSnapshots: MastraDBMessage[][] = [];
+    const MessagesProbe = () => {
+      renderSnapshots.push(useChatMessages());
+      return null;
+    };
+
+    const initialMessages = [
+      {
+        id: 'msg-buffering-terminal',
+        role: 'assistant',
+        createdAt: new Date('2026-05-29T00:00:00.000Z'),
+        threadId: 'thread-1',
+        resourceId: 'agent-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-om-buffering-start',
+              data: {
+                cycleId: 'cycle-terminal-reload',
+                operationType: 'observation',
+                recordId: 'record-1',
+                threadId: 'thread-1',
+              },
+            },
+            {
+              type: 'data-om-buffering-end',
+              data: {
+                cycleId: 'cycle-terminal-reload',
+                operationType: 'observation',
+                observations: ['persisted observation'],
+              },
+            },
+          ],
+          metadata: {},
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const bufferStatusRequests: string[] = [];
+    server.use(
+      ...baseHandlers([]),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
+        bufferStatusRequests.push(request.url);
+        return HttpResponse.json({
+          record: {
+            bufferedObservationChunks: [
+              {
+                cycleId: 'cycle-terminal-reload',
+                messageTokens: 219,
+                tokenCount: 81,
+                observations: ['persisted observation'],
+                extractedValues: { workingMemory: { location: 'Vancouver' } },
+              },
+            ],
+          },
+        });
+      }),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages}>
+            <MessagesProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    });
+
+    expect(bufferStatusRequests).toHaveLength(1);
+
+    const latestMessages = renderSnapshots.at(-1) ?? [];
+    const omData = latestMessages
+      .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
+      .map(part => (part as { output?: { omData?: unknown } }).output?.omData)
+      .find(Boolean) as { extractedValues?: unknown } | undefined;
+
+    expect(omData?.extractedValues).toEqual({ workingMemory: { location: 'Vancouver' } });
   });
 
   it('keeps streamed OM extraction data on the rendered chat marker while refreshing panel queries', async () => {
