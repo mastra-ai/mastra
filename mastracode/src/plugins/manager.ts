@@ -178,7 +178,7 @@ export class PluginManager {
       seen.add(checkoutPath);
 
       const before = await this.readGitHead(checkoutPath);
-      await execa('git', ['pull', '--ff-only'], { cwd: checkoutPath });
+      await this.refreshGithubCheckout(checkoutPath, before);
       const after = await this.readGitHead(checkoutPath);
       if (before !== after) changed = true;
     }
@@ -187,6 +187,83 @@ export class PluginManager {
       await this.reload();
     }
     return changed;
+  }
+
+  private async refreshGithubCheckout(checkoutPath: string, currentHead: string): Promise<void> {
+    await execa('git', ['fetch', 'origin'], { cwd: checkoutPath });
+    const upstream = await this.resolveGitUpstream(checkoutPath);
+    const [localOnly, remoteOnly] = await this.readGitAheadBehind(checkoutPath, upstream);
+    const hasLocalChanges = await this.hasGitWorkingTreeChanges(checkoutPath);
+
+    if (localOnly > 0 || hasLocalChanges) {
+      await this.backupGitCheckout(checkoutPath, currentHead, hasLocalChanges);
+    }
+
+    if (remoteOnly > 0 || localOnly > 0 || hasLocalChanges) {
+      await execa('git', ['reset', '--hard', upstream], { cwd: checkoutPath });
+    }
+  }
+
+  private async backupGitCheckout(
+    checkoutPath: string,
+    currentHead: string,
+    includeWorkingTree: boolean,
+  ): Promise<void> {
+    const backupBranch = this.createGitBackupBranchName(currentHead);
+
+    if (includeWorkingTree) {
+      const currentBranch = await this.readGitCurrentBranch(checkoutPath);
+      await execa('git', ['switch', '-c', backupBranch], { cwd: checkoutPath });
+      await execa('git', ['add', '-A'], { cwd: checkoutPath });
+      await execa(
+        'git',
+        [
+          '-c',
+          'user.name=Mastra Code',
+          '-c',
+          'user.email=noreply@mastra.ai',
+          'commit',
+          '-m',
+          'chore: backup local plugin checkout changes',
+        ],
+        { cwd: checkoutPath },
+      );
+      await execa('git', ['switch', currentBranch], { cwd: checkoutPath });
+      return;
+    }
+
+    await execa('git', ['branch', backupBranch, 'HEAD'], { cwd: checkoutPath });
+  }
+
+  private async resolveGitUpstream(cwd: string): Promise<string> {
+    try {
+      const { stdout } = await execa('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd });
+      return stdout.trim();
+    } catch {
+      return 'origin/main';
+    }
+  }
+
+  private async readGitAheadBehind(cwd: string, upstream: string): Promise<[number, number]> {
+    const { stdout } = await execa('git', ['rev-list', '--left-right', '--count', `HEAD...${upstream}`], { cwd });
+    const [ahead = '0', behind = '0'] = stdout.trim().split(/\s+/);
+    return [Number(ahead) || 0, Number(behind) || 0];
+  }
+
+  private async hasGitWorkingTreeChanges(cwd: string): Promise<boolean> {
+    const { stdout } = await execa('git', ['status', '--porcelain'], { cwd });
+    return stdout.trim().length > 0;
+  }
+
+  private async readGitCurrentBranch(cwd: string): Promise<string> {
+    const { stdout } = await execa('git', ['branch', '--show-current'], { cwd });
+    const branch = stdout.trim();
+    return branch.length > 0 ? branch : 'main';
+  }
+
+  private createGitBackupBranchName(currentHead: string): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    return `mastracode/plugin-backup/${timestamp}-${currentHead.slice(0, 8)}`;
   }
 
   private resolvePluginSourcePath(plugin: LoadedPlugin): string {
