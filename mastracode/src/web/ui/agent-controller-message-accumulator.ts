@@ -1,26 +1,7 @@
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerMessageContent } from '@mastra/client-js';
+import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 
 const fallbackCreatedAtByMessageId = new Map<string, Date>();
-
-export function accumulateMessages(messages: MastraDBMessage[], event: AgentControllerEvent): MastraDBMessage[] {
-  if (isMessageEvent(event)) {
-    const nextMessage = toMastraDBMessage(event.message);
-    const existingIndex = messages.findIndex(message => message.id === nextMessage.id);
-
-    if (existingIndex === -1) {
-      return [...messages, nextMessage];
-    }
-
-    return messages.map((message, index) => (index === existingIndex ? nextMessage : message));
-  }
-
-  if (isErrorEvent(event)) {
-    return [...messages, toHarnessErrorMessage(event)];
-  }
-
-  return messages;
-}
 
 export function toMastraDBMessage(message: AgentControllerMessage): MastraDBMessage {
   const harnessContent = message.content.filter(isHarnessMetadataContent);
@@ -114,35 +95,6 @@ function toStatusText(part: AgentControllerMessageContent): string | null {
   }
 
   return part.text ?? null;
-}
-
-function isMessageEvent(
-  event: AgentControllerEvent,
-): event is Extract<AgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }> {
-  return event.type === 'message_start' || event.type === 'message_update' || event.type === 'message_end';
-}
-
-function isErrorEvent(event: AgentControllerEvent): event is Extract<AgentControllerEvent, { type: 'error' }> {
-  return event.type === 'error' && 'error' in event;
-}
-
-function toHarnessErrorMessage(event: Extract<AgentControllerEvent, { type: 'error' }>): MastraDBMessage {
-  const message = typeof event.error === 'string' ? event.error : (event.error.message ?? 'Controller error');
-  const id = `error-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const harnessContent: AgentControllerMessageContent[] = [
-    { type: 'harness-error', text: message, ...(event.errorType ? { errorType: event.errorType } : {}) },
-  ];
-
-  return {
-    id,
-    role: 'system',
-    createdAt: createdAtForMessage(id),
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: message }],
-      metadata: { harnessContent },
-    },
-  };
 }
 
 function createdAtForMessage(messageId: string): Date {
