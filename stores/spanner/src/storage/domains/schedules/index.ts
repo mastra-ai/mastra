@@ -243,7 +243,7 @@ export class SchedulesSpanner extends SchedulesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -485,7 +485,7 @@ export class SchedulesSpanner extends SchedulesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),

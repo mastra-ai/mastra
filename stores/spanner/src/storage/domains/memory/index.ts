@@ -349,7 +349,7 @@ export class MemorySpanner extends MemoryStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -392,7 +392,7 @@ export class MemorySpanner extends MemoryStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -800,7 +800,7 @@ export class MemorySpanner extends MemoryStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -926,7 +926,7 @@ export class MemorySpanner extends MemoryStorage {
             }
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -996,7 +996,7 @@ export class MemorySpanner extends MemoryStorage {
             }
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -1139,7 +1139,7 @@ export class MemorySpanner extends MemoryStorage {
             updated = merged;
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),

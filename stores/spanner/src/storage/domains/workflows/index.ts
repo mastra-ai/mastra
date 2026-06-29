@@ -251,7 +251,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -368,7 +368,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             mergedContext = snapshot.context;
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -436,7 +436,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),

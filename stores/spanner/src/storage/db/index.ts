@@ -370,7 +370,7 @@ export class SpannerDB extends MastraBase {
         } catch (err) {
           // The Spanner client does NOT auto-rollback when the runFn throws
           // explicitly release the transaction so its row locks are freed.
-          await tx.rollback().catch(() => {});
+          await tx.rollback();
           throw err;
         }
       });
@@ -961,7 +961,7 @@ export class SpannerDB extends MastraBase {
           } catch (err) {
             // The Spanner client does NOT auto-rollback when the runFn throws
             // explicitly release the transaction so its row locks are freed.
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -996,7 +996,7 @@ export class SpannerDB extends MastraBase {
             }
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -1034,7 +1034,7 @@ export class SpannerDB extends MastraBase {
             }
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),

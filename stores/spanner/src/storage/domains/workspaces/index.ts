@@ -237,7 +237,7 @@ export class WorkspacesSpanner extends WorkspacesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -389,7 +389,7 @@ export class WorkspacesSpanner extends WorkspacesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),

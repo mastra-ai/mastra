@@ -146,7 +146,7 @@ export class FavoritesSpanner extends FavoritesStorage {
             favoriteCount = (await this.readEntityCount(tx, entityTable, entityId)) ?? 0;
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -205,7 +205,7 @@ export class FavoritesSpanner extends FavoritesStorage {
             favoriteCount = (await this.readEntityCount(tx, entityTable, entityId)) ?? 0;
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),
@@ -333,7 +333,7 @@ export class FavoritesSpanner extends FavoritesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback();
             throw err;
           }
         }),

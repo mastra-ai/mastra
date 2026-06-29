@@ -810,7 +810,7 @@ export async function batchCreateMetrics(database: Database, args: BatchCreateMe
           tx.insert(TABLE_AI_METRICS, rows);
           await tx.commit();
         } catch (err) {
-          await tx.rollback().catch(() => {});
+          await tx.rollback();
           throw err;
         }
       });
@@ -1491,7 +1491,7 @@ export async function clearMetrics(database: Database): Promise<void> {
       });
       await tx.commit();
     } catch (err) {
-      await tx.rollback().catch(() => {});
+      await tx.rollback();
       throw err;
     }
   });
