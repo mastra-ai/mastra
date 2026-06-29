@@ -365,10 +365,10 @@ These options are only applied when a new container is created. If the sandbox r
 
 ```typescript
 const sandbox = new AppleContainerSandbox({ id: 'persistent-sandbox' })
-await sandbox._start()
+await sandbox.start()
 
 const sandbox2 = new AppleContainerSandbox({ id: 'persistent-sandbox' })
-await sandbox2._start()
+await sandbox2.start()
 ```
 
 ## Editor provider
