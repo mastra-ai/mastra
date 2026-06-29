@@ -1,4 +1,4 @@
-import { Button, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 

@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { CustomAvailableModel, CustomModelCatalogProvider } from '@mastra/core/harness';
+import type { CustomAvailableModel, CustomModelCatalogProvider } from '@mastra/core/agent-controller';
 import {
   GATEWAY_AUTH_HEADER,
   MastraGateway,
@@ -267,6 +267,30 @@ export class MastraCodeGateway extends MastraModelGateway {
 
   static getMemoryGatewayApiKey(): string | undefined {
     return authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  }
+
+  /**
+   * Claim an unprefixed model id (e.g. a bare `anthropic/...`) when this gateway
+   * can authenticate it via OAuth or a stored/env credential. This lets the
+   * shared gateway router select MastraCode for auth resolution, so the status
+   * bar and `/api-keys` reflect OAuth logins instead of only checking env vars.
+   */
+  handlesModel(modelId: string): boolean {
+    const parsed = parseGatewayRouterId(modelId, this);
+    if (!parsed.providerId || !parsed.modelId) return false;
+    if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) return true;
+    const customProvider = this.#getCustomProviders().find(
+      provider => parsed.providerId === getCustomProviderId(provider.name),
+    );
+    if (customProvider?.apiKey) return true;
+    return hasResolvedAuth(
+      MastraCodeGateway.resolveProviderAuth({
+        gatewayId: this.id,
+        providerId: parsed.providerId,
+        modelId: parsed.modelId,
+        routerId: modelId,
+      }),
+    );
   }
 
   static resolveProviderAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: string): GatewayAuthResult | undefined {

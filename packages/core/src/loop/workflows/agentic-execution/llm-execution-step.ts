@@ -1178,7 +1178,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
             supportedUrls: resolvedSupportedUrls,
           };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          const llmPromptForModel =
+            currentStep.model?.specificationVersion === 'v3' || currentStep.model?.specificationVersion === 'v4'
+              ? messageList.get.all.aiV6.llmPrompt
+              : messageList.get.all.aiV5.llmPrompt;
+          let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
           if (autoResumeSuspendedTools) {
             const messages = messageList.get.all.db();
@@ -1927,6 +1931,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList,
             stepNumber,
             finishReason: immediateFinishReason,
+            providerMetadata: outputStream._getImmediateProviderMetadata(),
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
             usage: outputStream._getImmediateUsage(),

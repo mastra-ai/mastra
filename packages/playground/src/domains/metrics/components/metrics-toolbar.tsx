@@ -1,6 +1,6 @@
-import { cn } from '@mastra/playground-ui';
 import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { PropertyFilterActions, PropertyFilterApplied } from '@mastra/playground-ui/components/PropertyFilter';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 type MetricsToolbarProps = {
   /** Keep all filter pills but reset each value to its neutral state

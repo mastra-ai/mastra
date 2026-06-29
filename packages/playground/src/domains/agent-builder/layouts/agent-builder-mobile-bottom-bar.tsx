@@ -1,4 +1,4 @@
-import { AgentIcon } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';

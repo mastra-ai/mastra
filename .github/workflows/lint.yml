@@ -176,7 +176,7 @@ jobs:
           install-dependencies: true
 
       - name: bump versions
-        run: npx changeset version
+        run: npx changeset pre exit && npx changeset version
 
       - name: Configure git
         run: |

@@ -116,10 +116,21 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     conditions,
     workflowId,
     runId,
+    stepResults = {} as Record<string, StepResult<any, any, any, any>>,
+    timeTravel,
+    executionPath = [],
   }: {
     conditions: any[];
     workflowId: string;
     runId: string;
+    stepResults?: Record<string, StepResult<any, any, any, any>>;
+    timeTravel?: {
+      executionPath: number[];
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      inputData?: any;
+    };
+    executionPath?: number[];
   }) {
     const entry = {
       type: 'conditional' as const,
@@ -146,17 +157,18 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       conditions,
     };
 
-    return await engine.executeConditional({
+    const result = await engine.executeConditional({
       workflowId,
       runId,
       entry,
       prevOutput: null,
       serializedStepGraph: [],
-      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      stepResults,
+      timeTravel: timeTravel as any,
       executionContext: {
         workflowId,
         runId,
-        executionPath: [],
+        executionPath,
         suspendedPaths: {} as Record<string, number[]>,
         retryConfig: {
           attempts: 3,
@@ -171,6 +183,8 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       requestContext,
       tracingContext: {},
     });
+
+    return { result, stepResults };
   }
 
   it('should handle MastraError during condition evaluation and continue workflow', async () => {
@@ -193,7 +207,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     ];
 
     // Act: Execute conditional with the conditions
-    const result = await runConditional({
+    const { result } = await runConditional({
       conditions,
       workflowId: 'test-workflow',
       runId: randomUUID(),
@@ -232,7 +246,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     ];
 
     // Act: Execute conditional with the conditions
-    const result = await runConditional({
+    const { result } = await runConditional({
       conditions,
       workflowId,
       runId,
@@ -256,6 +270,79 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
 
     // Verify that the original error is preserved as the cause
     expect(wrappedError.cause).toBe(regularError);
+  });
+
+  // Regression coverage for the time-travel conditional reconciliation in
+  // packages/core/src/workflows/handlers/control-flow.ts. When a paused run is rehydrated and
+  // time-travelled into a conditional, createTimeTravelExecutionParams pre-marks the targeted arm
+  // as 'running'. If the condition re-evaluates and selects a different arm, the targeted-but-
+  // rejected arm must be rewritten to 'skipped' so the wrong branch is neither rendered as active
+  // nor executed on the rehydrated run.
+  describe('conditional time-travel reconciliation', () => {
+    it("rewrites a targeted-but-non-truthy arm from 'running' to 'skipped' during time travel", async () => {
+      const workflowId = 'test-workflow';
+      const runId = randomUUID();
+
+      // arm step1 (index 0) is truthy, arm step2 (index 1) is NOT truthy.
+      const conditions = [async () => true, async () => false];
+
+      // Mirror createTimeTravelExecutionParams: the targeted arm (step2) is pre-marked 'running'.
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        step2: {
+          status: 'running',
+          payload: { from: 'time-travel' },
+          startedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>,
+      };
+
+      const { result, stepResults: finalStepResults } = await runConditional({
+        conditions,
+        workflowId,
+        runId,
+        stepResults,
+        executionPath: [0],
+        timeTravel: {
+          executionPath: [0],
+          steps: ['step2'],
+          stepResults: {},
+        },
+      });
+
+      // The rejected arm is reconciled to 'skipped' with the expected bookkeeping fields.
+      expect(finalStepResults.step2.status).toBe('skipped');
+      expect(finalStepResults.step2).toHaveProperty('payload');
+      expect(finalStepResults.step2).toHaveProperty('startedAt');
+      expect(finalStepResults.step2).toHaveProperty('endedAt');
+
+      // The truthy arm (step1) still runs and the conditional succeeds.
+      expect(result.status).toBe('success');
+      expect(finalStepResults.step2.status).not.toBe('running');
+    });
+
+    it("leaves a 'running' arm untouched for normal start/resume (no time travel)", async () => {
+      const workflowId = 'test-workflow';
+      const runId = randomUUID();
+
+      const conditions = [async () => true, async () => false];
+
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        step2: {
+          status: 'running',
+          payload: {},
+          startedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>,
+      };
+
+      const { stepResults: finalStepResults } = await runConditional({
+        conditions,
+        workflowId,
+        runId,
+        stepResults,
+        // no timeTravel param -> reconciliation must not fire
+      });
+
+      expect(finalStepResults.step2.status).toBe('running');
+    });
   });
 });
 

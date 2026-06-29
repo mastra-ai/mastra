@@ -1,5 +1,6 @@
 import type { LanguageModelV2, LanguageModelV2CallOptions, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3, LanguageModelV3CallOptions, SharedV3ProviderOptions } from '@ai-sdk/provider-v6';
+import type { LanguageModelV4, LanguageModelV4CallOptions, SharedV4ProviderOptions } from '@ai-sdk/provider-v7';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod/v4';
@@ -49,6 +50,7 @@ export type OpenAICompatibleConfig =
 
 type DoStreamResultPromiseV2 = PromiseLike<Awaited<ReturnType<LanguageModelV2['doStream']>>>;
 type DoStreamResultPromiseV3 = PromiseLike<Awaited<ReturnType<LanguageModelV3['doStream']>>>;
+type DoStreamResultPromiseV4 = PromiseLike<Awaited<ReturnType<LanguageModelV4['doStream']>>>;
 
 /** Wrapped V2 model with unified doGenerate/doStream that returns streams */
 export type MastraLanguageModelV2 = Omit<LanguageModelV2, 'doGenerate' | 'doStream'> & {
@@ -62,23 +64,30 @@ export type MastraLanguageModelV3 = Omit<LanguageModelV3, 'doGenerate' | 'doStre
   doStream: (options: LanguageModelV3CallOptions) => DoStreamResultPromiseV3;
 };
 
+/** Wrapped V4 model with unified doGenerate/doStream that returns streams */
+export type MastraLanguageModelV4 = Omit<LanguageModelV4, 'doGenerate' | 'doStream'> & {
+  doGenerate: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
+  doStream: (options: LanguageModelV4CallOptions) => DoStreamResultPromiseV4;
+};
+
 export type MastraLanguageModelV1 = MastraLegacyLanguageModel;
 export type MastraLegacyLanguageModel = LanguageModelV1;
 
-/** Union of modern language models (V2/V3) */
-export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3;
+/** Union of modern language models (V2/V3/V4) */
+export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3 | MastraLanguageModelV4;
 
-export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOptions;
+export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOptions | SharedV4ProviderOptions;
 
 // Support for:
 // - "openai/gpt-4o" (magic string with autocomplete)
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
-// - LanguageModelV1/V2/V3 (existing AI SDK models)
+// - LanguageModelV1/V2/V3/V4 (existing AI SDK models)
 export type MastraModelConfig =
   | LanguageModelV1
   | LanguageModelV2
   | LanguageModelV3
+  | LanguageModelV4
   | ModelRouterModelId
   | OpenAICompatibleConfig
   | MastraLanguageModel;

@@ -649,20 +649,20 @@ describe('CoreToolBuilder background task schema injection', () => {
 describe('CoreToolBuilder requestContext merge', () => {
   it('preserves non-serializable closure requestContext values when exec RC is also present', async () => {
     // Simulates what happens when the evented workflow engine deserialises requestContext:
-    // the 'harness' key (containing functions) is lost because JSON.stringify drops functions
+    // the 'controller' key (containing functions) is lost because JSON.stringify drops functions
     // and may throw on objects with circular references.
-    const harnessCtx = {
-      harnessId: 'h-1',
+    const controllerCtx = {
+      controllerId: 'c-1',
       getState: () => ({ tasks: [] }),
       setState: vi.fn(),
       updateState: vi.fn(),
     };
 
     const closureRC = new RequestContext();
-    closureRC.set('harness', harnessCtx);
+    closureRC.set('controller', controllerCtx);
     closureRC.set('serializable-key', 'from-closure');
 
-    // The evented engine's RC — reconstructed from toJSON(), missing 'harness'
+    // The evented engine's RC — reconstructed from toJSON(), missing 'controller'
     const execRC = new RequestContext();
     execRC.set('serializable-key', 'from-exec');
     execRC.set('workflow-only-key', 42);
@@ -694,8 +694,8 @@ describe('CoreToolBuilder requestContext merge', () => {
 
     const merged = receivedCtx.requestContext!;
     // Non-serializable key from closure is preserved
-    expect(merged.get('harness')).toBe(harnessCtx);
-    expect((merged.get('harness') as any).updateState).toBe(harnessCtx.updateState);
+    expect(merged.get('controller')).toBe(controllerCtx);
+    expect((merged.get('controller') as any).updateState).toBe(controllerCtx.updateState);
     // Closure value wins for shared keys
     expect(merged.get('serializable-key')).toBe('from-closure');
     // Exec-only key is preserved
@@ -704,7 +704,7 @@ describe('CoreToolBuilder requestContext merge', () => {
 
   it('falls back to closure RC when exec RC is empty', async () => {
     const closureRC = new RequestContext();
-    closureRC.set('harness', { harnessId: 'h-1' });
+    closureRC.set('controller', { controllerId: 'c-1' });
 
     const receivedCtx: { requestContext?: RequestContext } = {};
     const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
@@ -732,6 +732,6 @@ describe('CoreToolBuilder requestContext merge', () => {
     await builtTool.execute!({}, { toolCallId: 'call-1', messages: [] });
 
     // With no exec RC, closure RC is used directly
-    expect(receivedCtx.requestContext!.get('harness')).toEqual({ harnessId: 'h-1' });
+    expect(receivedCtx.requestContext!.get('controller')).toEqual({ controllerId: 'c-1' });
   });
 });

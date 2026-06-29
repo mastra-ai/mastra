@@ -1,5 +1,6 @@
-import { Icon, cn } from '@mastra/playground-ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { WorkflowCardIndicator } from './workflow-card-badge-utils';
 
@@ -19,7 +20,7 @@ export const WorkflowCardBadges = ({ indicators, className }: WorkflowCardIndica
         const IndicatorIcon = indicator.icon;
 
         return (
-          <Tooltip key={indicator.id}>
+          <Tooltip key={`badge-${indicator.id}`}>
             <TooltipTrigger asChild>
               <span
                 role="img"

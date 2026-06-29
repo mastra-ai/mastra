@@ -1,4 +1,3 @@
-import { ScrollArea, cn } from '@mastra/playground-ui';
 import {
   Dialog,
   DialogBody,
@@ -7,6 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Highlight, themes } from 'prism-react-renderer';
 
 import type { WorkflowConditionCodeCondition } from './types';
