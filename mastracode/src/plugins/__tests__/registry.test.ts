@@ -47,6 +47,7 @@ describe('plugin registry', () => {
     fs.writeFileSync(
       registryPath,
       JSON.stringify({
+        disabledPlugins: ['valid', 12, 'valid'],
         plugins: {
           valid: {
             enabled: true,
@@ -64,6 +65,7 @@ describe('plugin registry', () => {
     const loaded = loadPluginRegistry(registryPath);
 
     expect(loaded).toEqual({
+      disabledPlugins: ['valid'],
       plugins: {
         valid: {
           enabled: true,
@@ -96,8 +98,8 @@ describe('plugin registry', () => {
     const invalidPath = path.join(tempDir, 'invalid.json');
     fs.writeFileSync(invalidPath, '{invalid');
 
-    expect(loadPluginRegistry(missingPath)).toEqual({ plugins: {} });
-    expect(loadPluginRegistry(invalidPath)).toEqual({ plugins: {} });
+    expect(loadPluginRegistry(missingPath)).toEqual({ plugins: {}, disabledPlugins: [] });
+    expect(loadPluginRegistry(invalidPath)).toEqual({ plugins: {}, disabledPlugins: [] });
   });
 
   it('merges global and project registries with project plugins taking precedence', () => {
@@ -129,6 +131,25 @@ describe('plugin registry', () => {
     ]);
   });
 
+  it('marks merged plugins blocked when their id is listed in disabledPlugins', () => {
+    const globalRegistry = setPluginRecord({ plugins: {} }, 'alexandria', {
+      enabled: true,
+      source: 'github',
+      specifier: 'https://github.com/acme/alexandria',
+      path: 'sources/github/alexandria',
+      entry: 'src/index.ts',
+    });
+    const projectRegistry = { plugins: {}, disabledPlugins: ['alexandria'] };
+
+    expect(mergePluginRegistries(globalRegistry, projectRegistry)).toMatchObject([
+      {
+        id: 'alexandria',
+        scope: 'global',
+        blocked: true,
+      },
+    ]);
+  });
+
   it('removes plugin records immutably', () => {
     const registry = setPluginRecord({ plugins: {} }, 'acme.plugin', {
       enabled: true,
@@ -138,7 +159,7 @@ describe('plugin registry', () => {
       entry: 'index.ts',
     });
 
-    expect(removePluginRecord(registry, 'acme.plugin')).toEqual({ plugins: {} });
+    expect(removePluginRecord(registry, 'acme.plugin')).toEqual({ plugins: {}, disabledPlugins: [] });
     expect(registry.plugins).toHaveProperty('acme.plugin');
   });
 });

@@ -37,6 +37,7 @@ export async function handlePluginsCommand(ctx: SlashCommandContext, args: strin
 function pluginStatus(plugin: LoadedPlugin): string {
   if (plugin.status === 'active') return theme.fg('success', 'active');
   if (plugin.status === 'inactive') return theme.fg('dim', 'inactive');
+  if (plugin.status === 'blocked') return theme.fg('warning', 'blocked');
   if (plugin.status === 'conflicted') return theme.fg('warning', 'conflicted');
   return theme.fg('error', 'load failed');
 }
@@ -101,20 +102,19 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
   if (plugin.description) container.addChild(new Text(`description: ${plugin.description}`, 0, 0));
   container.addChild(new Text(`tools: ${plugin.toolNames.length ? plugin.toolNames.join(', ') : '(none)'}`, 0, 0));
   if (plugin.error) container.addChild(new Text(theme.fg('error', `error: ${plugin.error}`), 0, 0));
+  if (plugin.status === 'blocked')
+    container.addChild(new Text(theme.fg('warning', 'blocked by plugins.json disabledPlugins'), 0, 0));
   if (plugin.conflicts?.length)
     container.addChild(new Text(theme.fg('warning', `conflicts: ${plugin.conflicts.join(', ')}`), 0, 0));
   container.addChild(new Spacer(1));
 
   const actionLabel = plugin.enabled ? 'Deactivate' : 'Activate';
-  const actions = new SelectList(
-    [
-      { value: 'toggle', label: `  ${actionLabel}` },
-      { value: 'uninstall', label: '  Uninstall' },
-      { value: BACK_VALUE, label: '  Back' },
-    ],
-    3,
-    getSelectListTheme(),
-  );
+  const actionItems: SelectItem[] = [
+    ...(plugin.status === 'blocked' ? [] : [{ value: 'toggle', label: `  ${actionLabel}` }]),
+    { value: 'uninstall', label: '  Uninstall' },
+    { value: BACK_VALUE, label: '  Back' },
+  ];
+  const actions = new SelectList(actionItems, actionItems.length, getSelectListTheme());
   actions.onSelect = item => {
     if (!ctx.pluginManager) return;
     if (item.value === BACK_VALUE) {

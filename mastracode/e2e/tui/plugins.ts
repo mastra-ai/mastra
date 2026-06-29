@@ -129,13 +129,19 @@ function writePluginPackageLink(pluginDir: string): void {
   }
 }
 
-function writePluginRegistry(projectDir: string, pluginDir: string, enabled = true): void {
+function writePluginRegistry(
+  projectDir: string,
+  pluginDir: string,
+  enabled = true,
+  disabledPlugins: string[] = [],
+): void {
   const registryDir = join(projectDir, '.mastracode', 'plugins');
   mkdirSync(registryDir, { recursive: true });
   writeFileSync(
     join(registryDir, 'plugins.json'),
     JSON.stringify(
       {
+        disabledPlugins,
         plugins: {
           [PLUGIN_ID]: {
             enabled,
@@ -443,6 +449,38 @@ export const pluginsGithubPollUpdateScenario: McE2eScenario = {
     }
     // The run() screen assertions wait for version-one and version-two, while the AIMock fixture responses deliberately
     // avoid those strings. That ensures the visible text comes from the plugin tool results, not mocked model prose.
+  },
+};
+
+export const pluginsBlockedConfigScenario: McE2eScenario = {
+  name: 'plugins-blocked-config',
+  description: 'Blocks an installed plugin through plugins.json disabledPlugins.',
+  testName: 'shows configured plugin blocks and hides blocked tools',
+  prepare({ projectDir }) {
+    const pluginDir = writeLocalPlugin({ projectDir });
+    writePluginRegistry(projectDir, pluginDir, true, [PLUGIN_ID]);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('../../src/plugins/manager.js');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('/plugins');
+    await runtime.waitForScreenText(new RegExp(PLUGIN_NAME), terminal, 8_000);
+    await runtime.waitForScreenText(/blocked/i, terminal, 8_000);
+
+    terminal.submit(`/plugins ${PLUGIN_ID}`);
+    await runtime.waitForScreenText(/blocked by plugins\.json disabledPlugins/i, terminal, 8_000);
+    await runtime.waitForScreenText(/tools:\s*\(none\)/i, terminal, 8_000);
+
+    terminal.keyCtrlC();
   },
 };
 

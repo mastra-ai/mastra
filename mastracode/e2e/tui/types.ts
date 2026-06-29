@@ -60,6 +60,7 @@ export type ScenarioName =
   | 'plugins-local-tool'
   | 'plugins-local-hot-reload'
   | 'plugins-github-poll-update'
+  | 'plugins-blocked-config'
   | 'plugins-scaffold-install-tool'
   | 'plugins-command-ui'
   | 'process-shortcuts'
