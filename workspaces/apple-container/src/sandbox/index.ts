@@ -234,6 +234,18 @@ export class AppleContainerSandbox extends MastraSandbox {
   }
 
   async start(): Promise<void> {
+    await this._runPlainLifecycle('starting', 'running', () => this._startContainer());
+  }
+
+  async stop(): Promise<void> {
+    await this._runPlainLifecycle('stopping', 'stopped', () => this._stopContainer());
+  }
+
+  async destroy(): Promise<void> {
+    await this._runPlainLifecycle('destroying', 'destroyed', () => this._destroyContainer());
+  }
+
+  private async _startContainer(): Promise<void> {
     const existing = await this._inspectContainer();
     if (existing) {
       this._containerId = existing.configuration?.id ?? this._containerName;
@@ -249,7 +261,7 @@ export class AppleContainerSandbox extends MastraSandbox {
     this._containerId = this._containerName;
   }
 
-  async stop(): Promise<void> {
+  private async _stopContainer(): Promise<void> {
     const existing = await this._inspectContainer();
     if (!existing || !isRunning(existing)) {
       return;
@@ -261,9 +273,9 @@ export class AppleContainerSandbox extends MastraSandbox {
     }
   }
 
-  async destroy(): Promise<void> {
+  private async _destroyContainer(): Promise<void> {
     if (!this._deleteOnDestroy) {
-      await this.stop();
+      await this._stopContainer();
       return;
     }
 
@@ -362,6 +374,29 @@ export class AppleContainerSandbox extends MastraSandbox {
     }
 
     return parts.join(' ');
+  }
+
+  private async _runPlainLifecycle(
+    activeStatus: ProviderStatus,
+    completeStatus: ProviderStatus,
+    operation: () => Promise<void>,
+  ): Promise<void> {
+    const managedByBaseWrapper = this.status === activeStatus;
+    if (!managedByBaseWrapper) {
+      this.status = activeStatus;
+    }
+
+    try {
+      await operation();
+      if (!managedByBaseWrapper) {
+        this.status = completeStatus;
+      }
+    } catch (error) {
+      if (!managedByBaseWrapper) {
+        this.status = 'error';
+      }
+      throw error;
+    }
   }
 
   private async _inspectContainer(): Promise<AppleContainerInspectResult | undefined> {

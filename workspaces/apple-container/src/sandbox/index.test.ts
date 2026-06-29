@@ -161,6 +161,27 @@ describe('AppleContainerSandbox', () => {
     expect(sandbox.status).toBe('running');
   });
 
+  it('keeps status in sync when plain lifecycle methods are called', async () => {
+    const runner = createRunner([
+      { success: false, exitCode: 1, stderr: 'container not found' },
+      {},
+      inspectResult('running'),
+      {},
+      inspectResult('stopped'),
+      {},
+    ]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox.start();
+    expect(sandbox.status).toBe('running');
+
+    await sandbox.stop();
+    expect(sandbox.status).toBe('stopped');
+
+    await sandbox.destroy();
+    expect(sandbox.status).toBe('destroyed');
+  });
+
   it('reconnects to an existing stopped container', async () => {
     const runner = createRunner([inspectResult('stopped', 'existing-id'), {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
@@ -305,6 +326,7 @@ describe('AppleContainerSandbox', () => {
       exitCode: 2,
       stderr: 'bad image',
     });
+    expect(sandbox.status).toBe('error');
   });
 });
 
