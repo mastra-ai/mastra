@@ -163,5 +163,28 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.1.1"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260627-011213",
+    "busy-lions-boil",
+    "calm-spiders-give",
+    "clear-cougars-decide",
+    "cool-singers-peel",
+    "cozy-bottles-melt",
+    "fix-inmemory-getworkflowrunbyid-optional-name",
+    "fix-qdrant-ts-expect-error-18572",
+    "fix-zod-v4-date-constraint-descriptions",
+    "floppy-towns-notice",
+    "full-numbers-occur",
+    "green-birds-knock",
+    "huge-maps-kick",
+    "inngest-observe-replay",
+    "legal-dots-kick",
+    "light-mails-guess",
+    "mcp-http-url-env-expansion",
+    "mcp-stdio-env-expansion",
+    "shy-radios-slide",
+    "solid-bees-shave",
+    "studio-metrics-vnext-gate",
+    "subagent-schema-cache"
+  ]
 }

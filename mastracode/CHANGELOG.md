@@ -1,5 +1,69 @@
 # mastracode
 
+## 0.27.0-alpha.3
+
+### Patch Changes
+
+- Fixed MCP HTTP server URLs so `${VAR}` references resolve from the environment, the same way header values already do. A server configured with `"url": "${MCP_SERVER_URL}"` is now connected instead of being silently skipped as an invalid URL. ([#18579](https://github.com/mastra-ai/mastra/pull/18579))
+
+- MCP stdio servers now resolve `${VAR}` references in their `env` values from the host environment, matching the existing behavior for HTTP server headers. You can reference secrets from the environment instead of hardcoding them in `mcp.json`: ([#18529](https://github.com/mastra-ai/mastra/pull/18529))
+
+  ```json
+  {
+    "mcpServers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+      }
+    }
+  }
+  ```
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`e05dade`](https://github.com/mastra-ai/mastra/commit/e05dade21c3e2551893ad939e6028cdafd84a1b2), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/schema-compat@1.3.2-alpha.0
+  - @mastra/server@1.48.0-alpha.3
+  - @mastra/mcp@1.12.0
+  - @mastra/memory@1.21.3-alpha.0
+  - @mastra/hono@1.5.3-alpha.3
+
+## 0.27.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+  - @mastra/server@1.48.0-alpha.2
+  - @mastra/hono@1.5.3-alpha.2
+
+## 0.27.0-alpha.1
+
+### Minor Changes
+
+- **Improved web settings data loading** ([#18518](https://github.com/mastra-ai/mastra/pull/18518))
+  - Settings panels now avoid duplicate requests and refresh lists after saves or removals.
+  - Provider keys, custom providers, model packs, observational memory, and the directory picker now stay in sync automatically.
+  - Streaming chat behavior is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [[`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`8e9c0fb`](https://github.com/mastra-ai/mastra/commit/8e9c0fb48fd58da2efcdff2cf1202ee41092c315)]:
+  - @mastra/core@1.48.0-alpha.1
+  - @mastra/server@1.48.0-alpha.1
+  - @mastra/hono@1.5.3-alpha.1
+
+## 0.26.1-alpha.0
+
+### Patch Changes
+
+- Set goal judge `maxSteps` to 1000 (matching the main agent) so the judge has ample budget for complex goals requiring heavy verification. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+- Updated dependencies [[`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`9566d27`](https://github.com/mastra-ai/mastra/commit/9566d27ead3d95bdbe5a69e5a082a68222829cf2)]:
+  - @mastra/core@1.48.0-alpha.0
+  - @mastra/server@1.48.0-alpha.0
+  - @mastra/hono@1.5.3-alpha.0
+
 ## 0.26.0
 
 ### Minor Changes

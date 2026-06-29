@@ -11,6 +11,10 @@ type NotificationDispatchAgent = {
   id?: string;
   getPubSub?: () => PubSub | undefined;
   sendSignal: (signal: CreatedAgentSignal, target: SendAgentSignalOptions) => SendAgentSignalResult;
+  getNotificationStreamOptions?: (target: {
+    resourceId: string;
+    threadId: string;
+  }) => Record<string, unknown> | Promise<Record<string, unknown> | undefined> | undefined;
 };
 
 export type DispatchDueNotificationsInput = {
@@ -126,7 +130,15 @@ async function sendNotificationRecord({
     deliveredAt: now,
     lastDeliveryAttemptAt: now,
   });
-  const target: SendAgentSignalOptions = { resourceId: current.resourceId, threadId: current.threadId };
+  const streamOptions = await agent.getNotificationStreamOptions?.({
+    resourceId: current.resourceId,
+    threadId: current.threadId,
+  });
+  const target: SendAgentSignalOptions = {
+    resourceId: current.resourceId,
+    threadId: current.threadId,
+    ...(streamOptions ? { ifIdle: { streamOptions } } : {}),
+  };
   const result = agent.sendSignal(signal, target);
   // `accepted` rejects when the signal could not be routed/started (e.g. a
   // misconfigured agent). Let that propagate so the caller records the
@@ -161,9 +173,19 @@ async function sendNotificationSummary({
   const agent = await mastra.getAgentById(first.agentId as never);
   const summary = summarizeNotifications(records);
   const signal = createNotificationSummarySignal(summary);
-  const target: SendAgentSignalOptions = records.every(record => record.priority === 'low')
-    ? { resourceId: first.resourceId, threadId: first.threadId, ifIdle: { behavior: 'persist' } }
-    : { resourceId: first.resourceId, threadId: first.threadId };
+  const streamOptions = await (agent as NotificationDispatchAgent).getNotificationStreamOptions?.({
+    resourceId: first.resourceId,
+    threadId: first.threadId,
+  });
+  const allLow = records.every(record => record.priority === 'low');
+  const ifIdle: Record<string, unknown> = {};
+  if (allLow) ifIdle.behavior = 'persist' as const;
+  if (streamOptions) ifIdle.streamOptions = streamOptions;
+  const target: SendAgentSignalOptions = {
+    resourceId: first.resourceId,
+    threadId: first.threadId,
+    ...(Object.keys(ifIdle).length > 0 ? { ifIdle } : {}),
+  };
   const result = (agent as NotificationDispatchAgent).sendSignal(signal, target);
   // `accepted` rejects when the signal could not be routed/started; let it
   // propagate so the caller records the notifications as failed deliveries.

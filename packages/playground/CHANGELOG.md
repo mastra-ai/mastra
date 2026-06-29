@@ -1,5 +1,49 @@
 # @internal/playground
 
+## 1.16.1-alpha.3
+
+### Patch Changes
+
+- Fixed Studio Metrics tab not rendering for PostgresStoreVNext users. The dashboard now appears when the observability store is Postgres v-next, with an advisory banner recommending time-range filters for best performance. ([#18598](https://github.com/mastra-ai/mastra/pull/18598))
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`c9530b7`](https://github.com/mastra-ai/mastra/commit/c9530b760fa04d835967e24288247284889880b2), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/schema-compat@1.3.2-alpha.0
+  - @mastra/ai-sdk@1.6.1-alpha.0
+  - @mastra/client-js@1.28.1-alpha.3
+  - @mastra/react@1.2.1-alpha.3
+  - @mastra/playground-ui@37.0.1-alpha.3
+
+## 1.16.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+  - @mastra/client-js@1.28.1-alpha.2
+  - @mastra/react@1.2.1-alpha.2
+  - @mastra/playground-ui@37.0.1-alpha.2
+
+## 1.16.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`8e9c0fb`](https://github.com/mastra-ai/mastra/commit/8e9c0fb48fd58da2efcdff2cf1202ee41092c315)]:
+  - @mastra/core@1.48.0-alpha.1
+  - @mastra/client-js@1.28.1-alpha.1
+  - @mastra/react@1.2.1-alpha.1
+  - @mastra/playground-ui@37.0.1-alpha.1
+
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`9566d27`](https://github.com/mastra-ai/mastra/commit/9566d27ead3d95bdbe5a69e5a082a68222829cf2)]:
+  - @mastra/core@1.48.0-alpha.0
+  - @mastra/client-js@1.28.1-alpha.0
+  - @mastra/react@1.2.1-alpha.0
+  - @mastra/playground-ui@37.0.1-alpha.0
+
 ## 1.16.0
 
 ### Patch Changes

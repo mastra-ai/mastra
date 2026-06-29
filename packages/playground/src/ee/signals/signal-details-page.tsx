@@ -1,4 +1,7 @@
-import { SignalDetailsPage as SignalDetailsPageContent, SignalTraceDetailsPanel } from '@mastra/playground-ui';
+import {
+  SignalDetailsPage as SignalDetailsPageContent,
+  SignalTraceDetailsPanel,
+} from '@mastra/playground-ui/ee/signals/components/signal-details-page';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
