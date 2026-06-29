@@ -14,7 +14,7 @@ test.describe('code-mode agent override', () => {
   });
 
   test('editable local code agent saves to filesystem and can download JSON', async ({ page, request }) => {
-    await page.goto('/agents/code-override-editable/editor');
+    await page.goto('/cms/agents/code-override-editable/edit/instruction-blocks');
 
     // Local code mode exposes a filesystem write, plus Download JSON. Platform
     // Open PR is only shown when a platform/GitHub App endpoint is configured.
@@ -37,7 +37,6 @@ test.describe('code-mode agent override', () => {
 
     const initialVersionCount = await getVersionCount();
 
-    await page.getByRole('button', { name: /System Prompt/i }).click();
     await page.locator('.cm-content').first().click();
     await page.keyboard.type('\nLocal filesystem save from e2e.');
     await expect(saveToFilesystemButton).toBeEnabled();
@@ -93,7 +92,7 @@ test.describe('code-mode agent override', () => {
   });
 
   test('locked code agent (editor: false) hides override editing entirely', async ({ page }) => {
-    await page.goto('/agents/code-override-locked/editor');
+    await page.goto('/cms/agents/code-override-locked/edit');
 
     // When editor: false the agent opts out of all overrides — Studio must not
     // surface code-mode write/export actions because no field is editable.
@@ -106,15 +105,14 @@ test.describe('code-mode agent override', () => {
     await expect(page.getByRole('button', { name: /^Save New Version$/i })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Publish$/i })).toHaveCount(0);
 
-    // The user-facing Editor tab must be read-only and hide block-level edit controls.
-    await expect(page.getByText(/Read-only/i)).toBeVisible();
-    await page.getByRole('button', { name: /System Prompt/i }).click();
+    await expect(page.getByText(/Editing disabled/i)).toBeVisible();
+    await expect(page.getByText(/editor: false/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /Save as prompt block/i })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Delete block/i })).toHaveCount(0);
 
     // Tools tab must show the same locked messaging as System Prompt and
     // hide add/remove controls — tools are code-owned for editor: false agents.
-    await page.getByRole('button', { name: /^Tools$/i }).click();
+    await page.getByRole('link', { name: /^Tools$/i }).click();
     await expect(page.getByText(/Tools are owned by code/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /Add Tools/i })).toHaveCount(0);
   });

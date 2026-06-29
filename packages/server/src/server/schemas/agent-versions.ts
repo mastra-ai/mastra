@@ -15,6 +15,7 @@ import {
   compareVersionsQuerySchema,
   createVersionBodySchema,
   activateVersionResponseSchema,
+  unpublishVersionResponseSchema,
   deleteVersionResponseSchema,
   versionDiffEntrySchema,
   createListVersionsResponseSchema,
@@ -31,6 +32,7 @@ export {
   compareVersionsQuerySchema,
   createVersionBodySchema,
   activateVersionResponseSchema,
+  unpublishVersionResponseSchema,
   deleteVersionResponseSchema,
   versionDiffEntrySchema,
 };

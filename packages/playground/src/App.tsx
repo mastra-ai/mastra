@@ -31,7 +31,6 @@ import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
 import AgentEvaluate from './pages/agents/agent-evaluate';
-import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
@@ -135,17 +134,28 @@ declare global {
   }
 }
 
+const agentThreadPath = (agentId: string, threadId: string, messageId?: string) => {
+  const base = `/agents/${encodeURIComponent(agentId)}/threads/${encodeURIComponent(threadId)}`;
+  return messageId ? `${base}?messageId=${encodeURIComponent(messageId)}` : base;
+};
+
+const agentVersionThreadPath = (agentId: string, versionId: string, threadId: string, messageId?: string) => {
+  const base = `/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/threads/${encodeURIComponent(threadId)}`;
+  return messageId ? `${base}?messageId=${encodeURIComponent(messageId)}` : base;
+};
+
 const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentLink: (agentId: string) => `/agents/${encodeURIComponent(agentId)}/threads/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
       ? `/workspaces/${workspaceId}/skills/${encodeURIComponent(skillName)}?agentId=${encodeURIComponent(agentId)}${skillPath ? `&path=${encodeURIComponent(skillPath)}` : ''}`
       : `/workspaces`,
   agentsLink: () => `/agents`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
-  agentThreadLink: (agentId: string, threadId: string, messageId?: string) =>
-    messageId ? `/agents/${agentId}/chat/${threadId}?messageId=${messageId}` : `/agents/${agentId}/chat/${threadId}`,
+  agentNewThreadLink: (agentId: string) => agentThreadPath(agentId, 'new'),
+  agentThreadLink: agentThreadPath,
+  agentVersionNewThreadLink: (agentId: string, versionId: string) => agentVersionThreadPath(agentId, versionId, 'new'),
+  agentVersionThreadLink: agentVersionThreadPath,
   workflowsLink: () => `/workflows`,
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => `/workflows/schedules`,
@@ -479,14 +489,37 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
           },
-          { path: 'chat', element: <Agent /> },
-          { path: 'chat/:threadId', element: <Agent /> },
+          {
+            path: 'threads',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
+          },
+          { path: 'threads/:threadId', element: <Agent /> },
+          {
+            path: 'chat',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
+          },
+          {
+            path: 'chat/:threadId',
+            loader: ({ params, request }: LoaderFunctionArgs) =>
+              redirect(
+                agentThreadPath(
+                  params.agentId!,
+                  params.threadId!,
+                  new URL(request.url).searchParams.get('messageId') ?? undefined,
+                ),
+              ),
+          },
+          {
+            path: 'versions/:versionId/threads',
+            loader: ({ params }: LoaderFunctionArgs) =>
+              redirect(`/agents/${params.agentId}/versions/${params.versionId}/threads/new`),
+          },
+          { path: 'versions/:versionId/threads/:threadId', element: <Agent /> },
           { path: 'settings', element: <Agent view="settings" /> },
           ...(isExperimentalFeatures
             ? [
-                { path: 'editor', element: <AgentPlayground /> },
                 { path: 'evaluate', element: <AgentEvaluate /> },
                 { path: 'review', element: <AgentReview /> },
               ]

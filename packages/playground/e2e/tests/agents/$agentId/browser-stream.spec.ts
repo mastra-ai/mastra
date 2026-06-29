@@ -39,7 +39,7 @@ test.afterEach(async () => {
 test('agent without browser tools: no WebSocket and no session probe', async ({ page }) => {
   const observed = observeBrowserTraffic(page);
 
-  await page.goto('/agents/weather-agent/chat/1234');
+  await page.goto('/agents/weather-agent/threads/1234');
 
   // Wait for the agent page to settle.
   await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
@@ -82,7 +82,7 @@ test('agent with browser tools: session probe is issued', async ({ page }) => {
 
   const observed = observeBrowserTraffic(page);
 
-  await page.goto('/agents/weather-agent/chat/1234');
+  await page.goto('/agents/weather-agent/threads/1234');
 
   await expect(page.locator('h2:has-text("Weather Agent")')).toBeVisible();
 

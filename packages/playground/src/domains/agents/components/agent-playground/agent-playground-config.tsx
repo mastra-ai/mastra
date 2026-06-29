@@ -1,13 +1,13 @@
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
-import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Braces, ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
+import { Eye, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -16,70 +16,68 @@ import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-pag
 import { ToolsPage } from '../agent-cms-pages/tools-page';
 import { useStoredPromptBlock } from '@/domains/prompt-blocks';
 
-// ---------------------------------------------------------------------------
-// Collapsible section
-// ---------------------------------------------------------------------------
+export type AgentConfigTab = 'prompt' | 'tools' | 'variables';
+type PromptViewMode = 'edit' | 'preview';
 
-interface CollapsibleSectionProps {
-  title: string;
-  icon: React.ReactNode;
-  badge?: React.ReactNode;
-  headerAction?: React.ReactNode;
-  defaultOpen?: boolean;
-  compact?: boolean;
-  children: React.ReactNode;
-}
-
-function CollapsibleSection({
-  title,
-  icon,
-  badge,
-  headerAction,
-  defaultOpen = false,
-  compact = false,
-  children,
-}: CollapsibleSectionProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
+function AgentConfigTabs({
+  prompt,
+  tools,
+  variables,
+  promptBadge,
+  toolsBadge,
+  variablesBadge,
+  selectedTab,
+  onSelectedTabChange,
+}: {
+  prompt: React.ReactNode;
+  tools: React.ReactNode;
+  variables: React.ReactNode;
+  promptBadge?: React.ReactNode;
+  toolsBadge?: React.ReactNode;
+  variablesBadge?: React.ReactNode;
+  selectedTab?: AgentConfigTab;
+  onSelectedTabChange?: (tab: AgentConfigTab) => void;
+}) {
   return (
-    <div className="border-b border-border1">
-      <div
-        className={cn(
-          'group flex items-center gap-2 px-4 hover:bg-surface3 transition-colors',
-          compact ? 'py-2' : 'py-3',
-          isOpen && 'bg-surface3',
-        )}
-      >
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-          aria-expanded={isOpen}
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          <Icon size="sm" className="text-neutral3">
-            {isOpen ? <ChevronDown /> : <ChevronRight />}
-          </Icon>
-          <Icon size="sm" className="text-neutral3">
-            {icon}
-          </Icon>
-          <Txt
-            as="span"
-            variant="ui-sm"
-            className={cn(
-              'font-normal text-neutral3 transition-colors group-hover:text-neutral5',
-              isOpen && 'text-neutral5',
-            )}
-          >
-            {title}
-          </Txt>
-        </button>
-        <span className="ml-auto flex items-center gap-2">
-          {headerAction}
-          {badge}
-        </span>
+    <Tabs<AgentConfigTab>
+      defaultTab="prompt"
+      value={selectedTab}
+      onValueChange={onSelectedTabChange}
+      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
+    >
+      <div className="border-b border-border1 bg-surface2 px-2 py-1.5">
+        <TabList variant="pill-ghost" className="w-full text-ui-sm">
+          <Tab value="prompt" className="px-3">
+            <span>Prompt</span>
+            {promptBadge}
+          </Tab>
+          <Tab value="tools" className="px-3">
+            <span>Tools</span>
+            {toolsBadge}
+          </Tab>
+          <Tab value="variables" className="px-3">
+            <span>Vars</span>
+            {variablesBadge}
+          </Tab>
+        </TabList>
       </div>
-      {isOpen && <div className="px-4 pb-4">{children}</div>}
-    </div>
+
+      <TabContent value="prompt" className="min-h-0 overflow-hidden p-0">
+        <ScrollArea className="h-full min-h-0" viewPortClassName="h-full">
+          {prompt}
+        </ScrollArea>
+      </TabContent>
+      <TabContent value="tools" className="min-h-0 overflow-hidden p-0">
+        <ScrollArea className="h-full min-h-0" viewPortClassName="h-full">
+          {tools}
+        </ScrollArea>
+      </TabContent>
+      <TabContent value="variables" className="min-h-0 overflow-hidden p-0">
+        <ScrollArea className="h-full min-h-0" viewPortClassName="h-full">
+          {variables}
+        </ScrollArea>
+      </TabContent>
+    </Tabs>
   );
 }
 
@@ -409,7 +407,7 @@ function ToolsDiffView({
   const prevKeys = new Set(previousTools ? Object.keys(previousTools) : []);
   const currKeys = new Set(currentTools ? Object.keys(currentTools) : []);
 
-  const allKeys = [...new Set([...prevKeys, ...currKeys])].sort();
+  const allKeys = Array.from(new Set([...prevKeys, ...currKeys])).sort();
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -501,7 +499,7 @@ function VariablesDiffView({
 
   const prevKeys = new Set(Object.keys(prevProps));
   const currKeys = new Set(Object.keys(currProps));
-  const allKeys = [...new Set([...prevKeys, ...currKeys])].sort();
+  const allKeys = Array.from(new Set([...prevKeys, ...currKeys])).sort();
 
   if (allKeys.length === 0) {
     return (
@@ -596,10 +594,14 @@ function ReadOnlyConfigWithDiff({
   agentId,
   selectedVersionId,
   latestVersionId,
+  selectedTab,
+  onSelectedTabChange,
 }: {
   agentId: string;
   selectedVersionId: string;
   latestVersionId: string;
+  selectedTab?: AgentConfigTab;
+  onSelectedTabChange?: (tab: AgentConfigTab) => void;
 }) {
   const { form } = useAgentEditFormContext();
   const tools = form.watch('tools');
@@ -644,40 +646,49 @@ function ReadOnlyConfigWithDiff({
   }
 
   return (
-    <>
-      <CollapsibleSection title="Variables" icon={<Braces />} badge={variablesBadge}>
-        {variablesDiff ? (
-          <VariablesDiffView
-            previousVars={variablesDiff.previousValue as Record<string, unknown> | undefined}
-            currentVars={variablesDiff.currentValue as Record<string, unknown> | undefined}
-          />
-        ) : (
-          <ReadOnlyVariables variables={variables as Record<string, unknown> | undefined} />
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="System Prompt" icon={<Cpu />} badge={instructionsBadge}>
-        {instructionsDiff ? (
-          <InstructionsDiffView
-            previousBlocks={instructionsDiff.previousValue}
-            currentBlocks={instructionsDiff.currentValue}
-          />
-        ) : (
-          <ReadOnlyInstructions blocks={instructionBlocks} />
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Tools" icon={<Wrench />} badge={toolsBadge}>
-        {toolsDiff ? (
-          <ToolsDiffView
-            previousTools={toolsDiff.previousValue as Record<string, unknown> | undefined}
-            currentTools={toolsDiff.currentValue as Record<string, unknown> | undefined}
-          />
-        ) : (
-          <ReadOnlyTools tools={tools as Record<string, unknown> | undefined} />
-        )}
-      </CollapsibleSection>
-    </>
+    <AgentConfigTabs
+      selectedTab={selectedTab}
+      onSelectedTabChange={onSelectedTabChange}
+      promptBadge={instructionsBadge}
+      toolsBadge={toolsBadge}
+      variablesBadge={variablesBadge}
+      variables={
+        <div className="p-3">
+          {variablesDiff ? (
+            <VariablesDiffView
+              previousVars={variablesDiff.previousValue as Record<string, unknown> | undefined}
+              currentVars={variablesDiff.currentValue as Record<string, unknown> | undefined}
+            />
+          ) : (
+            <ReadOnlyVariables variables={variables as Record<string, unknown> | undefined} />
+          )}
+        </div>
+      }
+      prompt={
+        <div className="p-3">
+          {instructionsDiff ? (
+            <InstructionsDiffView
+              previousBlocks={instructionsDiff.previousValue}
+              currentBlocks={instructionsDiff.currentValue}
+            />
+          ) : (
+            <ReadOnlyInstructions blocks={instructionBlocks} />
+          )}
+        </div>
+      }
+      tools={
+        <div className="p-3">
+          {toolsDiff ? (
+            <ToolsDiffView
+              previousTools={toolsDiff.previousValue as Record<string, unknown> | undefined}
+              currentTools={toolsDiff.currentValue as Record<string, unknown> | undefined}
+            />
+          ) : (
+            <ReadOnlyTools tools={tools as Record<string, unknown> | undefined} />
+          )}
+        </div>
+      }
+    />
   );
 }
 
@@ -689,104 +700,103 @@ interface AgentPlaygroundConfigProps {
   agentId: string;
   selectedVersionId?: string;
   latestVersionId?: string;
+  selectedTab?: AgentConfigTab;
+  onSelectedTabChange?: (tab: AgentConfigTab) => void;
 }
 
-export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersionId }: AgentPlaygroundConfigProps) {
-  const { form, readOnly } = useAgentEditFormContext();
+export function AgentPlaygroundConfig({
+  agentId,
+  selectedVersionId,
+  latestVersionId,
+  selectedTab,
+  onSelectedTabChange,
+}: AgentPlaygroundConfigProps) {
+  const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
   const tools = form.watch('tools');
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
   const toolCount = tools ? Object.keys(tools).length : 0;
-  const [showPreview, setShowPreview] = useState(false);
+  const [promptViewMode, setPromptViewMode] = useState<PromptViewMode>('edit');
 
   const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
   const showDiff = readOnly && !!selectedVersionId && !!latestVersionId && selectedVersionId !== latestVersionId;
+  const canEditPrompt =
+    !readOnly &&
+    (!isCodeAgentOverride ||
+      editorConfig === undefined ||
+      (editorConfig !== false && editorConfig?.instructions === true));
+  const showPromptPreview = !canEditPrompt || promptViewMode === 'preview';
 
   return (
-    <div className={cn('flex flex-col h-full')}>
-      <div className="px-4 py-3 border-b border-border1" />
-
-      <ScrollArea className="flex-1 min-h-0">
-        {showDiff ? (
-          <ReadOnlyConfigWithDiff
-            agentId={agentId}
-            selectedVersionId={selectedVersionId}
-            latestVersionId={latestVersionId}
-          />
-        ) : (
-          <>
-            <CollapsibleSection title="Variables" icon={<Braces />} compact>
-              <div className="flex flex-col gap-1 px-4 pt-2 pb-3">
-                {variableEntries.length > 0 ? (
-                  <div className="flex flex-col">
-                    {variableEntries.map(([name, prop]) => (
-                      <VariableProperty key={name} name={name} prop={prop} depth={0} />
-                    ))}
-                  </div>
-                ) : null}
-                <Txt variant="ui-xs" className="text-neutral3 mt-1">
-                  {variableEntries.length > 0
-                    ? 'Defined via requestContextSchema in code.'
-                    : 'No variables defined. Add a requestContextSchema to your agent to define variables.'}
-                </Txt>
-              </div>
-            </CollapsibleSection>
-
-            <CollapsibleSection title="System Prompt" icon={<Cpu />}>
-              <div className="flex flex-col gap-3 pt-4 px-4 pb-2">
-                <Txt variant="ui-sm" className="font-normal text-neutral3">
-                  Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
-                  <HoverPopover>
-                    <PopoverTrigger asChild>
-                      <button
-                        type="button"
-                        className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline"
-                      >
-                        use variables
-                      </button>
-                    </PopoverTrigger>{' '}
-                    as part of your instruction blocks.
-                    <PopoverContent side="bottom" align="start">
-                      <p className="text-ui-sm text-neutral5">
-                        Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert
-                        dynamic values into your instruction blocks.
-                      </p>
-                    </PopoverContent>
-                  </HoverPopover>
-                </Txt>
-
-                {!readOnly && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setShowPreview(prev => !prev)}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-neutral3 hover:text-neutral5 hover:bg-surface3"
-                    >
-                      <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
-                      {showPreview ? 'Edit' : 'Preview'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {readOnly || showPreview ? (
-                <ReadOnlyInstructions blocks={instructionBlocks} />
+    <div className="flex h-full min-h-0 flex-col">
+      {showDiff ? (
+        <ReadOnlyConfigWithDiff
+          agentId={agentId}
+          selectedVersionId={selectedVersionId}
+          latestVersionId={latestVersionId}
+          selectedTab={selectedTab}
+          onSelectedTabChange={onSelectedTabChange}
+        />
+      ) : (
+        <AgentConfigTabs
+          selectedTab={selectedTab}
+          onSelectedTabChange={onSelectedTabChange}
+          toolsBadge={toolCount > 0 ? <Badge variant="default">{`${toolCount}`}</Badge> : undefined}
+          variables={
+            <div className="p-3">
+              {variableEntries.length > 0 ? (
+                <div className="flex flex-col">
+                  {variableEntries.map(([name, prop]) => (
+                    <VariableProperty key={name} name={name} prop={prop} depth={0} />
+                  ))}
+                </div>
               ) : (
-                <InstructionBlocksPage />
+                <Txt variant="ui-sm" className="text-neutral3">
+                  No variables
+                </Txt>
               )}
-            </CollapsibleSection>
-
-            <CollapsibleSection
-              title="Tools"
-              icon={<Wrench />}
-              badge={toolCount > 0 ? <Badge variant="default">{`${toolCount}`}</Badge> : undefined}
-            >
-              <ToolsPage />
-            </CollapsibleSection>
-          </>
-        )}
-      </ScrollArea>
+            </div>
+          }
+          prompt={
+            <div className="min-h-full">
+              {canEditPrompt && (
+                <div className="border-b border-border1 bg-surface2 px-3 py-1.5">
+                  <Tabs<PromptViewMode>
+                    defaultTab="edit"
+                    value={promptViewMode}
+                    onValueChange={setPromptViewMode}
+                    className="flex justify-end overflow-visible"
+                  >
+                    <TabList variant="pill-ghost" className="text-ui-sm">
+                      <Tab value="edit" className="px-2.5">
+                        <Icon size="sm">
+                          <Pencil />
+                        </Icon>
+                        Edit
+                      </Tab>
+                      <Tab value="preview" className="px-2.5">
+                        <Icon size="sm">
+                          <Eye />
+                        </Icon>
+                        Preview
+                      </Tab>
+                    </TabList>
+                  </Tabs>
+                </div>
+              )}
+              {showPromptPreview ? (
+                <div className="p-3">
+                  <ReadOnlyInstructions blocks={instructionBlocks} />
+                </div>
+              ) : (
+                <InstructionBlocksPage layout="panel" />
+              )}
+            </div>
+          }
+          tools={<ToolsPage layout="panel" />}
+        />
+      )}
     </div>
   );
 }

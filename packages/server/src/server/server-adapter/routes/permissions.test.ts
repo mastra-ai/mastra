@@ -274,6 +274,10 @@ describe('deriveAction', () => {
       expect(deriveAction('POST', '/stored/agents/:id/versions/:vid/restore')).toBe('publish');
     });
 
+    it('should derive publish for POST ending in /unpublish', () => {
+      expect(deriveAction('POST', '/stored/agents/:id/versions/unpublish')).toBe('publish');
+    });
+
     it('should derive publish for /restore on non-agent stored families', () => {
       expect(deriveAction('POST', '/stored/prompt-blocks/:id/versions/:vid/restore')).toBe('publish');
       expect(deriveAction('POST', '/stored/mcp-clients/:id/versions/:vid/restore')).toBe('publish');
@@ -377,6 +381,9 @@ describe('derivePermission', () => {
       expect(derivePermission({ path: '/stored/agents/:agentId/versions/:versionId/activate', method: 'POST' })).toBe(
         'stored-agents:publish',
       );
+      expect(derivePermission({ path: '/stored/agents/:agentId/versions/unpublish', method: 'POST' })).toBe(
+        'stored-agents:publish',
+      );
       expect(derivePermission({ path: '/stored/scorers/:scorerId/versions/:versionId/restore', method: 'POST' })).toBe(
         'stored-scorers:publish',
       );
@@ -435,6 +442,12 @@ describe('derivePermission', () => {
 
     it('should derive stored-agents:publish for POST /stored/agents/:id/versions/:vid/restore', () => {
       expect(derivePermission({ path: '/stored/agents/:id/versions/:vid/restore', method: 'POST' })).toBe(
+        'stored-agents:publish',
+      );
+    });
+
+    it('should derive stored-agents:publish for POST /stored/agents/:id/versions/unpublish', () => {
+      expect(derivePermission({ path: '/stored/agents/:id/versions/unpublish', method: 'POST' })).toBe(
         'stored-agents:publish',
       );
     });

@@ -79,7 +79,10 @@ export function ExperimentPageHeader({ experimentId, experiment }: ExperimentPag
               <GitBranch /> Version
               {experiment.targetType === 'agent' && experiment.targetId ? (
                 <Link
-                  href={`${paths.agentLink(experiment.targetId)}/editor?version=${encodeURIComponent(experiment.agentVersion)}`}
+                  href={
+                    paths.agentVersionNewThreadLink?.(experiment.targetId, experiment.agentVersion) ??
+                    `/agents/${encodeURIComponent(experiment.targetId)}/versions/${encodeURIComponent(experiment.agentVersion)}/threads/new`
+                  }
                   className="font-mono text-xs underline hover:text-accent1"
                 >
                   {experiment.agentVersion}

@@ -9,6 +9,11 @@ import { useWatch } from 'react-hook-form';
 import { useAgentEditForm } from '../components/agent-edit-page/use-agent-edit-form';
 import type { AgentFormValues, EntityConfig } from '../components/agent-edit-page/utils/form-validation';
 import {
+  getAgentCmsErrorMessage,
+  hasAgentInstructions,
+  isInstructionsRequiredError,
+} from '../utils/agent-cms-validation';
+import {
   mapInstructionBlocksToApi,
   mapScorersToApi,
   buildObservationalMemoryForApi,
@@ -18,6 +23,8 @@ import { collectMCPClientIds } from '../utils/collect-mcp-client-ids';
 import { computeAgentInitialValues } from '../utils/compute-agent-initial-values';
 import type { AgentDataSource } from '../utils/compute-agent-initial-values';
 import { useStoredAgentMutations } from './use-stored-agents';
+
+export type AgentCmsFormSection = 'prompt' | 'tools' | 'variables';
 
 type CreateOptions = {
   mode: 'create';
@@ -35,6 +42,7 @@ type EditOptions = {
   /** Editor config from the code agent definition — controls which fields are owned by the user vs code */
   editorConfig?: AgentEditorConfig;
   saveSuccessMessage?: string;
+  onValidationSectionRequired?: (section: AgentCmsFormSection) => void;
   onSuccess: (agentId: string) => void;
 };
 
@@ -51,6 +59,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const isCodeAgentOverride = isEdit && !!options.isCodeAgentOverride;
   const hasStoredOverride = isEdit && !!options.hasStoredOverride;
   const editorConfig = isEdit ? options.editorConfig : undefined;
+  const onValidationSectionRequired = isEdit ? options.onValidationSectionRequired : undefined;
 
   // Derive which fields are owned by the user (vs by code). These flags MUST mirror the server's
   // getCodeAgentOwnership (packages/server/src/server/handlers/stored-agents.ts): on save the server
@@ -269,6 +278,21 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     };
   }, []);
 
+  const showPromptRequiredToast = useCallback(
+    (action: 'saving' | 'publishing' | 'exporting') => {
+      onValidationSectionRequired?.('prompt');
+      toast.error('Prompt is required', {
+        description: `Add at least one instruction block in the Prompt section before ${action}.`,
+      });
+    },
+    [onValidationSectionRequired],
+  );
+
+  const shouldRequirePrompt = useCallback(
+    (values: AgentFormValues) => isCodeAgentOverride && ownsInstructions && !hasAgentInstructions(values),
+    [isCodeAgentOverride, ownsInstructions],
+  );
+
   const handleSaveDraft = useCallback(
     async (changeMessage?: string) => {
       if (!isEdit) return;
@@ -280,6 +304,11 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       }
 
       const values = form.getValues();
+      if (shouldRequirePrompt(values)) {
+        showPromptRequiredToast('saving');
+        return;
+      }
+
       setIsSavingDraft(true);
 
       try {
@@ -307,13 +336,13 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         // Pass keepDefaultValues so currently rendered field state (e.g. open tabs,
         // focused inputs) is preserved — only the dirty flag is cleared.
         form.reset(values, { keepValues: true });
+        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
         // For code-mode overrides we intentionally skip stored-agent / agent query
         // invalidation: the dataSource reload would cascade through the
         // resetFormWithData effect and remount the System Prompt tab, which
         // is jarring. The filesystem write is authoritative for code mode and
         // the in-memory form already reflects the saved state.
         if (!isCodeAgentOverride) {
-          void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
         }
@@ -321,7 +350,11 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           options.mode === 'edit' && options.saveSuccessMessage ? options.saveSuccessMessage : 'Draft saved',
         );
       } catch (error) {
-        toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        if (isInstructionsRequiredError(error)) {
+          showPromptRequiredToast('saving');
+          return;
+        }
+        toast.error(`Failed to save draft: ${getAgentCmsErrorMessage(error)}`);
       } finally {
         setIsSavingDraft(false);
       }
@@ -338,6 +371,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       createStoredAgent,
       updateStoredAgent,
       queryClient,
+      shouldRequirePrompt,
+      showPromptRequiredToast,
     ],
   );
 
@@ -353,6 +388,11 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       }
 
       const values = form.getValues();
+      if (!publishVersionId && shouldRequirePrompt(values)) {
+        showPromptRequiredToast('publishing');
+        return;
+      }
+
       setIsSubmitting(true);
 
       try {
@@ -430,8 +470,12 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           options.onSuccess(created.id);
         }
       } catch (error) {
+        if (isInstructionsRequiredError(error)) {
+          showPromptRequiredToast('publishing');
+          return;
+        }
         const action = isEdit ? 'publish' : 'create';
-        toast.error(`Failed to ${action} agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        toast.error(`Failed to ${action} agent: ${getAgentCmsErrorMessage(error)}`);
       } finally {
         setIsSubmitting(false);
       }
@@ -448,6 +492,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       buildSharedParams,
       buildMemoryParams,
       queryClient,
+      shouldRequirePrompt,
+      showPromptRequiredToast,
     ],
   );
 
@@ -460,9 +506,15 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
       return;
     }
 
-    const sharedParams = await buildSharedParams(form.getValues());
+    const values = form.getValues();
+    if (shouldRequirePrompt(values)) {
+      showPromptRequiredToast('exporting');
+      return;
+    }
+
+    const sharedParams = await buildSharedParams(values);
     return client.getStoredAgent(options.agentId).export(sharedParams);
-  }, [buildSharedParams, client, form, isEdit, options]);
+  }, [buildSharedParams, client, form, isEdit, options, shouldRequirePrompt, showPromptRequiredToast]);
 
   const handleDownloadJson = useCallback(async () => {
     try {

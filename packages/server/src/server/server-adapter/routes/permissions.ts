@@ -47,7 +47,7 @@ const EXECUTE_PATTERNS = [
   '/clone',
 ];
 
-const PUBLISH_PATTERNS = ['/publish', '/activate', '/restore'];
+const PUBLISH_PATTERNS = ['/publish', '/activate', '/restore', '/unpublish'];
 
 /**
  * Maps `/stored/<family>` URL segments to canonical permission resource slugs.

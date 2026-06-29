@@ -1265,7 +1265,7 @@ export interface StoredAgentResponse {
   // Thin agent record fields
   id: string;
   status: string;
-  activeVersionId?: string;
+  activeVersionId?: string | null;
   authorId?: string;
   author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
@@ -1777,6 +1777,12 @@ export interface ActivateAgentVersionResponse {
   success: boolean;
   message: string;
   activeVersionId: string;
+}
+
+export interface UnpublishAgentVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: null;
 }
 
 export interface RestoreAgentVersionResponse {

@@ -1,3 +1,4 @@
+import type { StoredAgentResponse } from '@mastra/client-js';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +8,10 @@ import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { agentVersionsResponse } from '../../__tests__/fixtures/agent-versions';
 import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
+import { systemPackages } from '../../__tests__/fixtures/channels';
+import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { observationalMemory, threadMessages } from '../../__tests__/fixtures/memory-panel';
 import { MemorySidebar } from '../memory-sidebar';
 import {
@@ -23,6 +27,7 @@ import {
   ObservationalMemoryProvider,
   useObservationalMemoryContext,
 } from '@/domains/agents/context/agent-observational-memory-context';
+import { AgentSidebarViewProvider, useAgentSidebarView } from '@/domains/agents/context/agent-sidebar-view-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { MemoryTimelineProvider, useMemoryTimeline } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
@@ -33,6 +38,41 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
 const THREAD_ID = 'real-thread';
+
+const capabilityAgent = {
+  ...v2Agent,
+  id: AGENT_ID,
+  name: 'Chef Agent',
+  inputProcessors: [{ id: 'guardrail', name: 'Guardrail' }],
+};
+
+const versionsForAgent = {
+  ...agentVersionsResponse,
+  versions: agentVersionsResponse.versions.map(version => ({
+    ...version,
+    agentId: AGENT_ID,
+    name: 'Chef Agent',
+  })),
+};
+
+const storedAgentResponse = {
+  id: AGENT_ID,
+  status: 'draft',
+  activeVersionId: 'version-1',
+  createdAt: '2026-06-21T10:00:00.000Z',
+  updatedAt: '2026-06-22T10:00:00.000Z',
+  name: 'Chef Agent',
+  instructions: [{ id: 'intro', type: 'prompt_block', content: 'You are a test chef agent.' }],
+  model: { provider: 'openai', name: 'gpt-4o-mini' },
+  tools: {},
+  workflows: {},
+  agents: {},
+  integrationTools: {},
+  mcpClients: {},
+  scorers: {},
+  skills: {},
+  requestContextSchema: { type: 'object', properties: {} },
+} satisfies StoredAgentResponse;
 
 const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
   ({ children, to, href, ...props }, ref) => (
@@ -47,14 +87,14 @@ const paths = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
   scheduleLink: (scheduleId: string) => `/schedules/${scheduleId}`,
   networkLink: (networkId: string) => `/networks/${networkId}`,
-  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/chat/new`,
+  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/threads/new`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
@@ -85,6 +125,11 @@ const paths = {
 function registerMemoryHandlers() {
   server.use(
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(readOnlyAuthCapabilities)),
+    http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(capabilityAgent)),
+    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json({ ...systemPackages, cmsEnabled: true })),
+    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => HttpResponse.json(storedAgentResponse)),
+    http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () => HttpResponse.json(versionsForAgent)),
+    http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(semanticRecallConfig)),
     http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabledStatus)),
     http.get(`${BASE_URL}/api/memory/threads/:threadId`, () =>
@@ -96,33 +141,12 @@ function registerMemoryHandlers() {
   );
 }
 
-function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-
-  return render(
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>
-        <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={paths}>
-          <ThreadInputProvider>
-            <WorkingMemoryProvider agentId={AGENT_ID} threadId={THREAD_ID} resourceId={AGENT_ID}>
-              <MemoryTimelineProvider>
-                <TimelineProbe />
-                <MemorySidebar
-                  agentId={AGENT_ID}
-                  threadId={THREAD_ID}
-                  threads={threads}
-                  isLoading={false}
-                  onDelete={vi.fn()}
-                  hasMemory={hasMemory}
-                />
-              </MemoryTimelineProvider>
-            </WorkingMemoryProvider>
-          </ThreadInputProvider>
-        </LinkComponentProvider>
-      </QueryClientProvider>
-    </MastraReactProvider>,
+function OpenVersionsButton() {
+  const { openVersions } = useAgentSidebarView();
+  return (
+    <button type="button" onClick={openVersions}>
+      Open versions
+    </button>
   );
 }
 
@@ -145,7 +169,7 @@ function TimelineProbe() {
   return null;
 }
 
-function renderSidebarWithOM(threads: StorageThreadType[]) {
+function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -155,22 +179,26 @@ function renderSidebarWithOM(threads: StorageThreadType[]) {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={paths}>
           <ThreadInputProvider>
-            <WorkingMemoryProvider agentId={AGENT_ID} threadId={THREAD_ID} resourceId={AGENT_ID}>
-              <ObservationalMemoryProvider>
-                <MemoryTimelineProvider>
-                  <SignalProbe />
-                  <TimelineProbe />
-                  <MemorySidebar
-                    agentId={AGENT_ID}
-                    threadId={THREAD_ID}
-                    threads={threads}
-                    isLoading={false}
-                    onDelete={vi.fn()}
-                    hasMemory
-                  />
-                </MemoryTimelineProvider>
-              </ObservationalMemoryProvider>
-            </WorkingMemoryProvider>
+            <AgentSidebarViewProvider>
+              <OpenVersionsButton />
+              <WorkingMemoryProvider agentId={AGENT_ID} threadId={THREAD_ID} resourceId={AGENT_ID}>
+                <ObservationalMemoryProvider>
+                  <MemoryTimelineProvider>
+                    <SignalProbe />
+                    <TimelineProbe />
+                    <MemorySidebar
+                      agentId={AGENT_ID}
+                      threadId={THREAD_ID}
+                      threads={threads}
+                      isLoading={false}
+                      onDelete={vi.fn()}
+                      hasMemory={hasMemory}
+                      memoryType="local"
+                    />
+                  </MemoryTimelineProvider>
+                </ObservationalMemoryProvider>
+              </WorkingMemoryProvider>
+            </AgentSidebarViewProvider>
           </ThreadInputProvider>
         </LinkComponentProvider>
       </QueryClientProvider>
@@ -222,6 +250,30 @@ describe('MemorySidebar', () => {
     expect(blocks.length).toBe(1);
   });
 
+  it('shows a compact capabilities footer at the bottom of the thread layer', async () => {
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    const footer = await screen.findByTestId('agent-capabilities-footer');
+
+    expect(await within(footer).findByLabelText('Memory: On')).not.toBeNull();
+    expect(await within(footer).findByLabelText('Editor: 2')).not.toBeNull();
+    expect(within(footer).getByText('3/6')).not.toBeNull();
+
+    fireEvent.click(footer);
+
+    expect(within(footer).getByText('Capabilities')).not.toBeNull();
+    expect(screen.getAllByLabelText('Memory: On').length).toBeGreaterThan(1);
+    expect(screen.getAllByLabelText('Editor: 2').length).toBeGreaterThan(1);
+    expect(screen.getAllByLabelText('Processors: 1').length).toBeGreaterThan(1);
+    expect(screen.getAllByLabelText('Tools: Off').length).toBeGreaterThan(1);
+    expect(screen.getByRole('link', { name: 'Editor: 2' }).getAttribute('href')).toBe(
+      'https://mastra.ai/docs/editor/overview',
+    );
+    expect(screen.getByRole('link', { name: 'Memory: On' }).getAttribute('href')).toBe(
+      'https://mastra.ai/en/docs/agents/agent-memory',
+    );
+  });
+
   it('replaces the panel with an empty state and docs CTA when memory is disabled', async () => {
     renderSidebar([], false);
 
@@ -235,6 +287,22 @@ describe('MemorySidebar', () => {
     // An outline CTA links to the Agent Memory docs.
     const cta = screen.getByRole('link', { name: /documentation/i });
     expect(cta.getAttribute('href')).toBe('https://mastra.ai/en/docs/agents/agent-memory');
+  });
+
+  it('shows the version editor as the full sidebar view without leaving chat', async () => {
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open versions' }));
+
+    expect(await screen.findByRole('heading', { name: 'Versions' })).not.toBeNull();
+    expect(screen.getByText('You are a test chef agent.')).not.toBeNull();
+    expect(screen.queryByTestId('memory-sidebar-thread-layer')).toBeNull();
+    expect(screen.queryByTestId('memory-sidebar-card')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to threads' }));
+
+    expect(await screen.findByText('New Chat')).not.toBeNull();
+    expect(screen.getByTestId('memory-sidebar-card')).not.toBeNull();
   });
 
   it('shows the live memory content, without the static config, when the Memory card is clicked', async () => {
@@ -285,8 +353,6 @@ describe('MemorySidebar', () => {
       fireEvent.click(memoryCard);
     });
 
-    // Given the Memory view is open: the regular memory content ("Clone Thread")
-    // is visible, the OM subpanel is absent, and no OM/message data is fetched.
     await screen.findByText('Clone Thread');
     expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Back to memory' })).toBeNull();
@@ -294,9 +360,6 @@ describe('MemorySidebar', () => {
     expect(onOM).not.toHaveBeenCalled();
     expect(onMessages).not.toHaveBeenCalled();
 
-    // When the OM detail is opened (as the "Analyze Observations" CTA does): the
-    // OM detail replaces the regular memory content (fills the panel), so
-    // "Clone Thread" is gone and the OM subpanel + Back button are shown.
     act(() => openPanel());
 
     const subpanel = await screen.findByTestId('memory-sidebar-om-detail-subpanel');
@@ -306,8 +369,6 @@ describe('MemorySidebar', () => {
     await waitFor(() => expect(onOM).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(1));
 
-    // When Back is clicked: the OM subpanel is removed and the regular memory
-    // content returns.
     fireEvent.click(screen.getByRole('button', { name: 'Back to memory' }));
 
     await waitFor(() => expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull());
@@ -315,7 +376,7 @@ describe('MemorySidebar', () => {
     expect(await screen.findByText('Clone Thread')).not.toBeNull();
   });
 
-  it('refetches the open OM subpanel when observations are signalled (stream-finish freshness)', async () => {
+  it('refetches the open OM subpanel when observations are signalled after a stream finishes', async () => {
     const onOM = vi.fn();
     const onMessages = vi.fn();
 
@@ -331,18 +392,15 @@ describe('MemorySidebar', () => {
       }),
     );
 
-    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
     act(() => openPanel());
 
-    // Initial open fetches each query exactly once.
     await screen.findByTestId('memory-sidebar-om-detail-subpanel');
     await waitFor(() => expect(onOM).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(1));
 
-    // Simulating a stream-finish freshness signal must refetch both queries so the
-    // panel reflects new observations without remounting, like the left OM sidebar.
     await act(async () => {
       signalObservationsUpdated();
     });
@@ -351,26 +409,20 @@ describe('MemorySidebar', () => {
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(2));
   });
 
-  it('renders the timeline panel context window from the OM record (source of truth), not message markers', async () => {
+  it('renders the timeline panel context window from the OM record instead of message markers', async () => {
     server.use(
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
       http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),
       http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessages)),
     );
 
-    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
     act(() => openPanel());
 
     await screen.findByTestId('memory-sidebar-om-detail-subpanel');
 
-    // The panel's Messages bar must show the record-derived counter:
-    // pendingMessageTokens 14200 over the message threshold 30000 (14.2/30k).
-    // The thread messages are plain text with no OM status markers, so a
-    // marker-derived panel would show 0 here. The observation/memory readout
-    // (observationTokenCount 4500 over the observation threshold 6000 → 4.5/6k)
-    // is lifted into the panel header beside the "Observational memory" title.
     expect(await screen.findByText('14.2/30k')).not.toBeNull();
     expect(await screen.findByText('4.5/6k')).not.toBeNull();
   });
@@ -382,17 +434,13 @@ describe('MemorySidebar', () => {
       http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessages)),
     );
 
-    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
     act(() => openPanel());
 
     const subpanel = await screen.findByTestId('memory-sidebar-om-detail-subpanel');
 
-    // The OM detail panel shows two progress bars matching the collapsed sidebar:
-    // a Messages bar and an Observations bar, each with record-derived readouts.
-    // (Other "Messages" text can appear in the panel, so assert at least one of
-    // each bar label is present, plus the exact record-derived readouts.)
     expect((await within(subpanel).findAllByText('Messages')).length).toBeGreaterThan(0);
     expect((await within(subpanel).findAllByText('Observations')).length).toBeGreaterThan(0);
     expect(await within(subpanel).findByText('14.2/30k')).not.toBeNull();
@@ -400,8 +448,6 @@ describe('MemorySidebar', () => {
   });
 
   it('filters the observation list to the selected zoom range', async () => {
-    // Recharts' ResponsiveContainer needs a measurable size in jsdom so the
-    // FlameGraph (and its zoom track) renders.
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120);
 
@@ -411,20 +457,16 @@ describe('MemorySidebar', () => {
       http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessagesSpan)),
     );
 
-    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
     act(() => openPanel());
 
     await screen.findByTestId('memory-sidebar-om-detail-subpanel');
 
-    // Both records are visible by default: the body defaults to the latest record
-    // (om-late at 10:05 → "User reported a blocking bug").
     const bodyBefore = await screen.findByTestId('observation-detail-body');
     expect(within(bodyBefore).getByText(/User reported a blocking bug/)).toBeTruthy();
 
-    // Collapse the range by dragging the right zoom handle to ~40% of the track
-    // (~10:02), which keeps om-early (10:01) and drops om-late (10:05).
     const track = document.querySelector('.cursor-pointer.select-none') as HTMLElement;
     expect(track).toBeTruthy();
     track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
@@ -432,15 +474,12 @@ describe('MemorySidebar', () => {
     fireEvent.mouseMove(window, { clientX: 40 });
     fireEvent.mouseUp(window);
 
-    // Now only om-early is in range: its observation text shows and the
-    // out-of-range om-late observation is gone from the list.
     await waitFor(() => {
       const bodyAfter = screen.getByTestId('observation-detail-body');
       expect(within(bodyAfter).getByText(/User asked about onboarding/)).toBeTruthy();
       expect(within(bodyAfter).queryByText(/User reported a blocking bug/)).toBeNull();
     });
 
-    // Reset zoom restores the full list.
     fireEvent.click(screen.getByLabelText('Reset zoom'));
     await waitFor(() => {
       expect(screen.getByText(/User reported a blocking bug/)).toBeTruthy();

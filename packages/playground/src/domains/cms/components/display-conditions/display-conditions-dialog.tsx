@@ -17,9 +17,16 @@ interface DisplayConditionsDialogProps {
   schema?: JsonSchema;
   rules?: RuleGroup;
   onRulesChange: (rules: RuleGroup | undefined) => void;
+  triggerSize?: 'icon-xs' | 'icon-sm';
 }
 
-export function DisplayConditionsDialog({ entityName, schema, rules, onRulesChange }: DisplayConditionsDialogProps) {
+export function DisplayConditionsDialog({
+  entityName,
+  schema,
+  rules,
+  onRulesChange,
+  triggerSize = 'icon-sm',
+}: DisplayConditionsDialogProps) {
   const hasVariables = Object.keys(schema?.properties ?? {}).length > 0;
 
   if (!schema || !hasVariables) {
@@ -33,7 +40,7 @@ export function DisplayConditionsDialog({ entityName, schema, rules, onRulesChan
       <DialogTrigger asChild>
         <Button
           tooltip={ruleCount > 0 ? `${ruleCount} rules` : 'Display Conditions'}
-          size="icon-sm"
+          size={triggerSize}
           variant="ghost"
           className="relative"
         >

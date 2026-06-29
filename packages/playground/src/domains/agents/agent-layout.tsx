@@ -9,6 +9,7 @@ import { ReviewQueueProvider } from '@/domains/agents/context/review-queue-conte
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
+import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { GenerationProvider } from '@/domains/datasets/context/generation-context';
 import { cleanProviderId } from '@/domains/llm/utils';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
@@ -21,7 +22,6 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { hasObservability } = useHasObservability();
 
   const isExperimentalFeatures = coreFeatures.has('datasets');
-  const showPlayground = isCmsAvailable && isExperimentalFeatures;
   const showObservability = hasObservability && isExperimentalFeatures;
 
   const { data: agent } = useAgent(agentId!);
@@ -31,27 +31,24 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const requestContextSchema = agent?.requestContextSchema;
 
   // Settings has no tab pill, so it maps to 'none' and the bar stays unhighlighted.
-  const activeTab: AgentPageTab | 'none' = location.pathname.includes('/editor')
-    ? 'versions'
-    : location.pathname.includes('/evaluate')
-      ? 'evaluate'
-      : location.pathname.includes('/review')
-        ? 'review'
-        : location.pathname.includes('/traces')
-          ? 'traces'
-          : location.pathname.includes('/settings')
-            ? 'none'
-            : 'chat';
+  const activeTab: AgentPageTab | 'none' = location.pathname.includes('/evaluate')
+    ? 'evaluate'
+    : location.pathname.includes('/review')
+      ? 'review'
+      : location.pathname.includes('/traces')
+        ? 'traces'
+        : location.pathname.includes('/settings')
+          ? 'none'
+          : 'chat';
 
   const showTopBarRunOptions =
-    (activeTab === 'evaluate' || activeTab === 'review') && (showPlayground || showObservability);
+    (activeTab === 'evaluate' || activeTab === 'review') && (isCmsAvailable || showObservability);
 
   const content = (
     <MainContentLayout>
       <AgentPageTabs
         agentId={agentId!}
         activeTab={activeTab}
-        showPlayground={showPlayground}
         showObservability={showObservability}
         rightSlot={
           showTopBarRunOptions ? <AgentTopBarRunOptions requestContextSchema={requestContextSchema} /> : undefined
@@ -66,7 +63,9 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
       <SchemaRequestContextProvider>
         <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
           <GenerationProvider>
-            <ReviewQueueProvider>{content}</ReviewQueueProvider>
+            <ReviewQueueProvider>
+              <ThreadInputProvider>{content}</ThreadInputProvider>
+            </ReviewQueueProvider>
           </GenerationProvider>
         </PlaygroundModelProvider>
       </SchemaRequestContextProvider>

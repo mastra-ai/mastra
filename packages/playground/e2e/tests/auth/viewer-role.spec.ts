@@ -89,10 +89,10 @@ test.describe('Viewer Role', () => {
 
     test('viewer can view agent chat interface', async ({ page }) => {
       await setupViewerAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Should be on agent chat page
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
+      await expect(page).toHaveURL(/\/agents\/weather-agent\/threads/);
 
       // The page should load without permission errors for viewing
       const permissionDenied = page.getByText(/permission denied|not authorized|access denied/i);
@@ -113,7 +113,7 @@ test.describe('Viewer Role', () => {
 
     test('viewer cannot execute agents - sees disabled chat input', async ({ page }) => {
       await setupViewerAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Viewer has agents:read but NOT agents:execute
       // The chat input should be disabled with permission message as placeholder
@@ -354,10 +354,10 @@ test.describe('Viewer Role', () => {
   test.describe('Read-Only UI State', () => {
     test('viewer sees read-only agent chat with disabled input', async ({ page }) => {
       await setupViewerAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Page should load without errors
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
+      await expect(page).toHaveURL(/\/agents\/weather-agent\/threads/);
 
       // Viewer has agents:read but NOT agents:execute
       // The chat input should be disabled with permission message as placeholder
@@ -374,10 +374,10 @@ test.describe('Viewer Role', () => {
 
     test('viewer agent page shows read-only state', async ({ page }) => {
       await setupViewerAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Page should load
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
+      await expect(page).toHaveURL(/\/agents\/weather-agent\/threads/);
 
       // Viewer should be able to see agent details
       // Look for agent name or description

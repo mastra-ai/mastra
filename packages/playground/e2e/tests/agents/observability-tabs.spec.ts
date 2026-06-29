@@ -72,7 +72,7 @@ test('requests agent traces when runtime observability is available without pack
   let traceListUrl: URL | undefined;
   await mockTraceLists(page, url => (traceListUrl = url));
 
-  await page.goto('/agents/weather-agent/chat/new');
+  await page.goto('/agents/weather-agent/threads/new');
   await expect(page.getByRole('tab', { name: 'Evaluate' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Review' })).toBeVisible();
   await page.getByRole('tab', { name: 'Traces' }).click();
@@ -92,7 +92,7 @@ test('requests agent traces when runtime observability is available without pack
 test('keeps agent observability tabs disabled when runtime observability is unavailable', async ({ page }) => {
   await mockSystemPackages(page, false);
 
-  await page.goto('/agents/weather-agent/chat/new');
+  await page.goto('/agents/weather-agent/threads/new');
   await page.getByRole('tab', { name: 'Traces' }).hover();
 
   await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();

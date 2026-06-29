@@ -77,10 +77,10 @@ test.describe('Member Role', () => {
 
     test('member can view agent chat interface', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Should be on agent chat page
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
+      await expect(page).toHaveURL(/\/agents\/weather-agent\/threads/);
 
       // The page should load without permission errors
       const permissionDenied = page.getByText(/permission denied|not authorized|access denied/i);
@@ -120,7 +120,7 @@ test.describe('Member Role', () => {
 
     test('member cannot execute agents - sees disabled chat input', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Member has agents:read but NOT agents:execute
       // The chat input should be disabled with permission message as placeholder
@@ -366,10 +366,10 @@ test.describe('Member Role', () => {
 
     test('member agent page shows disabled chat and viewable content', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Page should load without errors
-      await expect(page).toHaveURL(/\/agents\/weather-agent\/chat/);
+      await expect(page).toHaveURL(/\/agents\/weather-agent\/threads/);
 
       // Member has agents:read but NOT agents:execute
       // The chat input should be disabled

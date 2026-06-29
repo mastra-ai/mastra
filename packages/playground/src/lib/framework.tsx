@@ -14,6 +14,8 @@ type LinkComponentPaths = {
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) => string;
   agentThreadLink: (agentId: string, threadId: string, messageId?: string) => string;
   agentNewThreadLink: (agentId: string) => string;
+  agentVersionThreadLink?: (agentId: string, versionId: string, threadId: string, messageId?: string) => string;
+  agentVersionNewThreadLink?: (agentId: string, versionId: string) => string;
 
   workflowsLink: () => string;
   workflowLink: (workflowId: string) => string;
@@ -70,6 +72,8 @@ const LinkComponentContext = createContext<{
     agentSkillLink: () => '',
     agentThreadLink: () => '',
     agentNewThreadLink: () => '',
+    agentVersionThreadLink: () => '',
+    agentVersionNewThreadLink: () => '',
     workflowsLink: () => '',
     workflowLink: () => '',
     schedulesLink: () => '',

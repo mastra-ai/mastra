@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createInstructionBlock } from '../../components/agent-edit-page/utils/form-validation';
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
 import { useAgentCmsForm } from '../use-agent-cms-form';
-import { createdCodeAgent } from './fixtures/use-agent-cms-form';
+import { useAgentVersions } from '../use-agent-versions';
+import { createdCodeAgent, emptyAgentVersions, savedCodeAgentVersions } from './fixtures/use-agent-cms-form';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -150,6 +151,50 @@ describe('useAgentCmsForm — code agent instruction ownership', () => {
     // Mirrors the server's getCodeAgentOwnership: an editor object only owns instructions when it
     // sets `instructions: true`. Omitting the key must not send instructions the server would strip.
     expect(sink.body!.instructions).toEqual([]);
+  });
+
+  it('refreshes versions after saving a filesystem-backed code agent', async () => {
+    const sink: { body: Record<string, unknown> | null } = { body: null };
+    let versionRequests = 0;
+    captureCreateBody(sink);
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () => {
+        versionRequests += 1;
+        return HttpResponse.json(versionRequests > 1 ? savedCodeAgentVersions : emptyAgentVersions);
+      }),
+    );
+
+    const { result } = renderHook(
+      () => ({
+        cmsForm: useAgentCmsForm({
+          mode: 'edit',
+          agentId: AGENT_ID,
+          dataSource,
+          isCodeAgentOverride: true,
+          hasStoredOverride: false,
+          editorConfig: undefined,
+          saveSuccessMessage: 'Saved to filesystem',
+          onSuccess: () => {},
+        }),
+        versions: useAgentVersions({ agentId: AGENT_ID }),
+      }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.versions.data?.total).toBe(0));
+
+    act(() => {
+      result.current.cmsForm.form.setValue('instructionBlocks', [createInstructionBlock('User edited prompt')], {
+        shouldDirty: true,
+      });
+    });
+
+    await act(async () => {
+      await result.current.cmsForm.handleSaveDraft();
+    });
+
+    await waitFor(() => expect(result.current.versions.data?.total).toBe(1));
+    expect(versionRequests).toBeGreaterThanOrEqual(2);
   });
 });
 

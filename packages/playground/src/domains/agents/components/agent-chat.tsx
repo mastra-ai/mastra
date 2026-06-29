@@ -15,6 +15,7 @@ export const AgentChat = ({
   refreshThreadList,
   modelVersion,
   agentVersionId,
+  threadMetadata,
   supportsMemory,
   modelList,
   messageId,
@@ -39,19 +40,27 @@ export const AgentChat = ({
 
   // Handle scrolling to message after navigation
   useEffect(() => {
-    if (messageId && data && !isMessagesLoading) {
-      // Small delay to ensure DOM is ready
-      setTimeout(() => {
-        const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-        if (messageElement) {
-          messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          messageElement.classList.add('bg-surface4');
-          setTimeout(() => {
-            messageElement.classList.remove('bg-surface4');
-          }, 2000);
-        }
-      }, 100);
-    }
+    if (!messageId || !data || isMessagesLoading) return;
+
+    let highlightTimeout: ReturnType<typeof setTimeout> | undefined;
+    // Small delay to ensure DOM is ready
+    const scrollTimeout = setTimeout(() => {
+      const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        messageElement.classList.add('bg-surface4');
+        highlightTimeout = setTimeout(() => {
+          messageElement.classList.remove('bg-surface4');
+        }, 2000);
+      }
+    }, 100);
+
+    return () => {
+      clearTimeout(scrollTimeout);
+      if (highlightTimeout) {
+        clearTimeout(highlightTimeout);
+      }
+    };
   }, [messageId, data, isMessagesLoading]);
 
   // Stable empty array per thread: stays the same reference across re-renders
@@ -70,6 +79,7 @@ export const AgentChat = ({
       agentName={agentName}
       modelVersion={modelVersion}
       agentVersionId={agentVersionId}
+      threadMetadata={threadMetadata}
       supportsMemory={supportsMemory}
       threadId={threadId}
       initialMessages={messages}

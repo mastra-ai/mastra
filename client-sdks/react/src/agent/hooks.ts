@@ -147,12 +147,17 @@ type SignalContinuationOptions = {
   providerOptions?: ModelSettings['providerOptions'];
   requireToolApproval?: boolean;
   tracingOptions?: TracingOptions;
+  memory?: {
+    thread: string | { id: string; metadata?: Record<string, unknown> };
+    resource: string;
+  };
 };
 
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
   threadId?: string;
+  threadMetadata?: Record<string, unknown>;
   initialMessages?: MastraDBMessage[];
   /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
   requestContext?: RequestContext;
@@ -176,6 +181,7 @@ interface SharedArgs {
   coreUserMessages: CoreUserMessage[];
   requestContext?: RequestContext;
   threadId?: string;
+  threadMetadata?: Record<string, unknown>;
   modelSettings?: ModelSettings;
   signal?: AbortSignal;
   tracingOptions?: TracingOptions;
@@ -262,6 +268,7 @@ export const useChat = ({
   agentId,
   resourceId,
   threadId,
+  threadMetadata: propsThreadMetadata,
   initialMessages,
   requestContext: propsRequestContext,
   clientTools: hookClientTools,
@@ -360,6 +367,16 @@ export const useChat = ({
     _threadSignalsUnsupportedRef.current = true;
     onThreadSignalsUnsupported?.();
   }, [onThreadSignalsUnsupported]);
+
+  const buildMemoryOption = (id?: string, metadata?: Record<string, unknown>) =>
+    id
+      ? {
+          memory: {
+            thread: metadata ? { id, metadata } : id,
+            resource: resourceId || agentId,
+          },
+        }
+      : {};
 
   const getSignalPreview = (coreUserMessages: CoreUserMessage[]) => {
     const preview = coreUserMessages
@@ -530,6 +547,7 @@ export const useChat = ({
     coreUserMessages,
     requestContext,
     threadId,
+    threadMetadata,
     modelSettings,
     signal,
     onFinish,
@@ -578,7 +596,7 @@ export const useChat = ({
       },
       instructions,
       requestContext: resolvedRequestContext,
-      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+      ...buildMemoryOption(threadId, threadMetadata ?? propsThreadMetadata),
       providerOptions,
       tracingOptions,
       requireToolApproval,
@@ -620,6 +638,7 @@ export const useChat = ({
     coreUserMessages,
     requestContext,
     threadId,
+    threadMetadata,
     onChunk,
     modelSettings,
     signal,
@@ -659,6 +678,7 @@ export const useChat = ({
       providerOptions,
       requireToolApproval,
       tracingOptions,
+      ...buildMemoryOption(threadId, threadMetadata ?? propsThreadMetadata),
     };
     _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
@@ -696,7 +716,7 @@ export const useChat = ({
         },
         instructions,
         requestContext: resolvedRequestContext,
-        ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+        ...buildMemoryOption(threadId, threadMetadata ?? propsThreadMetadata),
         providerOptions,
         requireToolApproval,
         tracingOptions,
@@ -748,6 +768,7 @@ export const useChat = ({
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
+      ...buildMemoryOption(threadId, threadMetadata ?? propsThreadMetadata),
     };
 
     try {
@@ -814,6 +835,7 @@ export const useChat = ({
     coreUserMessages,
     requestContext,
     threadId,
+    threadMetadata,
     onNetworkChunk,
     modelSettings,
     signal,
@@ -848,7 +870,7 @@ export const useChat = ({
       },
       runId,
       requestContext: resolvedRequestContext,
-      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+      ...buildMemoryOption(threadId, threadMetadata ?? propsThreadMetadata),
       tracingOptions,
     });
 

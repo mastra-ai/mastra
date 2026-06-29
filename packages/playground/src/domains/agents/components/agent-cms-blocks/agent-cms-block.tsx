@@ -19,7 +19,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { GripVertical, X, BookmarkPlus } from 'lucide-react';
+import { GripVertical, Save, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -79,16 +79,19 @@ const SaveAsPromptBlockDialog = ({
     [name, description, onSave],
   );
 
-  // Reset form when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setName('');
-      setDescription('');
-    }
-  }, [open]);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!nextOpen) {
+        setName('');
+        setDescription('');
+      }
+      onOpenChange(nextOpen);
+    },
+    [onOpenChange],
+  );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Save as prompt block</DialogTitle>
@@ -122,7 +125,7 @@ const SaveAsPromptBlockDialog = ({
             )}
           </DialogBody>
           <DialogFooter className="px-6 pt-4">
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" size="sm" onClick={() => handleOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" size="sm" disabled={!name.trim() || isPending}>
@@ -194,10 +197,7 @@ const InlineBlockContent = ({
   return (
     <>
       <div
-        className={cn(
-          'relative group rounded-md transition-colors duration-150 hover:bg-surface2/50',
-          !readOnly && 'pr-20',
-        )}
+        className={cn('relative group w-full min-w-0 rounded-md transition-colors duration-150 hover:bg-surface2/50')}
       >
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
@@ -223,22 +223,23 @@ const InlineBlockContent = ({
               schema={schema}
               rules={block.rules}
               onRulesChange={handleRulesChange}
+              triggerSize="icon-xs"
             />
 
             {onConvertToRef && block.content.trim().length > 0 && (
               <Button
                 variant="ghost"
-                size="icon-sm"
+                size="icon-xs"
                 onClick={() => setSaveDialogOpen(true)}
                 tooltip="Save as prompt block"
               >
-                <BookmarkPlus />
+                <Save />
               </Button>
             )}
 
             {onDelete && (
-              <Button variant="ghost" size="icon-sm" onClick={onDelete} tooltip="Delete block">
-                <X />
+              <Button variant="ghost" size="icon-xs" onClick={onDelete} tooltip="Delete block">
+                <Trash2 />
               </Button>
             )}
           </div>
@@ -250,7 +251,7 @@ const InlineBlockContent = ({
           value={block.content}
           onChange={handleContentChange}
           placeholder={placeholder}
-          className="border-none rounded-none bg-transparent min-h-12"
+          className="w-full border-none rounded-none bg-transparent min-h-12"
           language="markdown"
           highlightVariables
           showCopyButton={false}
@@ -303,7 +304,7 @@ export const AgentCMSBlock = ({
   }
 
   return (
-    <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
+    <ContentBlock index={index} draggableId={block.id} className={cn('w-full min-w-0', className)}>
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
         <InlineBlockContent
           index={index}

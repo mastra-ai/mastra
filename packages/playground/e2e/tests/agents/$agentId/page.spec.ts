@@ -7,7 +7,7 @@ test.afterEach(async () => {
 });
 
 test('overall layout information', async ({ page }) => {
-  await page.goto('/agents/weather-agent/chat/1234');
+  await page.goto('/agents/weather-agent/threads/1234');
 
   // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
@@ -18,7 +18,7 @@ test('overall layout information', async ({ page }) => {
   // Thread history (with memory)
   const newChatButton = await page.locator('a:has-text("New Chat")');
   await expect(newChatButton).toBeVisible();
-  await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/chat\/.*/);
+  await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
   await expect(page.locator('text=Your conversations will appear here once you start chatting!')).toBeVisible();
 
   // Agent header and settings overview
@@ -53,7 +53,7 @@ test.describe('agent settings', () => {
 
 test.describe('composer model settings', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/agents/weather-agent/chat/new');
+    await page.goto('/agents/weather-agent/threads/new');
     await page.getByTestId('composer-model-settings-trigger').click();
   });
 

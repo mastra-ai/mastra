@@ -39,7 +39,7 @@ test.afterEach(async () => {
 
 test('Enter during IME composition does not submit, Enter after composition does submit', async () => {
   await selectFixture(page, 'text-stream');
-  await page.goto(`/agents/weather-agent/chat/new`);
+  await page.goto(`/agents/weather-agent/threads/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
   await page.keyboard.press('Escape');
@@ -78,9 +78,9 @@ test('Enter during IME composition does not submit, Enter after composition does
   // Guard returns early during composition without calling preventDefault.
   expect(defaultPreventedDuringComposition).toBe(false);
 
-  // The real user-facing check: the URL should still be /chat/new because no
+  // The real user-facing check: the URL should still be /threads/new because no
   // submit happened, and the textarea should still hold the in-progress text.
-  await expect(page).toHaveURL(/\/chat\/new$/);
+  await expect(page).toHaveURL(/\/threads\/new$/);
   await expect(chatInput).toHaveValue('hello');
 
   // End the composition session, mirroring the user confirming an IME candidate.
@@ -90,14 +90,14 @@ test('Enter during IME composition does not submit, Enter after composition does
     el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'hello' }));
   });
 
-  // Now Enter should submit the message normally, navigating away from /chat/new.
+  // Now Enter should submit the message normally, navigating away from /threads/new.
   // Wait for the composer to be idle (Send enabled) so the Enter is not dropped
   // by the handler's running-thread guard.
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: 10000 });
   await chatInput.focus();
   await page.keyboard.press('Enter');
 
-  await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
+  await expect(page).not.toHaveURL(/\/threads\/new/, { timeout: 20000 });
   await expect(page.getByTestId('pending-signal-message')).not.toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('thread-wrapper').getByText('hello')).toBeVisible({ timeout: 20000 });
 });
@@ -112,7 +112,7 @@ test('Enter after IME switch (no compositionend) still submits — #16464 regres
   //    appear permanently disabled. Reading native `isComposing` instead means
   //    the next Enter (with isComposing=false) submits normally.
   await selectFixture(page, 'text-stream');
-  await page.goto(`/agents/weather-agent/chat/new`);
+  await page.goto(`/agents/weather-agent/threads/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
   await page.keyboard.press('Escape');
@@ -160,7 +160,7 @@ test('Enter after IME switch (no compositionend) still submits — #16464 regres
   await chatInput.focus();
   await page.keyboard.press('Enter');
 
-  await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
+  await expect(page).not.toHaveURL(/\/threads\/new/, { timeout: 20000 });
   await expect(page.getByTestId('pending-signal-message')).not.toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('thread-wrapper').getByText('hello')).toBeVisible({ timeout: 20000 });
 });

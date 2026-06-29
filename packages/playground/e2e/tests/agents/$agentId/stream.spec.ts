@@ -17,9 +17,9 @@ test.afterEach(async () => {
 });
 
 /**
- * Fill the chat input, click Send, and wait for navigation away from /chat/new.
+ * Fill the chat input, click Send, and wait for navigation away from /threads/new.
  * Uses pressSequentially to work reliably with React controlled inputs.
- * After sending, the app navigates from /chat/new to /chat/{threadId} — we wait
+ * After sending, the app navigates from /threads/new to /threads/{threadId} — we wait
  * for that transition so subsequent assertions run against the correct thread.
  */
 async function fillAndSend(page: Page, message: string) {
@@ -36,7 +36,7 @@ test('text stream', async () => {
   const expectedResult = `I can help you get accurate weather forecasts by providing real-time data for your location. Just tell me your city or location, and I'll give you current conditions and detailed forecasts with temperature, humidity, and wind speed. Whether you're planning a trip or just checking today, I'm here to help! What is your current location?`;
 
   await selectFixture(page, 'text-stream');
-  await page.goto(`/agents/weather-agent/chat/new`);
+  await page.goto(`/agents/weather-agent/threads/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
   await page.keyboard.press('Escape');
@@ -68,15 +68,15 @@ test('text stream', async () => {
 
 test('tool stream', async () => {
   await selectFixture(page, 'tool-stream');
-  await page.goto(`/agents/weather-agent/chat/new`);
+  await page.goto(`/agents/weather-agent/threads/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
   await page.keyboard.press('Escape');
 
   await fillAndSend(page, 'Give me the weather in Paris');
 
-  // Wait for navigation from /chat/new to the actual thread URL
-  await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
+  // Wait for navigation from /threads/new to the actual thread URL
+  await expect(page).not.toHaveURL(/\/threads\/new/, { timeout: 20000 });
 
   await assertToolStream(page);
   await page.reload();
@@ -108,7 +108,7 @@ async function assertToolStream(page: Page) {
 
 test('workflow stream', async () => {
   await selectFixture(page, 'workflow-stream');
-  await page.goto(`/agents/weather-agent/chat/new`);
+  await page.goto(`/agents/weather-agent/threads/new`);
   await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
   await page.keyboard.press('Escape');

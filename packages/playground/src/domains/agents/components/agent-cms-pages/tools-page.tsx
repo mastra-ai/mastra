@@ -19,7 +19,7 @@ import { MCPClientList } from '@/domains/mcps/components/mcp-client-list';
 import { IntegrationToolsSection } from '@/domains/tool-providers/components';
 import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
-export function ToolsPage() {
+export function ToolsPage({ layout = 'page' }: { layout?: 'page' | 'panel' }) {
   const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
   const { control } = form;
   const { data: tools } = useTools();
@@ -132,6 +132,7 @@ export function ToolsPage() {
   const unselectedOptions = useMemo(() => {
     return options.filter(opt => !selectedToolIds.includes(opt.value));
   }, [options, selectedToolIds]);
+  const compact = layout === 'panel';
 
   const handleAddTool = (toolId: string) => {
     form.setValue(
@@ -189,70 +190,72 @@ export function ToolsPage() {
     );
   };
 
-  return (
-    <ScrollArea className="h-full">
-      <div className="flex flex-col gap-6 pt-4">
-        {isToolsLocked && (
-          <Notice variant="info" title="Tools are owned by code">
-            <Notice.Message>
-              This code-defined agent has disabled tools editing from Studio. Update the agent definition in code to
-              change its tools.
-            </Notice.Message>
-          </Notice>
-        )}
-        {!isToolsLocked && descriptionsOnly && (
-          <Notice variant="info" title="Tool membership is owned by code">
-            <Notice.Message>
-              This code-defined agent only allows editing tool descriptions from Studio. Update the agent definition in
-              code to add or remove tools.
-            </Notice.Message>
-          </Notice>
-        )}
-        <SubSectionRoot>
-          <Section.Header>
-            <SubSectionHeader title="Tools" icon={<ToolsIcon />} />
+  const content = (
+    <div className={cn('flex flex-col', compact ? 'gap-4 p-3' : 'gap-6 pt-4')}>
+      {isToolsLocked && (
+        <Notice variant="info" title="Tools are owned by code">
+          <Notice.Message>
+            This code-defined agent has disabled tools editing from Studio. Update the agent definition in code to
+            change its tools.
+          </Notice.Message>
+        </Notice>
+      )}
+      {!isToolsLocked && descriptionsOnly && (
+        <Notice variant="info" title="Tool membership is owned by code">
+          <Notice.Message>
+            This code-defined agent only allows editing tool descriptions from Studio. Update the agent definition in
+            code to add or remove tools.
+          </Notice.Message>
+        </Notice>
+      )}
+      <SubSectionRoot>
+        <Section.Header>
+          <SubSectionHeader title="Tools" icon={<ToolsIcon />} />
 
-            {canEditToolMembership && unselectedOptions.length > 0 && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <Icon size="sm">
-                      <PlusIcon />
-                    </Icon>
-                    Add Tools
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 p-0 pt-4 max-h-72 overflow-y-auto">
-                  {unselectedOptions.map(tool => (
-                    <button
-                      key={tool.value}
-                      type="button"
-                      onClick={() => handleAddTool(tool.value)}
-                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-0"
-                    >
-                      <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
-                      {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
-                    </button>
-                  ))}
-                </PopoverContent>
-              </Popover>
-            )}
-          </Section.Header>
-
-          {selectedOptions.length > 0 && (
-            <div className="flex flex-col gap-1">{selectedOptions.map(tool => renderToolEntity(tool))}</div>
+          {canEditToolMembership && unselectedOptions.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <Icon size="sm">
+                    <PlusIcon />
+                  </Icon>
+                  Add Tools
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 p-0 pt-4 max-h-72 overflow-y-auto">
+                {unselectedOptions.map(tool => (
+                  <button
+                    key={tool.value}
+                    type="button"
+                    onClick={() => handleAddTool(tool.value)}
+                    className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-0"
+                  >
+                    <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
+                    {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
           )}
-        </SubSectionRoot>
+        </Section.Header>
 
-        {!hideToolMembershipSections && <MCPClientList />}
-
-        {!hideToolMembershipSections && (
-          <IntegrationToolsSection
-            selectedToolIds={selectedIntegrationTools}
-            onSubmitTools={canEditToolMembership ? handleIntegrationToolsSubmit : undefined}
-          />
+        {selectedOptions.length > 0 && (
+          <div className="flex flex-col gap-1">{selectedOptions.map(tool => renderToolEntity(tool))}</div>
         )}
-      </div>
-    </ScrollArea>
+      </SubSectionRoot>
+
+      {!hideToolMembershipSections && <MCPClientList />}
+
+      {!hideToolMembershipSections && (
+        <IntegrationToolsSection
+          selectedToolIds={selectedIntegrationTools}
+          onSubmitTools={canEditToolMembership ? handleIntegrationToolsSubmit : undefined}
+        />
+      )}
+    </div>
   );
+
+  if (compact) return content;
+
+  return <ScrollArea className="h-full">{content}</ScrollArea>;
 }

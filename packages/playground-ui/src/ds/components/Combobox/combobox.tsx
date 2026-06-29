@@ -22,6 +22,9 @@ type ComboboxSharedProps = {
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
+  triggerContent?: React.ReactNode;
+  triggerAriaLabel?: string;
+  popupFooter?: React.ReactNode;
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
@@ -68,6 +71,9 @@ export function Combobox(props: ComboboxProps) {
     placeholder = isMultipleCombobox(props) ? 'Select options...' : 'Select option...',
     searchPlaceholder = 'Search...',
     emptyText = 'No option found.',
+    triggerContent,
+    triggerAriaLabel,
+    popupFooter,
     className,
     disabled = false,
     variant = 'default',
@@ -89,8 +95,13 @@ export function Combobox(props: ComboboxProps) {
 
   const comboboxContent = (
     <>
-      <BaseCombobox.Trigger className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}>
-        {multiple ? (
+      <BaseCombobox.Trigger
+        aria-label={triggerAriaLabel}
+        className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}
+      >
+        {triggerContent ? (
+          triggerContent
+        ) : multiple ? (
           <span className={cn('truncate', selectedOptions.length === 0 && comboboxStyles.placeholder)}>
             {triggerText}
           </span>
@@ -153,6 +164,7 @@ export function Combobox(props: ComboboxProps) {
                 );
               }}
             </BaseCombobox.List>
+            {popupFooter ? <div className={comboboxStyles.footer}>{popupFooter}</div> : null}
           </BaseCombobox.Popup>
         </BaseCombobox.Positioner>
       </BaseCombobox.Portal>

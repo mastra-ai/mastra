@@ -1,23 +1,45 @@
 import { PanelDrawer, PanelSeparator } from '@mastra/playground-ui';
+import { Drawer, DrawerContent, DrawerTitle } from '@mastra/playground-ui/components/Drawer';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
-import { useMemoryTimeline } from '../context';
+import { useMemoryTimeline } from '../context/memory-timeline-context';
 
 export interface AgentLayoutProps {
   agentId: string;
-  children: React.ReactNode;
-  leftSlot?: React.ReactNode;
-  rightSlot?: React.ReactNode;
+  children: ReactNode;
+  leftSlot?: ReactNode;
+  rightSlot?: ReactNode;
   /** Accessible label for the mobile drawer that hosts the left slot */
   leftDrawerLabel?: string;
-  /** Accessible label for the mobile drawer that hosts the right slot */
+  /** Accessible label for the drawer that hosts the right slot */
   rightDrawerLabel?: string;
-  browserOverlay?: React.ReactNode;
+  onRightDrawerOpenChange?: (open: boolean) => void;
+  browserOverlay?: ReactNode;
 }
 
 const MEMORY_DETAIL_LEFT_PANEL_DEFAULT_RESTORE = '300px';
+
+function FloatingRightDrawer({
+  children,
+  label,
+  onOpenChange,
+}: {
+  children: ReactNode;
+  label: string;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  return (
+    <Drawer side="right" variant="floating" open={true} onOpenChange={onOpenChange}>
+      <DrawerContent className="overflow-hidden" showCloseButton={false}>
+        <DrawerTitle className="sr-only">{label}</DrawerTitle>
+        {children}
+      </DrawerContent>
+    </Drawer>
+  );
+}
 
 export const AgentLayout = ({
   agentId,
@@ -26,6 +48,7 @@ export const AgentLayout = ({
   rightSlot,
   leftDrawerLabel = 'Open left panel',
   rightDrawerLabel = 'Open right panel',
+  onRightDrawerOpenChange,
   browserOverlay,
 }: AgentLayoutProps) => {
   const isMobile = useIsMobile();
@@ -59,7 +82,7 @@ export const AgentLayout = ({
   }, [isMemoryTimelineOpen]);
 
   // Resizable side panels are a desktop paradigm; below the breakpoint the
-  // side slots move into edge drawers and the main content takes the full width.
+  // left slot moves into an edge drawer and the main content takes the full width.
   if (isMobile) {
     return (
       <div className="relative h-full w-full overflow-hidden">
@@ -70,9 +93,9 @@ export const AgentLayout = ({
           </PanelDrawer>
         )}
         {rightSlot && (
-          <PanelDrawer direction="right" label={rightDrawerLabel}>
+          <FloatingRightDrawer label={rightDrawerLabel} onOpenChange={onRightDrawerOpenChange}>
             {rightSlot}
-          </PanelDrawer>
+          </FloatingRightDrawer>
         )}
         {browserOverlay}
       </div>
@@ -99,15 +122,12 @@ export const AgentLayout = ({
         <Panel id="main-slot" className="grid min-w-0 overflow-y-auto relative">
           {children}
         </Panel>
-        {rightSlot && (
-          <>
-            <PanelSeparator />
-            <Panel id="right-slot" minSize={320} maxSize={'45%'} defaultSize={420} className="min-w-0">
-              {rightSlot}
-            </Panel>
-          </>
-        )}
       </Group>
+      {rightSlot && (
+        <FloatingRightDrawer label={rightDrawerLabel} onOpenChange={onRightDrawerOpenChange}>
+          {rightSlot}
+        </FloatingRightDrawer>
+      )}
       {/* Browser modal overlay - center view mode */}
       {browserOverlay}
     </div>

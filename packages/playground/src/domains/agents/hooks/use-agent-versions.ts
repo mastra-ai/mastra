@@ -5,6 +5,7 @@ import type {
   AgentVersionResponse,
   CompareVersionsResponse,
   ActivateAgentVersionResponse,
+  UnpublishAgentVersionResponse,
   DeleteAgentVersionResponse,
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
@@ -16,14 +17,22 @@ export type { ListAgentVersionsParams, CreateAgentVersionParams };
 /**
  * Hook to list versions of a stored agent
  */
-export const useAgentVersions = ({ agentId, params }: { agentId: string; params?: ListAgentVersionsParams }) => {
+export const useAgentVersions = ({
+  agentId,
+  params,
+  enabled = true,
+}: {
+  agentId: string;
+  params?: ListAgentVersionsParams;
+  enabled?: boolean;
+}) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery<ListAgentVersionsResponse>({
     queryKey: ['agent-versions', agentId, params, requestContext],
     queryFn: () => client.getStoredAgent(agentId).listVersions(params, requestContext),
-    enabled: !!agentId,
+    enabled: enabled && !!agentId,
   });
 };
 
@@ -71,7 +80,30 @@ export const useActivateAgentVersion = ({ agentId }: { agentId: string }) => {
     mutationFn: (versionId: string) => client.getStoredAgent(agentId).activateVersion(versionId, requestContext),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
       void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
+    },
+  });
+};
+
+/**
+ * Hook to clear the active published version of a stored agent
+ */
+export const useUnpublishAgentVersion = ({ agentId }: { agentId: string }) => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+  const { requestContext } = usePlaygroundStore();
+
+  return useMutation<UnpublishAgentVersionResponse, Error, void>({
+    mutationFn: () => client.getStoredAgent(agentId).unpublishVersion(requestContext),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agents'] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agents'] });
     },
   });
 };

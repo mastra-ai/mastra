@@ -4,7 +4,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileText, PenLine, PlusIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { createInstructionBlock, createRefInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { AgentCMSBlock } from './agent-cms-block';
@@ -17,6 +17,7 @@ export interface AgentCMSBlocksProps {
   placeholder?: string;
   schema?: JsonSchema;
   readOnly?: boolean;
+  compact?: boolean;
 }
 
 interface AddBlockButtonProps {
@@ -67,9 +68,10 @@ export const AgentCMSBlocks = ({
   placeholder,
   schema,
   readOnly = false,
+  compact = false,
 }: AgentCMSBlocksProps) => {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [insertIndex, setInsertIndex] = useState<number | null>(null);
+  const insertIndexRef = useRef<number | null>(null);
 
   const handleDelete = (index: number) => {
     const newItems = items.filter((_, idx) => idx !== index);
@@ -84,17 +86,17 @@ export const AgentCMSBlocks = ({
   };
 
   const handlePickRefAt = (index: number) => {
-    setInsertIndex(index);
+    insertIndexRef.current = index;
     setPickerOpen(true);
   };
 
   const handleAddRef = (blockId: string) => {
-    const idx = insertIndex ?? items.length;
+    const idx = insertIndexRef.current ?? items.length;
     const newBlock = createRefInstructionBlock(blockId);
     const newItems = [...items];
     newItems.splice(idx, 0, newBlock);
     onChange(newItems);
-    setInsertIndex(null);
+    insertIndexRef.current = null;
   };
 
   const handleBlockChange = (index: number, updatedBlock: InstructionBlock) => {
@@ -119,7 +121,7 @@ export const AgentCMSBlocks = ({
   return (
     <div className={cn('flex flex-col w-full h-full overflow-y-auto', className)}>
       {items.length > 0 && (
-        <div className="overflow-y-auto h-full pl-10 pr-2">
+        <div className={cn('overflow-y-auto h-full', compact ? 'px-1' : 'pl-10 pr-2')}>
           <ContentBlocks items={items} onChange={onChange} className="flex flex-col w-full">
             {items.map((block, index) => (
               <div key={block.id}>
@@ -148,7 +150,7 @@ export const AgentCMSBlocks = ({
       )}
 
       {!readOnly && (
-        <div className="pl-10 pr-2">
+        <div className={compact ? 'px-1' : 'pl-10 pr-2'}>
           <AddBlockButton
             onAddInline={() => handleAddInlineAt(items.length)}
             onPickRef={() => handlePickRefAt(items.length)}

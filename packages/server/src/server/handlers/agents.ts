@@ -140,6 +140,29 @@ function mergeBodyRequestContext(serverRequestContext: RequestContext, bodyReque
   }
 }
 
+type AuthorizedMemoryThread = string | (Record<string, unknown> & { id: string });
+
+export function resolveAuthorizedMemoryThread(
+  memoryThread: AuthorizedMemoryThread,
+  effectiveThreadId: string | undefined,
+): AuthorizedMemoryThread;
+export function resolveAuthorizedMemoryThread(
+  memoryThread: AuthorizedMemoryThread | undefined,
+  effectiveThreadId: string | undefined,
+): AuthorizedMemoryThread | undefined;
+export function resolveAuthorizedMemoryThread(
+  memoryThread: AuthorizedMemoryThread | undefined,
+  effectiveThreadId: string | undefined,
+): AuthorizedMemoryThread | undefined {
+  if (!effectiveThreadId) return memoryThread;
+
+  if (memoryThread && typeof memoryThread === 'object' && !Array.isArray(memoryThread)) {
+    return { ...memoryThread, id: effectiveThreadId };
+  }
+
+  return effectiveThreadId;
+}
+
 /**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
@@ -1296,7 +1319,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: resolveAuthorizedMemoryThread(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -1669,7 +1692,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: resolveAuthorizedMemoryThread(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -2189,7 +2212,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: resolveAuthorizedMemoryThread(memoryOption.thread, effectiveThreadId),
         };
       }
 
@@ -2584,7 +2607,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId
+            ? { thread: resolveAuthorizedMemoryThread(memoryOption?.thread, effectiveThreadId) }
+            : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 
@@ -2706,7 +2731,9 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           ...(effectiveResourceId ? { resource: effectiveResourceId } : {}),
-          ...(effectiveThreadId ? { thread: effectiveThreadId } : {}),
+          ...(effectiveThreadId
+            ? { thread: resolveAuthorizedMemoryThread(memoryOption?.thread, effectiveThreadId) }
+            : {}),
         } as NonNullable<typeof authorizedMemoryOption>;
       }
 

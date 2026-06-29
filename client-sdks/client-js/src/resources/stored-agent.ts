@@ -11,6 +11,7 @@ import type {
   ListAgentVersionsResponse,
   CreateAgentVersionParams,
   ActivateAgentVersionResponse,
+  UnpublishAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
   FavoriteToggleResponse,
@@ -225,6 +226,21 @@ export class StoredAgent extends BaseResource {
   ): Promise<ActivateAgentVersionResponse> {
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
+      {
+        method: 'POST',
+      },
+    );
+  }
+
+  /**
+   * Clears the active published version so the default agent resolution can fall back to code.
+   * Saved versions remain available.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing unpublish confirmation with activeVersionId set to null
+   */
+  unpublishVersion(requestContext?: RequestContext | Record<string, any>): Promise<UnpublishAgentVersionResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/versions/unpublish${requestContextQueryString(requestContext)}`,
       {
         method: 'POST',
       },

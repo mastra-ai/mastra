@@ -5,6 +5,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, Link as LinkIcon, Pencil, SlidersHorizontal, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
+import { useAgentSidebarView } from '../context/agent-sidebar-view-context';
 import { useAgent } from '../hooks/use-agent';
 import { AgentEntityHeader } from './agent-entity-header';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
@@ -13,14 +14,17 @@ import { useLinkComponent } from '@/lib/framework';
 export interface AgentViewHeaderProps {
   agentId: string;
   view: 'chat' | 'settings';
+  agentVersionId?: string;
+  threadId?: string;
 }
 
-export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
+export function AgentViewHeader({ agentId, view, agentVersionId, threadId }: AgentViewHeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: agent } = useAgent(agentId);
   const { canCreateAgent } = useCanCreateAgent();
-  const { Link: FrameworkLink, paths } = useLinkComponent();
+  const { paths } = useLinkComponent();
+  const { openVersions } = useAgentSidebarView();
 
   const basePath = (window.MASTRA_STUDIO_BASE_PATH ?? '').replace(/\/$/, '');
   const sessionUrl = `${window.location.origin}${basePath}/agents/${encodeURIComponent(agentId)}/session`;
@@ -30,8 +34,7 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
   });
 
   const isStoredAgent = agent?.source === 'stored';
-  const editPath = paths.cmsAgentEditLink(agentId);
-  const showEditButton = canCreateAgent && isStoredAgent && Boolean(editPath);
+  const showEditButton = canCreateAgent && isStoredAgent;
 
   const handleToggle = () => {
     if (view === 'chat') {
@@ -43,7 +46,8 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
     }
 
     const from = (location.state as { from?: string } | null)?.from;
-    void navigate(from ?? `/agents/${agentId}/chat/new`, { viewTransition: true });
+    const defaultChatPath = paths.agentNewThreadLink(agentId) || `/agents/${encodeURIComponent(agentId)}/threads/new`;
+    void navigate(from ?? defaultChatPath, { viewTransition: true });
   };
 
   return (
@@ -53,11 +57,11 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
         style={{ viewTransitionName: 'agent-view-header' }}
       >
         <div className="flex-1 min-w-0 max-lg:hidden">
-          <AgentEntityHeader agentId={agentId} />
+          <AgentEntityHeader agentId={agentId} agentVersionId={agentVersionId} threadId={threadId} />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {showEditButton && (
-            <Button variant="outline" size="sm" as={FrameworkLink} to={editPath}>
+            <Button type="button" variant="outline" size="sm" onClick={openVersions}>
               <Icon size="sm">
                 <Pencil />
               </Icon>

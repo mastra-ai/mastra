@@ -41,6 +41,7 @@ export function ChatProvider({
   requestContext,
   modelVersion,
   agentVersionId,
+  threadMetadata,
   supportsMemory,
 }: Readonly<{ children: ReactNode }> & ChatProps) {
   const { settings: tracingSettings } = useTracingSettings();
@@ -56,13 +57,18 @@ export function ChatProvider({
   const threadSignalsEnabled =
     window.MASTRA_AGENT_SIGNALS !== 'false' && supportsMemory !== false && !modelSettings.chatWithLegacyStream;
 
-  // Clear persisted stream errors when switching threads/agents so they don't
-  // leak across conversations.
-  useEffect(() => {
-    setStreamErrors([]);
+  const resetKey = `${agentId}:${threadId}`;
+  const appliedResetKeyRef = useRef(resetKey);
+  if (appliedResetKeyRef.current !== resetKey) {
+    appliedResetKeyRef.current = resetKey;
+    if (streamErrors.length > 0) {
+      setStreamErrors([]);
+    }
     threadSignalsUnsupportedRef.current = false;
-    setThreadSignalsUnsupported(false);
-  }, [agentId, threadId]);
+    if (threadSignalsUnsupported) {
+      setThreadSignalsUnsupported(false);
+    }
+  }
 
   const chatRequestContext = useMemo(() => {
     if (!agentVersionId && !requestContext) return undefined;
@@ -94,6 +100,7 @@ export function ChatProvider({
   } = useChat({
     agentId,
     threadId,
+    threadMetadata,
     initialMessages,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
@@ -236,6 +243,7 @@ export function ChatProvider({
     agentId,
     requestContext,
     agentVersionId,
+    threadMetadata,
     threadId,
     modelSettingsArgs,
     chatWithNetwork,

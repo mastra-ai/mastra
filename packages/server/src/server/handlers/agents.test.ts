@@ -38,6 +38,8 @@ import {
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   isProviderConnected,
   extractVersionOptions,
+  getAgentFromSystem,
+  resolveAuthorizedMemoryThread,
 } from './agents';
 
 // Mock the PROVIDER_REGISTRY before importing anything that uses it
@@ -2074,5 +2076,103 @@ describe('extractVersionOptions', () => {
   it('should handle body requestContext without agentVersionId key', () => {
     expect(extractVersionOptions(undefined, { otherKey: 'value' })).toBeUndefined();
     expect(extractVersionOptions(undefined, {})).toBeUndefined();
+  });
+});
+
+describe('getAgentFromSystem version resolution', () => {
+  const createCodeAgent = () =>
+    new Agent({
+      id: 'agent-1',
+      name: 'Agent One',
+      instructions: 'Base instructions',
+      model: {} as any,
+    });
+
+  const createMastraWithEditor = (
+    agent: Agent,
+    applyStoredOverrides: ReturnType<typeof vi.fn>,
+    getStoredAgent: ReturnType<typeof vi.fn> = vi.fn(),
+  ) =>
+    ({
+      getLogger: () => ({ debug: vi.fn() }),
+      getAgentById: vi.fn((agentId: string) => (agentId === 'agent-1' ? agent : undefined)),
+      listAgents: vi.fn(() => ({})),
+      getEditor: () => ({
+        agent: {
+          applyStoredOverrides,
+          getById: getStoredAgent,
+        },
+      }),
+    }) as any;
+
+  it('targets an exact editor version when versionOptions carries a versionId', async () => {
+    const codeAgent = createCodeAgent();
+    const applyStoredOverrides = vi.fn(async (agent: Agent) => agent);
+    const mastra = createMastraWithEditor(codeAgent, applyStoredOverrides);
+    const requestContext = new RequestContext();
+
+    const resolved = await getAgentFromSystem({
+      mastra,
+      agentId: 'agent-1',
+      versionOptions: { versionId: 'version-1' },
+      requestContext,
+    });
+
+    expect(resolved).toBe(codeAgent);
+    expect(applyStoredOverrides).toHaveBeenCalledWith(codeAgent, { versionId: 'version-1' }, requestContext);
+  });
+
+  it('uses the published editor override by default for code-defined agents', async () => {
+    const codeAgent = createCodeAgent();
+    const publishedAgent = new Agent({
+      id: 'agent-1',
+      name: 'Published Agent',
+      instructions: 'Published instructions',
+      model: {} as any,
+    });
+    const applyStoredOverrides = vi.fn(async () => publishedAgent);
+    const mastra = createMastraWithEditor(codeAgent, applyStoredOverrides);
+    const requestContext = new RequestContext();
+
+    const resolved = await getAgentFromSystem({ mastra, agentId: 'agent-1', requestContext });
+
+    expect(resolved).toBe(publishedAgent);
+    expect(applyStoredOverrides).toHaveBeenCalledWith(codeAgent, { status: 'published' }, requestContext);
+  });
+
+  it('falls back to the code-defined agent when no published editor override replaces it', async () => {
+    const codeAgent = createCodeAgent();
+    const applyStoredOverrides = vi.fn(async (agent: Agent) => agent);
+    const mastra = createMastraWithEditor(codeAgent, applyStoredOverrides);
+
+    const resolved = await getAgentFromSystem({ mastra, agentId: 'agent-1' });
+
+    expect(resolved).toBe(codeAgent);
+    expect(applyStoredOverrides).toHaveBeenCalledWith(codeAgent, { status: 'published' }, undefined);
+  });
+});
+
+describe('resolveAuthorizedMemoryThread', () => {
+  it('preserves thread metadata when replacing the authorized thread id', () => {
+    expect(
+      resolveAuthorizedMemoryThread(
+        {
+          id: 'client-thread',
+          metadata: { mastra: { agentVersionId: 'version-1' } },
+        },
+        'authorized-thread',
+      ),
+    ).toEqual({
+      id: 'authorized-thread',
+      metadata: { mastra: { agentVersionId: 'version-1' } },
+    });
+  });
+
+  it('falls back to the authorized thread id for string memory threads', () => {
+    expect(resolveAuthorizedMemoryThread('client-thread', 'authorized-thread')).toBe('authorized-thread');
+  });
+
+  it('leaves the original memory thread unchanged when no authorized thread id exists', () => {
+    expect(resolveAuthorizedMemoryThread({ id: 'client-thread' }, undefined)).toEqual({ id: 'client-thread' });
   });
 });

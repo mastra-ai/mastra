@@ -120,6 +120,9 @@ export const comboboxStyles = {
   /** Options list */
   list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
 
+  /** Optional action area below the result list */
+  footer: 'border-t border-border1 p-1',
+
   /** Option item base — rounded-md sits concentrically inside rounded-xl + p-1. */
   item: comboboxItemClass({ multiple: false }),
 

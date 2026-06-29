@@ -36,10 +36,283 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
 // These are never called in the browser — stub them alongside Node builtins.
 const nodeOnlyPackages = new Set(['execa']);
 
+const getNodeStubSource = (source: string) => {
+  const moduleName = (source.startsWith('node:') ? source.slice(5) : source).split('/')[0];
+
+  const baseStub = `
+    class NodeStub {
+      constructor() {}
+      on() { return this; }
+      once() { return this; }
+      off() { return this; }
+      emit() { return false; }
+      addListener() { return this; }
+      removeListener() { return this; }
+      pipe() { return this; }
+      unpipe() { return this; }
+      write() { return true; }
+      end() { return this; }
+      push() { return true; }
+      destroy() { return this; }
+    }
+    const noop = () => undefined;
+    const asyncNoop = async () => undefined;
+  `;
+
+  switch (moduleName) {
+    case 'stream':
+      return {
+        code: `${baseStub}
+          export class Transform extends NodeStub {}
+          export class PassThrough extends Transform {}
+          export class Readable extends NodeStub {}
+          export class Writable extends NodeStub {}
+          export class Duplex extends Transform {}
+          export const ReadableStream = globalThis.ReadableStream ?? NodeStub;
+          export const WritableStream = globalThis.WritableStream ?? NodeStub;
+          export const TransformStream = globalThis.TransformStream ?? NodeStub;
+          export const pipeline = noop;
+          export const finished = noop;
+          export default {
+            Transform,
+            PassThrough,
+            Readable,
+            Writable,
+            Duplex,
+            ReadableStream,
+            WritableStream,
+            TransformStream,
+            pipeline,
+            finished,
+          };
+        `,
+      };
+    case 'events':
+      return {
+        code: `${baseStub}
+          export class EventEmitter extends NodeStub {}
+          export default EventEmitter;
+        `,
+      };
+    case 'crypto':
+      return {
+        code: `${baseStub}
+          export const createHash = () => ({ update() { return this; }, digest() { return ''; } });
+          export const createHmac = () => ({ update() { return this; }, digest() { return ''; } });
+          export const randomUUID = () => globalThis.crypto?.randomUUID?.() ?? '';
+          export const randomBytes = () => new Uint8Array();
+          export default { createHash, createHmac, randomUUID, randomBytes };
+        `,
+      };
+    case 'path':
+      return {
+        code: `${baseStub}
+          export const join = (...parts) => parts.filter(Boolean).join('/');
+          export const resolve = (...parts) => join(...parts);
+          export const dirname = value => String(value ?? '').split('/').slice(0, -1).join('/') || '.';
+          export const basename = value => String(value ?? '').split('/').pop() ?? '';
+          export const extname = value => {
+            const base = basename(value);
+            const index = base.lastIndexOf('.');
+            return index > 0 ? base.slice(index) : '';
+          };
+          export const normalize = value => String(value ?? '');
+          export const relative = (_from, to) => String(to ?? '');
+          export const isAbsolute = value => String(value ?? '').startsWith('/');
+          export const parse = value => ({ root: '', dir: dirname(value), base: basename(value), ext: extname(value), name: basename(value).replace(extname(value), '') });
+          export const sep = '/';
+          export const posix = { join, resolve, dirname, basename, extname, normalize, relative, isAbsolute, parse, sep };
+          export default posix;
+        `,
+      };
+    case 'fs':
+      return {
+        code: `${baseStub}
+          export const readFile = asyncNoop;
+          export const writeFile = asyncNoop;
+          export const mkdir = asyncNoop;
+          export const access = asyncNoop;
+          export const stat = asyncNoop;
+          export const unlink = asyncNoop;
+          export const open = asyncNoop;
+          export const rm = asyncNoop;
+          export const mkdtemp = async value => String(value ?? '');
+          export const readdir = async () => [];
+          export const realpath = async value => String(value ?? '');
+          export const appendFile = asyncNoop;
+          export const copyFile = asyncNoop;
+          export const rename = asyncNoop;
+          export const rmdir = asyncNoop;
+          export const readlink = async value => String(value ?? '');
+          export const symlink = asyncNoop;
+          export const lstat = async () => ({ isDirectory: () => false, isFile: () => false, isSymbolicLink: () => false });
+          export const existsSync = () => false;
+          export const readdirSync = () => [];
+          export const lstatSync = () => ({ isDirectory: () => false, isFile: () => false });
+          export const unlinkSync = noop;
+          export const mkdirSync = noop;
+          export const openSync = () => 0;
+          export const closeSync = noop;
+          export const writeSync = noop;
+          export const fstatSync = () => ({ size: 0 });
+          export const realpathSync = value => String(value ?? '');
+          export const statSync = () => ({ isDirectory: () => false, isFile: () => false });
+          export const readFileSync = noop;
+          export const writeFileSync = noop;
+          export const renameSync = noop;
+          export const rmSync = noop;
+          export const constants = {};
+          export const promises = {
+            readFile,
+            writeFile,
+            mkdir,
+            access,
+            stat,
+            unlink,
+            open,
+            rm,
+            mkdtemp,
+            readdir,
+            realpath,
+            appendFile,
+            copyFile,
+            rename,
+            rmdir,
+            readlink,
+            symlink,
+            lstat,
+          };
+          export default {
+            readFile,
+            writeFile,
+            mkdir,
+            access,
+            stat,
+            unlink,
+            open,
+            rm,
+            mkdtemp,
+            readdir,
+            realpath,
+            appendFile,
+            copyFile,
+            rename,
+            rmdir,
+            readlink,
+            symlink,
+            lstat,
+            existsSync,
+            readdirSync,
+            lstatSync,
+            unlinkSync,
+            mkdirSync,
+            openSync,
+            closeSync,
+            writeSync,
+            fstatSync,
+            realpathSync,
+            statSync,
+            readFileSync,
+            writeFileSync,
+            renameSync,
+            rmSync,
+            constants,
+            promises,
+          };
+        `,
+      };
+    case 'buffer':
+      return {
+        code: `${baseStub}
+          export const Buffer = globalThis.Buffer ?? Uint8Array;
+          export default { Buffer };
+        `,
+      };
+    case 'url':
+      return {
+        code: `${baseStub}
+          export const fileURLToPath = value => String(value ?? '');
+          export const pathToFileURL = value => new URL(String(value ?? ''), 'file://');
+          export default { fileURLToPath, pathToFileURL };
+        `,
+      };
+    case 'util':
+      return {
+        code: `${baseStub}
+          export const promisify = fn => fn;
+          export const inspect = value => String(value);
+          export const inherits = noop;
+          export default { promisify, inspect, inherits };
+        `,
+      };
+    case 'module':
+      return {
+        code: `${baseStub}
+          export const createRequire = () => () => ({});
+          export default { createRequire };
+        `,
+      };
+    case 'async_hooks':
+      return {
+        code: `${baseStub}
+          export class AsyncLocalStorage {
+            getStore() { return undefined; }
+            run(_store, callback, ...args) { return callback?.(...args); }
+            enterWith() {}
+            disable() {}
+          }
+          export default { AsyncLocalStorage };
+        `,
+      };
+    case 'child_process':
+      return {
+        code: `${baseStub}
+          export const execFile = noop;
+          export const execFileSync = noop;
+          export default { execFile, execFileSync };
+        `,
+      };
+    case 'net':
+      return {
+        code: `${baseStub}
+          export const createConnection = () => new NodeStub();
+          export default { createConnection };
+        `,
+      };
+    case 'string_decoder':
+      return {
+        code: `${baseStub}
+          export class StringDecoder {
+            write(value) { return String(value ?? ''); }
+            end(value) { return String(value ?? ''); }
+          }
+          export default { StringDecoder };
+        `,
+      };
+    case 'os':
+      return {
+        code: `${baseStub}
+          export const tmpdir = () => '/tmp';
+          export const homedir = () => '';
+          export const platform = () => 'browser';
+          export const totalmem = () => 0;
+          export const cpus = () => [];
+          export default { tmpdir, homedir, platform, totalmem, cpus };
+        `,
+      };
+    default:
+      return {
+        code: `${baseStub}
+          export { noop };
+          export default {};
+        `,
+      };
+  }
+};
+
 const stubNodeBuiltinsPlugin: Plugin = {
   name: 'stub-node-builtins',
   enforce: 'pre',
-  apply: 'build',
   resolveId(source) {
     if (nodeOnlyPackages.has(source)) {
       return { id: `\0node-stub:${source}`, moduleSideEffects: false };
@@ -52,7 +325,7 @@ const stubNodeBuiltinsPlugin: Plugin = {
   },
   load(id) {
     if (id.startsWith('\0node-stub:')) {
-      return { code: 'export default {}', syntheticNamedExports: true };
+      return getNodeStubSource(id.slice('\0node-stub:'.length));
     }
   },
 };
@@ -235,6 +508,9 @@ export default defineConfig(({ mode }) => {
       process: {
         env: {},
       },
+    },
+    optimizeDeps: {
+      exclude: ['@standard-schema/spec'],
     },
   };
 

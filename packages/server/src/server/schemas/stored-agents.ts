@@ -405,7 +405,7 @@ export const storedAgentSchema = z.object({
   // Thin agent record fields
   id: z.string(),
   status: z.string().describe('Agent status: draft or published'),
-  activeVersionId: z.string().optional(),
+  activeVersionId: z.string().nullable().optional(),
   authorId: z.string().optional(),
   author: resolvedAuthorSchema.optional().describe('Resolved author identity (when an auth provider is configured)'),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -503,7 +503,7 @@ export const updateStoredAgentResponseSchema = z.union([
   z.object({
     id: z.string(),
     status: z.string(),
-    activeVersionId: z.string().optional(),
+    activeVersionId: z.string().nullable().optional(),
     authorId: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
     visibility: z.enum(['private', 'public']).optional(),

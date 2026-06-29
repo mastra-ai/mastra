@@ -578,6 +578,25 @@ describe('StoredAgent Resource', () => {
         );
       });
 
+      it('should unpublish the active version', async () => {
+        const mockResponse = {
+          success: true,
+          message: 'Published version cleared',
+          activeVersionId: null,
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.unpublishVersion();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions/unpublish`,
+          expect.objectContaining({
+            method: 'POST',
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
       it('should restore a version', async () => {
         const versionId = 'version-1';
         const mockResponse = {

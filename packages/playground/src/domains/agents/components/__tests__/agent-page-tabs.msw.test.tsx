@@ -1,30 +1,18 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentLayout } from '../../agent-layout';
 import { systemPackages } from './fixtures/channels';
 import { v2Agent } from './fixtures/composer-model-settings';
+import { useThreadInput } from '@/domains/conversation';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-  };
-});
-
-vi.mock('@mastra/playground-ui/utils/toast', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
-}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -58,7 +46,28 @@ const noopPaths = {
   experimentLink: () => '',
 } as never;
 
-function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
+function ThreadInputRouteProbe() {
+  const navigate = useNavigate();
+  const { threadInput, setThreadInput } = useThreadInput('thread-1');
+
+  return (
+    <div>
+      <textarea
+        aria-label="composer probe"
+        value={threadInput}
+        onChange={event => setThreadInput(event.currentTarget.value)}
+      />
+      <button type="button" onClick={() => void navigate('/agents/agent-1/versions/version-1/threads/thread-1')}>
+        Switch version
+      </button>
+    </div>
+  );
+}
+
+function renderLayout(
+  initialEntry = '/agents/agent-1/threads/new',
+  child: React.ReactNode = <div data-testid="agent-child" />,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -70,14 +79,7 @@ function renderLayout(initialEntry = '/agents/agent-1/chat/new') {
           <TooltipProvider>
             <MemoryRouter initialEntries={[initialEntry]}>
               <Routes>
-                <Route
-                  path="/agents/:agentId/*"
-                  element={
-                    <AgentLayout>
-                      <div data-testid="agent-child" />
-                    </AgentLayout>
-                  }
-                />
+                <Route path="/agents/:agentId/*" element={<AgentLayout>{child}</AgentLayout>} />
               </Routes>
             </MemoryRouter>
           </TooltipProvider>
@@ -141,14 +143,27 @@ describe('AgentLayout tool tabs', () => {
     expect(tabsRoot.className).toContain('max-lg:flex-auto');
   });
 
-  it('keeps run options out of the Editor tab bar because the editor chat composer owns them', async () => {
+  it('keeps version routes in chat without restoring a separate Editor tab', async () => {
     server.use(...commonHandlers(enabledPackages));
 
-    renderLayout('/agents/agent-1/editor');
+    renderLayout('/agents/agent-1/versions/version-1/threads/thread-1');
 
-    expect(await screen.findByRole('tab', { name: /editor/i })).not.toBeNull();
+    expect(await screen.findByRole('tab', { name: /chat/i })).not.toBeNull();
+    expect(screen.queryByRole('tab', { name: /editor/i })).toBeNull();
     expect(screen.queryByTestId('agent-top-bar-run-options-trigger')).toBeNull();
     expect(screen.queryByTestId('agent-tracing-controls-trigger')).toBeNull();
+  });
+
+  it('keeps composer input mounted when switching into the version route panel', async () => {
+    server.use(...commonHandlers(enabledPackages));
+
+    renderLayout('/agents/agent-1/threads/thread-1', <ThreadInputRouteProbe />);
+
+    const composer = await screen.findByRole('textbox', { name: /composer probe/i });
+    fireEvent.change(composer, { target: { value: 'keep this draft' } });
+    fireEvent.click(screen.getByRole('button', { name: /switch version/i }));
+
+    expect(await screen.findByDisplayValue('keep this draft')).not.toBeNull();
   });
 
   it('keeps the top-bar run options control on Evaluate because there is no composer', async () => {

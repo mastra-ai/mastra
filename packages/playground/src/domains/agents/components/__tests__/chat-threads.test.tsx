@@ -28,14 +28,18 @@ const paths = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
+  agentVersionThreadLink: (agentId: string, versionId: string, threadId: string) =>
+    `/agents/${agentId}/versions/${versionId}/threads/${threadId}`,
+  agentVersionNewThreadLink: (agentId: string, versionId: string) =>
+    `/agents/${agentId}/versions/${versionId}/threads/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
   scheduleLink: (scheduleId: string) => `/schedules/${scheduleId}`,
   networkLink: (networkId: string) => `/networks/${networkId}`,
-  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/chat/new`,
+  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/threads/new`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
@@ -159,5 +163,37 @@ describe('ChatThreads', () => {
 
     expect(realTitleElement.className).toBe('block truncate');
     expect(fallbackTitleElement.className).toBe(realTitleElement.className);
+  });
+
+  it('uses version routes for version-scoped new chats and stored version threads', async () => {
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(readOnlyAuthCapabilities)));
+
+    renderWithProviders(
+      <ChatThreads
+        threads={[
+          thread({
+            id: 'version-thread',
+            title: 'Saved version chat',
+            metadata: {
+              mastra: {
+                agentVersionId: 'version-2',
+              },
+            },
+          }),
+        ]}
+        isLoading={false}
+        threadId="version-thread"
+        onDelete={vi.fn()}
+        resourceId="chef-agent"
+        resourceType="agent"
+        agentVersionId="version-2"
+      />,
+    );
+
+    const newChat = await screen.findByRole('link', { name: /new chat/i });
+    expect(newChat.getAttribute('href')).toBe('/agents/chef-agent/versions/version-2/threads/new');
+
+    const versionThread = await screen.findByRole('link', { name: /saved version chat/i });
+    expect(versionThread.getAttribute('href')).toBe('/agents/chef-agent/versions/version-2/threads/version-thread');
   });
 });

@@ -53,7 +53,8 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
 
   const versionLinkHref =
     experiment.agentVersion && experiment.targetType === 'agent' && experiment.targetId
-      ? `${paths.agentLink(experiment.targetId)}/editor?version=${encodeURIComponent(experiment.agentVersion)}`
+      ? (paths.agentVersionNewThreadLink?.(experiment.targetId, experiment.agentVersion) ??
+        `/agents/${encodeURIComponent(experiment.targetId)}/versions/${encodeURIComponent(experiment.agentVersion)}/threads/new`)
       : null;
 
   return (

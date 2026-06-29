@@ -2,18 +2,17 @@ import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
+import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill (e.g. settings) pass `'none'`. */
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
+export type AgentPageTab = 'chat' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
   /** `'none'` (or any non-tab value) leaves the bar unhighlighted. */
   activeTab: AgentPageTab | 'none';
-  showPlayground?: boolean;
   showObservability?: boolean;
   reviewBadge?: number;
   rightSlot?: React.ReactNode;
@@ -66,11 +65,14 @@ function AgentTab({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span tabIndex={0} className="inline-flex">
-            <Tab value={value} disabled className="px-3 py-2.5">
-              {tabContent}
-            </Tab>
-          </span>
+          <button
+            type="button"
+            aria-disabled="true"
+            className="text-ui-md font-normal text-neutral3 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 outline-none cursor-not-allowed opacity-50 rounded-full px-3 py-2.5 focus-visible:ring-1 focus-visible:ring-accent1"
+            onClick={event => event.preventDefault()}
+          >
+            {tabContent}
+          </button>
         </TooltipTrigger>
         {disabledReason && <TooltipContent side="bottom">{disabledReason}</TooltipContent>}
       </Tooltip>
@@ -87,19 +89,12 @@ function AgentTab({
 export function AgentPageTabs({
   agentId,
   activeTab,
-  showPlayground = false,
   showObservability = false,
   reviewBadge,
   rightSlot,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
 
-  const playgroundDisabledReason = !showPlayground ? (
-    <p>
-      Configure <code>@mastra/editor</code> to use the Editor.{' '}
-      <DocsLink href="https://mastra.ai/docs/editor/overview">Learn more</DocsLink>
-    </p>
-  ) : undefined;
   const observabilityDisabledReason = !showObservability ? (
     <p>
       Add <code>@mastra/observability</code> to enable this tab.{' '}
@@ -108,8 +103,7 @@ export function AgentPageTabs({
   ) : undefined;
 
   const hrefMap: Record<AgentPageTab, string> = {
-    chat: `/agents/${agentId}/chat/new`,
-    versions: `/agents/${agentId}/editor`,
+    chat: `/agents/${agentId}/threads/new`,
     evaluate: `/agents/${agentId}/evaluate`,
     review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
@@ -132,13 +126,6 @@ export function AgentPageTabs({
       >
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
-          <AgentTab
-            value="versions"
-            icon={<GitBranch />}
-            label="Editor"
-            disabled={!showPlayground}
-            disabledReason={playgroundDisabledReason}
-          />
           <AgentTab
             value="evaluate"
             icon={<FlaskConical />}

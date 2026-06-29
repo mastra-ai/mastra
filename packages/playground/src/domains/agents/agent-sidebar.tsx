@@ -6,17 +6,23 @@ import { useLinkComponent } from '@/lib/framework';
 export function AgentSidebar({
   agentId,
   threadId,
+  routeThreadId,
+  agentVersionId,
   threads,
   isLoading,
   memoryType,
   hasMemory,
+  isMemoryLoading,
 }: {
   agentId: string;
   threadId: string;
+  routeThreadId?: string;
+  agentVersionId?: string;
   threads?: StorageThreadType[];
   isLoading: boolean;
   memoryType?: 'local' | 'gateway';
   hasMemory: boolean;
+  isMemoryLoading?: boolean;
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
@@ -24,7 +30,11 @@ export function AgentSidebar({
   const handleDelete = async (deleteId: string) => {
     await mutateAsync({ threadId: deleteId!, agentId });
     if (deleteId === threadId) {
-      navigate(paths.agentNewThreadLink(agentId));
+      const nextPath =
+        agentVersionId && paths.agentVersionNewThreadLink
+          ? paths.agentVersionNewThreadLink(agentId, agentVersionId)
+          : paths.agentNewThreadLink(agentId);
+      navigate(nextPath);
     }
   };
 
@@ -32,11 +42,14 @@ export function AgentSidebar({
     <MemorySidebar
       agentId={agentId}
       threadId={threadId}
+      routeThreadId={routeThreadId}
+      agentVersionId={agentVersionId}
       threads={threads}
       isLoading={isLoading}
       onDelete={handleDelete}
       memoryType={memoryType}
       hasMemory={hasMemory}
+      isMemoryLoading={isMemoryLoading}
     />
   );
 }

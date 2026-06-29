@@ -3,39 +3,43 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useCallback, useMemo, useState } from 'react';
-import { useParams } from 'react-router';
-import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';
+import type { AgentConfigTab } from './agent-playground/agent-playground-config';
+import { AgentPlaygroundEditorPanelContent } from './agent-playground/agent-playground-view';
+import { AgentSidebarVersionHeader } from './agent-sidebar-version-header';
 import { AgentEditFormProvider } from '@/domains/agents/context/agent-edit-form-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
-import { useAgentVersions, useAgentVersion } from '@/domains/agents/hooks/use-agent-versions';
+import { useAgentVersion, useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 
-function AgentPlayground() {
-  const { agentId } = useParams();
+export function AgentVersionSidebarPanel({ agentId, onClose }: { agentId: string; onClose?: () => void }) {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [selectedConfigTab, setSelectedConfigTab] = useState<AgentConfigTab>('prompt');
 
-  const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId!);
-  const { data: memory } = useMemory(agentId!);
+  const { data: codeAgent, isLoading: isLoadingCodeAgent, error } = useAgent(agentId);
   const editorSource = useEditorSource();
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
-  // Fetch versions first — this endpoint returns an empty array for code-only agents
-  const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+  const { data: versionsData, isLoading: isLoadingVersions } = useAgentVersions({
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 
-  // Only fetch stored agent details when versions exist (avoids 404 for code-only agents)
   const hasVersions = (versionsData?.versions?.length ?? 0) > 0;
-  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId!, {
+  const { data: storedAgent, isLoading: isLoadingStoredAgent } = useStoredAgent(agentId, {
     status: 'draft',
     enabled: hasVersions,
+  });
+  const activeVersionId = storedAgent ? (storedAgent.activeVersionId ?? undefined) : codeAgent?.activeVersionId;
+  const versionIdToLoad = selectedVersionId ?? activeVersionId ?? '';
+
+  const { data: versionData, isLoading: isLoadingVersion } = useAgentVersion({
+    agentId,
+    versionId: versionIdToLoad,
   });
 
   const isCodeAgentOverride = codeAgent?.source === 'code';
@@ -44,30 +48,24 @@ function AgentPlayground() {
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
   const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
-  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
-  const hasMemory = Boolean(memory?.result);
+  const isLoading =
+    isLoadingCodeAgent ||
+    isLoadingVersions ||
+    (hasVersions && isLoadingStoredAgent) ||
+    !!(versionIdToLoad && isLoadingVersion);
 
-  // Fetch version data when a specific version is selected
-  const { data: versionData } = useAgentVersion({
-    agentId: agentId ?? '',
-    versionId: selectedVersionId ?? '',
-  });
-
-  const activeVersionId = storedAgent?.activeVersionId;
   const latestVersion = versionsData?.versions?.[0];
   const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
+  const hasLoadedVersionData = !!versionIdToLoad && !!versionData;
+  const isViewingPreviousVersion =
+    !!selectedVersionId && hasLoadedVersionData && selectedVersionId !== latestVersion?.id;
 
-  // Determine if viewing a previous (non-latest) version
-  const isViewingVersion = !!selectedVersionId && !!versionData;
-  const isViewingPreviousVersion = isViewingVersion && selectedVersionId !== latestVersion?.id;
-
-  // Switch data source based on selected version
   const dataSource = useMemo<AgentDataSource>(() => {
-    if (isViewingVersion && versionData) return versionData;
-    if (storedAgent) return storedAgent;
+    if (hasLoadedVersionData && versionData) return versionData;
     if (codeAgent) return mapAgentResponseToDataSource(codeAgent);
+    if (storedAgent) return storedAgent;
     return {} as AgentDataSource;
-  }, [isViewingVersion, versionData, storedAgent, codeAgent]);
+  }, [codeAgent, hasLoadedVersionData, storedAgent, versionData]);
 
   const {
     form,
@@ -80,12 +78,13 @@ function AgentPlayground() {
     isDirty,
   } = useAgentCmsForm({
     mode: 'edit',
-    agentId: agentId ?? '',
+    agentId,
     dataSource,
     isCodeAgentOverride,
     hasStoredOverride: isCodeAgentOverride && !!storedAgent,
     editorConfig: codeAgent?.editor,
     saveSuccessMessage: isCodeSourceAgent ? 'Saved to filesystem' : undefined,
+    onValidationSectionRequired: setSelectedConfigTab,
     onSuccess: () => {},
   });
 
@@ -102,17 +101,9 @@ function AgentPlayground() {
     await handleOpenPr({ platformApiEndpoint: mastraPlatformApiEndpoint, projectId: mastraPlatformProjectId });
   }, [handleOpenPr, mastraPlatformApiEndpoint, mastraPlatformProjectId]);
 
-  const handleVersionSelect = useCallback(
-    (versionId: string) => {
-      // If selecting the latest version, clear the selection (back to editable draft)
-      if (versionId === latestVersion?.id) {
-        setSelectedVersionId(null);
-      } else {
-        setSelectedVersionId(versionId);
-      }
-    },
-    [latestVersion?.id],
-  );
+  const handleVersionSelect = useCallback((versionId: string | null) => {
+    setSelectedVersionId(versionId);
+  }, []);
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -139,7 +130,7 @@ function AgentPlayground() {
   }
 
   if (!codeAgent) {
-    return <div className="text-center py-4">Agent not found</div>;
+    return <div className="py-4 text-center">Agent not found</div>;
   }
 
   return (
@@ -156,33 +147,41 @@ function AgentPlayground() {
       readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
       editorConfig={codeAgent?.editor}
     >
-      <AgentPlaygroundView
-        agentId={agentId!}
-        agentName={codeAgent?.name}
-        modelVersion={codeAgent?.modelVersion}
-        agentVersionId={isViewingPreviousVersion ? (selectedVersionId ?? undefined) : undefined}
-        hasMemory={hasMemory}
-        activeVersionId={activeVersionId ?? undefined}
-        selectedVersionId={selectedVersionId ?? undefined}
-        latestVersionId={latestVersion?.id}
-        onVersionSelect={handleVersionSelect}
-        isDirty={isDirty}
-        isSavingDraft={isSavingDraft}
-        isPublishing={isSubmitting}
-        hasDraft={hasDraft}
-        readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
-        isCodeSourceAgent={isCodeSourceAgent}
-        showCodeModeActions={showCodeModeActions}
-        canOpenPr={canOpenPr}
-        openPrTitle={openPrTitle}
-        onSaveDraft={handleSaveDraft}
-        onPublish={handlePublishVersion}
-        onDownloadJson={handleDownloadJson}
-        onOpenPr={handleOpenPrClick}
-        isViewingPreviousVersion={isViewingPreviousVersion}
-      />
+      <div className="flex h-full min-h-0 flex-col">
+        <AgentSidebarVersionHeader
+          agentId={agentId}
+          selectedVersionId={selectedVersionId}
+          onVersionSelect={handleVersionSelect}
+          onCreateVersion={() => void handleSaveDraft()}
+          onBack={onClose}
+          showEditorAction={false}
+          showCreateVersionAction={false}
+        />
+
+        <AgentPlaygroundEditorPanelContent
+          agentId={agentId}
+          activeVersionId={activeVersionId}
+          selectedVersionId={selectedVersionId ?? undefined}
+          latestVersionId={latestVersion?.id}
+          onVersionSelect={handleVersionSelect}
+          isDirty={isDirty}
+          isSavingDraft={isSavingDraft}
+          isPublishing={isSubmitting}
+          hasDraft={hasDraft}
+          readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
+          isCodeSourceAgent={isCodeSourceAgent}
+          showCodeModeActions={showCodeModeActions}
+          canOpenPr={canOpenPr}
+          openPrTitle={openPrTitle}
+          onSaveDraft={handleSaveDraft}
+          onPublish={handlePublishVersion}
+          onDownloadJson={handleDownloadJson}
+          onOpenPr={handleOpenPrClick}
+          isViewingPreviousVersion={isViewingPreviousVersion}
+          selectedConfigTab={selectedConfigTab}
+          onConfigTabChange={setSelectedConfigTab}
+        />
+      </div>
     </AgentEditFormProvider>
   );
 }
-
-export default AgentPlayground;

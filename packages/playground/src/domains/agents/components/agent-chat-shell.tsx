@@ -4,6 +4,8 @@ import { AgentViewHeader } from './agent-view-header';
 export interface AgentChatShellProps {
   agentId: string;
   view: 'chat' | 'settings';
+  agentVersionId?: string;
+  threadId?: string;
   /** Rendered inside the main slot (header + chat/settings) */
   children: React.ReactNode;
   leftSlot: React.ReactNode;
@@ -14,6 +16,8 @@ export interface AgentChatShellProps {
 export function AgentChatShell({
   agentId,
   view,
+  agentVersionId,
+  threadId,
   leftSlot,
   leftDrawerLabel,
   browserOverlay,
@@ -27,7 +31,7 @@ export function AgentChatShell({
       browserOverlay={browserOverlay}
     >
       <div className="grid grid-rows-[auto_1fr] h-full min-h-0">
-        <AgentViewHeader agentId={agentId} view={view} />
+        <AgentViewHeader agentId={agentId} view={view} agentVersionId={agentVersionId} threadId={threadId} />
         {children}
       </div>
     </AgentLayout>

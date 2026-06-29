@@ -22,7 +22,19 @@ export interface ChatThreadsProps {
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
+  agentVersionId?: string;
   embedded?: boolean;
+}
+
+function getThreadAgentVersionId(thread: StorageThreadType): string | undefined {
+  const metadata = thread.metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return undefined;
+
+  const mastra = (metadata as Record<string, unknown>).mastra;
+  if (!mastra || typeof mastra !== 'object' || Array.isArray(mastra)) return undefined;
+
+  const agentVersionId = (mastra as Record<string, unknown>).agentVersionId;
+  return typeof agentVersionId === 'string' && agentVersionId ? agentVersionId : undefined;
 }
 
 export const ChatThreads = ({
@@ -32,6 +44,7 @@ export const ChatThreads = ({
   onDelete,
   resourceId,
   resourceType,
+  agentVersionId,
   embedded = false,
 }: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
@@ -40,7 +53,11 @@ export const ChatThreads = ({
 
   const canDeleteThread = canDelete('memory');
   const newThreadLink =
-    resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
+    resourceType === 'agent' && agentVersionId && paths.agentVersionNewThreadLink
+      ? paths.agentVersionNewThreadLink(resourceId, agentVersionId)
+      : resourceType === 'agent'
+        ? paths.agentNewThreadLink(resourceId)
+        : paths.networkNewThreadLink(resourceId);
 
   if (isLoading) {
     return <ChatThreadSkeleton embedded={embedded} Link={Link} newThreadLink={newThreadLink} />;
@@ -63,11 +80,14 @@ export const ChatThreads = ({
           <ThreadListItems>
             {threads.map(thread => {
               const isActive = thread.id === threadId;
+              const threadAgentVersionId = getThreadAgentVersionId(thread);
 
               const threadLink =
-                resourceType === 'agent'
-                  ? paths.agentThreadLink(resourceId, thread.id)
-                  : paths.networkThreadLink(resourceId, thread.id);
+                resourceType === 'agent' && threadAgentVersionId && paths.agentVersionThreadLink
+                  ? paths.agentVersionThreadLink(resourceId, threadAgentVersionId, thread.id)
+                  : resourceType === 'agent'
+                    ? paths.agentThreadLink(resourceId, thread.id)
+                    : paths.networkThreadLink(resourceId, thread.id);
 
               return (
                 <ThreadListItem

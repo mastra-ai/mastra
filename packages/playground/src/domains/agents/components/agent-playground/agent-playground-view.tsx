@@ -1,8 +1,7 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-
 import { AgentLayout } from '../agent-layout';
 import { SidebarPanel } from '../sidebar-panel';
 import { AgentPlaygroundConfig } from './agent-playground-config';
+import type { AgentConfigTab } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
 
@@ -30,29 +29,11 @@ interface AgentPlaygroundViewProps {
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
+  selectedConfigTab?: AgentConfigTab;
+  onConfigTabChange?: (tab: AgentConfigTab) => void;
 }
 
-function LeftPanel({
-  agentId,
-  activeVersionId,
-  selectedVersionId,
-  latestVersionId,
-  onVersionSelect,
-  isDirty,
-  isSavingDraft,
-  isPublishing,
-  hasDraft,
-  readOnly,
-  isCodeSourceAgent,
-  showCodeModeActions,
-  canOpenPr,
-  openPrTitle,
-  onSaveDraft,
-  onPublish,
-  onDownloadJson,
-  onOpenPr,
-  isViewingPreviousVersion,
-}: {
+interface AgentPlaygroundEditorPanelContentProps {
   agentId: string;
   activeVersionId?: string;
   selectedVersionId?: string;
@@ -72,8 +53,34 @@ function LeftPanel({
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
-}) {
-  const { versionSelector, actionBar } = AgentPlaygroundVersionBar({
+  selectedConfigTab?: AgentConfigTab;
+  onConfigTabChange?: (tab: AgentConfigTab) => void;
+}
+
+export function AgentPlaygroundEditorPanelContent({
+  agentId,
+  activeVersionId,
+  selectedVersionId,
+  latestVersionId,
+  onVersionSelect,
+  isDirty,
+  isSavingDraft,
+  isPublishing,
+  hasDraft,
+  readOnly,
+  isCodeSourceAgent,
+  showCodeModeActions,
+  canOpenPr,
+  openPrTitle,
+  onSaveDraft,
+  onPublish,
+  onDownloadJson,
+  onOpenPr,
+  isViewingPreviousVersion,
+  selectedConfigTab,
+  onConfigTabChange,
+}: AgentPlaygroundEditorPanelContentProps) {
+  const { actionBar } = AgentPlaygroundVersionBar({
     agentId,
     activeVersionId,
     selectedVersionId,
@@ -92,27 +99,30 @@ function LeftPanel({
     onDownloadJson,
     onOpenPr,
     isViewingPreviousVersion,
+    layout: 'panel',
   });
 
   return (
-    <SidebarPanel>
-      {versionSelector}
-
-      <div className="px-4 pt-3">
-        <Txt variant="ui-sm" className="text-neutral3">
-          Edit your agent's system prompt, tools, and variables below.
-        </Txt>
-      </div>
-
+    <>
       <div className="flex-1 min-h-0">
         <AgentPlaygroundConfig
           agentId={agentId}
           selectedVersionId={selectedVersionId}
           latestVersionId={latestVersionId}
+          selectedTab={selectedConfigTab}
+          onSelectedTabChange={onConfigTabChange}
         />
       </div>
 
       {actionBar}
+    </>
+  );
+}
+
+function LeftPanel(props: AgentPlaygroundEditorPanelContentProps) {
+  return (
+    <SidebarPanel>
+      <AgentPlaygroundEditorPanelContent {...props} />
     </SidebarPanel>
   );
 }
@@ -141,6 +151,8 @@ export function AgentPlaygroundView({
   onDownloadJson,
   onOpenPr,
   isViewingPreviousVersion,
+  selectedConfigTab,
+  onConfigTabChange,
 }: AgentPlaygroundViewProps) {
   return (
     <AgentLayout
@@ -167,6 +179,8 @@ export function AgentPlaygroundView({
           onDownloadJson={onDownloadJson}
           onOpenPr={onOpenPr}
           isViewingPreviousVersion={isViewingPreviousVersion}
+          selectedConfigTab={selectedConfigTab}
+          onConfigTabChange={onConfigTabChange}
         />
       }
     >

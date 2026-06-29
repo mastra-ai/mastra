@@ -79,7 +79,7 @@ test.describe('Admin Role', () => {
 
     test('admin can execute agents - chat input is enabled', async ({ page }) => {
       await setupAdminAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Admin has wildcard permissions, so agents:execute is granted
       // The chat input should be enabled with normal placeholder
@@ -282,7 +282,7 @@ test.describe('Admin Role', () => {
     test('admin has more permissions than member', async ({ page }) => {
       // First, verify admin can access a page
       await setupAdminAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/threads/new');
 
       // Admin should see full UI without restrictions
       // Now check as member

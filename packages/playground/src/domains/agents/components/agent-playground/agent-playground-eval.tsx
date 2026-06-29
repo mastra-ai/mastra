@@ -411,7 +411,9 @@ export function ExperimentResultsPanel({
                     type="button"
                     className="underline hover:text-neutral5 transition-colors cursor-pointer"
                     onClick={() =>
-                      navigate(`/agents/${agentId}/editor?version=${encodeURIComponent(experiment.agentVersion!)}`)
+                      navigate(
+                        `/agents/${agentId}/versions/${encodeURIComponent(experiment.agentVersion!)}/threads/new`,
+                      )
                     }
                   >
                     {label}

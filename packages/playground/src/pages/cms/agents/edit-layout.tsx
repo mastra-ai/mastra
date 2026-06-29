@@ -255,6 +255,19 @@ function EditLayoutWrapper() {
             {showCodeModeActions ? (
               isCodeAgentEditable ? (
                 <>
+                  <Button onClick={() => void handleSaveDraft()} disabled={!isDirty || isSavingDraft || isSubmitting}>
+                    {isSavingDraft ? (
+                      <>
+                        <Spinner className="h-4 w-4" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save />
+                        Save to filesystem
+                      </>
+                    )}
+                  </Button>
                   <Button onClick={() => void handleDownloadJson()} disabled={isSavingDraft || isSubmitting}>
                     <Download />
                     Download JSON
@@ -333,7 +346,7 @@ function EditLayoutWrapper() {
               isSubmitting={isSubmitting}
               isSavingDraft={isSavingDraft}
               onVersionSelect={handleVersionSelect}
-              activeVersionId={activeVersionId}
+              activeVersionId={activeVersionId ?? undefined}
               latestVersionId={latestVersion?.id}
               editorConfig={undefined}
             />
@@ -351,7 +364,7 @@ function EditLayoutWrapper() {
           isSubmitting={isSubmitting}
           isSavingDraft={isSavingDraft}
           onVersionSelect={handleVersionSelect}
-          activeVersionId={activeVersionId}
+          activeVersionId={activeVersionId ?? undefined}
           latestVersionId={latestVersion?.id}
           hideVersionPanel={isCodeAgentOverride && !storedAgent}
           isCodeAgentOverride={isCodeAgentOverride}

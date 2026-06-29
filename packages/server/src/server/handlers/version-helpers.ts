@@ -259,7 +259,7 @@ export async function handleAutoVersioning<TEntity>(
   parentId: string,
   parentIdField: string,
   snapshotConfigFields: readonly string[],
-  existingEntity: TEntity & { activeVersionId?: string },
+  existingEntity: TEntity & { activeVersionId?: string | null },
   updatedEntity: TEntity,
   configFields?: Record<string, unknown>,
   options?: { changeMessage?: string },
