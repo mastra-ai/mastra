@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': patch
+'@mastra/playground-ui': minor
 ---
 
 Added direct subpath imports for shared Playground UI domain components, hooks, resize helpers, primitives, and the playground store. This lets applications avoid the root barrel when they only need one focused API.

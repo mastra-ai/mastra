@@ -182,7 +182,7 @@ const libConfig: UserConfig = {
     rollupOptions: {
       external: ['motion/react'],
       output: {
-        // With ~98 entries, hoisted transitive imports would bloat every entry
+        // With ~300 entries, hoisted transitive imports would bloat every entry
         // chunk with empty side-effect imports of shared chunks.
         hoistTransitiveImports: false,
         // Pin the global Tailwind stylesheet to a chunk named `index` so its
