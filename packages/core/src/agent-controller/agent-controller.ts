@@ -1148,7 +1148,16 @@ export class AgentController<TState = {}> {
     const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
 
-    const hasAuth = this.#gatewayManager ? await this.#gatewayManager.hasAuth(modelId) : true;
+    // hasAuth returns false for expected missing-auth/missing-gateway cases.
+    // It rethrows unexpected gateway failures (token exchange errors, network
+    // bugs) — catch those here so the UI auth-status endpoint stays stable
+    // and falls back to "no auth" instead of erroring.
+    let hasAuth = true;
+    try {
+      hasAuth = this.#gatewayManager ? await this.#gatewayManager.hasAuth(modelId) : true;
+    } catch {
+      hasAuth = false;
+    }
     if (hasAuth) return { hasAuth: true };
 
     // Surface the env-var hint from the catalog when available.

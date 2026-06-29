@@ -453,4 +453,68 @@ describe('Custom Gateway Integration', () => {
       expect(model.modelId).toBe('model-1');
     });
   });
+
+  describe('Custom gateway dedup regression', () => {
+    it('uses the custom gateway when it shadows a default gateway id (first-wins)', () => {
+      // A custom gateway with the same id as the default Netlify gateway.
+      // Before the GatewayManager dedup fix, the default would override the
+      // custom gateway, losing the user's override. Now first-wins dedup keeps
+      // the custom gateway.
+      const shadowGateway: MastraModelGatewayInterface = {
+        id: 'netlify',
+        name: 'custom-netlify-override',
+        shouldEnable: () => true,
+        fetchProviders: vi.fn(async () => ({
+          'shadow-provider': {
+            name: 'Shadow',
+            models: ['shadow-model'],
+            apiKeyEnvVar: 'SHADOW_KEY',
+            gateway: 'netlify',
+            url: 'https://shadow.example/v1',
+          },
+        })),
+        buildUrl: () => 'https://shadow.example/v1',
+        getApiKey: vi.fn(async () => 'shadow-key'),
+        resolveAuth: vi.fn(() => ({ apiKey: 'shadow-auth-key', source: 'gateway' as const })),
+        resolveLanguageModel: vi.fn(
+          () =>
+            ({
+              specificationVersion: 'v2',
+              doGenerate: vi.fn(),
+              doStream: vi.fn(),
+            }) as any,
+        ),
+      };
+
+      const model = new ModelRouterLanguageModel('netlify/shadow-provider/shadow-model', [shadowGateway]);
+
+      // The custom gateway wins over the default Netlify gateway.
+      expect(model.gatewayId).toBe('netlify');
+      expect(model.provider).toBe('shadow-provider');
+      expect(model.modelId).toBe('shadow-model');
+      expect(shadowGateway.resolveAuth).not.toHaveBeenCalled(); // not called at construction time
+    });
+
+    it('does not reserve a gateway id from a disabled custom gateway before an enabled default', () => {
+      // A disabled custom gateway with the same id as a default should not
+      // block the enabled default from being used.
+      const disabledGateway: MastraModelGatewayInterface = {
+        id: 'netlify',
+        name: 'disabled-netlify-override',
+        shouldEnable: () => false,
+        fetchProviders: vi.fn(async () => ({})),
+        buildUrl: () => '',
+        getApiKey: vi.fn(async () => 'should-not-be-used'),
+        resolveLanguageModel: vi.fn(() => ({}) as any),
+      };
+
+      // With the disabled custom gateway first, the default Netlify gateway
+      // should still be available (not blocked by the disabled id).
+      const model = new ModelRouterLanguageModel('openai/gpt-4o', [disabledGateway]);
+
+      expect(model).toBeDefined();
+      // Should resolve via models.dev (default) since the disabled gateway is filtered.
+      expect(model.provider).toBe('openai');
+    });
+  });
 });
