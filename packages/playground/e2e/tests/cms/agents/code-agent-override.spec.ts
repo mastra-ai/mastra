@@ -4,6 +4,9 @@ import { resetStorage } from '../../__utils__/reset-storage';
 // These tests cover the code-mode override product behavior:
 // - The editor in code-override mode replaces db-mode Save/Publish with local
 //   filesystem saves, Download JSON, or platform Open PR when configured.
+// - Each save is a distinct draft snapshot: it grows version history (no
+//   rolling collapse) and never auto-publishes. Publishing is an explicit,
+//   separate action, so a save never silently goes live.
 // - Sections owned by code (editor.tools/instructions === false) are hidden in
 //   the sidebar — Studio never lets a user edit fields the code locked down.
 // - The export endpoint returns a deterministic payload reflecting overrides.
@@ -35,6 +38,12 @@ test.describe('code-mode agent override', () => {
           .then(r => r.json() as Promise<{ versions: unknown[] }>);
         return versions.versions.length;
       };
+      const getActiveVersionId = async () => {
+        const agent = await request
+          .get('/api/stored/agents/code-override-editable')
+          .then(r => r.json() as Promise<{ activeVersionId?: string | null }>);
+        return agent.activeVersionId ?? null;
+      };
 
       const initialVersionCount = await getVersionCount();
 
@@ -44,15 +53,19 @@ test.describe('code-mode agent override', () => {
       await expect(saveToFilesystemButton).toBeEnabled();
       await saveToFilesystemButton.click();
 
-      // Code mode treats local saves as commit-less drafts: each save should
-      // overwrite the rolling snapshot rather than grow version history.
-      await expect.poll(getVersionCount).toBe(initialVersionCount);
+      // A save is a draft snapshot: it adds a version and must NOT auto-publish.
+      await expect.poll(getVersionCount).toBe(initialVersionCount + 1);
+      expect(await getActiveVersionId()).toBeNull();
 
       await page.locator('.cm-content').first().click();
       await page.keyboard.type(' Another tweak.');
+      await expect(saveToFilesystemButton).toBeEnabled();
       await saveToFilesystemButton.click();
 
-      await expect.poll(getVersionCount).toBe(initialVersionCount);
+      // The previous snapshot is preserved — saves grow history, never collapse it,
+      // and still never publish on their own.
+      await expect.poll(getVersionCount).toBe(initialVersionCount + 2);
+      expect(await getActiveVersionId()).toBeNull();
 
       const downloadPromise = page.waitForEvent('download');
       await downloadButton.click();

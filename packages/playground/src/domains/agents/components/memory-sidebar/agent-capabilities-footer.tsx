@@ -228,17 +228,12 @@ export function AgentCapabilitiesFooter({
           <button
             type="button"
             data-testid="agent-capabilities-footer"
-            className="flex w-full items-center gap-1.5 px-2 py-2 text-left text-neutral4 transition-colors duration-normal hover:!text-neutral4 hover:bg-surface3 focus-visible:!text-neutral4 focus-visible:bg-surface3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface4/80 aria-expanded:bg-surface3/70 data-[panel-open]:bg-surface3/70"
+            className="flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left text-neutral4 transition-colors duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70"
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               {capabilities.map(capability => (
                 <CapabilityIconChip key={capability.id} capability={capability} />
               ))}
-              {isExpanded ? (
-                <Txt as="span" variant="ui-xs" className="min-w-0 truncate font-medium text-neutral5">
-                  Capabilities
-                </Txt>
-              ) : null}
             </div>
             <Txt as="span" variant="ui-xs" className="shrink-0 text-neutral3">
               {enabledCount}/{capabilities.length}

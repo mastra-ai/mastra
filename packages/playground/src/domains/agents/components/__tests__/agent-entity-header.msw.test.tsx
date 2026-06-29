@@ -76,7 +76,6 @@ const paths = {
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
   promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
@@ -197,8 +196,9 @@ describe('AgentSidebarVersionHeader', () => {
 
     renderWithProviders(<SidebarVersionHeaderHarness threadId="thread-1" />, { showSidebarViewProbe: true });
 
-    const createVersion = await screen.findByRole('button', { name: /create version/i });
-    fireEvent.click(createVersion);
+    // Even with no saved versions the combobox is the entry point; "Create version" lives in its footer.
+    fireEvent.click(await screen.findByRole('combobox', { name: /switch test agent version/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /create version/i }));
 
     expect(screen.getByTestId('sidebar-view').textContent).toBe('versions');
     expect(navigateSpy).not.toHaveBeenCalled();

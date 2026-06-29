@@ -575,6 +575,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     workspace,
     browser,
     requestContextSchema,
+    publishOnSave,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -682,15 +683,19 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Publish the initial version so the agent is immediately usable.
       // Without this, the thin record stays as status='draft' with activeVersionId=null,
       // which makes the agent unreachable via status='published' resolution.
-      const { versions } = await agentsStore.listVersions({ agentId: id, perPage: 1 });
-      const initialVersion = versions[0];
-      if (initialVersion) {
-        await agentsStore.update({
-          id,
-          activeVersionId: initialVersion.id,
-          status: 'published',
-        });
-        editor?.agent.clearCache(id);
+      // Callers that want a draft (the version editor's "Save") pass
+      // publishOnSave: false to skip activation until they explicitly publish.
+      if (publishOnSave !== false) {
+        const { versions } = await agentsStore.listVersions({ agentId: id, perPage: 1 });
+        const initialVersion = versions[0];
+        if (initialVersion) {
+          await agentsStore.update({
+            id,
+            activeVersionId: initialVersion.id,
+            status: 'published',
+          });
+          editor?.agent.clearCache(id);
+        }
       }
 
       // Return the resolved agent (thin record + version config) using the newly published version
@@ -762,6 +767,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     requestContextSchema,
     // Version metadata
     changeMessage,
+    publishOnSave,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -915,8 +921,10 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // deleting the prior latest version, leaving a single rolling snapshot.
       // When the user explicitly provides a changeMessage we treat that as a
       // commit and keep the new version as a discrete history entry.
+      // The version editor opts out (publishOnSave: false) so each draft save
+      // is preserved as a distinct snapshot the user can publish or discard.
       const isCodeSource = mastra.getEditor?.()?.getSource?.() === 'code';
-      if (isCodeSource && autoVersionResult.versionCreated && !changeMessage) {
+      if (isCodeSource && autoVersionResult.versionCreated && !changeMessage && publishOnSave !== false) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 2 });
         const previousVersion = versions[1];
         if (previousVersion) {
@@ -928,8 +936,10 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // visible in list views. The Agent Builder UI has no separate "Publish"
       // button, so without this every edit after creation would create orphaned
       // draft versions that never surface in the list.
-      // When a proper publish flow ships, this block can be removed.
-      if (autoVersionResult.versionCreated) {
+      // The version editor splits Save from Publish and opts out with
+      // publishOnSave: false, keeping the new version a draft until the user
+      // explicitly publishes it.
+      if (autoVersionResult.versionCreated && publishOnSave !== false) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
         if (latestVersion) {

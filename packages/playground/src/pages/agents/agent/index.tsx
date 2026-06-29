@@ -21,15 +21,77 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { useEditorPreviewVersionId } from '@/domains/agents/hooks/use-editor-preview-version';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
+import type { ChatProps } from '@/types';
 
 // With View Transitions support the chat/settings switch is choreographed in
 // agent-view-transition.css; the in-DOM enter animation would replay inside the
 // captured snapshot and double the motion, so it only serves as a fallback.
 const supportsViewTransitions = typeof document !== 'undefined' && 'startViewTransition' in document;
+
+interface AgentChatRegionProps {
+  agentId: string;
+  agentName?: string;
+  modelVersion?: string;
+  /** The version pinned in the URL (`/agents/:id/versions/:versionId/...`), if any. */
+  urlVersionId?: string;
+  supportsMemory?: boolean;
+  threadId: string;
+  memory?: boolean;
+  refreshThreadList: () => Promise<void>;
+  modelList?: ChatProps['modelList'];
+  messageId?: string;
+  isNewThread?: boolean;
+  requestContextSchema?: string;
+}
+
+/**
+ * Renders the test chat, resolving the agent version it runs against.
+ *
+ * Lives inside `AgentSidebarViewProvider` so it can consume the editor's open
+ * state: while the version editor panel is open, the chat previews the latest
+ * saved draft (see {@link useEditorPreviewVersionId}) so a "Save" is immediately
+ * testable without publishing. An explicit URL version always wins.
+ */
+function AgentChatRegion({
+  agentId,
+  agentName,
+  modelVersion,
+  urlVersionId,
+  supportsMemory,
+  threadId,
+  memory,
+  refreshThreadList,
+  modelList,
+  messageId,
+  isNewThread,
+  requestContextSchema,
+}: AgentChatRegionProps) {
+  const agentVersionId = useEditorPreviewVersionId({ agentId, urlVersionId });
+  const threadMetadata = useMemo(() => (agentVersionId ? { mastra: { agentVersionId } } : undefined), [agentVersionId]);
+
+  return (
+    <AgentChat
+      agentId={agentId}
+      agentName={agentName}
+      modelVersion={modelVersion}
+      agentVersionId={agentVersionId}
+      threadMetadata={threadMetadata}
+      supportsMemory={supportsMemory}
+      threadId={threadId}
+      memory={memory}
+      refreshThreadList={refreshThreadList}
+      modelList={modelList}
+      messageId={messageId}
+      isNewThread={isNewThread}
+      runOptionsSlot={<ComposerRunOptions requestContextSchema={requestContextSchema} />}
+    />
+  );
+}
 
 function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const { agentId, threadId, versionId } = useParams();
@@ -81,17 +143,6 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
   const agentVersionId = versionId;
-  const threadMetadata = useMemo(
-    () =>
-      agentVersionId
-        ? {
-            mastra: {
-              agentVersionId,
-            },
-          }
-        : undefined,
-    [agentVersionId],
-  );
 
   // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
@@ -182,13 +233,12 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                             {isSettingsView ? (
                               <AgentSettingsView agentId={agentId!} />
                             ) : (
-                              <AgentChat
+                              <AgentChatRegion
                                 key={actualThreadId!}
                                 agentId={agentId!}
                                 agentName={agent?.name}
                                 modelVersion={agent?.modelVersion}
-                                agentVersionId={agentVersionId}
-                                threadMetadata={threadMetadata}
+                                urlVersionId={agentVersionId}
                                 supportsMemory={agent?.supportsMemory}
                                 threadId={actualThreadId!}
                                 memory={hasMemory}
@@ -196,9 +246,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                                 modelList={agent?.modelList}
                                 messageId={messageId}
                                 isNewThread={isNewThread}
-                                runOptionsSlot={
-                                  <ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />
-                                }
+                                requestContextSchema={agent?.requestContextSchema}
                               />
                             )}
                           </div>

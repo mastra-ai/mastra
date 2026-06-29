@@ -4,11 +4,9 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
-import { Eye, Pencil } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
@@ -17,7 +15,6 @@ import { ToolsPage } from '../agent-cms-pages/tools-page';
 import { useStoredPromptBlock } from '@/domains/prompt-blocks';
 
 export type AgentConfigTab = 'prompt' | 'tools' | 'variables';
-type PromptViewMode = 'edit' | 'preview';
 
 function AgentConfigTabs({
   prompt,
@@ -45,7 +42,7 @@ function AgentConfigTabs({
       onValueChange={onSelectedTabChange}
       className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
     >
-      <div className="border-b border-border1 bg-surface2 px-2 py-1.5">
+      <div className="px-2 py-1.5">
         <TabList variant="pill-ghost" className="w-full text-ui-sm">
           <Tab value="prompt" className="px-3">
             <span>Prompt</span>
@@ -716,8 +713,6 @@ export function AgentPlaygroundConfig({
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
   const toolCount = tools ? Object.keys(tools).length : 0;
-  const [promptViewMode, setPromptViewMode] = useState<PromptViewMode>('edit');
-
   const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
   const showDiff = readOnly && !!selectedVersionId && !!latestVersionId && selectedVersionId !== latestVersionId;
@@ -726,7 +721,7 @@ export function AgentPlaygroundConfig({
     (!isCodeAgentOverride ||
       editorConfig === undefined ||
       (editorConfig !== false && editorConfig?.instructions === true));
-  const showPromptPreview = !canEditPrompt || promptViewMode === 'preview';
+  const showPromptPreview = !canEditPrompt;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -760,31 +755,6 @@ export function AgentPlaygroundConfig({
           }
           prompt={
             <div className="min-h-full">
-              {canEditPrompt && (
-                <div className="border-b border-border1 bg-surface2 px-3 py-1.5">
-                  <Tabs<PromptViewMode>
-                    defaultTab="edit"
-                    value={promptViewMode}
-                    onValueChange={setPromptViewMode}
-                    className="flex justify-end overflow-visible"
-                  >
-                    <TabList variant="pill-ghost" className="text-ui-sm">
-                      <Tab value="edit" className="px-2.5">
-                        <Icon size="sm">
-                          <Pencil />
-                        </Icon>
-                        Edit
-                      </Tab>
-                      <Tab value="preview" className="px-2.5">
-                        <Icon size="sm">
-                          <Eye />
-                        </Icon>
-                        Preview
-                      </Tab>
-                    </TabList>
-                  </Tabs>
-                </div>
-              )}
               {showPromptPreview ? (
                 <div className="p-3">
                   <ReadOnlyInstructions blocks={instructionBlocks} />

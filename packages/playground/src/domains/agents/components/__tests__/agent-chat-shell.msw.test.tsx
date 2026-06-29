@@ -24,9 +24,7 @@ const StubLink = ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorE
   <a {...props}>{children}</a>
 );
 
-const noopPaths = {
-  cmsAgentEditLink: () => '',
-} as never;
+const noopPaths = {} as never;
 
 // Header data — same regardless of memory enablement.
 const headerHandlers = () => [

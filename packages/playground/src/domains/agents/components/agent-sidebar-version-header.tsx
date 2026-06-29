@@ -165,12 +165,12 @@ export function AgentSidebarVersionHeader({
   const canSwitchVersions = !isCmsAvailabilityLoading && isCmsAvailable && !isEditorLocked;
   const isCheckingVersions =
     canSwitchVersions && (versionsQuery.isLoading || (hasVersions && storedAgentQuery.isLoading));
-  const showVersionSelect = hasVersions && canSwitchVersions;
   const isCurrentThreadNew = threadId === 'new';
   const canPublishSelectedVersion = Boolean(
     currentVersionId && selectedRouteVersion && currentVersionId !== activeVersionId,
   );
   const canUnpublishVersion = Boolean(activeVersionId && (!currentVersionId || currentVersionId === activeVersionId));
+  const hasInlineVersionActions = canPublishSelectedVersion || canUnpublishVersion || showEditorAction;
 
   const versionOptions: ComboboxOption[] = [
     {
@@ -302,7 +302,13 @@ export function AgentSidebarVersionHeader({
 
   const triggerContent = (
     <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-      <GitBranch className="size-3.5 shrink-0 text-neutral4" />
+      {currentVersionId ? (
+        <GitBranch className="size-3.5 shrink-0 text-neutral4" />
+      ) : (
+        <span className="flex size-4 shrink-0 items-center justify-center text-neutral4">
+          <AgentIcon />
+        </span>
+      )}
       <Txt as="span" variant="ui-sm" className="min-w-0 flex-1 truncate font-medium text-neutral6">
         {triggerLabel}
       </Txt>
@@ -328,7 +334,7 @@ export function AgentSidebarVersionHeader({
               <Skeleton className="ml-auto h-3 w-12" />
             </div>
           </div>
-        ) : showVersionSelect ? (
+        ) : canSwitchVersions ? (
           <div className="flex flex-col gap-1.5">
             <div className="flex w-full items-center gap-1.5">
               {onBack ? (
@@ -336,106 +342,95 @@ export function AgentSidebarVersionHeader({
                   <ArrowLeft className="size-3.5" />
                 </Button>
               ) : null}
-              <div className="min-w-0 flex-1">
-                <Combobox
-                  options={versionOptions}
-                  value={currentVersionId ?? DEFAULT_AGENT_OPTION_VALUE}
-                  onValueChange={handleVersionChange}
-                  placeholder="Versions"
-                  searchPlaceholder="Search versions..."
-                  emptyText="No versions found."
-                  triggerAriaLabel={`Switch ${agentName} version`}
-                  triggerContent={triggerContent}
-                  popupFooter={
-                    showCreateVersionAction ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="w-full justify-start"
-                        onClick={handleCreateVersion}
-                      >
-                        <Plus className="size-3.5" />
-                        Create version
-                      </Button>
-                    ) : null
-                  }
-                  variant="outline"
-                  size="sm"
-                  className="h-auto w-full min-w-0 justify-between px-2 py-1.5"
-                  open={isVersionSelectOpen}
-                  onOpenChange={setIsVersionSelectOpen}
-                />
+              {/* No inner container: the header itself is the zone. The
+                  borderless combobox fills the row as the clickable trigger and
+                  the inline actions sit beside it, so nothing reads as a nested
+                  box. */}
+              <div className="flex min-w-0 flex-1 items-center">
+                {/* Block wrapper grows to fill the row; the combobox root is a
+                    flex-col, so it only stretches the trigger to full width when
+                    its parent is a block box (not a flex item) that owns flex-1. */}
+                <div className="min-w-0 flex-1">
+                  <Combobox
+                    options={versionOptions}
+                    value={currentVersionId ?? DEFAULT_AGENT_OPTION_VALUE}
+                    onValueChange={handleVersionChange}
+                    placeholder="Versions"
+                    searchPlaceholder="Search versions..."
+                    emptyText="No versions found."
+                    triggerAriaLabel={`Switch ${agentName} version`}
+                    triggerContent={triggerContent}
+                    popupFooter={
+                      showCreateVersionAction ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="w-full justify-start"
+                          onClick={handleCreateVersion}
+                        >
+                          <Plus className="size-3.5" />
+                          Create version
+                        </Button>
+                      ) : null
+                    }
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto w-full min-w-0 justify-between rounded-md px-2 py-1.5"
+                    open={isVersionSelectOpen}
+                    onOpenChange={setIsVersionSelectOpen}
+                  />
+                </div>
+                {hasInlineVersionActions ? <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border1/50" /> : null}
+                {canPublishSelectedVersion ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={handlePublishSelectedVersion}
+                    disabled={activateVersion.isPending}
+                    aria-label={
+                      activateVersion.isPending
+                        ? `Publishing v${selectedRouteVersion?.versionNumber}`
+                        : `Publish v${selectedRouteVersion?.versionNumber}`
+                    }
+                    tooltip={
+                      activateVersion.isPending
+                        ? `Publishing v${selectedRouteVersion?.versionNumber}`
+                        : `Publish v${selectedRouteVersion?.versionNumber}`
+                    }
+                  >
+                    <UploadCloud className="size-3.5" />
+                  </Button>
+                ) : null}
+                {canUnpublishVersion ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={handleUnpublishVersion}
+                    disabled={unpublishVersion.isPending}
+                    aria-label={unpublishVersion.isPending ? 'Unpublishing version' : 'Unpublish version'}
+                    tooltip={unpublishVersion.isPending ? 'Unpublishing version' : 'Unpublish version'}
+                  >
+                    <CloudOff className="size-3.5" />
+                  </Button>
+                ) : null}
+                {showEditorAction ? (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={handleCreateVersion}
+                    aria-label="Open agent editor"
+                    tooltip="Open agent editor"
+                    data-testid="agent-sidebar-version-header-open-editor"
+                  >
+                    <Pencil />
+                  </Button>
+                ) : null}
               </div>
-              {canPublishSelectedVersion ? (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  onClick={handlePublishSelectedVersion}
-                  disabled={activateVersion.isPending}
-                  aria-label={
-                    activateVersion.isPending
-                      ? `Publishing v${selectedRouteVersion?.versionNumber}`
-                      : `Publish v${selectedRouteVersion?.versionNumber}`
-                  }
-                >
-                  <UploadCloud className="size-3.5" />
-                </Button>
-              ) : null}
-              {canUnpublishVersion ? (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="outline"
-                  onClick={handleUnpublishVersion}
-                  disabled={unpublishVersion.isPending}
-                  aria-label={unpublishVersion.isPending ? 'Unpublishing version' : 'Unpublish version'}
-                >
-                  <CloudOff className="size-3.5" />
-                </Button>
-              ) : null}
-              {showEditorAction ? (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={handleCreateVersion}
-                  aria-label="Open agent editor"
-                  tooltip="Open agent editor"
-                  data-testid="agent-sidebar-version-header-open-editor"
-                >
-                  <Pencil />
-                </Button>
-              ) : null}
             </div>
-          </div>
-        ) : canSwitchVersions ? (
-          <div className="flex w-full items-center gap-1.5">
-            {onBack ? (
-              <Button type="button" size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to threads">
-                <ArrowLeft className="size-3.5" />
-              </Button>
-            ) : null}
-            {showCreateVersionAction ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="min-w-0 flex-1 justify-start"
-                onClick={onCreateVersion}
-              >
-                <Plus className="size-3.5" />
-                Create version
-              </Button>
-            ) : (
-              <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-neutral4">
-                <GitBranch className="size-3.5 shrink-0" />
-                <Txt as="span" variant="ui-sm" className="min-w-0 truncate">
-                  No versions yet
-                </Txt>
-              </div>
-            )}
           </div>
         ) : isEditorLocked ? (
           <Tooltip>

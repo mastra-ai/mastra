@@ -100,7 +100,6 @@ const paths = {
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}`,
   cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}`,
   promptBlockLink: (promptBlockId: string) => `/prompt-blocks/${promptBlockId}`,
   promptBlocksLink: () => '/prompt-blocks',
   cmsPromptBlockCreateLink: () => '/cms/prompt-blocks/create',
@@ -261,7 +260,6 @@ describe('MemorySidebar', () => {
 
     fireEvent.click(footer);
 
-    expect(within(footer).getByText('Capabilities')).not.toBeNull();
     expect(screen.getAllByLabelText('Memory: On').length).toBeGreaterThan(1);
     expect(screen.getAllByLabelText('Editor: 2').length).toBeGreaterThan(1);
     expect(screen.getAllByLabelText('Processors: 1').length).toBeGreaterThan(1);

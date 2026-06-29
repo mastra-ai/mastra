@@ -316,18 +316,22 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
 
         if (needsCreate) {
-          // First save for a code agent — create the stored override
+          // First save for a code agent — create the stored override.
+          // publishOnSave: false keeps it a draft; the user publishes explicitly.
           const createParams: CreateStoredAgentParams = {
             id: options.agentId,
             ...sharedParams,
             memory: editMemory,
+            publishOnSave: false,
           };
           await createStoredAgent.mutateAsync(createParams);
           setOverrideCreated(true);
         } else {
+          // Draft save: do not auto-publish. Publishing is an explicit action.
           await updateStoredAgent.mutateAsync({
             ...sharedParams,
             memory: editMemory,
+            publishOnSave: false,
             ...(changeMessage ? { changeMessage } : {}),
           });
         }

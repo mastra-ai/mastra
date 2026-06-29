@@ -343,6 +343,12 @@ export const createStoredAgentBodySchema = z
       .enum(['private', 'public'])
       .optional()
       .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
+    publishOnSave: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether to auto-publish (activate) the initial version. Defaults to true. Pass false to keep the save a draft until explicitly published.',
+      ),
   })
   .merge(snapshotConfigCreateSchema);
 
@@ -370,6 +376,12 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
       .max(500)
       .optional()
       .describe('Optional message describing the changes for the auto-created version'),
+    publishOnSave: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether to auto-publish (activate) the version created by this update. Defaults to true. Pass false to keep the save a draft until explicitly published.',
+      ),
   });
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();

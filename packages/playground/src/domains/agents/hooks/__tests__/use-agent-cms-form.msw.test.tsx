@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createInstructionBlock } from '../../components/agent-edit-page/utils/form-validation';
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
@@ -39,6 +39,15 @@ const dataSource: AgentDataSource = {
 const captureCreateBody = (sink: { body: Record<string, unknown> | null }) =>
   server.use(
     http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
+      sink.body = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json(createdCodeAgent);
+    }),
+  );
+
+/** Capture the body of the update (PATCH) request the save flow sends. */
+const captureUpdateBody = (sink: { body: Record<string, unknown> | null }) =>
+  server.use(
+    http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, async ({ request }) => {
       sink.body = (await request.json()) as Record<string, unknown>;
       return HttpResponse.json(createdCodeAgent);
     }),
@@ -195,6 +204,88 @@ describe('useAgentCmsForm — code agent instruction ownership', () => {
 
     await waitFor(() => expect(result.current.versions.data?.total).toBe(1));
     expect(versionRequests).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// The version editor splits "Save" (snapshot a draft) from "Publish" (activate).
+// A draft save must tell the server NOT to auto-publish — otherwise the save goes
+// live instantly and the explicit Publish action becomes meaningless. The opt-out
+// rides on the wire as `publishOnSave: false`.
+describe('useAgentCmsForm — draft save does not auto-publish', () => {
+  it('sends publishOnSave:false on the first save (create override) and never activates a version', async () => {
+    const sink: { body: Record<string, unknown> | null } = { body: null };
+    captureCreateBody(sink);
+
+    const onActivate = vi.fn<() => void>();
+    server.use(
+      http.post(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions/:versionId/activate`, () => {
+        onActivate();
+        return HttpResponse.json({ success: true, message: 'activated', activeVersionId: 'v1' });
+      }),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useAgentCmsForm({
+          mode: 'edit',
+          agentId: AGENT_ID,
+          dataSource,
+          isCodeAgentOverride: true,
+          hasStoredOverride: false,
+          editorConfig: undefined,
+          onSuccess: () => {},
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    act(() => {
+      result.current.form.setValue('instructionBlocks', [createInstructionBlock('User edited prompt')], {
+        shouldDirty: true,
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleSaveDraft();
+    });
+
+    await waitFor(() => expect(sink.body).not.toBeNull());
+
+    expect(sink.body!.publishOnSave).toBe(false);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('sends publishOnSave:false on a subsequent save (update of an existing override)', async () => {
+    const sink: { body: Record<string, unknown> | null } = { body: null };
+    captureUpdateBody(sink);
+
+    const { result } = renderHook(
+      () =>
+        useAgentCmsForm({
+          mode: 'edit',
+          agentId: AGENT_ID,
+          dataSource,
+          isCodeAgentOverride: true,
+          // An override already exists → the save path is an UPDATE, not a create.
+          hasStoredOverride: true,
+          editorConfig: undefined,
+          onSuccess: () => {},
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    act(() => {
+      result.current.form.setValue('instructionBlocks', [createInstructionBlock('User edited prompt')], {
+        shouldDirty: true,
+      });
+    });
+
+    await act(async () => {
+      await result.current.handleSaveDraft();
+    });
+
+    await waitFor(() => expect(sink.body).not.toBeNull());
+
+    expect(sink.body!.publishOnSave).toBe(false);
   });
 });
 

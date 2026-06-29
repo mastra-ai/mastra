@@ -3370,6 +3370,7 @@ export const API_ROUTE_METADATA = {
       "model",
       "name",
       "outputProcessors",
+      "publishOnSave",
       "requestContextSchema",
       "scorers",
       "skills",
@@ -3408,6 +3409,7 @@ export const API_ROUTE_METADATA = {
       "model",
       "name",
       "outputProcessors",
+      "publishOnSave",
       "requestContextSchema",
       "scorers",
       "skills",
@@ -3485,6 +3487,20 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [],
     "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /stored/agents/:agentId/versions/unpublish": {
+    "method": "POST",
+    "path": "/stored/agents/:agentId/versions/unpublish",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
     "hasBody": false,
     "responseShape": {
       "kind": "single"

@@ -31,7 +31,6 @@ type LinkComponentPaths = {
   cmsScorerEditLink: (scorerId: string) => string;
 
   cmsAgentCreateLink: () => string;
-  cmsAgentEditLink: (agentId: string) => string;
 
   promptBlockLink: (promptBlockId: string) => string;
   promptBlocksLink: () => string;
@@ -85,7 +84,6 @@ const LinkComponentContext = createContext<{
     cmsScorersCreateLink: () => '',
     cmsScorerEditLink: () => '',
     cmsAgentCreateLink: () => '',
-    cmsAgentEditLink: () => '',
     promptBlockLink: () => '',
     promptBlocksLink: () => '',
     cmsPromptBlockCreateLink: () => '',

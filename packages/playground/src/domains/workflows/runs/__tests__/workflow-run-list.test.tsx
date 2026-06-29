@@ -42,7 +42,6 @@ const paths = {
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}`,
   cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}`,
   promptBlockLink: (promptBlockId: string) => `/prompt-blocks/${promptBlockId}`,
   promptBlocksLink: () => '/prompt-blocks',
   cmsPromptBlockCreateLink: () => '/cms/prompt-blocks/create',

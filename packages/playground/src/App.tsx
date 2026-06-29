@@ -35,7 +35,6 @@ import AgentReview from './pages/agents/agent-review';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
 import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
-import { EditLayoutWrapper } from './pages/cms/agents/edit-layout';
 import CmsAgentInformationPage from './pages/cms/agents/information';
 import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
 import CmsAgentMemoryPage from './pages/cms/agents/memory';
@@ -167,7 +166,6 @@ const paths: LinkComponentProviderProps['paths'] = {
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
   cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
   promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
@@ -439,12 +437,6 @@ export const routes: RouteObject[] = [
         path: '/cms/agents/create',
         element: <CreateLayoutWrapper />,
         handle: navHandleWithChildren('/agents', [{ id: 'create-agent', label: 'Create agent' }]),
-        children: agentCmsChildRoutes,
-      },
-      {
-        path: '/cms/agents/:agentId/edit',
-        element: <EditLayoutWrapper />,
-        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb, heading: 'Agent' }]),
         children: agentCmsChildRoutes,
       },
       {

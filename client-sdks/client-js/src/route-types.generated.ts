@@ -409,7 +409,7 @@ export type PostAgentsAgentIdClone_Response = {
   id: string;
   /** Agent status: draft or published */
   status: string;
-  activeVersionId?: string | undefined;
+  activeVersionId?: (string | null) | undefined;
   authorId?: string | undefined;
   /** Resolved author identity (when an auth provider is configured) */
   author?:
@@ -21706,7 +21706,7 @@ export type GetStoredAgents_Response = {
     id: string;
     /** Agent status: draft or published */
     status: string;
-    activeVersionId?: string | undefined;
+    activeVersionId?: (string | null) | undefined;
     authorId?: string | undefined;
     /** Resolved author identity (when an auth provider is configured) */
     author?:
@@ -35071,7 +35071,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
   id: string;
   /** Agent status: draft or published */
   status: string;
-  activeVersionId?: string | undefined;
+  activeVersionId?: (string | null) | undefined;
   authorId?: string | undefined;
   /** Resolved author identity (when an auth provider is configured) */
   author?:
@@ -39452,6 +39452,8 @@ export type PostStoredAgents_Body = {
     | undefined;
   /** Agent visibility: private (owner/admin only) or public (any reader) */
   visibility?: ('private' | 'public') | undefined;
+  /** Whether to auto-publish (activate) the initial version. Defaults to true. Pass false to keep the save a draft until explicitly published. */
+  publishOnSave?: boolean | undefined;
   /** Name of the agent */
   name: string;
   /** Description of the agent */
@@ -43782,7 +43784,7 @@ export type PostStoredAgents_Response = {
   id: string;
   /** Agent status: draft or published */
   status: string;
-  activeVersionId?: string | undefined;
+  activeVersionId?: (string | null) | undefined;
   authorId?: string | undefined;
   /** Resolved author identity (when an auth provider is configured) */
   author?:
@@ -52546,13 +52548,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
     | undefined;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string | undefined;
+  /** Whether to auto-publish (activate) the version created by this update. Defaults to true. Pass false to keep the save a draft until explicitly published. */
+  publishOnSave?: boolean | undefined;
 };
 
 export type PatchStoredAgentsStoredAgentId_Response =
   | {
       id: string;
       status: string;
-      activeVersionId?: string | undefined;
+      activeVersionId?: (string | null) | undefined;
       authorId?: string | undefined;
       metadata?:
         | {
@@ -52567,7 +52571,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
       id: string;
       /** Agent status: draft or published */
       status: string;
-      activeVersionId?: string | undefined;
+      activeVersionId?: (string | null) | undefined;
       authorId?: string | undefined;
       /** Resolved author identity (when an auth provider is configured) */
       author?:
@@ -71876,6 +71880,37 @@ export interface GetStoredAgentsAgentIdVersionsCompare_RouteContract {
   body: never;
   request: GetStoredAgentsAgentIdVersionsCompare_Request;
   response: GetStoredAgentsAgentIdVersionsCompare_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /stored/agents/:agentId/versions/unpublish
+// ============================================================================
+export type PostStoredAgentsAgentIdVersionsUnpublish_PathParams = {
+  /** Unique identifier for the stored agent */
+  agentId: string;
+};
+
+export type PostStoredAgentsAgentIdVersionsUnpublish_Response = {
+  success: boolean;
+  message: string;
+  activeVersionId: null;
+};
+
+export type PostStoredAgentsAgentIdVersionsUnpublish_Request = Simplify<
+  (PostStoredAgentsAgentIdVersionsUnpublish_PathParams extends never
+    ? {}
+    : { params: PostStoredAgentsAgentIdVersionsUnpublish_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostStoredAgentsAgentIdVersionsUnpublish_RouteContract {
+  pathParams: PostStoredAgentsAgentIdVersionsUnpublish_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostStoredAgentsAgentIdVersionsUnpublish_Request;
+  response: PostStoredAgentsAgentIdVersionsUnpublish_Response;
   responseType: 'json';
 }
 
@@ -91722,6 +91757,7 @@ export interface RouteTypes {
   'GET /stored/agents/:agentId/versions': GetStoredAgentsAgentIdVersions_RouteContract;
   'POST /stored/agents/:agentId/versions': PostStoredAgentsAgentIdVersions_RouteContract;
   'GET /stored/agents/:agentId/versions/compare': GetStoredAgentsAgentIdVersionsCompare_RouteContract;
+  'POST /stored/agents/:agentId/versions/unpublish': PostStoredAgentsAgentIdVersionsUnpublish_RouteContract;
   'GET /stored/agents/:agentId/versions/:versionId': GetStoredAgentsAgentIdVersionsVersionId_RouteContract;
   'POST /stored/agents/:agentId/versions/:versionId/activate': PostStoredAgentsAgentIdVersionsVersionIdActivate_RouteContract;
   'POST /stored/agents/:agentId/versions/:versionId/restore': PostStoredAgentsAgentIdVersionsVersionIdRestore_RouteContract;
@@ -92596,6 +92632,9 @@ export interface Client {
   };
   '/stored/agents/:agentId/versions/compare': {
     GET: GetStoredAgentsAgentIdVersionsCompare_RouteContract;
+  };
+  '/stored/agents/:agentId/versions/unpublish': {
+    POST: PostStoredAgentsAgentIdVersionsUnpublish_RouteContract;
   };
   '/stored/agents/:storedAgentId': {
     DELETE: DeleteStoredAgentsStoredAgentId_RouteContract;
