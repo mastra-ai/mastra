@@ -73,6 +73,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'lifecycle-hooks-configured'
+  | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'

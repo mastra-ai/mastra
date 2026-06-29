@@ -331,8 +331,17 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 | `SessionStart` | When a session begins | No |
 | `SessionEnd` | When a session ends | No |
 | `Notification` | When the TUI fires a notification | No |
+| `AgentStart` | When an agent run begins | No |
+| `AgentEnd` | When an agent run ends (`complete`, `aborted`, `error`, or `suspended`) | No |
+| `PermissionRequest` | When a tool requires approval before running | No |
+| `PermissionResult` | When a user approves, declines, or dismisses a permission gate | No |
+| `Interrupt` | When a running run is aborted by the user, goal judge, or a process signal | No |
+| `SubagentStart` | When a subagent begins a delegated task | No |
+| `SubagentEnd` | When a subagent finishes its delegated task | No |
 
 `UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
+
+Only `PreToolUse`, `Stop`, and `UserPromptSubmit` can block agent behavior. The remaining events are non-blocking lifecycle signals for logging and integration.
 
 ### Hook I/O protocol
 
@@ -345,6 +354,23 @@ Hook processes receive a JSON payload on stdin with context about the event:
   "hook_event_name": "PreToolUse",
   "tool_name": "execute_command",
   "tool_input": { "command": "npm test" }
+}
+```
+
+During an active agent run, all hook payloads include a `run_id` that identifies the current run. The same `run_id` appears on `AgentStart`, tool hooks, `PermissionRequest`, `SubagentStart`, `SubagentEnd`, `AgentEnd`, and `Stop` for that run, so external integrations can correlate events. `Interrupt` and `PermissionResult` include `run_id` when a run is active.
+
+A `PermissionRequest` payload includes the tool and approval kind:
+
+```json
+{
+  "session_id": "thread-abc123",
+  "cwd": "/path/to/project",
+  "hook_event_name": "PermissionRequest",
+  "run_id": "run-uuid",
+  "permission_kind": "tool_approval",
+  "tool_call_id": "call-1",
+  "tool_name": "execute_command",
+  "tool_input": { "command": "rm -rf /" }
 }
 ```
 
