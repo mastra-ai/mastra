@@ -248,6 +248,32 @@ new Extractor({
 })
 ```
 
+### Working memory updates
+
+Use `observationalMemory.observation.manageWorkingMemory` when working memory should be managed automatically by the Observer. The main agent no longer needs to remember to call the working memory tool while it is handling the user request.
+
+This also keeps working memory prompt-cache friendly. Working memory normally lives in the system prompt, so updates can invalidate the prompt cache. OM-managed working memory defaults `workingMemory.useStateSignals` to `true`, which moves working memory into state signals instead.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+    observationalMemory: {
+      enabled: true,
+      observation: {
+        manageWorkingMemory: true,
+      },
+    },
+  },
+})
+```
+
+This setting adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true`. Set `workingMemory.agentManaged: true` if the main agent should still receive working memory tool and instruction injection.
+
 Use `onExtracted` to normalize or react to custom extracted values before they are persisted:
 
 ```typescript title="src/mastra/agents/agent.ts"

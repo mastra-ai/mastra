@@ -1,16 +1,22 @@
 ---
 '@mastra/memory': minor
-'@mastra/core': patch
+'@mastra/core': minor
 ---
 
-add working memory extractor and injectTools config
+add OM-managed working memory
 
-Adds a built-in WorkingMemoryExtractor for the observtional
-memory extractor pipeline. When included in observation or
-reflection config, the observer/reflector can update working
-memory through the normal extractor pipeline instead of
-requiring the main agent to call the working memory tool.
+Adds `observationalMemory.observation.manageWorkingMemory` so the Observer can update working memory automatically instead of requiring the main agent to call the working memory tool.
 
-Adds injectTools: boolean (default true) to BaseWorkingMemory.
-Set to false to prevent the working memory update tool from
-being injected into the main agent.
+```ts
+new Memory({
+  options: {
+    workingMemory: { enabled: true },
+    observationalMemory: {
+      enabled: true,
+      observation: { manageWorkingMemory: true },
+    },
+  },
+})
+```
+
+This option adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true` when working memory is enabled. Set `workingMemory.agentManaged: true` to keep the main agent's working memory tool and instructions enabled.

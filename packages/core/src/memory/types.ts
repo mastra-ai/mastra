@@ -197,13 +197,13 @@ type BaseWorkingMemory = {
    */
   useStateSignals?: boolean;
   /**
-   * Whether to inject the working memory update tool into the main agent.
+   * Whether the main agent manages working memory directly through tool/instruction injection.
    * Set to false when another path, such as Observational Memory extractors,
    * owns working memory updates.
    *
    * @default true
    */
-  injectTools?: boolean;
+  agentManaged?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };
@@ -443,6 +443,16 @@ export interface ObservationalMemoryObservationConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: AgentConfig['model'];
+
+  /**
+   * Manage working memory through Observational Memory extraction.
+   * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
+   * disable main-agent working memory management and add the WorkingMemoryExtractor.
+   * Set `workingMemory.agentManaged: true` to keep main-agent tools/instructions enabled.
+   *
+   * @default false
+   */
+  manageWorkingMemory?: boolean;
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -1329,6 +1339,9 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Manage working memory through Observational Memory extraction. */
+  manageWorkingMemory?: boolean;
+
   /** Token count threshold that triggers observation */
   messageTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */

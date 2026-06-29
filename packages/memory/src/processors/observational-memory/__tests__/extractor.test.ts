@@ -221,10 +221,10 @@ describe('Extractor', () => {
       workingMemory: '# User\n- Existing fact\n- New fact',
       memoryConfig: undefined,
     });
-    expect(result.values).toBeUndefined();
+    expect(result.values).toEqual({ 'working-memory': '# User\n- Existing fact\n- New fact' });
   });
 
-  it('merges JSON working memory updates from the working memory extractor', async () => {
+  it('replaces JSON working memory from the working memory extractor', async () => {
     const memory = {
       getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
       getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
@@ -242,6 +242,7 @@ describe('Extractor', () => {
     expect(resolved?.mode).toBe('structured');
     expect(resolved?.instructions).toContain('Working memory JSON schema:');
     expect(resolved?.schema.parse({ location: 'Toronto' })).toEqual({ location: 'Toronto' });
+    expect(resolved?.schema.parse(null)).toBeNull();
     expect(buildExtractorOutputSections([resolved!])).toBe('');
 
     const result = await applyExtractorHooks({
@@ -256,9 +257,37 @@ describe('Extractor', () => {
     expect(memory.updateWorkingMemory).toHaveBeenCalledWith({
       threadId: 'thread-1',
       resourceId: 'resource-1',
-      workingMemory: JSON.stringify({ name: 'Tyler', likes: ['dogs'], location: 'Toronto' }),
+      workingMemory: JSON.stringify({ location: 'Toronto' }),
       memoryConfig: undefined,
     });
+    expect(result.values).toEqual({ 'working-memory': { location: 'Toronto' } });
+  });
+
+  it('skips JSON working memory updates when the extractor returns null', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"name":"Tyler"}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const extractor = new WorkingMemoryExtractor();
+    const [resolved] = await resolveExtractors([extractor], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': null },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
     expect(result.values).toBeUndefined();
   });
 
