@@ -19,14 +19,14 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthGoogle } from '@mastra/auth-google'
 
 export const mastra = new Mastra({
-	server: {
-		auth: new MastraAuthGoogle({
-			clientId: process.env.GOOGLE_CLIENT_ID,
-			clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-			redirectUri: process.env.GOOGLE_REDIRECT_URI,
-			allowedDomains: ['example.com'],
-		}),
-	},
+  server: {
+    auth: new MastraAuthGoogle({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri: process.env.GOOGLE_REDIRECT_URI,
+      allowedDomains: ['example.com'],
+    }),
+  },
 })
 ```
 
@@ -40,99 +40,99 @@ You can omit the constructor parameters if you have the appropriately named envi
 
 <PropertiesTable
   content={[
-	{
-		name: 'clientId',
-		type: 'string',
-		description: 'Google OAuth client ID.',
-		isOptional: true,
-		defaultValue: 'process.env.GOOGLE_CLIENT_ID',
-	},
-	{
-		name: 'clientSecret',
-		type: 'string',
-		description: 'Google OAuth client secret. Required for Studio SSO.',
-		isOptional: true,
-		defaultValue: 'process.env.GOOGLE_CLIENT_SECRET',
-	},
-	{
-		name: 'redirectUri',
-		type: 'string',
-		description:
-			'OAuth redirect URI for the SSO callback. Must match the redirect URI configured in your Google Cloud OAuth client.',
-		isOptional: true,
-		defaultValue: 'process.env.GOOGLE_REDIRECT_URI',
-	},
-	{
-		name: 'scopes',
-		type: 'string[]',
-		description: 'OAuth scopes requested during the login flow.',
-		isOptional: true,
-		defaultValue: "['openid', 'profile', 'email']",
-	},
-	{
-		name: 'allowedDomains',
-		type: 'string | string[]',
-		description: 'Allowed Google Workspace hosted domains. Mastra validates these against the verified `hd` claim.',
-		isOptional: true,
-		defaultValue: 'process.env.GOOGLE_ALLOWED_DOMAINS',
-	},
-	{
-		name: 'hostedDomain',
-		type: 'string',
-		description:
-			'Hosted-domain login hint passed to Google as `hd`. This is a hint only and is not used for authorization.',
-		isOptional: true,
-		defaultValue: 'process.env.GOOGLE_HOSTED_DOMAIN or the single allowed domain',
-	},
-	{
-		name: 'session',
-		type: 'GoogleSessionOptions',
-		description: 'Session cookie configuration.',
-		isOptional: true,
-		properties: [
-			{
-				type: 'GoogleSessionOptions',
-				parameters: [
-					{
-						name: 'cookieName',
-						type: 'string',
-						description: 'Name of the session cookie.',
-						isOptional: true,
-						defaultValue: "'google_session'",
-					},
-					{
-						name: 'cookieMaxAge',
-						type: 'number',
-						description: 'Cookie max age in seconds.',
-						isOptional: true,
-						defaultValue: '86400 (24 hours)',
-					},
-					{
-						name: 'cookiePassword',
-						type: 'string',
-						description:
-							'Password for encrypting session cookies. Must be at least 32 characters. If not set, an auto-generated value is used in development that does not survive restarts.',
-						isOptional: true,
-						defaultValue: 'process.env.GOOGLE_COOKIE_PASSWORD',
-					},
-					{
-						name: 'secureCookies',
-						type: 'boolean',
-						description: 'Set the `Secure` flag on session cookies.',
-						isOptional: true,
-						defaultValue: 'true in production, false otherwise',
-					},
-				],
-			},
-		],
-	},
-	{
-		name: 'name',
-		type: 'string',
-		description: 'Custom name for the auth provider instance.',
-		isOptional: true,
-		defaultValue: "'google'",
-	},
+  {
+    name: 'clientId',
+    type: 'string',
+    description: 'Google OAuth client ID.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_CLIENT_ID',
+  },
+  {
+    name: 'clientSecret',
+    type: 'string',
+    description: 'Google OAuth client secret. Required for Studio SSO.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_CLIENT_SECRET',
+  },
+  {
+    name: 'redirectUri',
+    type: 'string',
+    description:
+      'OAuth redirect URI for the SSO callback. Must match the redirect URI configured in your Google Cloud OAuth client.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_REDIRECT_URI',
+  },
+  {
+    name: 'scopes',
+    type: 'string[]',
+    description: 'OAuth scopes requested during the login flow.',
+    isOptional: true,
+    defaultValue: "['openid', 'profile', 'email']",
+  },
+  {
+    name: 'allowedDomains',
+    type: 'string | string[]',
+    description: 'Allowed Google Workspace hosted domains. Mastra validates these against the verified `hd` claim.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_ALLOWED_DOMAINS',
+  },
+  {
+    name: 'hostedDomain',
+    type: 'string',
+    description:
+      'Hosted-domain login hint passed to Google as `hd`. This is a hint only and is not used for authorization.',
+    isOptional: true,
+    defaultValue: 'process.env.GOOGLE_HOSTED_DOMAIN or the single allowed domain',
+  },
+  {
+    name: 'session',
+    type: 'GoogleSessionOptions',
+    description: 'Session cookie configuration.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'GoogleSessionOptions',
+        parameters: [
+          {
+            name: 'cookieName',
+            type: 'string',
+            description: 'Name of the session cookie.',
+            isOptional: true,
+            defaultValue: "'google_session'",
+          },
+          {
+            name: 'cookieMaxAge',
+            type: 'number',
+            description: 'Cookie max age in seconds.',
+            isOptional: true,
+            defaultValue: '86400 (24 hours)',
+          },
+          {
+            name: 'cookiePassword',
+            type: 'string',
+            description:
+              'Password for encrypting session cookies. Must be at least 32 characters. If not set, an auto-generated value is used in development that does not survive restarts.',
+            isOptional: true,
+            defaultValue: 'process.env.GOOGLE_COOKIE_PASSWORD',
+          },
+          {
+            name: 'secureCookies',
+            type: 'boolean',
+            description: 'Set the `Secure` flag on session cookies.',
+            isOptional: true,
+            defaultValue: 'true in production, false otherwise',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: "'google'",
+  },
 ]}
 />
 
@@ -142,41 +142,41 @@ The following environment variables are automatically used when constructor opti
 
 <PropertiesTable
   content={[
-	{
-		name: 'GOOGLE_CLIENT_ID',
-		type: 'string',
-		description: 'Google OAuth client ID from your Google Cloud OAuth client.',
-	},
-	{
-		name: 'GOOGLE_CLIENT_SECRET',
-		type: 'string',
-		description: 'Google OAuth client secret. Required for the SSO authorization code flow.',
-		isOptional: true,
-	},
-	{
-		name: 'GOOGLE_REDIRECT_URI',
-		type: 'string',
-		description: 'OAuth redirect URI for the SSO callback.',
-		isOptional: true,
-	},
-	{
-		name: 'GOOGLE_COOKIE_PASSWORD',
-		type: 'string',
-		description: 'Password for encrypting session cookies. Must be at least 32 characters.',
-		isOptional: true,
-	},
-	{
-		name: 'GOOGLE_ALLOWED_DOMAINS',
-		type: 'string',
-		description: 'Comma-separated Google Workspace hosted domains to allow.',
-		isOptional: true,
-	},
-	{
-		name: 'GOOGLE_HOSTED_DOMAIN',
-		type: 'string',
-		description: 'Hosted-domain login hint passed to Google during SSO login.',
-		isOptional: true,
-	},
+  {
+    name: 'GOOGLE_CLIENT_ID',
+    type: 'string',
+    description: 'Google OAuth client ID from your Google Cloud OAuth client.',
+  },
+  {
+    name: 'GOOGLE_CLIENT_SECRET',
+    type: 'string',
+    description: 'Google OAuth client secret. Required for the SSO authorization code flow.',
+    isOptional: true,
+  },
+  {
+    name: 'GOOGLE_REDIRECT_URI',
+    type: 'string',
+    description: 'OAuth redirect URI for the SSO callback.',
+    isOptional: true,
+  },
+  {
+    name: 'GOOGLE_COOKIE_PASSWORD',
+    type: 'string',
+    description: 'Password for encrypting session cookies. Must be at least 32 characters.',
+    isOptional: true,
+  },
+  {
+    name: 'GOOGLE_ALLOWED_DOMAINS',
+    type: 'string',
+    description: 'Comma-separated Google Workspace hosted domains to allow.',
+    isOptional: true,
+  },
+  {
+    name: 'GOOGLE_HOSTED_DOMAIN',
+    type: 'string',
+    description: 'Hosted-domain login hint passed to Google during SSO login.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -237,58 +237,58 @@ The `GoogleUser` type extends the base `EEUser` interface with Google-specific f
 
 <PropertiesTable
   content={[
-	{
-		name: 'id',
-		type: 'string',
-		description: 'Mastra user ID. Uses the Google `sub` claim.',
-	},
-	{
-		name: 'googleId',
-		type: 'string',
-		description: 'Google Account subject identifier.',
-	},
-	{
-		name: 'email',
-		type: 'string',
-		description: 'User email address.',
-		isOptional: true,
-	},
-	{
-		name: 'name',
-		type: 'string',
-		description: 'User display name from Google profile claims.',
-		isOptional: true,
-	},
-	{
-		name: 'avatarUrl',
-		type: 'string',
-		description: "URL to the user's Google profile picture.",
-		isOptional: true,
-	},
-	{
-		name: 'hostedDomain',
-		type: 'string',
-		description: 'Google Workspace hosted domain from the verified `hd` claim.',
-		isOptional: true,
-	},
-	{
-		name: 'expiresAt',
-		type: 'Date',
-		description: 'Verified ID token expiration time, when available.',
-		isOptional: true,
-	},
-	{
-		name: 'emailVerified',
-		type: 'boolean',
-		description: 'Whether Google reports the email address as verified.',
-		isOptional: true,
-	},
-	{
-		name: 'groups',
-		type: 'string[]',
-		description: 'Optional pre-resolved Google Workspace group role IDs.',
-		isOptional: true,
-	},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Mastra user ID. Uses the Google `sub` claim.',
+  },
+  {
+    name: 'googleId',
+    type: 'string',
+    description: 'Google Account subject identifier.',
+  },
+  {
+    name: 'email',
+    type: 'string',
+    description: 'User email address.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'User display name from Google profile claims.',
+    isOptional: true,
+  },
+  {
+    name: 'avatarUrl',
+    type: 'string',
+    description: "URL to the user's Google profile picture.",
+    isOptional: true,
+  },
+  {
+    name: 'hostedDomain',
+    type: 'string',
+    description: 'Google Workspace hosted domain from the verified `hd` claim.',
+    isOptional: true,
+  },
+  {
+    name: 'expiresAt',
+    type: 'Date',
+    description: 'Verified ID token expiration time, when available.',
+    isOptional: true,
+  },
+  {
+    name: 'emailVerified',
+    type: 'boolean',
+    description: 'Whether Google reports the email address as verified.',
+    isOptional: true,
+  },
+  {
+    name: 'groups',
+    type: 'string[]',
+    description: 'Optional pre-resolved Google Workspace group role IDs.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -311,22 +311,22 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthGoogle, MastraRBACGoogle } from '@mastra/auth-google'
 
 export const mastra = new Mastra({
-	server: {
-		auth: new MastraAuthGoogle(),
-		rbac: new MastraRBACGoogle({
-			serviceAccount: {
-				clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
-				privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
-				subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
-			},
-			roleMapping: {
-				'admins@example.com': ['*'],
-				'engineering@example.com': ['agents:*', 'workflows:*', 'tools:*'],
-				'viewers@example.com': ['agents:read', 'workflows:read'],
-				_default: [],
-			},
-		}),
-	},
+  server: {
+    auth: new MastraAuthGoogle(),
+    rbac: new MastraRBACGoogle({
+      serviceAccount: {
+        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+        privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+        subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+      },
+      roleMapping: {
+        'admins@example.com': ['*'],
+        'engineering@example.com': ['agents:*', 'workflows:*', 'tools:*'],
+        'viewers@example.com': ['agents:read', 'workflows:read'],
+        _default: [],
+      },
+    }),
+  },
 })
 ```
 
@@ -338,22 +338,22 @@ import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 import { MastraRBACGoogle } from '@mastra/auth-google'
 
 export const mastra = new Mastra({
-	server: {
-		auth: new MastraAuthAuth0(),
-		rbac: new MastraRBACGoogle({
-			getUserKey: user => user.email,
-			serviceAccount: {
-				clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
-				privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
-				subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
-			},
-			roleMapping: {
-				'engineering@example.com': ['agents:*', 'workflows:*'],
-				'admins@example.com': ['*'],
-				_default: [],
-			},
-		}),
-	},
+  server: {
+    auth: new MastraAuthAuth0(),
+    rbac: new MastraRBACGoogle({
+      getUserKey: user => user.email,
+      serviceAccount: {
+        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
+        privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+        subject: process.env.GOOGLE_WORKSPACE_ADMIN_EMAIL!,
+      },
+      roleMapping: {
+        'engineering@example.com': ['agents:*', 'workflows:*'],
+        'admins@example.com': ['*'],
+        _default: [],
+      },
+    }),
+  },
 })
 ```
 
@@ -361,106 +361,106 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-	{
-		name: 'roleMapping',
-		type: 'RoleMapping',
-		description:
-			"Maps Google Workspace group role IDs to arrays of Mastra permission strings. Use `'_default'` to assign permissions to users who do not match any group. Supports wildcards like `'*'` (full access) and `'agents:*'` (all agent actions).",
-		isOptional: false,
-	},
-	{
-		name: 'accessToken',
-		type: 'string',
-		description: 'Pre-obtained Workspace Directory API access token.',
-		isOptional: true,
-	},
-	{
-		name: 'getAccessToken',
-		type: '() => Promise<string> | string',
-		description: 'Callback that returns a Workspace Directory API access token.',
-		isOptional: true,
-	},
-	{
-		name: 'serviceAccount',
-		type: 'GoogleWorkspaceServiceAccount',
-		description: 'Service account credentials for domain-wide delegated Directory API access.',
-		isOptional: true,
-		properties: [
-			{
-				type: 'GoogleWorkspaceServiceAccount',
-				parameters: [
-					{
-						name: 'clientEmail',
-						type: 'string',
-						description: 'Google service account email.',
-					},
-					{
-						name: 'privateKey',
-						type: 'string',
-						description: 'PEM-encoded private key. Escaped `\\n` values from .env files are supported.',
-					},
-					{
-						name: 'privateKeyId',
-						type: 'string',
-						description: 'Optional private key ID.',
-						isOptional: true,
-					},
-					{
-						name: 'subject',
-						type: 'string',
-						description: 'Workspace administrator user to impersonate with domain-wide delegation.',
-						isOptional: true,
-					},
-					{
-						name: 'scopes',
-						type: 'string[]',
-						description: 'OAuth scopes for the service account token.',
-						isOptional: true,
-						defaultValue: "['https://www.googleapis.com/auth/admin.directory.group.readonly']",
-					},
-				],
-			},
-		],
-	},
-	{
-		name: 'getUserKey',
-		type: '(user: unknown) => string | undefined',
-		description: 'Extract the Directory API `userKey` from an authenticated user. Defaults to `user.email`.',
-		isOptional: true,
-	},
-	{
-		name: 'mapGroupToRoles',
-		type: '(group: GoogleWorkspaceGroup) => string[]',
-		description: 'Map a Google Workspace group to role IDs. Defaults to `[group.email]`.',
-		isOptional: true,
-	},
-	{
-		name: 'cache',
-		type: 'PermissionCacheOptions',
-		description: 'Configure the LRU cache for group lookups.',
-		isOptional: true,
-		properties: [
-			{
-				type: 'PermissionCacheOptions',
-				parameters: [
-					{
-						name: 'maxSize',
-						type: 'number',
-						description: 'Maximum number of users to cache.',
-						isOptional: true,
-						defaultValue: '1000',
-					},
-					{
-						name: 'ttlMs',
-						type: 'number',
-						description: 'Time-to-live in milliseconds.',
-						isOptional: true,
-						defaultValue: '60000',
-					},
-				],
-			},
-		],
-	},
+  {
+    name: 'roleMapping',
+    type: 'RoleMapping',
+    description:
+      "Maps Google Workspace group role IDs to arrays of Mastra permission strings. Use `'_default'` to assign permissions to users who do not match any group. Supports wildcards like `'*'` (full access) and `'agents:*'` (all agent actions).",
+    isOptional: false,
+  },
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Pre-obtained Workspace Directory API access token.',
+    isOptional: true,
+  },
+  {
+    name: 'getAccessToken',
+    type: '() => Promise<string> | string',
+    description: 'Callback that returns a Workspace Directory API access token.',
+    isOptional: true,
+  },
+  {
+    name: 'serviceAccount',
+    type: 'GoogleWorkspaceServiceAccount',
+    description: 'Service account credentials for domain-wide delegated Directory API access.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'GoogleWorkspaceServiceAccount',
+        parameters: [
+          {
+            name: 'clientEmail',
+            type: 'string',
+            description: 'Google service account email.',
+          },
+          {
+            name: 'privateKey',
+            type: 'string',
+            description: 'PEM-encoded private key. Escaped `\\n` values from .env files are supported.',
+          },
+          {
+            name: 'privateKeyId',
+            type: 'string',
+            description: 'Optional private key ID.',
+            isOptional: true,
+          },
+          {
+            name: 'subject',
+            type: 'string',
+            description: 'Workspace administrator user to impersonate with domain-wide delegation.',
+            isOptional: true,
+          },
+          {
+            name: 'scopes',
+            type: 'string[]',
+            description: 'OAuth scopes for the service account token.',
+            isOptional: true,
+            defaultValue: "['https://www.googleapis.com/auth/admin.directory.group.readonly']",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'getUserKey',
+    type: '(user: unknown) => string | undefined',
+    description: 'Extract the Directory API `userKey` from an authenticated user. Defaults to `user.email`.',
+    isOptional: true,
+  },
+  {
+    name: 'mapGroupToRoles',
+    type: '(group: GoogleWorkspaceGroup) => string[]',
+    description: 'Map a Google Workspace group to role IDs. Defaults to `[group.email]`.',
+    isOptional: true,
+  },
+  {
+    name: 'cache',
+    type: 'PermissionCacheOptions',
+    description: 'Configure the LRU cache for group lookups.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'PermissionCacheOptions',
+        parameters: [
+          {
+            name: 'maxSize',
+            type: 'number',
+            description: 'Maximum number of users to cache.',
+            isOptional: true,
+            defaultValue: '1000',
+          },
+          {
+            name: 'ttlMs',
+            type: 'number',
+            description: 'Time-to-live in milliseconds.',
+            isOptional: true,
+            defaultValue: '60000',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 

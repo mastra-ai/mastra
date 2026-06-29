@@ -357,11 +357,11 @@ import { Mastra } from '@mastra/core'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
 
 export const mastra = new Mastra({
-	agents: { agent },
-	pubsub: new RedisStreamsPubSub({
-		url: process.env.REDIS_URL,
-		keyPrefix: 'mastra:my-app',
-	}),
+  agents: { agent },
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL,
+    keyPrefix: 'mastra:my-app',
+  }),
 })
 ```
 

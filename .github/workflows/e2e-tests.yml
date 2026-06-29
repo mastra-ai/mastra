@@ -216,7 +216,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     permissions:
       contents: read
     env:
@@ -234,7 +234,17 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Build
-        run: pnpm build
+        run: >-
+          pnpm turbo
+          --filter "@mastra/core"
+          --filter "mastra"
+          --filter "@mastra/editor"
+          --filter "@mastra/memory"
+          --filter "@mastra/libsql"
+          --filter "@mastra/loggers"
+          --filter "@mastra/mcp"
+          --filter "@internal/playground"
+          build
 
       - name: Setup e2e project dependencies
         working-directory: ./packages/playground

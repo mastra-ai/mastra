@@ -1,4 +1,4 @@
-- navigation:
+- navigation "Breadcrumb":
     - list:
         - listitem:
             - link "Agents":

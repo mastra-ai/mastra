@@ -22,10 +22,10 @@ import { Mastra } from '@mastra/core'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
 
 export const mastra = new Mastra({
-	// RedisStreamsPubSub implements both PubSub and LeaseProvider
-	pubsub: new RedisStreamsPubSub({
-		url: process.env.REDIS_URL,
-	}),
+  // RedisStreamsPubSub implements both PubSub and LeaseProvider
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL,
+  }),
 })
 ```
 
@@ -36,12 +36,12 @@ import { PubSub } from '@mastra/core/events'
 import type { LeaseProvider } from '@mastra/core/events'
 
 export class CustomPubSub extends PubSub implements LeaseProvider {
-	async acquireLease(key: string, owner: string, ttlMs: number) {
-		// Atomically claim the lease, or report the current holder.
-		return { acquired: true, owner }
-	}
+  async acquireLease(key: string, owner: string, ttlMs: number) {
+    // Atomically claim the lease, or report the current holder.
+    return { acquired: true, owner }
+  }
 
-	// ...getLeaseOwner, releaseLease, renewLease, transferLease
+  // ...getLeaseOwner, releaseLease, renewLease, transferLease
 }
 ```
 
@@ -57,9 +57,9 @@ Atomically tries to acquire a lease on a key. Returns `{ acquired: true, owner }
 const result = await pubsub.acquireLease('thread:abc', runId, 15000)
 
 if (result.acquired) {
-	// This process owns the thread, so wake and run the agent.
+  // This process owns the thread, so wake and run the agent.
 } else {
-	// result.owner holds the lease, so route the signal to them.
+  // result.owner holds the lease, so route the signal to them.
 }
 ```
 
@@ -67,22 +67,22 @@ Returns: `Promise<{ acquired: boolean; owner?: string }>`
 
 <PropertiesTable
   content={[
-	{
-		name: 'key',
-		type: 'string',
-		description: 'The lease key, such as a thread key.',
-	},
-	{
-		name: 'owner',
-		type: 'string',
-		description:
-			'Identifier for the owner, such as a `runId`. The same owner can call `acquireLease` idempotently to renew or release.',
-	},
-	{
-		name: 'ttlMs',
-		type: 'number',
-		description: 'Time-to-live in milliseconds for the lease.',
-	},
+  {
+    name: 'key',
+    type: 'string',
+    description: 'The lease key, such as a thread key.',
+  },
+  {
+    name: 'owner',
+    type: 'string',
+    description:
+      'Identifier for the owner, such as a `runId`. The same owner can call `acquireLease` idempotently to renew or release.',
+  },
+  {
+    name: 'ttlMs',
+    type: 'number',
+    description: 'Time-to-live in milliseconds for the lease.',
+  },
 ]}
 />
 
@@ -114,7 +114,7 @@ Renews an existing lease owned by `owner`, extending its TTL. Returns `true` if 
 const stillOwned = await pubsub.renewLease('thread:abc', runId, 15000)
 
 if (!stillOwned) {
-	// Lost the lease, so stop renewing and let the new owner take over.
+  // Lost the lease, so stop renewing and let the new owner take over.
 }
 ```
 
@@ -130,8 +130,8 @@ Returns `true` if `fromOwner` still held the lease and ownership moved to `toOwn
 const transferred = await pubsub.transferLease('thread:abc', currentRunId, nextRunId, 15000)
 
 if (!transferred) {
-	// Lease was lost, so acquire fresh instead.
-	await pubsub.acquireLease('thread:abc', nextRunId, 15000)
+  // Lease was lost, so acquire fresh instead.
+  await pubsub.acquireLease('thread:abc', nextRunId, 15000)
 }
 ```
 
