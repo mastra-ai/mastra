@@ -139,6 +139,26 @@ describe('validateConfig', () => {
     }
   });
 
+  it('expands ${VAR} references in stdio env values from the environment', () => {
+    const previous = process.env.MC_TEST_MCP_KEY;
+    process.env.MC_TEST_MCP_KEY = 'secret-123';
+    try {
+      const result = validateConfig({
+        mcpServers: {
+          fs: { command: 'npx', args: ['-y', 'mcp-fs'], env: { API_KEY: '${MC_TEST_MCP_KEY}' } },
+        },
+      });
+      expect(result.mcpServers!['fs']).toEqual({
+        command: 'npx',
+        args: ['-y', 'mcp-fs'],
+        env: { API_KEY: 'secret-123' },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.MC_TEST_MCP_KEY;
+      else process.env.MC_TEST_MCP_KEY = previous;
+    }
+  });
+
   it('accepts http server entry with OAuth config', () => {
     const result = validateConfig({
       mcpServers: {
