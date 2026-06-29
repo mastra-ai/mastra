@@ -1,0 +1,68 @@
+---
+title: "Reference: Scavio tools | Tools & MCP"
+description: "API reference for @mastra/scavio, which provides real-time Google, YouTube, Amazon, Walmart, Reddit, TikTok, and Instagram search tools for Mastra agents."
+packages:
+  - "@mastra/scavio"
+---
+
+# Scavio tools
+
+The `@mastra/scavio` package wraps the [Scavio](https://scavio.dev) search API as Mastra-compatible tools. Scavio is a real-time, multi-platform search API for AI agents. The package exposes factory functions for Google, YouTube, Amazon, Walmart, Reddit, TikTok, and Instagram — each returning a tool created with [`createTool()`](./create-tool) with Zod input/output schemas.
+
+## Installation
+
+```sh npm2yarn
+npm install @mastra/scavio scavio zod
+```
+
+## Quick start
+
+Use `createScavioTools()` to get all tools with shared configuration:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createScavioTools } from '@mastra/scavio'
+
+const tools = createScavioTools()
+// Or pass an explicit API key:
+// const tools = createScavioTools({ apiKey: 'sk_...' })
+```
+
+Each tool can also be created individually:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createScavioGoogleSearchTool, createScavioRedditSearchTool } from '@mastra/scavio'
+
+const googleSearch = createScavioGoogleSearchTool()
+const redditSearch = createScavioRedditSearchTool({ apiKey: 'sk_...' })
+```
+
+By default, all tools read `SCAVIO_API_KEY` from the environment. You can pass `{ apiKey }` explicitly to override. Get a key at the [Scavio Dashboard](https://dashboard.scavio.dev).
+
+## Configuration
+
+All factory functions accept `ScavioClientOptions`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Scavio API key. Falls back to the `SCAVIO_API_KEY` environment variable.',
+    isOptional: true,
+  },
+  ]}
+/>
+
+## Tools
+
+`createScavioTools()` returns the following tools:
+
+- `scavioGoogleSearch` — Google web search
+- `scavioAmazonSearch`, `scavioAmazonProduct` — Amazon search and product lookup
+- `scavioWalmartSearch`, `scavioWalmartProduct` — Walmart search and product lookup
+- `scavioYoutubeSearch`, `scavioYoutubeMetadata` — YouTube search and video metadata
+- `scavioRedditSearch`, `scavioRedditPost` — Reddit search and post lookup
+- `scavioTiktokSearch`, `scavioTiktokProfile` — TikTok video search and profile lookup
+- `scavioInstagramSearch`, `scavioInstagramProfile` — Instagram user search and profile lookup
+
+Each tool returns the structured Scavio JSON response. The full Scavio API is also available via the [`scavio`](https://www.npmjs.com/package/scavio) SDK or the [Scavio MCP server](https://scavio.dev/docs).
