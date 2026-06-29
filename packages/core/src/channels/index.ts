@@ -30,6 +30,7 @@ export type {
   StaticToolDisplay,
   StreamingConfig,
   StreamingOnlyToolDisplay,
+  TextDisplay,
   ThreadHistoryMessage,
   ToolDisplay,
   ToolDisplayContext,

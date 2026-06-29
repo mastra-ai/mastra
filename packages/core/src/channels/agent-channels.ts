@@ -44,6 +44,7 @@ import type {
   PostableMessage,
   ResolveResourceId,
   StreamingConfig,
+  TextDisplay,
   ThreadHistoryMessage,
   ToolDisplay,
   ToolDisplayFn,
@@ -1134,6 +1135,7 @@ export class AgentChannels {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const streaming = this.resolveStreaming(adapterConfig?.streaming);
+    const textDisplay = this.resolveTextDisplay(adapterConfig);
     const { resolved: toolDisplay, fn: toolDisplayFn } = this.resolveToolDisplay(
       platform,
       adapterConfig?.toolDisplay,
@@ -1159,6 +1161,7 @@ export class AgentChannels {
       chatThread,
       platform,
       streaming,
+      textDisplay,
       toolDisplay,
       toolDisplayFn,
       channelToolNames: this.channelToolNames,
@@ -1230,6 +1233,16 @@ export class AgentChannels {
     if (raw === undefined || raw === false) return { enabled: false };
     if (raw === true) return { enabled: true, options: {} };
     return { enabled: true, options: raw };
+  }
+
+  /**
+   * Resolve the per-adapter `textDisplay` option, defaulting to `'progressive'`
+   * (post text as the run produces it — prior behavior). The legacy config
+   * branch has no `textDisplay`, so omitted/legacy adapters get the default.
+   */
+  private resolveTextDisplay(adapterConfig: ChannelAdapterConfig | undefined): TextDisplay {
+    const textDisplay = (adapterConfig as { textDisplay?: TextDisplay } | undefined)?.textDisplay;
+    return textDisplay ?? 'progressive';
   }
 
   /**

@@ -9,7 +9,7 @@ import type { AgentChannels } from './agent-channels';
 import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
 import type { PendingApprovalRecord } from './stream-helpers';
-import type { ToolDisplay, ToolDisplayFn } from './types';
+import type { TextDisplay, ToolDisplay, ToolDisplayFn } from './types';
 
 /**
  * Per-run render dependencies stashed onto `requestContext` by
@@ -28,6 +28,8 @@ export interface ChatChannelRenderContext {
   chatThread: Thread;
   platform: string;
   streaming: { enabled: boolean; options?: { updateIntervalMs?: number } };
+  /** When the agent's text output is posted. See {@link TextDisplay}. */
+  textDisplay: TextDisplay;
   toolDisplay: ToolDisplay;
   toolDisplayFn?: ToolDisplayFn;
   channelToolNames: Set<string>;
@@ -247,8 +249,13 @@ export class ChatChannelOutputProcessor {
       });
     }
 
+    // `textDisplay: 'final'` is inherently non-streaming for text — it
+    // accumulates and posts once. Route it through the static driver even when
+    // `streaming` is enabled (tool display then also renders statically).
+    const useStreaming = render.streaming.enabled && render.textDisplay !== 'final';
+
     const driverPromise = (
-      render.streaming.enabled
+      useStreaming
         ? runStreamingDriver({
             stream: wrapped,
             chatThread: render.chatThread,
@@ -268,7 +275,14 @@ export class ChatChannelOutputProcessor {
             stream: wrapped,
             chatThread: render.chatThread,
             adapter: render.adapter,
-            toolDisplay: render.toolDisplay as 'cards' | 'text' | 'hidden',
+            // The static driver only renders `'cards' | 'text' | 'hidden'`. When
+            // a streaming adapter is forced static by `textDisplay: 'final'`, its
+            // streaming-only tool modes (`'timeline'`/`'grouped'`) have no Plan to
+            // render into, so coerce them to `'cards'`.
+            toolDisplay:
+              render.toolDisplay === 'timeline' || render.toolDisplay === 'grouped'
+                ? 'cards'
+                : (render.toolDisplay as 'cards' | 'text' | 'hidden'),
             toolDisplayFn: render.toolDisplayFn,
             channelToolNames: render.channelToolNames,
             logger: render.logger,
@@ -276,6 +290,7 @@ export class ChatChannelOutputProcessor {
             getPendingApproval: render.getPendingApproval,
             takePendingApproval: render.takePendingApproval,
             formatError: render.formatError,
+            textDisplay: render.textDisplay,
           })
     ).catch(err => {
       // Prevent unhandled rejection if the driver fails before a terminal chunk

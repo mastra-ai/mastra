@@ -188,6 +188,18 @@ export type ToolDisplayResult =
 export type StreamingConfig = boolean | { updateIntervalMs?: number };
 
 /**
+ * When the agent's text output is posted to the channel.
+ *
+ * - `'progressive'` — post text as the run produces it: one message per
+ *   contiguous text block (static), or a live-updating message (streaming).
+ *   This is the default and matches prior behavior.
+ * - `'final'` — accumulate all text across the run and post it once, when the
+ *   run ends. Inherently non-streaming: selecting `'final'` renders text
+ *   statically even if `streaming` is enabled for tool display.
+ */
+export type TextDisplay = 'progressive' | 'final';
+
+/**
  * `toolDisplay` modes that need a live streaming session (`StreamingPlan`) to
  * render. Only valid when `streaming: true | { ... }`.
  */
@@ -209,6 +221,11 @@ export interface ChannelAdapterStaticConfig extends ChannelAdapterBaseConfig {
   streaming?: false;
   /** See {@link ToolDisplay} for mode descriptions. */
   toolDisplay?: StaticToolDisplay;
+  /**
+   * When the agent's text output is posted to the channel. See {@link TextDisplay}.
+   * @default 'progressive'
+   */
+  textDisplay?: TextDisplay;
   cards?: never;
   formatToolCall?: never;
 }
@@ -223,6 +240,13 @@ export interface ChannelAdapterStreamingConfig extends ChannelAdapterBaseConfig 
   streaming: Exclude<StreamingConfig, false>;
   /** See {@link ToolDisplay} for mode descriptions. */
   toolDisplay?: ToolDisplay;
+  /**
+   * When the agent's text output is posted to the channel. See {@link TextDisplay}.
+   * `'final'` renders text statically (accumulate-and-post-once) even though
+   * `streaming` is enabled — tool display still streams.
+   * @default 'progressive'
+   */
+  textDisplay?: TextDisplay;
   cards?: never;
   formatToolCall?: never;
 }
