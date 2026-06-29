@@ -510,15 +510,42 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
+    if (ids) {
+      if (ids.length === 0) return;
+      indexName = normalizeIndexName(indexName);
+      try {
+        await this.client.send(
+          new DeleteVectorsCommand({
+            ...this.bucketParams(),
+            indexName,
+            keys: ids,
+          }),
+        );
+        return;
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+              idsCount: ids.length,
+            },
+          },
+          error,
+        );
+      }
+    }
+
     throw new MastraError({
       id: createVectorErrorId('S3VECTORS', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for S3Vectors vector store',
+      text: 'deleteVectors by filter is not yet implemented for S3Vectors vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       details: {
         indexName,
         ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
       },
     });
   }

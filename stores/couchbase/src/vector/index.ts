@@ -507,15 +507,47 @@ export class CouchbaseVector extends MastraVector {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
+    if (ids) {
+      if (ids.length === 0) return;
+      try {
+        const collection = await this.getCollection();
+        // Process in chunks to avoid saturating the KV client
+        const BATCH_SIZE = 50;
+        for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+          const chunk = ids.slice(i, i + BATCH_SIZE);
+          const promises = chunk.map(id =>
+            collection.remove(id).catch((err: any) => {
+              // Ignore document not found errors for bulk deletion to be idempotent
+              if (err.code === 13 || err.message?.includes('document not found')) {
+                return;
+              }
+              throw err;
+            }),
+          );
+          await Promise.all(promises);
+        }
+        return;
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { indexName, idsCount: ids.length },
+          },
+          error,
+        );
+      }
+    }
+
     throw new MastraError({
       id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for Couchbase vector store',
+      text: 'deleteVectors by filter is not yet implemented for Couchbase vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       details: {
         indexName,
         ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
       },
     });
   }

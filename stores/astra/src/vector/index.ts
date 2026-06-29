@@ -354,15 +354,33 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
+    if (ids) {
+      if (ids.length === 0) return;
+      try {
+        const collection = this.#db.collection(indexName);
+        await collection.deleteMany({ id: { $in: ids } });
+        return;
+      } catch (error: any) {
+        throw new MastraError(
+          {
+            id: createVectorErrorId('ASTRA', 'DELETE_VECTORS', 'FAILED'),
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { indexName, idsCount: ids.length },
+          },
+          error,
+        );
+      }
+    }
+
     throw new MastraError({
       id: createVectorErrorId('ASTRA', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for Astra vector store',
+      text: 'deleteVectors by filter is not yet implemented for Astra vector store',
       domain: ErrorDomain.MASTRA_VECTOR,
       category: ErrorCategory.SYSTEM,
       details: {
         indexName,
         ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
       },
     });
   }

@@ -387,15 +387,35 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
+    if (ids) {
+      if (ids.length === 0) return;
+      try {
+        await this.client.vectorize.indexes.deleteByIds(indexName, {
+          ids,
+          account_id: this.accountId,
+        });
+        return;
+      } catch (error) {
+        throw new MastraError(
+          {
+            id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { indexName, idsCount: ids.length },
+          },
+          error,
+        );
+      }
+    }
+
     throw new MastraError({
       id: createVectorErrorId('VECTORIZE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for Vectorize vector store',
+      text: 'deleteVectors by filter is not yet implemented for Vectorize vector store',
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.SYSTEM,
       details: {
         indexName,
         ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
       },
     });
   }
