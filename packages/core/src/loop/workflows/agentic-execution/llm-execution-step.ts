@@ -64,6 +64,7 @@ import {
   TOOL_PAYLOAD_TRANSFORM_KEY,
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
+import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -1164,24 +1165,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             model: currentStep.model,
           });
 
-          // Resolve supportedUrls - it may be a Promise (e.g., from ModelRouterLanguageModel)
-          // This allows providers like Mistral to expose their native URL support for PDFs
-          // See: https://github.com/mastra-ai/mastra/issues/12152
-          let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
-          const modelSupportedUrls = currentStep.model?.supportedUrls;
-          if (modelSupportedUrls) {
-            if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
-              resolvedSupportedUrls = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
-            } else {
-              resolvedSupportedUrls = modelSupportedUrls as Record<string, RegExp[]>;
-            }
-          }
-
-          const messageListPromptArgs = {
+          const messageListPromptArgs = await buildLlmPromptArgs({
+            model: currentStep.model,
             downloadRetries,
             downloadConcurrency,
-            supportedUrls: resolvedSupportedUrls,
-          };
+          });
           const llmPromptForModel =
             currentStep.model?.specificationVersion === 'v3' || currentStep.model?.specificationVersion === 'v4'
               ? messageList.get.all.aiV6.llmPrompt

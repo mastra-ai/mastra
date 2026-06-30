@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
+import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
@@ -301,24 +302,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               };
             }
 
-            // Forward the model's `supportedUrls` (may be a Promise) so URLs a provider
-            // fetches natively (e.g. Vertex `gs://`) pass through instead of being
-            // downloaded/inlined. Mirrors loop/workflows/agentic-execution/llm-execution-step.ts.
-            let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
-            const modelSupportedUrls = currentModel?.supportedUrls;
-            if (modelSupportedUrls) {
-              resolvedSupportedUrls =
-                typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function'
-                  ? await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>)
-                  : (modelSupportedUrls as Record<string, RegExp[]>);
-            }
+            // `downloadRetries` / `downloadConcurrency` are internal-only on the
+            // non-durable path today (not exposed through AgentExecutionOptions),
+            // so durable also relies on the MessageList defaults here. If those
+            // ever become user-facing they should be plumbed in identically.
+            const messageListPromptArgs = await buildLlmPromptArgs({
+              model: currentModel,
+            });
             const llmPromptForModel =
               currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
                 ? messageList.get.all.aiV6.llmPrompt
                 : messageList.get.all.aiV5.llmPrompt;
-            const inputMessages = (await llmPromptForModel({
-              supportedUrls: resolvedSupportedUrls,
-            })) as LanguageModelV2Prompt;
+            const inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
