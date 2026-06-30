@@ -4,7 +4,7 @@
 Mastra Engineering
 January 2026
 
-This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 18 rules across 8 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
+This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 19 rules across 8 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
 
 ## How to Use This Catalog
 
@@ -22,7 +22,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | 4        | Re-render Optimization    | MEDIUM                        | 4          |
 | 5        | Rendering Performance     | MEDIUM                        | 2          |
 | 6        | JavaScript Performance    | LOW-MEDIUM                    | 3          |
-| 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 4          |
+| 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 5          |
 | 8        | Testing                   | MEDIUM-HIGH (correctness)     | 1          |
 
 ## Category Focus
@@ -91,6 +91,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | `structure-component-naming`      | JSX-Returning Helpers Must Be Components              | MEDIUM      | Name reusable JSX-returning helpers as PascalCase components and call them with JSX.          | `references/rules/structure-component-naming.md`      |
 | `structure-derive-dont-duplicate` | Derive Props and Params, Don't Pass Duplicates        | MEDIUM      | Compute a value from a param/prop already in scope instead of accepting it as a separate arg. | `references/rules/structure-derive-dont-duplicate.md` |
 | `structure-no-nested-ternary`     | No Ternaries Nested Inside Ternaries                  | MEDIUM      | Replace a ternary whose branch is another ternary with a guard-clause helper or early returns. | `references/rules/structure-no-nested-ternary.md`     |
+| `structure-early-return-render-branches` | Early-Return Render Branches, Don't Ternary the Wrapper | MEDIUM | Return loading/empty/mode states from early `if` guards instead of a ternary wrapping the JSX. | `references/rules/structure-early-return-render-branches.md` |
 
 ### 8. Testing
 

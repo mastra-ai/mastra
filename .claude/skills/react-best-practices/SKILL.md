@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 18 rules across 8 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 19 rules across 8 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -66,6 +66,7 @@ Rules are prioritized by impact:
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
 - Replace ternaries nested inside ternaries with a guard-clause helper or early returns (`structure-no-nested-ternary`)
+- Return distinct render states (loading/empty/mode) from early `if` guards, not a ternary wrapping the JSX (`structure-early-return-render-branches`)
 
 **Testing:**
 
@@ -107,5 +108,5 @@ grep -l "Tanstack" references/rules/
 - `rerender-*` - Re-render optimization (4 rules)
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
-- `structure-*` - Component/hook structure (4 rules)
+- `structure-*` - Component/hook structure (5 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy (1 rule)
