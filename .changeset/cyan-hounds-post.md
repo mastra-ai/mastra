@@ -14,3 +14,13 @@ Pushed remaining dataset read filters and pagination down to storage.
 `Dataset.listItems({ version, search, page, perPage })` now applies `search` and pagination at the storage layer when `version` is set. Previously these were silently dropped whenever `version` was provided.
 
 The declared return type of `Dataset.listItems` is unchanged (`DatasetItem[] | { items, pagination }`), but the runtime now always returns the `{ items, pagination }` branch. Callers that were narrowing on the `DatasetItem[]` branch should switch to reading `result.items`; the bare-array branch is no longer produced.
+
+```ts
+// Before — when `version` was provided, the result was a bare DatasetItem[]
+const items = await dataset.listItems({ version: someVersion });
+items.forEach(item => /* ... */);
+
+// After — the result is always `{ items, pagination }`
+const { items } = await dataset.listItems({ version: someVersion });
+items.forEach(item => /* ... */);
+```
