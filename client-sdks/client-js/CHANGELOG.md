@@ -1,5 +1,16 @@
 # @mastra/client-js
 
+## 1.29.0-alpha.10
+
+### Patch Changes
+
+- add Studio support for observational memory extractors ([#18655](https://github.com/mastra-ai/mastra/pull/18655))
+
+  Adds `bufferedObservationChunks` and extraction metadata to the buffer-status API and client types so extracted values flow through during live streaming. Renders observational memory indicators from a normalized cycle model that preserves extraction data across streaming, refetch, reload, activation, and failure transitions.
+
+- Updated dependencies [[`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/core@1.48.0-alpha.10
+
 ## 1.29.0-alpha.9
 
 ### Patch Changes

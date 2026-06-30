@@ -187,6 +187,7 @@
     "fix-schema-compat-v4-string-format-drop",
     "fix-zod-v4-date-constraint-descriptions",
     "floppy-towns-notice",
+    "forty-carpets-unite",
     "fs-agents-cli",
     "fs-agents-deployer",
     "fs-agents-server-source",
@@ -194,6 +195,7 @@
     "gateway-redos-fix",
     "green-birds-knock",
     "heartbeats-on-accepted",
+    "honest-llamas-dress",
     "huge-maps-kick",
     "inngest-durable-agent-parity",
     "inngest-observe-replay",
@@ -218,11 +220,17 @@
     "scorer-helper-signal-user-message",
     "shaky-dingos-prove",
     "shy-radios-slide",
+    "smooth-parents-happen",
     "spicy-masks-matter",
     "studio-metrics-vnext-gate",
     "subagent-schema-cache",
+    "ten-donuts-itch",
+    "thick-readers-arrive",
     "thirty-candies-invite",
+    "three-rocks-feel",
+    "true-clowns-divide",
     "turso-tenant-bootstrap-mastracode",
-    "two-dancers-jam"
+    "two-dancers-jam",
+    "wide-signs-send"
   ]
 }

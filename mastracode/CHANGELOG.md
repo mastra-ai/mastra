@@ -1,5 +1,44 @@
 # mastracode
 
+## 0.27.0-alpha.10
+
+### Patch Changes
+
+- Improved the Mastra Code status area to show active work time, completed work duration, and idle time. ([#18656](https://github.com/mastra-ai/mastra/pull/18656))
+
+- Added Mastra Code plugin support: ([#18658](https://github.com/mastra-ai/mastra/pull/18658))
+  - Install, scaffold, configure, block, and auto-update plugins with local-change backups.
+  - Load plugin tools in all modes, including streaming progress and subagent-style rendering.
+  - Load bundled plugin commands, skills, and plugin-provided system instructions.
+
+  Example:
+
+  ```ts
+  import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';
+
+  export default defineMastraCodePlugin({
+    id: 'acme.tools',
+    tools: {
+      echo: {
+        tool: createTool({
+          id: 'echo',
+          inputSchema: z.object({ message: z.string() }),
+          execute: async ({ message }) => ({ message }),
+        }),
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/memory@1.22.0-alpha.3
+  - @mastra/core@1.48.0-alpha.10
+  - @mastra/server@1.48.0-alpha.10
+  - @mastra/libsql@1.14.3-alpha.0
+  - @mastra/pg@1.14.3-alpha.0
+  - @mastra/hono@1.5.3-alpha.10
+  - @mastra/react@1.2.1-alpha.10
+
 ## 0.27.0-alpha.9
 
 ### Patch Changes

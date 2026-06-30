@@ -1,5 +1,45 @@
 # @mastra/memory
 
+## 1.22.0-alpha.3
+
+### Minor Changes
+
+- add observational memory extractors ([#18653](https://github.com/mastra-ai/mastra/pull/18653))
+
+  Introduces a public Extractor API for Observational Memory
+  with inline XML extraction and structured follow-up modes.
+  Includes built-in extractors for current task, suggested
+  response, and thread title. Persists extracted values into
+  thread OM metadata with key-level merging and carry-forward
+  into future observer/reflector prompts.
+
+- add OM-managed working memory ([#18654](https://github.com/mastra-ai/mastra/pull/18654))
+
+  Adds `observationalMemory.observation.manageWorkingMemory` so the Observer can update working memory automatically instead of requiring the main agent to call the working memory tool.
+
+  ```ts
+  new Memory({
+    options: {
+      workingMemory: { enabled: true },
+      observationalMemory: {
+        enabled: true,
+        observation: { manageWorkingMemory: true },
+      },
+    },
+  });
+  ```
+
+  This option adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true` when working memory is enabled. Set `workingMemory.agentManaged: true` to keep the main agent's working memory tool and instructions enabled.
+
+### Patch Changes
+
+- add Studio support for observational memory extractors ([#18655](https://github.com/mastra-ai/mastra/pull/18655))
+
+  Adds `bufferedObservationChunks` and extraction metadata to the buffer-status API and client types so extracted values flow through during live streaming. Renders observational memory indicators from a normalized cycle model that preserves extraction data across streaming, refetch, reload, activation, and failure transitions.
+
+- Updated dependencies [[`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/core@1.48.0-alpha.10
+
 ## 1.21.3-alpha.2
 
 ### Patch Changes

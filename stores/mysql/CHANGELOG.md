@@ -1,5 +1,14 @@
 # @mastra/mysql
 
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Fixed buffered observation extraction metadata so stored OM chunks keep extracted values and extraction failures across memory storage adapters. ([#18655](https://github.com/mastra-ai/mastra/pull/18655))
+
+- Updated dependencies [[`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/core@1.48.0-alpha.10
+
 ## 0.3.1
 
 ### Patch Changes
