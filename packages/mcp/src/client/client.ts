@@ -138,7 +138,13 @@ function isDatadogTracerLikelyLoaded(): boolean {
     return true;
   }
 
-  return false;
+  try {
+    const req = createRequire(import.meta.url);
+    const resolvedPath = req.resolve('dd-trace');
+    return Boolean(req.cache[resolvedPath]);
+  } catch {
+    return false;
+  }
 }
 
 function runOutsideDatadogTraceScope<T>(callback: () => T): T {
