@@ -50,7 +50,7 @@ vi.mock('../commands/index.js', () => ({
   handleBrowserCommand: vi.fn(),
   handleThemeCommand: vi.fn(),
   handleUpdateCommand: vi.fn(),
-  handleMemoryGatewayCommand: vi.fn(),
+  handleMastraGatewayCommand: vi.fn(),
   handleApiKeysCommand: vi.fn(),
   handleFeedbackCommand: vi.fn(),
   handleObservabilityCommand: vi.fn(),

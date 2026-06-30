@@ -175,8 +175,8 @@ vi.mock('../../onboarding/settings.js', () => ({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, ''),
-  MEMORY_GATEWAY_PROVIDER: 'mastra-gateway',
-  MEMORY_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
+  MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
+  MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
 }));
 
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
@@ -590,7 +590,7 @@ describe('resolveModel', () => {
     });
   });
 
-  describe('memory gateway enabled (gateway API key stored)', () => {
+  describe('mastra gateway enabled (gateway API key stored)', () => {
     beforeEach(() => {
       mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) =>
         providerId === 'mastra-gateway' ? 'msk_gateway_key_123' : undefined,

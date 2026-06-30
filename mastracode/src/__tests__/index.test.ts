@@ -246,7 +246,7 @@ vi.mock('../onboarding/packs.js', () => ({
 vi.mock('../onboarding/settings.js', () => ({
   getCustomProviderId: vi.fn(),
   loadSettings: loadSettingsMock,
-  MEMORY_GATEWAY_PROVIDER: 'mastra',
+  MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),
@@ -396,7 +396,7 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 10_000);
 
-  it('uses configured memory gateway settings when creating the MastraCode gateway', async () => {
+  it('uses configured mastra gateway settings when creating the MastraCode gateway', async () => {
     const settings = createMockSettings();
     settings.memoryGateway = { baseUrl: 'https://gateway.example.com/v1' };
     loadSettingsMock.mockReturnValue(settings);

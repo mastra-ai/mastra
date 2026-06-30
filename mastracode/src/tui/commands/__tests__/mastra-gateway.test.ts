@@ -22,8 +22,8 @@ vi.mock('@mastra/core/llm', () => ({
 vi.mock('../../../onboarding/settings.js', () => ({
   loadSettings: mockLoadSettings,
   saveSettings: mockSaveSettings,
-  MEMORY_GATEWAY_PROVIDER: 'mastra-gateway',
-  MEMORY_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
+  MASTRA_GATEWAY_PROVIDER: 'mastra-gateway',
+  MASTRA_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
 }));
 
 const { mockQuestions } = vi.hoisted(() => ({
@@ -46,7 +46,7 @@ vi.mock('../../modal-question.js', () => ({
   }),
 }));
 
-import { handleMemoryGatewayCommand } from '../memory-gateway.js';
+import { handleMastraGatewayCommand } from '../mastra-gateway.js';
 
 function createCtx() {
   const authStorage = {
@@ -72,7 +72,7 @@ function createCtx() {
   return { ctx, authStorage };
 }
 
-describe('handleMemoryGatewayCommand', () => {
+describe('handleMastraGatewayCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQuestions.length = 0;
@@ -88,7 +88,7 @@ describe('handleMemoryGatewayCommand', () => {
     const { ctx, authStorage } = createCtx();
     authStorage.getStoredApiKey.mockReturnValue(undefined);
 
-    const promise = handleMemoryGatewayCommand(ctx);
+    const promise = handleMastraGatewayCommand(ctx);
 
     expect(mockQuestions).toHaveLength(1);
     mockQuestions[0]!.onSubmit('mg_test_key');
@@ -111,7 +111,7 @@ describe('handleMemoryGatewayCommand', () => {
     const { ctx, authStorage } = createCtx();
     authStorage.getStoredApiKey.mockReturnValue('mg_existing_key');
 
-    const promise = handleMemoryGatewayCommand(ctx);
+    const promise = handleMastraGatewayCommand(ctx);
 
     expect(mockQuestions).toHaveLength(1);
     expect(mockQuestions[0]!.props.defaultValue).toBe('mg_existing_key');
@@ -131,7 +131,7 @@ describe('handleMemoryGatewayCommand', () => {
     const { ctx, authStorage } = createCtx();
     authStorage.getStoredApiKey.mockReturnValue('mg_existing_key');
 
-    const promise = handleMemoryGatewayCommand(ctx);
+    const promise = handleMastraGatewayCommand(ctx);
 
     expect(mockQuestions).toHaveLength(1);
     mockQuestions[0]!.onCancel();
@@ -153,7 +153,7 @@ describe('handleMemoryGatewayCommand', () => {
     process.env.MASTRA_GATEWAY_API_KEY = 'mg_existing_key';
     process.env.MASTRA_GATEWAY_URL = 'https://gateway.example.com';
 
-    const promise = handleMemoryGatewayCommand(ctx);
+    const promise = handleMastraGatewayCommand(ctx);
 
     expect(mockQuestions).toHaveLength(1);
     mockQuestions[0]!.onSubmit('clear');
