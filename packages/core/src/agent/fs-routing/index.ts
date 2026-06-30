@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import type { MastraMemory } from '../../memory/memory';
 import type { InlineSkill, SkillInput } from '../../skills/types';
 import { Workspace, LocalFilesystem, LocalSandbox } from '../../workspace';
 import type { AnyWorkspace } from '../../workspace';
@@ -64,6 +65,12 @@ export interface FsAgentEntry {
    */
   workspace?: AnyWorkspace;
   /**
+   * Default export of `agents/<name>/memory.ts`, if present. A `MastraMemory`
+   * instance wired into the assembled agent as its `memory`. `config.memory`
+   * (from `config.ts`) takes precedence on conflict.
+   */
+  memory?: MastraMemory;
+  /**
    * Base path for the convention default workspace. When provided and neither
    * `config.workspace` nor `workspace.ts` supplies one, an FS agent gets a
    * default `Workspace` (a contained `LocalFilesystem` rooted here plus a
@@ -98,6 +105,9 @@ export interface FsAgentEntry {
  *   collision `config.skills` wins (a warning is surfaced via `onWarn`). A
  *   dynamic (function) `config.skills` wins wholesale and discovered skills are
  *   ignored with a warning.
+ * - `memory`: `memory.ts`'s default export is used unless `config.memory` is
+ *   set, in which case `config.memory` wins (a warning is surfaced via
+ *   `onWarn`). Missing both leaves the agent without memory.
  *
  * If `config` is already an `Agent` instance (the author wrote
  * `export default new Agent({...})` in `config.ts`), it is used as-is — no
@@ -113,6 +123,7 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
     tools = [],
     skills = [],
     workspace,
+    memory,
     defaultWorkspaceBasePath,
     subagents = [],
   } = entry;
@@ -138,6 +149,11 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
         `Agent "${name}": config.ts exports a new Agent(), so agents/${name}/workspace.ts is ignored. Set the workspace in the Agent config instead.`,
       );
     }
+    if (memory !== undefined) {
+      onWarn(
+        `Agent "${name}": config.ts exports a new Agent(), so agents/${name}/memory.ts is ignored. Set the memory in the Agent config instead.`,
+      );
+    }
     if (subagents.length > 0) {
       onWarn(
         `Agent "${name}": config.ts exports a new Agent(), so discovered subagents under agents/${name}/subagents/ are ignored. Set 'agents' in the Agent config instead.`,
@@ -161,6 +177,7 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
   const mergedTools = mergeTools(name, tools, config.tools, onWarn);
   const mergedSkills = mergeSkills(name, skills, config.skills, onWarn);
   const mergedWorkspace = mergeWorkspace(name, workspace, config.workspace, defaultWorkspaceBasePath, onWarn);
+  const mergedMemory = mergeMemory(name, memory, config.memory, onWarn);
   const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, options);
 
   const assembled = {
@@ -171,6 +188,7 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
     ...(mergedTools !== undefined ? { tools: mergedTools } : {}),
     ...(mergedSkills !== undefined ? { skills: mergedSkills } : {}),
     ...(mergedWorkspace !== undefined ? { workspace: mergedWorkspace } : {}),
+    ...(mergedMemory !== undefined ? { memory: mergedMemory } : {}),
     ...(mergedAgents !== undefined ? { agents: mergedAgents } : {}),
   } as AgentConfig;
 
@@ -411,4 +429,33 @@ function createDefaultWorkspace(name: string, basePath: string): AnyWorkspace {
     filesystem: new LocalFilesystem({ basePath }),
     sandbox: new LocalSandbox({ workingDirectory: basePath }),
   });
+}
+
+/**
+ * Resolve the memory for a file-based agent.
+ *
+ * Precedence (explicit > convention):
+ * - `config.memory` (from `config.ts`) wins over `memory.ts`. A function
+ *   `config.memory` is carried through wholesale (it is an opaque value).
+ * - Otherwise `memory.ts`'s default export is used.
+ * - Otherwise returns `undefined` (no memory; current behavior).
+ */
+function mergeMemory(
+  name: string,
+  fsMemory: MastraMemory | undefined,
+  configMemory: FsAgentConfig['memory'],
+  onWarn: (message: string) => void,
+): FsAgentConfig['memory'] | undefined {
+  if (configMemory !== undefined) {
+    if (fsMemory !== undefined) {
+      onWarn(`Agent "${name}": memory defined in both config.ts and memory.ts; config.memory wins.`);
+    }
+    return configMemory;
+  }
+
+  if (fsMemory !== undefined) {
+    return fsMemory;
+  }
+
+  return undefined;
 }

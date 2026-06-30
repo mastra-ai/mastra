@@ -19,6 +19,8 @@ export interface DiscoveredFsAgent {
   instructionsPath?: string;
   /** Absolute path to `workspace.ts`/`workspace.js`, if present. */
   workspacePath?: string;
+  /** Absolute path to `memory.ts`/`memory.js`, if present. */
+  memoryPath?: string;
   /**
    * Absolute, slash-normalized path to an authored `workspace/` directory of
    * seed files, if present. These are mirrored into the deployed workspace at
@@ -64,6 +66,7 @@ export type DiscoveredFsSkill =
 
 const CONFIG_BASENAMES = ['config.ts', 'config.js'];
 const WORKSPACE_BASENAMES = ['workspace.ts', 'workspace.js'];
+const MEMORY_BASENAMES = ['memory.ts', 'memory.js'];
 const INSTRUCTIONS_BASENAME = 'instructions.md';
 const TOOL_EXTENSIONS = ['.ts', '.js'];
 const SKILL_MODULE_EXTENSIONS = ['.ts', '.js'];
@@ -71,8 +74,8 @@ const SKILL_MD_BASENAME = 'SKILL.md';
 
 /**
  * Presence check that does NOT follow symlinks. Returns `false` for symlinks
- * (and broken links) so a symlinked `config.ts`/`instructions.md`/`workspace.ts`
- * is never inlined or imported into the generated bundle.
+ * (and broken links) so a symlinked `config.ts`/`instructions.md`/`workspace.ts`/
+ * `memory.ts` is never inlined or imported into the generated bundle.
  */
 async function exists(path: string): Promise<boolean> {
   try {
@@ -277,6 +280,7 @@ async function discoverAgentDir(
   }
 
   const workspacePath = await firstExisting(dir, WORKSPACE_BASENAMES);
+  const memoryPath = await firstExisting(dir, MEMORY_BASENAMES);
   const workspaceSeedDir = await directoryExists(join(dir, 'workspace'));
   const tools = await discoverTools(join(dir, 'tools'));
   const skills = await discoverSkills(join(dir, 'skills'));
@@ -288,6 +292,7 @@ async function discoverAgentDir(
     configPath,
     instructionsPath,
     workspacePath,
+    memoryPath,
     workspaceSeedDir,
     tools,
     skills,
