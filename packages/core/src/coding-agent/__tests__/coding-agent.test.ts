@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../../agent/agent';
+import { DEFAULT_GOAL_JUDGE_PROMPT } from '../../agent/goal/objective';
 import { LocalFilesystem, LocalSandbox, Workspace } from '../../workspace';
 import type { PromptContext } from '../index';
 import { buildBasePrompt, createCodingAgent } from '../index';
@@ -45,8 +46,8 @@ describe('createCodingAgent', () => {
     expect(workspace?.sandbox).toBeInstanceOf(LocalSandbox);
   });
 
-  it('roots the default workspace at workspaceBasePath', async () => {
-    const agent = createCodingAgent(baseConfig({ workspaceBasePath: '/custom/base' }));
+  it('roots the default workspace at basePath', async () => {
+    const agent = createCodingAgent(baseConfig({ basePath: '/custom/base' }));
     const workspace = await agent.getWorkspace();
 
     expect((workspace?.sandbox as LocalSandbox).workingDirectory).toBe('/custom/base');
@@ -71,13 +72,22 @@ describe('createCodingAgent', () => {
     expect(workspace).toBe(custom);
   });
 
-  it('does not throw when goal is configured (prompt defaulted)', () => {
+  it('defaults the goal prompt when a goal is configured without one', () => {
     const agent = createCodingAgent(
       baseConfig({
         goal: { judge: MODEL, maxRuns: 5 },
       }),
     );
-    expect(agent).toBeInstanceOf(Agent);
+    expect(agent.__getGoalConfig()?.prompt).toBe(DEFAULT_GOAL_JUDGE_PROMPT);
+  });
+
+  it('defaults the goal prompt when prompt is explicitly undefined', () => {
+    const agent = createCodingAgent(
+      baseConfig({
+        goal: { judge: MODEL, maxRuns: 5, prompt: undefined },
+      }),
+    );
+    expect(agent.__getGoalConfig()?.prompt).toBe(DEFAULT_GOAL_JUDGE_PROMPT);
   });
 
   it('accepts caller-provided signals and error processors', () => {

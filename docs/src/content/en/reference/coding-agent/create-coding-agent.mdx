@@ -17,12 +17,11 @@ Pass a model, instructions, and tools. The factory fills in the workspace, task 
 
 ```typescript title="src/mastra/coding-agent.ts"
 import { createCodingAgent } from '@mastra/core/coding-agent'
-import { openai } from '@ai-sdk/openai'
 
 const agent = createCodingAgent({
   id: 'my-coding-agent',
   name: 'My Coding Agent',
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5',
   instructions: 'You are a helpful coding assistant.',
   tools: {},
 })
@@ -58,7 +57,7 @@ const agent = createCodingAgent({
     isOptional: true,
   },
   {
-    name: 'workspaceBasePath',
+    name: 'basePath',
     type: 'string',
     description: 'Base path for the default workspace built when workspace is omitted.',
     isOptional: true,
@@ -112,7 +111,7 @@ The factory only fills a default when you do not provide the corresponding field
 
 ### Workspace
 
-When the `workspace` key is omitted, the factory builds a local workspace rooted at `workspaceBasePath` (default `process.cwd()`):
+When the `workspace` key is omitted, the factory builds a local workspace rooted at `basePath` (default `process.cwd()`):
 
 ```typescript
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
@@ -128,7 +127,8 @@ To opt out — for example when the workspace is injected at the [`AgentControll
 ```typescript
 const agent = createCodingAgent({
   id: 'my-coding-agent',
-  model: openai('gpt-4o'),
+  name: 'My Coding Agent',
+  model: 'openai/gpt-5',
   instructions: 'You are a helpful coding assistant.',
   tools: {},
   workspace: undefined, // opt out of the default workspace

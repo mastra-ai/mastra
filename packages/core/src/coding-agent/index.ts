@@ -91,7 +91,7 @@ export interface CreateCodingAgentConfig extends AgentConfig {
    * Base path for the default workspace built when `workspace` is omitted.
    * @default process.cwd()
    */
-  workspaceBasePath?: string;
+  basePath?: string;
 }
 
 /**
@@ -102,7 +102,7 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  * Caller-provided values always win:
  * - `workspace` is used verbatim when provided; otherwise a {@link Workspace}
  *   backed by {@link LocalFilesystem}/{@link LocalSandbox} rooted at
- *   `workspaceBasePath` (default `process.cwd()`) is built.
+ *   `basePath` (default `process.cwd()`) is built.
  * - `signals` is used verbatim when provided; otherwise it defaults to a single
  *   {@link TaskSignalProvider}.
  * - `errorProcessors` is used verbatim when provided; otherwise it defaults to
@@ -114,26 +114,27 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  * @example
  * ```typescript
  * import { createCodingAgent } from '@mastra/core/coding-agent';
- * import { openai } from '@ai-sdk/openai';
  *
  * const agent = createCodingAgent({
  *   id: 'my-coding-agent',
  *   name: 'My Coding Agent',
- *   model: openai('gpt-4o'),
+ *   model: 'openai/gpt-5',
  *   instructions: 'You are a helpful coding assistant.',
  *   tools: {},
  * });
  * ```
  */
 export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
-  const { workspaceBasePath, workspace: _workspace, signals, errorProcessors, goal, ...rest } = config;
+  const { basePath, workspace: _workspace, signals, errorProcessors, goal, ...rest } = config;
 
   // Distinguish an absent `workspace` key (build the default) from an explicit
   // `workspace: undefined` (caller opts out — e.g. when the workspace is wired
   // elsewhere, such as at a controller/request-context level).
-  const workspace = 'workspace' in config ? config.workspace : defaultWorkspace(workspaceBasePath ?? process.cwd());
+  const workspace = 'workspace' in config ? config.workspace : defaultWorkspace(basePath ?? process.cwd());
 
-  const resolvedGoal = goal ? { prompt: DEFAULT_GOAL_JUDGE_PROMPT, ...goal } : undefined;
+  // Treat an explicit `prompt: undefined` the same as an omitted prompt so the
+  // documented default is preserved.
+  const resolvedGoal = goal ? { ...goal, prompt: goal.prompt ?? DEFAULT_GOAL_JUDGE_PROMPT } : undefined;
 
   return new Agent({
     ...rest,
