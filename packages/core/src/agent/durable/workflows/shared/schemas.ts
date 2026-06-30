@@ -101,6 +101,9 @@ export const baseIterationStateSchema = z.object({
   backgroundTaskPending: z.boolean().optional(),
   // Set when a delegation hook calls ctx.bail() — signals the loop to stop
   delegationBailed: z.boolean().optional(),
+  // Set when onIterationComplete returns { continue: false, feedback } — allows
+  // one more LLM turn with the feedback, then stops on the next predicate eval.
+  pendingFeedbackStop: z.boolean().optional(),
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
