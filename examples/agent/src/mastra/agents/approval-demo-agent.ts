@@ -34,62 +34,72 @@ const findUserTool = createTool({
 const mockApprovalModel = new MastraLanguageModelV2Mock({
   provider: 'mock',
   modelId: 'mock-approval',
-  doStream: (() => {
-    let callCount = 0;
-    return async () => {
-      callCount++;
-      // Odd calls = tool call (needs approval); even calls = text response (after the decision).
-      if (callCount % 2 === 1) {
-        return {
-          stream: new ReadableStream({
-            start(controller) {
-              controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({
-                type: 'response-metadata',
-                id: 'id-0',
-                modelId: 'mock-approval',
-                timestamp: new Date(),
-              });
-              controller.enqueue({
-                type: 'tool-call',
-                toolCallId: `find-user-${Date.now()}`,
-                toolName: 'findUserTool',
-                input: JSON.stringify({ name: 'Dero Israel' }),
-                providerExecuted: false,
-              });
-              controller.enqueue({
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              });
-              controller.close();
-            },
-          }),
-        };
-      }
+  // Decide from the conversation itself rather than a shared counter, so concurrent or abandoned
+  // Studio threads can't flip each other's behavior. For the latest user turn: if findUserTool
+  // hasn't been called/resolved yet, call it (which triggers the approval prompt); once a tool
+  // call/result is already present after that user message (i.e. the approve/decline happened),
+  // reply with text so the loop finishes.
+  doStream: async ({ prompt }) => {
+    const messages = Array.isArray(prompt) ? prompt : [];
+    const lastUserIdx = messages.map(m => m.role).lastIndexOf('user');
+    const toolHandledThisTurn = messages
+      .slice(lastUserIdx + 1)
+      .some(
+        m =>
+          Array.isArray(m.content) &&
+          m.content.some((part: { type?: string }) => part?.type === 'tool-call' || part?.type === 'tool-result'),
+      );
+
+    if (!toolHandledThisTurn) {
       return {
         stream: new ReadableStream({
           start(controller) {
             controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({ type: 'response-metadata', id: 'id-1', modelId: 'mock-approval', timestamp: new Date() });
-            controller.enqueue({ type: 'text-start', id: 'text-0' });
             controller.enqueue({
-              type: 'text-delta',
-              id: 'text-0',
-              delta: 'All done — let me know if you need anything else.',
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-approval',
+              timestamp: new Date(),
             });
-            controller.enqueue({ type: 'text-end', id: 'text-0' });
+            controller.enqueue({
+              type: 'tool-call',
+              toolCallId: `find-user-${Date.now()}`,
+              toolName: 'findUserTool',
+              input: JSON.stringify({ name: 'Dero Israel' }),
+              providerExecuted: false,
+            });
             controller.enqueue({
               type: 'finish',
-              finishReason: 'stop',
+              finishReason: 'tool-calls',
               usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
             });
             controller.close();
           },
         }),
       };
+    }
+    return {
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({ type: 'response-metadata', id: 'id-1', modelId: 'mock-approval', timestamp: new Date() });
+          controller.enqueue({ type: 'text-start', id: 'text-0' });
+          controller.enqueue({
+            type: 'text-delta',
+            id: 'text-0',
+            delta: 'All done — let me know if you need anything else.',
+          });
+          controller.enqueue({ type: 'text-end', id: 'text-0' });
+          controller.enqueue({
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          });
+          controller.close();
+        },
+      }),
     };
-  })(),
+  },
 });
 
 export const approvalDemoAgent = new Agent({
