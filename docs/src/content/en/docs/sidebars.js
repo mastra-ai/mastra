@@ -114,6 +114,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/structured-output',
           label: 'Structured Output',
         },

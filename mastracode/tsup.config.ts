@@ -20,6 +20,7 @@ export default defineConfig({
     cli: 'src/main.ts',
     tui: 'src/tui/index.ts',
     acp: 'src/acp.ts',
+    headless: 'src/headless/index.ts',
   },
   format: ['esm', 'cjs'],
   clean: true,

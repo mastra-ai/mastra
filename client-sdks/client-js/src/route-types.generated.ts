@@ -135,7 +135,7 @@ export type GetAgents_Response = {
           [key: string]: any;
         }
       | undefined;
-    source?: ('code' | 'stored') | undefined;
+    source?: ('code' | 'stored' | 'fs') | undefined;
     status?: ('draft' | 'published' | 'archived') | undefined;
     activeVersionId?: string | undefined;
     hasDraft?: boolean | undefined;
@@ -343,7 +343,7 @@ export type GetAgentsAgentId_Response = {
         [key: string]: any;
       }
     | undefined;
-  source?: ('code' | 'stored') | undefined;
+  source?: ('code' | 'stored' | 'fs') | undefined;
   status?: ('draft' | 'published' | 'archived') | undefined;
   activeVersionId?: string | undefined;
   hasDraft?: boolean | undefined;
@@ -12938,7 +12938,7 @@ export type GetScoresScorers_Response = {
     agentNames: string[];
     workflowIds: string[];
     isRegistered: boolean;
-    source: 'code' | 'stored';
+    source: 'code' | 'stored' | 'fs';
   };
 };
 
@@ -12980,7 +12980,7 @@ export type GetScoresScorersScorerId_Response = {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
-  source: 'code' | 'stored';
+  source: 'code' | 'stored' | 'fs';
 } | null;
 
 export type GetScoresScorersScorerId_Request = Simplify<

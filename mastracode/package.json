@@ -53,6 +53,16 @@
         "default": "./dist/acp.cjs"
       }
     },
+    "./headless": {
+      "import": {
+        "types": "./dist/headless/index.d.ts",
+        "default": "./dist/headless.js"
+      },
+      "require": {
+        "types": "./dist/headless/index.d.ts",
+        "default": "./dist/headless.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
