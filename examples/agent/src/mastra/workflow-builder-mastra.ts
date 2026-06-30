@@ -12,7 +12,9 @@
  */
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
+import { securityExpertAgent } from './agents/security-expert-agent';
 import { workflowBuilderAgent } from './agents/workflow-builder-agent';
+import { listFilesTool, readFileTool } from './tools/filesystem-tools';
 import { weatherTool } from './tools/weather-tool';
 import {
   listAvailableAgentsTool,
@@ -36,10 +38,13 @@ export function buildWorkflowBuilderMastra({ storageUrl, port }: BuildWorkflowBu
     agents: {
       'workflow-builder-agent': workflowBuilderAgent,
       'weather-reporter': weatherReporterAgent,
+      'security-expert': securityExpertAgent,
     },
     tools: {
-      // Composable building blocks for the demo workflows.
+      // Composable building blocks the workflow-builder can pull from.
       'get-weather': weatherTool,
+      'list-files': listFilesTool,
+      'read-file': readFileTool,
       // Workflow-builder server-side tools (these power the chat).
       'list-available-agents': listAvailableAgentsTool,
       'list-available-tools': listAvailableToolsTool,
