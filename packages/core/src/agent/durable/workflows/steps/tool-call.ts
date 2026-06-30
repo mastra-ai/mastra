@@ -8,6 +8,7 @@ import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import type { ExportedSpan, SpanType } from '../../../../observability';
 import { ChunkFrom } from '../../../../stream/types';
+import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -18,7 +19,6 @@ import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type { DurableToolCallInput, SerializableDurableOptions, AgentSuspendedEventData } from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
-import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
 
@@ -192,8 +192,9 @@ export function createDurableToolCallStep() {
 
       // 1. Resolve the tool from global registry first, then by provider-tool
       // model-facing name (e.g. `web_search` resolves to `webSearch` when the
-      // provider tool advertises the snake-case name), then fall back to the
-      // Mastra-wide tool registry. Mirrors the non-durable tool-call step.
+      // provider tool advertises the snake-case name), then by id, then fall
+      // back to the Mastra-wide tool registry (exact name, provider-tool
+      // name, then by id). Mirrors the non-durable tool-call step.
       const registryEntry = globalRunRegistry.get(runId);
       let tool = registryEntry?.tools?.[toolName];
 
@@ -202,7 +203,25 @@ export function createDurableToolCallStep() {
       }
 
       if (!tool) {
+        tool = Object.values(registryEntry?.tools ?? {}).find(
+          (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+        ) as typeof tool;
+      }
+
+      if (!tool) {
         tool = resolveTool(toolName, mastra as Mastra);
+      }
+
+      if (!tool && mastra) {
+        const mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
+        if (mastraTools) {
+          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
+          if (!tool) {
+            tool = Object.values(mastraTools).find(
+              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+            ) as typeof tool;
+          }
+        }
       }
 
       const toolKey = registryEntry?.tools?.[toolName]

@@ -281,10 +281,13 @@ describe('DurableAgent RequestContext reserved keys', () => {
       // non-durable agent which forwards Object.fromEntries(requestContext.entries())
       // to scorers. The full RequestContext (which can hold live handles) is
       // not serialized — it stays on the run registry.
-      const serialized = JSON.stringify(result.workflowInput);
-      expect(serialized).toContain('userId');
-      expect(serialized).toContain('user-123');
-      expect(serialized).not.toContain('liveHandle');
+      //
+      // The snapshot is taken *before* preparation mutates the request context
+      // (e.g. adding MASTRA_VERSIONS_KEY / MastraMemory), so persisted
+      // customContext must reflect only caller-provided entries.
+      const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+        .requestContextEntries;
+      expect(entries).toEqual({ userId: 'user-123' });
     });
   });
 });

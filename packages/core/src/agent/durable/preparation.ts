@@ -180,6 +180,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
 
+  // 2a. Snapshot caller-provided RequestContext entries *before* preparation
+  // mutates the context (version overrides at step 3, MastraMemory at step 4).
+  // The persisted `customContext` should reflect only what the caller passed in,
+  // not internal-key state added during prep.
+  const requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+
   // 2b. Merge the wrapped agent's defaultOptions under the per-request options,
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
@@ -556,7 +562,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messageId,
     agentSpanData: agentSpan?.exportSpan(),
     modelSpanData: modelSpan?.exportSpan(),
-    requestContextEntries: snapshotRequestContextEntries(requestContext),
+    requestContextEntries: requestContextEntriesSnapshot,
   });
 
   // 14. Create registry entry for non-serializable state

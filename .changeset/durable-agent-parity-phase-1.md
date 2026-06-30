@@ -2,8 +2,8 @@
 '@mastra/core': patch
 ---
 
-Close three behavioral parity gaps between `DurableAgent` and the in-memory `Agent` loop:
+`DurableAgent` now matches `Agent` behavior in three places where the durable loop previously diverged:
 
-- **`isTaskComplete` scorers now see `requestContext`.** The durable `is-task-complete` step previously passed `customContext: undefined` to scorers. `prepareForDurableExecution` now snapshots the JSON-safe subset of `requestContext.entries()` onto the workflow input, and the step forwards it as `customContext` so scorers observe the same context they do on the non-durable agent. Non-JSON-serializable values are dropped; do not store secrets in `RequestContext` if you persist durable agent snapshots.
-- **Provider-tool fallback on durable `tool-call`.** Tool-call resolution now falls back to `findProviderToolByName` against the run registry's tools (and against `mastra` tools) before emitting `ToolNotFoundError`, so provider-only tools the model invokes resolve and execute on the durable path the same way they do on the regular agent.
-- **`messageId` rotation between iterations.** The durable `dowhile` predicate now rotates `state.messageId` (using `mastra.generateId()` with a `crypto.randomUUID()` fallback) when the loop will continue, so each continued iteration's assistant message lands under a distinct id rather than reusing the first iteration's id.
+- `isTaskComplete` scorers receive `requestContext` as `customContext`, so the same scorer code works on both agents. Only JSON-serializable entries from `requestContext` are forwarded; non-serializable values are dropped. Do not store secrets in `RequestContext` if you persist durable agent snapshots.
+- Provider-defined tools (e.g. OpenAI `web_search`) resolve and execute when invoked by the model, instead of surfacing as `ToolNotFoundError`.
+- Each iteration of a multi-step durable run produces a distinct assistant `messageId`, matching the non-durable loop and unblocking downstream consumers (signal drains, audit logs, replay) that key off message identity.

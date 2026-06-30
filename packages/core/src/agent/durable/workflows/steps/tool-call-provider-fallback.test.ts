@@ -15,6 +15,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { globalRunRegistry } from '../../run-registry';
+import * as resolveRuntime from '../../utils/resolve-runtime';
 import { createDurableToolCallStep } from './tool-call';
 
 vi.mock('../../utils/resolve-runtime', () => ({
@@ -86,6 +87,78 @@ describe('durable tool-call provider-tool fallback', () => {
     expect(executeMock).toHaveBeenCalledTimes(1);
     expect(result.error).toBeUndefined();
     expect(result.result).toEqual({ snippet: 'result' });
+  });
+
+  it('falls back to resolveTool() against the Mastra-wide registry when not in run registry', async () => {
+    const executeMock = vi.fn().mockResolvedValue({ ok: true });
+    const mastraTool = {
+      id: 'mastraTool',
+      description: 'a mastra-wide tool',
+      execute: executeMock,
+    };
+    vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce(mastraTool as any);
+
+    // Run registry has no matching tool — resolveTool() should be consulted.
+    globalRunRegistry.set(RUN_ID, {
+      tools: {},
+      model: {} as any,
+    } as any);
+
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      inputData: {
+        toolCallId: 'call-mastra',
+        toolName: 'mastraTool',
+        args: { foo: 'bar' },
+      },
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => makeInitData(),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(resolveRuntime.resolveTool).toHaveBeenCalledWith('mastraTool', expect.anything());
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result.error).toBeUndefined();
+    expect(result.result).toEqual({ ok: true });
+  });
+
+  it('falls back to a Mastra-wide provider tool when run registry and resolveTool miss', async () => {
+    const executeMock = vi.fn().mockResolvedValue({ snippet: 'web-result' });
+    const mastraTools = {
+      webSearch: {
+        type: 'provider-defined',
+        id: 'openai.web_search',
+        execute: executeMock,
+      },
+    };
+    vi.mocked(resolveRuntime.resolveTool).mockReturnValueOnce(undefined as any);
+
+    globalRunRegistry.set(RUN_ID, {
+      tools: {},
+      model: {} as any,
+    } as any);
+
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      inputData: {
+        toolCallId: 'call-provider-mastra',
+        toolName: 'web_search',
+        args: { query: 'mastra' },
+      },
+      mastra: { getLogger: () => undefined, listTools: () => mastraTools },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => makeInitData(),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+    expect(result.error).toBeUndefined();
+    expect(result.result).toEqual({ snippet: 'web-result' });
   });
 
   it('still emits ToolNotFoundError when no provider tool matches', async () => {
