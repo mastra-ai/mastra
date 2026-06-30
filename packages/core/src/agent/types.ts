@@ -376,9 +376,12 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   useAgent?: boolean;
 
   /**
-   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   * Whether to use prompt injection instead of native response format to coerce the LLM to respond with JSON text.
+   * true and 'system' inject JSON instructions into the leading system message.
+   * 'inline' appends JSON instructions to the latest user message.
+   * false or omitted uses the provider's native response format.
    */
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
 
   /**
    * Optional logger instance for structured logging
