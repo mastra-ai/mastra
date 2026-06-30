@@ -26,9 +26,10 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setIsMounted(true);
       }, 500); // Delay to ensure modal is fully rendered
+      return () => clearTimeout(timer);
     }
   }, [open]);
 
