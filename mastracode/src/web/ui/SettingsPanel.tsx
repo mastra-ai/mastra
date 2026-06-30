@@ -6,6 +6,7 @@ import type {
   ToolCategory,
 } from '@mastra/client-js';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
 
 import { CustomProvidersSection } from './CustomProvidersSection';
 import {
@@ -62,7 +63,7 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
+const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => ReactElement }[] = [
   { id: 'general', label: 'General', icon: PaletteIcon },
   { id: 'model', label: 'Model', icon: SearchIcon },
   { id: 'packs', label: 'Packs', icon: LayersIcon },
