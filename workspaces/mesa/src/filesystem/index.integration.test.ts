@@ -113,8 +113,6 @@ function createMesaFilesystem(): MesaFilesystem {
 }
 
 class RootedMesaFilesystem implements WorkspaceFilesystem {
-  private readonly localModifiedAt = new Map<string, Date>();
-
   constructor(
     private readonly filesystem: MesaFilesystem,
     private readonly root: string,
@@ -192,48 +190,32 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
     return this.filesystem.readFile(this.toMesaPath(inputPath), options);
   }
 
-  async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
-    const target = this.toMesaPath(inputPath);
-    await this.filesystem.writeFile(target, content, options);
-    this.recordModified(target);
+  writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
+    return this.filesystem.writeFile(this.toMesaPath(inputPath), content, options);
   }
 
-  async appendFile(inputPath: string, content: FileContent): Promise<void> {
-    const target = this.toMesaPath(inputPath);
-    await this.filesystem.appendFile(target, content);
-    this.recordModified(target);
+  appendFile(inputPath: string, content: FileContent): Promise<void> {
+    return this.filesystem.appendFile(this.toMesaPath(inputPath), content);
   }
 
-  async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
-    const target = this.toMesaPath(inputPath);
-    await this.filesystem.deleteFile(target, options);
-    this.forgetPath(target);
+  deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
+    return this.filesystem.deleteFile(this.toMesaPath(inputPath), options);
   }
 
-  async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    const target = this.toMesaPath(dest);
-    await this.filesystem.copyFile(this.toMesaPath(src), target, options);
-    this.recordModified(target);
+  copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    return this.filesystem.copyFile(this.toMesaPath(src), this.toMesaPath(dest), options);
   }
 
-  async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    const source = this.toMesaPath(src);
-    const target = this.toMesaPath(dest);
-    await this.filesystem.moveFile(source, target, options);
-    this.forgetPath(source);
-    this.recordModified(target);
+  moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    return this.filesystem.moveFile(this.toMesaPath(src), this.toMesaPath(dest), options);
   }
 
-  async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
-    const target = this.toMesaPath(inputPath);
-    await this.filesystem.mkdir(target, options);
-    this.recordModified(target);
+  mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
+    return this.filesystem.mkdir(this.toMesaPath(inputPath), options);
   }
 
-  async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
-    const target = this.toMesaPath(inputPath);
-    await this.filesystem.rmdir(target, options);
-    this.forgetPath(target);
+  rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
+    return this.filesystem.rmdir(this.toMesaPath(inputPath), options);
   }
 
   readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
@@ -246,9 +228,7 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
 
   async stat(inputPath: string): Promise<FileStat> {
     const stat = await this.filesystem.stat(this.toMesaPath(inputPath));
-    const localPath = this.fromMesaPath(stat.path);
-    const modifiedAt = this.localModifiedAt.get(localPath) ?? stat.modifiedAt;
-    return { ...stat, path: localPath, modifiedAt };
+    return { ...stat, path: this.fromMesaPath(stat.path) };
   }
 
   private toMesaPath(inputPath: string): string {
@@ -268,26 +248,6 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
     if (normalized === this.root) return '/';
     if (normalized.startsWith(`${this.root}/`)) return normalized.slice(this.root.length);
     throw new Error(`Mesa path escapes conformance test root: ${inputPath}`);
-  }
-
-  private recordModified(mesaPath: string): void {
-    this.localModifiedAt.set(this.fromMesaPath(mesaPath), new Date());
-  }
-
-  private forgetPath(mesaPath: string): void {
-    const localPath = this.fromMesaPath(mesaPath);
-    if (localPath === '/') {
-      this.localModifiedAt.clear();
-      return;
-    }
-
-    this.localModifiedAt.delete(localPath);
-
-    for (const path of this.localModifiedAt.keys()) {
-      if (path.startsWith(`${localPath}/`)) {
-        this.localModifiedAt.delete(path);
-      }
-    }
   }
 }
 
@@ -319,6 +279,31 @@ describe('MesaFilesystem integration', () => {
       await fs.rmdir(testDir, { recursive: true, force: true });
     }
   });
+
+  it('reports Mesa path stats without assuming local runner timestamps', async () => {
+    const testDir = mesaRepoPath(`path-${Date.now()}`);
+    const fs = createMesaFilesystem();
+
+    try {
+      await fs.writeFile(`${testDir}/stat-time.txt`, 'content');
+
+      await expect(fs.exists(`${testDir}/stat-time.txt`)).resolves.toBe(true);
+
+      const stat = await fs.stat(`${testDir}/stat-time.txt`);
+      expect(stat).toEqual(
+        expect.objectContaining({
+          name: 'stat-time.txt',
+          path: `${testDir}/stat-time.txt`,
+          type: 'file',
+          size: expect.any(Number),
+          createdAt: expect.any(Date),
+          modifiedAt: expect.any(Date),
+        }),
+      );
+    } finally {
+      await fs.rmdir(testDir, { recursive: true, force: true });
+    }
+  });
 });
 
 createFilesystemTestSuite({
@@ -339,6 +324,11 @@ createFilesystemTestSuite({
     supportsConcurrency: true,
     supportsEmptyDirectories: true,
     deleteThrowsOnMissing: true,
+  },
+  testDomains: {
+    // Mesa returns server-side mtimes, but the shared pathOperations suite
+    // assumes stat().modifiedAt is comparable to the local test runner clock.
+    pathOperations: false,
   },
   testTimeout: 30000,
 });
