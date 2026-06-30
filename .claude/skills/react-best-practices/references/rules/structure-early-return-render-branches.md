@@ -12,19 +12,29 @@ When a component renders mutually exclusive top-level states — loading, empty,
 **Incorrect (a ternary tree inside the wrapper):**
 
 ```tsx
-return (
-  <Panel>
-    {isLoading ? <Skeleton /> : isDetailOpen ? <Detail /> : <List items={items} />}
-  </Panel>
-);
+return <Panel>{isLoading ? <Skeleton /> : isDetailOpen ? <Detail /> : <List items={items} />}</Panel>;
 ```
 
 **Also incorrect (the wrapper duplicated in every early return):**
 
 ```tsx
-if (isLoading) return <Panel><Skeleton /></Panel>;
-if (isDetailOpen) return <Panel><Detail /></Panel>;
-return <Panel><List items={items} /></Panel>;
+if (isLoading)
+  return (
+    <Panel>
+      <Skeleton />
+    </Panel>
+  );
+if (isDetailOpen)
+  return (
+    <Panel>
+      <Detail />
+    </Panel>
+  );
+return (
+  <Panel>
+    <List items={items} />
+  </Panel>
+);
 ```
 
 **Correct (one wrapper; the body early-returns bare content):**
