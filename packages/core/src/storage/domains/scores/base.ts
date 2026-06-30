@@ -1,13 +1,17 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
-import type { StoragePagination } from '../../types';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData } from '../../../evals/types';
+import type {
+  ListScoresByBatchIdInput,
+  ListScoresByDatasetIdInput,
+  ListScoresByEntityIdInput,
+  ListScoresByRunIdInput,
+  ListScoresByScorerIdInput,
+  ListScoresBySpanInput,
+  ScoreTenancyFilters,
+} from '../../types';
 import { StorageDomain } from '../base';
 
-/** Multi-tenant scope filters for score queries. */
-export interface ScoreTenancyFilters {
-  organizationId?: string;
-  projectId?: string;
-}
+export type { ScoreTenancyFilters };
 
 export abstract class ScoresStorage extends StorageDomain {
   constructor() {
@@ -25,51 +29,13 @@ export abstract class ScoresStorage extends StorageDomain {
 
   abstract saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }>;
 
-  abstract listScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-    source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResponse>;
+  abstract listScoresByScorerId(input: ListScoresByScorerIdInput): Promise<ListScoresResponse>;
 
-  abstract listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResponse>;
+  abstract listScoresByRunId(input: ListScoresByRunIdInput): Promise<ListScoresResponse>;
 
-  abstract listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResponse>;
+  abstract listScoresByEntityId(input: ListScoresByEntityIdInput): Promise<ListScoresResponse>;
 
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination: _pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResponse> {
+  async listScoresBySpan({ traceId, spanId }: ListScoresBySpanInput): Promise<ListScoresResponse> {
     throw new MastraError({
       id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.STORAGE,
@@ -83,14 +49,7 @@ export abstract class ScoresStorage extends StorageDomain {
    * per-trace score produced by one batch scoring call). Tenant-scoped via
    * `filters`. Adapters that have not implemented this throw by default.
    */
-  async listScoresByBatchId({
-    batchId,
-    pagination: _pagination,
-  }: {
-    batchId: string;
-    pagination: StoragePagination;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResponse> {
+  async listScoresByBatchId({ batchId }: ListScoresByBatchIdInput): Promise<ListScoresResponse> {
     throw new MastraError({
       id: 'SCORES_STORAGE_GET_SCORES_BY_BATCH_ID_NOT_IMPLEMENTED',
       domain: ErrorDomain.STORAGE,
@@ -104,14 +63,7 @@ export abstract class ScoresStorage extends StorageDomain {
    * scores can join back to their dataset items. Tenant-scoped via `filters`.
    * Adapters that have not implemented this throw by default.
    */
-  async listScoresByDatasetId({
-    datasetId,
-    pagination: _pagination,
-  }: {
-    datasetId: string;
-    pagination: StoragePagination;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResponse> {
+  async listScoresByDatasetId({ datasetId }: ListScoresByDatasetIdInput): Promise<ListScoresResponse> {
     throw new MastraError({
       id: 'SCORES_STORAGE_GET_SCORES_BY_DATASET_ID_NOT_IMPLEMENTED',
       domain: ErrorDomain.STORAGE,

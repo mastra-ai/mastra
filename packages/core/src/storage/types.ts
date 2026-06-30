@@ -1,7 +1,7 @@
 import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
-import type { ScoringSamplingConfig } from '../evals/types';
+import type { ScoringSamplingConfig, ScoringSource } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
 import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
@@ -2802,6 +2802,57 @@ export interface AddExperimentResultInput {
 export interface ExperimentTenancyFilters {
   organizationId?: string;
   projectId?: string;
+}
+
+/**
+ * Multi-tenant scoping filters for score queries. Mirrors
+ * {@link DatasetTenancyFilters} so the scores domain can be queried
+ * within a tenancy bucket using the same shape.
+ */
+export interface ScoreTenancyFilters {
+  organizationId?: string;
+  projectId?: string;
+}
+
+export interface ListScoresByScorerIdInput {
+  scorerId: string;
+  pagination: StoragePagination;
+  entityId?: string;
+  entityType?: string;
+  source?: ScoringSource;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresByRunIdInput {
+  runId: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresByEntityIdInput {
+  entityId: string;
+  entityType: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresBySpanInput {
+  traceId: string;
+  spanId: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresByBatchIdInput {
+  batchId: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresByDatasetIdInput {
+  datasetId: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
 }
 
 export interface ListExperimentsInput {

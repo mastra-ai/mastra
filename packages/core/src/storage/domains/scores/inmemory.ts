@@ -1,8 +1,7 @@
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
-import type { StoragePagination } from '../../types';
+import type { ScoreTenancyFilters, StoragePagination } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
-import type { ScoreTenancyFilters } from './base';
 import { ScoresStorage } from './base';
 
 function matchesTenancy(score: ScoreRowData, filters?: ScoreTenancyFilters): boolean {
