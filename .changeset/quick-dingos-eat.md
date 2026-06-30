@@ -4,10 +4,16 @@
 
 support inline JSON prompt injection
 
-Widens the `jsonPromptInjection` type from `boolean` to
-`boolean | 'system' | 'inline'`. `'inline'` injects the
-JSON schema instruction into the latest user message
-instead of the leading system message, preserving prompt
-cache on providers with prefix-based caching. Also adds
-a `'json-prompt-injection:inline'` feature flag for
-runtime capability detection.
+Added `structuredOutput.jsonPromptInjection: 'inline'` to
+append JSON schema instructions to the latest user message
+instead of the system prompt. This helps keep the system
+prompt stable on providers that cache prompt prefixes.
+
+```ts
+await agent.generate('Summarize this text', {
+  structuredOutput: {
+    schema,
+    jsonPromptInjection: 'inline',
+  },
+});
+```

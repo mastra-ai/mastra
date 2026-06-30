@@ -119,6 +119,7 @@ describe('execute structured output prompt handling', () => {
     );
     expect(JSON.stringify((capturedPrompt as any[])[3])).toContain('Return your response as JSON matching this schema');
     expect(JSON.stringify((capturedPrompt as any[])[3])).toContain('suggestions');
+    expect(JSON.stringify((capturedPrompt as any[])[3])).toContain('Extract now.');
   });
 
   it('adds a user message for inline mode when no user message exists', async () => {
