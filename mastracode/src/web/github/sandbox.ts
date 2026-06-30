@@ -16,6 +16,7 @@
  * inject a fake sandbox and other providers can be added later.
  */
 
+import { createHash } from 'node:crypto';
 import { RailwaySandbox } from '@mastra/railway';
 import { eq } from 'drizzle-orm';
 import { getAppDb } from './db';
@@ -324,7 +325,7 @@ export async function reattachProjectSandbox(providerSandboxId: string): Promise
  * standard POSIX-safe construction and prevents the quoted string from being
  * terminated early.
  */
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   // Replace each ' with the four-character sequence: ' \ ' '
   return `'` + value.split(`'`).join(`'\\''`) + `'`;
 }
@@ -518,7 +519,15 @@ function classifyGitFailure(
  * command in a way that escapes quoting. Mirrors the route-layer check.
  */
 export function isValidGitRef(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 255 &&
+    // Reject leading-dash refs (e.g. `--mirror`) so the value can never be
+    // parsed as a git option when interpolated into a command.
+    !value.startsWith('-') &&
+    /^[A-Za-z0-9_./-]+$/.test(value)
+  );
 }
 
 /** Identity used to author commits inside the sandbox. */
@@ -694,17 +703,24 @@ export class WorktreeError extends Error {
 
 /**
  * Reduce a (already ref-validated) branch name to a filesystem-safe directory
- * segment for the worktree path: lowercase, slashes/dots/unsafe chars collapsed
- * to `-`. This only affects the *directory name*, never the git branch itself.
+ * segment for the worktree path: slashes/dots/unsafe chars collapsed to `-`.
+ * This only affects the *directory name*, never the git branch itself.
+ *
+ * Sanitization is lossy (e.g. `feat/a` and `feat-a` both reduce to `feat-a`),
+ * so an 8-char hash of the original branch is appended whenever the sanitized
+ * form differs from the input. That keeps clean names (`main`) readable while
+ * guaranteeing distinct branches never share a worktree directory.
  */
 export function safeBranchDir(branch: string): string {
-  return (
+  const sanitized =
     branch
       .replace(/[^A-Za-z0-9._-]+/g, '-')
       .replace(/\/+/g, '-')
       .replace(/^[-.]+|[-.]+$/g, '')
-      .slice(0, 100) || 'work'
-  );
+      .slice(0, 100) || 'work';
+  if (sanitized === branch) return sanitized;
+  const hash = createHash('sha256').update(branch).digest('hex').slice(0, 8);
+  return `${sanitized}-${hash}`;
 }
 
 /**

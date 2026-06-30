@@ -33,6 +33,7 @@ import {
   resolveGitIdentity,
   safeBranchDir,
   setSandboxFactory,
+  shellQuote,
   withInstallToken,
   WorktreeError,
 } from './sandbox';
@@ -382,6 +383,37 @@ describe('isValidGitRef', () => {
     expect(isValidGitRef('has space')).toBe(false);
     expect(isValidGitRef(123)).toBe(false);
   });
+
+  it('rejects leading-dash refs that git could parse as options', () => {
+    expect(isValidGitRef('--mirror')).toBe(false);
+    expect(isValidGitRef('-D')).toBe(false);
+  });
+});
+
+describe('shellQuote', () => {
+  it('wraps simple values in single quotes', () => {
+    expect(shellQuote('main')).toBe(`'main'`);
+    expect(shellQuote('feat/cloud-agent')).toBe(`'feat/cloud-agent'`);
+  });
+
+  it('escapes embedded single quotes with the canonical POSIX sequence', () => {
+    // A single quote must close the quoted string, emit an escaped quote, then
+    // reopen — the four-character sequence '\'' — so the value cannot terminate
+    // the quoted string early.
+    expect(shellQuote(`it's`)).toBe(`'it'\\''s'`);
+  });
+
+  it('neutralizes command-injection attempts', () => {
+    // Even if an unvalidated value (e.g. a commit message or PR body) reaches
+    // the shell, the injected command stays inside a quoted literal.
+    const malicious = `'; rm -rf / #`;
+    const quoted = shellQuote(malicious);
+    // The result is a single shell word: opening quote, escaped quotes around
+    // the payload, closing quote. No unescaped quote can break out.
+    expect(quoted.startsWith(`'`)).toBe(true);
+    expect(quoted.endsWith(`'`)).toBe(true);
+    expect(quoted).toBe(`''\\''; rm -rf / #'`);
+  });
 });
 
 describe('resolveGitIdentity', () => {
@@ -517,19 +549,29 @@ describe('pushBranch', () => {
 });
 
 describe('safeBranchDir', () => {
-  it('collapses slashes and unsafe chars to a single dir segment', () => {
-    expect(safeBranchDir('feat/cloud-agent')).toBe('feat-cloud-agent');
-    expect(safeBranchDir('release/1.2.3')).toBe('release-1.2.3');
+  it('leaves already-safe names untouched', () => {
+    expect(safeBranchDir('main')).toBe('main');
+    expect(safeBranchDir('release-1.2.3')).toBe('release-1.2.3');
+  });
+
+  it('collapses slashes and unsafe chars and appends a hash to stay unique', () => {
+    expect(safeBranchDir('feat/cloud-agent')).toBe('feat-cloud-agent-53bf6e98');
+    expect(safeBranchDir('release/1.2.3')).toBe('release-1.2.3-88ded651');
   });
 
   it('never produces an empty segment', () => {
-    expect(safeBranchDir('///')).toBe('work');
+    expect(safeBranchDir('///')).toBe('work-732c4e97');
+  });
+
+  it('gives ambiguous branches distinct directories', () => {
+    // Without the hash suffix both of these would collapse to `feat-a`.
+    expect(safeBranchDir('feat/a')).not.toBe(safeBranchDir('feat-a'));
   });
 });
 
 describe('computeWorktreePath', () => {
   it('places worktrees in a sibling worktrees/ dir of the repo checkout', () => {
-    expect(computeWorktreePath('/workspace/hello', 'feat/x')).toBe('/workspace/worktrees/feat-x');
+    expect(computeWorktreePath('/workspace/hello', 'feat/x')).toBe('/workspace/worktrees/feat-x-79b4cc55');
   });
 
   it('tolerates a trailing slash on the repo workdir', () => {
@@ -549,14 +591,16 @@ describe('ensureWorktree', () => {
     const result = await ensureWorktree(sandbox, '/workspace/hello', { branch: 'feat/x', baseBranch: 'main' });
 
     expect(result).toEqual({
-      worktreePath: '/workspace/worktrees/feat-x',
+      worktreePath: '/workspace/worktrees/feat-x-79b4cc55',
       branch: 'feat/x',
       baseBranch: 'main',
       reused: false,
     });
     const joined = sandbox.calls.join('\n');
     expect(joined).toContain("git -C '/workspace/hello' fetch origin 'main'");
-    expect(joined).toContain("git -C '/workspace/hello' worktree add -B 'feat/x' '/workspace/worktrees/feat-x' 'main'");
+    expect(joined).toContain(
+      "git -C '/workspace/hello' worktree add -B 'feat/x' '/workspace/worktrees/feat-x-79b4cc55' 'main'",
+    );
   });
 
   it('reuses an existing worktree without running git worktree add', async () => {
@@ -565,7 +609,7 @@ describe('ensureWorktree', () => {
     const result = await ensureWorktree(sandbox, '/workspace/hello', { branch: 'feat/x', baseBranch: 'main' });
 
     expect(result.reused).toBe(true);
-    expect(result.worktreePath).toBe('/workspace/worktrees/feat-x');
+    expect(result.worktreePath).toBe('/workspace/worktrees/feat-x-79b4cc55');
     expect(sandbox.calls.some(c => c.includes('worktree add'))).toBe(false);
   });
 
