@@ -20,6 +20,7 @@ afterEach(async () => {
 interface AgentFiles {
   config?: string;
   instructions?: string;
+  memory?: string;
   workspace?: string;
   /** Map of relative path under `workspace/` to seed file content. */
   workspaceSeed?: Record<string, string>;
@@ -37,6 +38,9 @@ async function writeAgentDir(agentDir: string, files: AgentFiles) {
   }
   if (files.instructions !== undefined) {
     await writeFile(join(agentDir, 'instructions.md'), files.instructions);
+  }
+  if (files.memory !== undefined) {
+    await writeFile(join(agentDir, 'memory.ts'), files.memory);
   }
   if (files.workspace !== undefined) {
     await writeFile(join(agentDir, 'workspace.ts'), files.workspace);
@@ -251,6 +255,16 @@ describe('discoverFsAgents', () => {
     expect(agent.configPath).toBeUndefined();
   });
 
+  it('skips a symlinked memory.ts so it is not imported into the bundle', async () => {
+    const secret = join(dir, 'secret-memory.ts');
+    await writeFile(secret, `export default {};`);
+    await writeAgent('weather', { config: `export default { model: 'openai/gpt-4o' };`, instructions: 'hi' });
+    await symlink(secret, join(dir, 'agents', 'weather', 'memory.ts'));
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.memoryPath).toBeUndefined();
+  });
+
   it('discovers a flat markdown skill, defaulting name to the filename', async () => {
     await writeAgent('weather', {
       config: `export default { model: 'openai/gpt-4o' };`,
@@ -308,6 +322,42 @@ describe('discoverFsAgents', () => {
     });
 
     expect((await discoverFsAgents(dir))[0]!.workspacePath).toBeUndefined();
+  });
+
+  it('discovers memory.ts when present', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      memory: `export default {};`,
+    });
+
+    expect((await discoverFsAgents(dir))[0]!.memoryPath).toMatch(/agents\/weather\/memory\.ts$/);
+  });
+
+  it('leaves memoryPath undefined when there is no memory file', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+
+    expect((await discoverFsAgents(dir))[0]!.memoryPath).toBeUndefined();
+  });
+
+  it('discovers a subagent memory.ts', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      subagents: {
+        worker: {
+          config: `export default { model: 'openai/gpt-4o', description: 'worker' };`,
+          instructions: 'hi',
+          memory: `export default {};`,
+        },
+      },
+    });
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.subagents[0]!.memoryPath).toMatch(/subagents\/worker\/memory\.ts$/);
   });
 
   it('discovers an authored workspace/ seed directory', async () => {
@@ -437,6 +487,38 @@ describe('generateFsAgentsModule', () => {
     expect(source).toMatch(/import workspace_\d+_\w+ from "[^"]*workspace\.ts";/);
     expect(source).toMatch(/workspace: workspace_\d+_\w+/);
     expect(source).toContain('defaultWorkspaceBasePath:');
+  });
+
+  it('imports memory.ts and threads it into the entry when present', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      memory: `export default {};`,
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+    expect(source).toMatch(/import memory_\w+ from "[^"]*memory\.ts";/);
+    expect(source).toMatch(/memory: memory_\w+/);
+  });
+
+  it('imports a subagent memory.ts and threads it into the nested entry', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      subagents: {
+        worker: {
+          config: `export default { model: 'openai/gpt-4o', description: 'worker' };`,
+          instructions: 'hi',
+          memory: `export default {};`,
+        },
+      },
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+    expect(source).toMatch(/import memory_\w+ from "[^"]*subagents\/worker\/memory\.ts";/);
+    expect(source).toMatch(/memory: memory_\w+/);
   });
 });
 
