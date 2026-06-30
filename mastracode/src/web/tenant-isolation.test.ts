@@ -79,8 +79,8 @@ async function seedPrivateThread(mem: ReturnType<typeof memoryOf>, marker: strin
 
 describe('S3: cross-tenant libSQL isolation', () => {
   it('keeps one tenant from reading another tenant threads and messages', async () => {
-    const a = resolveTenantStorage({ userId: 'user_a' });
-    const b = resolveTenantStorage({ userId: 'user_b' });
+    const a = await resolveTenantStorage({ userId: 'user_a' });
+    const b = await resolveTenantStorage({ userId: 'user_b' });
 
     // Different tenants → different hashed dirs → different db files.
     expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
@@ -144,8 +144,8 @@ describe('S3: cross-tenant libSQL isolation', () => {
 
 describe('S3: per-(org,user) libSQL isolation', () => {
   it('isolates two users in the SAME org into distinct databases', async () => {
-    const a = resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
-    const b = resolveTenantStorage({ orgId: 'org_a', userId: 'user_2' });
+    const a = await resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
+    const b = await resolveTenantStorage({ orgId: 'org_a', userId: 'user_2' });
 
     expect(a.tenantKey).not.toBe(b.tenantKey);
     expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
@@ -179,8 +179,8 @@ describe('S3: per-(org,user) libSQL isolation', () => {
   });
 
   it('isolates the SAME user across two orgs into distinct databases', async () => {
-    const a = resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
-    const b = resolveTenantStorage({ orgId: 'org_b', userId: 'user_1' });
+    const a = await resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
+    const b = await resolveTenantStorage({ orgId: 'org_b', userId: 'user_1' });
 
     expect(a.tenantKey).not.toBe(b.tenantKey);
     expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
@@ -207,11 +207,11 @@ describe('S3: per-(org,user) libSQL isolation', () => {
 });
 
 describe('S3: remote URL template per-(org,user) isolation', () => {
-  it('produces distinct remote urls carrying each tenant composite key', () => {
+  it('produces distinct remote urls carrying each tenant composite key', async () => {
     process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE = 'libsql://{id}.turso.io';
 
-    const a = resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
-    const b = resolveTenantStorage({ orgId: 'org_b', userId: 'user_1' });
+    const a = await resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
+    const b = await resolveTenantStorage({ orgId: 'org_b', userId: 'user_1' });
 
     expect(a.storageConfig.isRemote).toBe(true);
     expect(b.storageConfig.isRemote).toBe(true);

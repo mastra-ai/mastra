@@ -331,12 +331,25 @@ client-supplied paths); users without an org fall back to a user-only key.
 # Local files (default): one isolated DB dir per tenant under this root
 export MASTRACODE_TENANT_DB_ROOT=~/.mastracode/web/tenants    # optional
 
-# Or remote libSQL/Turso per tenant ({id} = hashed (orgId, userId))
+# Or remote libSQL/Turso per tenant ({id} = hashed (orgId, userId)). This mode
+# assumes each tenant DB already exists at the templated URL.
 export MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io        # optional
 export MASTRACODE_TENANT_VECTOR_URL_TEMPLATE=libsql://{id}-vec-org.turso.io # optional
 export MASTRACODE_TENANT_DB_AUTH_TOKEN=...                                  # optional
 export MASTRACODE_TENANT_VECTOR_AUTH_TOKEN=...                              # optional
+
+# Or auto-provision a Turso database per tenant on first access via the Turso
+# Platform API (no pre-created DBs needed). Requires APP_DATABASE_URL: the
+# stable db-name/hostname mapping is persisted there so replicas converge on
+# one DB and cold starts don't re-create it. A scoped token is minted fresh per
+# resolution, so no long-lived credential is stored.
+export MASTRACODE_TURSO_PLATFORM_TOKEN=...    # optional
+export MASTRACODE_TURSO_ORG=my-org            # optional
+export MASTRACODE_TURSO_GROUP=default         # optional (default "default")
 ```
+
+Resolution priority: explicit `MASTRACODE_TENANT_DB_URL_TEMPLATE` → Turso
+auto-provisioning (when the platform token + org are set) → local libSQL files.
 
 When web auth is disabled the server uses a single shared store, exactly as before.
 
@@ -356,7 +369,8 @@ export GITHUB_APP_WEBHOOK_SECRET=...
 export MASTRACODE_DISTRIBUTED_LOCK=1
 
 # Persist/share tenant DBs across replicas — fail/warn at startup if no remote
-# tenant DB template is set (local-file DBs don't survive restarts or sharing).
+# tenant DB backend (URL template OR Turso auto-provisioning) is configured
+# (local-file DBs don't survive restarts or sharing).
 export MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1
 
 # Bound in-memory tenant caches as the team grows.

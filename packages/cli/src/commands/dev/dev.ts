@@ -8,6 +8,7 @@ import {
   getServerOptions,
   normalizeStudioBase,
   prepareFsAgentsEntry,
+  writeFsAgentsEntry,
   mirrorFsAgentWorkspaces,
 } from '@mastra/deployer/build';
 import { execa } from 'execa';
@@ -534,6 +535,11 @@ export async function dev({
   };
 
   await bundler.prepare(dotMastraPath);
+
+  // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
+  // empties the output directory so the wrapper is not wiped before the watcher
+  // reads it. No-op when there are no fs-routed agents.
+  await writeFsAgentsEntry(fsAgents);
 
   // Mirror authored `agents/<name>/workspace/**` seeds into the bundled output
   // directory, where the generated entry resolves each agent's default
