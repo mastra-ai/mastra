@@ -22,12 +22,15 @@ export interface PromptContext {
   productName?: string;
   /** Name used in the commit `Co-Authored-By` line. Default: "Mastra Code". */
   coAuthorName?: string;
+  /** Email used in the commit `Co-Authored-By` line. Default: "noreply@mastra.ai". */
+  coAuthorEmail?: string;
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
   const commonBinaries = formatCommonBinaries(ctx.commonBinaries);
   const productName = ctx.productName ?? 'Mastra Code';
   const coAuthorName = ctx.coAuthorName ?? 'Mastra Code';
+  const coAuthorEmail = ctx.coAuthorEmail ?? 'noreply@mastra.ai';
 
   return `You are ${productName}, an interactive CLI coding agent that helps users with software engineering tasks.
 
@@ -82,7 +85,7 @@ ${ctx.toolGuidance}
 Don't commit files likely to contain secrets (\`.env\`, \`*.key\`, \`credentials.json\`). Warn if asked.
 
 ## Commits
-Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName}${ctx.modelId ? ` (${ctx.modelId})` : ''} <noreply@mastra.ai>\` in the message body.
+Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName}${ctx.modelId ? ` (${ctx.modelId})` : ''} <${coAuthorEmail}>\` in the message body.
 
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.

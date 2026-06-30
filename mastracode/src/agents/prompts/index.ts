@@ -2,7 +2,6 @@
  * Prompt system — exports the prompt builder and mode-specific prompts.
  */
 
-export { buildBasePrompt } from '@mastra/core/coding-agent';
 export { buildModePrompt, buildModePromptFn } from './build.js';
 export { planModePrompt } from './plan.js';
 export { fastModePrompt } from './fast.js';

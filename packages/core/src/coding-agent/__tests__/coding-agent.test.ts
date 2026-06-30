@@ -109,4 +109,9 @@ describe('buildBasePrompt', () => {
     const prompt = buildBasePrompt(promptContext({ modelId: 'openai/gpt-4o' }));
     expect(prompt).toContain('Co-Authored-By: Mastra Code (openai/gpt-4o) <noreply@mastra.ai>');
   });
+
+  it('parameterizes the Co-Authored-By email', () => {
+    const prompt = buildBasePrompt(promptContext({ coAuthorName: 'Acme Bot', coAuthorEmail: 'bot@acme.dev' }));
+    expect(prompt).toContain('Co-Authored-By: Acme Bot <bot@acme.dev>');
+  });
 });

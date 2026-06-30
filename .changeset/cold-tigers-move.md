@@ -12,7 +12,7 @@ The factory wires sensible, portable defaults that you can override per field:
 - **Error handling** — retries on `ECONNRESET` and bad-request errors, plus prefill and provider-history compatibility processors.
 - **Goal judging** — the default goal judge prompt.
 
-`buildBasePrompt` is parameterized with `productName` and `coAuthorName` (both default to "Mastra Code"), so you can brand the system prompt without forking it.
+`buildBasePrompt` is parameterized with `productName`, `coAuthorName` (both default to "Mastra Code"), and `coAuthorEmail` (defaults to "noreply@mastra.ai"), so you can brand the system prompt and commit trailer without forking it.
 
 ```ts
 import { createCodingAgent } from '@mastra/core/coding-agent';
