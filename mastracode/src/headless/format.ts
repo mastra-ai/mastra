@@ -51,8 +51,13 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
       return {};
     }
     case 'message_end': {
-      // Emit any text the message_update stream didn't already cover (e.g. a run
-      // that only delivered the final text on message_end), then terminate the line.
+      // Only assistant messages produce stdout. The controller also emits
+      // message_end for the echoed user prompt (and system messages); emitting
+      // those here would duplicate the prompt to stdout and corrupt the stream.
+      if (event.message.role !== 'assistant') return {};
+      // Emit any assistant text the message_update stream didn't already cover
+      // (e.g. a run that only delivered the final text on message_end), then
+      // terminate the line.
       const fullText = event.message.content
         .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
         .map(p => p.text)

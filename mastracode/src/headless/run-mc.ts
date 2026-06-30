@@ -102,26 +102,34 @@ async function resolveThread<TState extends Record<string, unknown>>(
  * A simple back-pressured async queue. Events are pushed in; consumers pull via
  * the async iterator. `close()` ends iteration after draining buffered events.
  *
- * Events are only buffered once an iterator has been attached. The result-only
- * path (`await run.result` without `for await (...)`) never iterates, so its
- * events are dropped instead of accumulating an unbounded log for the lifetime
- * of the run — the aggregated {@link RunMCResult} is built separately.
+ * Buffered events are bounded by `maxBuffer`: if a consumer never iterates (the
+ * result-only path, `await run.result` without `for await (...)`) — or simply
+ * falls far behind — the oldest buffered events are dropped instead of growing
+ * without limit. The aggregated {@link RunMCResult} is built independently of
+ * this queue, so dropping buffered events never affects the final result.
  */
 class EventQueue<T> {
   #buffer: T[] = [];
   #resolvers: Array<(r: IteratorResult<T>) => void> = [];
   #closed = false;
-  #iterated = false;
+  readonly #maxBuffer: number;
+
+  constructor(maxBuffer = 10_000) {
+    this.#maxBuffer = maxBuffer;
+  }
 
   push(value: T): void {
     if (this.#closed) return;
     const resolve = this.#resolvers.shift();
     if (resolve) {
       resolve({ value, done: false });
-    } else if (this.#iterated) {
-      this.#buffer.push(value);
+      return;
     }
-    // No iterator attached yet → drop the event (result-only path).
+    this.#buffer.push(value);
+    if (this.#buffer.length > this.#maxBuffer) {
+      // Bound memory: drop the oldest event once over the cap.
+      this.#buffer.shift();
+    }
   }
 
   close(): void {
@@ -133,7 +141,6 @@ class EventQueue<T> {
   }
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
-    this.#iterated = true;
     return {
       next: (): Promise<IteratorResult<T>> => {
         if (this.#buffer.length > 0) {

@@ -54,6 +54,27 @@ describe('formatHuman', () => {
     expect(state.lastTextLength).toBe(0);
   });
 
+  it('ignores non-assistant message_end (e.g. echoed user prompt) so it never reaches stdout', () => {
+    const state = createHumanFormatState();
+    const userEcho = {
+      type: 'message_end' as const,
+      message: { role: 'user' as const, content: [{ type: 'text' as const, text: 'Do the thing.' }] },
+    };
+    expect(formatHuman(userEcho as AgentControllerEvent, state)).toEqual({});
+    // The cursor must remain untouched so a subsequent assistant turn streams correctly.
+    expect(state.lastTextLength).toBe(0);
+  });
+
+  it('flushes trailing assistant text on message_end when message_update never streamed it', () => {
+    const state = createHumanFormatState();
+    const out = formatHuman(
+      { type: 'message_end', message: textMessage('Final answer') } as AgentControllerEvent,
+      state,
+    );
+    expect(out).toEqual({ stdout: 'Final answer\n' });
+    expect(state.lastTextLength).toBe(0);
+  });
+
   it('routes tool start activity to stderr', () => {
     const state = createHumanFormatState();
     const out = formatHuman({ type: 'tool_start', toolName: 'shell', toolCallId: 'c1' } as AgentControllerEvent, state);
