@@ -6522,12 +6522,14 @@ export class Agent<
     })) as MastraLLMVNext;
 
     const resolvedModel = llm.getModel();
-    const isGatewayModel =
+    // Suppress the warning when the model's gateway handles memory server-side
+    // (explicit capability — not inferred from the gateway id).
+    const gatewayHandlesMemory =
       typeof resolvedModel === 'object' &&
       resolvedModel !== null &&
-      'gatewayId' in resolvedModel &&
-      resolvedModel.gatewayId === 'mastra';
-    if (resourceId && threadFromArgs && !this.hasOwnMemory() && !isGatewayModel) {
+      'gatewayHandlesMemory' in resolvedModel &&
+      resolvedModel.gatewayHandlesMemory === true;
+    if (resourceId && threadFromArgs && !this.hasOwnMemory() && !gatewayHandlesMemory) {
       this.logger.warn('No memory is configured but resourceId and threadId were passed in args', { agent: this.name });
     }
 

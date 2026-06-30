@@ -1,7 +1,7 @@
 /**
- * HTTP client for the Mastra Memory Gateway REST API.
+ * HTTP client for the Mastra Gateway memory REST API.
  * Used to proxy memory operations from the local Mastra server to the remote gateway
- * when agents use `mastra/` model strings.
+ * when the agent's gateway handles memory server-side.
  */
 
 interface GatewayThread {
@@ -287,8 +287,10 @@ export function getGatewayClient(): GatewayMemoryClient | null {
 }
 
 /**
- * Check if an agent uses a gateway model (mastra/ prefix).
- * Sync version — can only check agent.model string directly.
+ * Check if an agent's gateway handles memory server-side.
+ * Sync version — cannot resolve the model, so it falls back to the raw
+ * `agent.model` string prefix as a heuristic. Prefer {@link isGatewayAgentAsync},
+ * which reads the resolved model's explicit `gatewayHandlesMemory` capability.
  */
 
 export function isGatewayAgent(agent: any): boolean {
@@ -305,11 +307,10 @@ export function isGatewayAgent(agent: any): boolean {
 }
 
 /**
- * Async version of isGatewayAgent that can await getLLM().
- * Checks multiple paths to detect if an agent uses a mastra/ gateway model:
- * 1. agent.model as raw string (most reliable for directly configured agents)
- * 2. Resolved LLM's underlying ModelRouterLanguageModel config.routerId
- * 3. Resolved LLM's getModel() to access the router's config
+ * Async version that resolves the model and reads its explicit
+ * `gatewayHandlesMemory` capability — memory behavior is driven by what the
+ * gateway does, not by the gateway id. Only when the model cannot be resolved
+ * does it fall back to the raw `agent.model` `mastra/` prefix heuristic.
  */
 
 export async function isGatewayAgentAsync(agent: any): Promise<boolean> {
@@ -317,34 +318,30 @@ export async function isGatewayAgentAsync(agent: any): Promise<boolean> {
   try {
     const agentAny = agent as Record<string, unknown>;
 
-    // Check 1: agent.model is a raw string like 'mastra/openai/gpt-5-mini'
-    if (typeof agentAny.model === 'string' && agentAny.model.startsWith('mastra/')) {
-      return true;
-    }
-
-    // Check 2: Resolve the LLM and check the router's config.routerId
-    // llm.getModelId() returns stripped ID (e.g., 'gpt-5-mini'), so we need
-    // to access the underlying ModelRouterLanguageModel's config.routerId
+    // Primary: resolve the underlying model and read its capability.
+    // llm.getModel() returns the ModelRouterLanguageModel, which carries
+    // `gatewayHandlesMemory` (set from the gateway's handlesMemory() capability).
     if (typeof agent.getLLM === 'function') {
       const llm = await Promise.resolve(agent.getLLM({}));
-      if (llm) {
-        // Try to access the underlying model's routerId via getModel()
-        const llmAny = llm as Record<string, unknown>;
-        if (typeof llmAny.getModel === 'function') {
-          const underlyingModel = (llmAny as { getModel: () => unknown }).getModel();
-          const modelAny = underlyingModel as Record<string, unknown>;
-          // ModelRouterLanguageModel stores routerId in private config
-          if (modelAny?.config && typeof modelAny.config === 'object') {
-            const routerId = (modelAny.config as Record<string, unknown>).routerId;
-            if (typeof routerId === 'string' && routerId.startsWith('mastra/')) {
-              return true;
-            }
-          }
+      const llmAny = llm as Record<string, unknown> | undefined;
+      if (llmAny && typeof llmAny.getModel === 'function') {
+        const underlyingModel = (llmAny as { getModel: () => unknown }).getModel();
+        if (underlyingModel != null) {
+          return (
+            typeof underlyingModel === 'object' &&
+            'gatewayHandlesMemory' in underlyingModel &&
+            (underlyingModel as { gatewayHandlesMemory?: boolean }).gatewayHandlesMemory === true
+          );
         }
       }
     }
+
+    // Fallback when the model can't be resolved: raw model string prefix.
+    if (typeof agentAny.model === 'string' && agentAny.model.startsWith('mastra/')) {
+      return true;
+    }
   } catch {
-    // Detection failed — not a gateway agent
+    // Detection failed — not a gateway memory agent
   }
   return false;
 }

@@ -75,6 +75,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
    */
   readonly modelId: string;
   readonly gatewayId?: string;
+  readonly gatewayHandlesMemory?: boolean;
   /**
    * Supported URL patterns by media type for the provider.
    *
@@ -93,6 +94,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
     this.provider = this.#model.provider;
     this.modelId = this.#model.modelId;
     this.gatewayId = (config as { gatewayId?: string }).gatewayId;
+    this.gatewayHandlesMemory = (config as { gatewayHandlesMemory?: boolean }).gatewayHandlesMemory;
     this.supportedUrls = this.#model.supportedUrls;
   }
 
@@ -118,12 +120,19 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
    * safe shape explicit and avoids walking `supportedUrls` (a
    * PromiseLike / regex map that isn't useful in spans).
    */
-  serializeForSpan(): { specificationVersion: 'v2'; modelId: string; provider: string; gatewayId?: string } {
+  serializeForSpan(): {
+    specificationVersion: 'v2';
+    modelId: string;
+    provider: string;
+    gatewayId?: string;
+    gatewayHandlesMemory?: boolean;
+  } {
     return {
       specificationVersion: this.specificationVersion,
       modelId: this.modelId,
       provider: this.provider,
       gatewayId: this.gatewayId,
+      gatewayHandlesMemory: this.gatewayHandlesMemory,
     };
   }
 }

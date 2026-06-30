@@ -188,10 +188,10 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
           <div className="bg-surface3 border border-border1 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400">Gateway</span>
-              <h3 className="text-sm font-medium text-neutral5">Memory Gateway</h3>
+              <h3 className="text-sm font-medium text-neutral5">Mastra Gateway</h3>
             </div>
             <p className="text-xs text-neutral3">
-              Memory is managed by the Memory Gateway. Threads and observations are stored remotely.
+              Memory is managed by the Mastra Gateway. Threads and observations are stored remotely.
             </p>
           </div>
         </div>

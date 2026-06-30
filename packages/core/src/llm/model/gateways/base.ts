@@ -93,6 +93,17 @@ export interface MastraModelGatewayInterface {
   handlesModel?(modelId: string): boolean;
 
   /**
+   * Whether this gateway handles memory (e.g. Observational Memory) server-side
+   * for models it serves. When true, local memory processing is skipped because
+   * the gateway already observes/reflects/injects context remotely.
+   *
+   * This is an explicit capability — memory behavior must not be inferred from
+   * the gateway's `id`/`name`. A gateway can be a plain model router (false) and
+   * still be the Mastra gateway. Optional; defaults to `false`.
+   */
+  handlesMemory?(): boolean;
+
+  /**
    * Fetch provider configurations from the gateway.
    * Should return providers in the standard format.
    */
@@ -148,6 +159,10 @@ export abstract class MastraModelGateway implements MastraModelGatewayInterface 
   }
 
   handlesModel(_modelId: string): boolean {
+    return false;
+  }
+
+  handlesMemory(): boolean {
     return false;
   }
 

@@ -14,10 +14,20 @@ export interface MastraGatewayConfig {
 
 export class MastraGateway extends MastraModelGateway {
   readonly id = 'mastra';
-  readonly name = 'Memory Gateway';
+  readonly name = 'Mastra Gateway';
 
   constructor(private config?: MastraGatewayConfig) {
     super();
+  }
+
+  /**
+   * The hosted Mastra gateway handles Observational Memory server-side, so
+   * agents routed through it skip local memory processing. This is the single
+   * source of truth for that behavior — consumers must check this capability
+   * rather than the gateway id/name.
+   */
+  override handlesMemory(): boolean {
+    return true;
   }
 
   private getBaseUrl(): string {
@@ -41,7 +51,7 @@ export class MastraGateway extends MastraModelGateway {
       mastra: {
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         apiKeyHeader: 'Authorization',
-        name: 'Memory Gateway',
+        name: 'Mastra Gateway',
         gateway: 'mastra',
         models: [...models],
         docUrl: 'https://mastra.ai/docs/gateway',
