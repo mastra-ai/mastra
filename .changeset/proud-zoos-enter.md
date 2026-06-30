@@ -35,4 +35,4 @@ A file-based agent can also declare **subagents** under `agents/<name>/subagents
 
 Code-registered agents win on name collisions, and a `config.ts` that exports `new Agent()` is used as-is (its sibling `instructions.md`, `tools/`, and `subagents/` are ignored with a warning), so existing projects are unaffected.
 
-File-based agents are discovered by the bundler and are only registered when the app runs through the Mastra CLI (`mastra dev` / `mastra build`). If you import the `mastra` instance directly as a library (your own server, a server adapter, a framework route, or a test), the `agents/<name>/` directories are not discovered — register those agents in code instead.
+The core API surface is `agentConfig()` plus the `assembleAgentFromFsEntry()` / `Mastra.__registerFsAgents()` helpers that turn a discovered directory into a registered agent. Directory discovery itself is performed by the build pipeline; importing the `mastra` instance directly as a library does not scan `agents/<name>/` directories, so register those agents in code if you need them outside the build pipeline.

@@ -11,7 +11,7 @@ a default workspace with seed files, and a declared subagent.
 
 ## Layout
 
-```
+```text
 weather-fs/
   config.ts                       # model + config overrides (uses agentConfig() for typing)
   instructions.md                 # the agent instructions
@@ -36,15 +36,15 @@ weather-fs/
 
 ## How it maps
 
-| File / dir                              | Becomes                                                                        |
-| --------------------------------------- | ------------------------------------------------------------------------------ |
-| `config.ts`                             | merged agent config; `id`/`name` default to `weather-fs`.                      |
-| `instructions.md`                       | the agent `instructions`.                                                       |
-| `tools/get_weather.ts`                  | a tool keyed `get_weather`.                                                      |
-| `skills/units.md`                       | a flat skill named `units`.                                                      |
-| `skills/severe-weather/SKILL.md`        | a packaged skill; frontmatter supplies name/description, `references/` inlined.  |
-| `workspace/`                            | seed files copied into the agent's default workspace.                           |
-| `subagents/forecaster/`                 | a subagent the parent can delegate to via a tool named `forecaster`.            |
+| File / dir                       | Becomes                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| `config.ts`                      | merged agent config; `id`/`name` default to `weather-fs`.                       |
+| `instructions.md`                | the agent `instructions`.                                                       |
+| `tools/get_weather.ts`           | a tool keyed `get_weather`.                                                     |
+| `skills/units.md`                | a flat skill named `units`.                                                     |
+| `skills/severe-weather/SKILL.md` | a packaged skill; frontmatter supplies name/description, `references/` inlined. |
+| `workspace/`                     | seed files copied into the agent's default workspace.                           |
+| `subagents/forecaster/`          | a subagent the parent can delegate to via a tool named `forecaster`.            |
 
 Subagents are **one level deep** and each subagent's `config.ts` must set a
 non-empty `description` — that is what the parent model sees when deciding

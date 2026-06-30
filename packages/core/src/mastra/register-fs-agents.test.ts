@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../agent/durable';
 import { Mastra } from './index';
 
 function makeAgent(name: string) {
@@ -41,6 +42,16 @@ describe('Mastra.__registerFsAgents', () => {
 
     expect(mastra.getAgent('weather')).toBe(coded);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('weather'));
+  });
+
+  it('stamps source on durable agents registered with a source', () => {
+    const base = makeAgent('durable-weather');
+    const durable = createDurableAgent({ agent: base, id: 'durable-weather', name: 'durable-weather' });
+    const mastra = new Mastra({});
+
+    mastra.addAgent(durable, 'durable-weather', { source: 'fs' });
+
+    expect(mastra.getAgent('durable-weather').source).toBe('fs');
   });
 
   it('skips null entries without throwing', () => {

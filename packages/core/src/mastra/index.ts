@@ -2142,6 +2142,14 @@ export class Mastra<
       // Set the Mastra instance on the durable agent for observability
       durableAgent.__setMastra?.(this);
 
+      // Propagate the definition source (e.g. 'fs') onto both the wrapper and
+      // the underlying agent. The durable branch returns early below, so it
+      // never reaches the shared `options?.source` handling.
+      if (options?.source) {
+        (durableAgent as unknown as Agent<any>).source = options.source;
+        underlyingAgent.source = options.source;
+      }
+
       // Initialize the underlying agent (needed for tools, memory, etc.)
       underlyingAgent.__setLogger(this.#logger);
       underlyingAgent.__registerMastra(this);

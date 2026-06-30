@@ -171,7 +171,7 @@ export async function generateFsAgentsModule(userEntry: string, agents: Discover
   }
   lines.push(`];`);
   lines.push(``);
-  lines.push(`const __fsAgents = {};`);
+  lines.push(`const __fsAgents = Object.create(null);`);
   lines.push(`for (const __entry of __fsAgentEntries) {`);
   lines.push(`  __fsAgents[__entry.name] = assembleAgentFromFsEntry(__entry, {`);
   lines.push(`    onWarn: msg => __userEntry.mastra?.getLogger?.()?.warn?.(msg) ?? console.warn(msg),`);

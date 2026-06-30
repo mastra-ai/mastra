@@ -453,12 +453,6 @@ export async function dev({
   const fsAgents = await prepareFsAgentsEntry(mastraDir, userEntryFile, dotMastraPath);
   const entryFile = fsAgents.entryFile;
 
-  // Mirror authored `agents/<name>/workspace/**` seeds next to the generated
-  // dev entry (in `.mastra/`), where each agent's default workspace is rooted.
-  if (fsAgents.agentCount > 0) {
-    await mirrorFsAgentWorkspaces(mastraDir, dotMastraPath);
-  }
-
   // Use the bundler's getAllToolPaths method to prepare tools paths, plus any
   // tools defined under agents/*/tools for fs-routed agents.
   const discoveredTools = bundler.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
@@ -540,6 +534,13 @@ export async function dev({
   };
 
   await bundler.prepare(dotMastraPath);
+
+  // Mirror authored `agents/<name>/workspace/**` seeds into the bundled output
+  // directory, where the generated entry resolves each agent's default
+  // workspace at runtime. Runs after `prepare()` so it is not wiped.
+  if (fsAgents.agentCount > 0) {
+    await mirrorFsAgentWorkspaces(mastraDir, join(dotMastraPath, 'output'));
+  }
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 

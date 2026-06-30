@@ -2,4 +2,12 @@
 '@mastra/deployer': minor
 ---
 
-Added build support for file-based agents. The bundler now discovers agents defined under `src/mastra/agents/<name>/` (a `config.ts`, `instructions.md`, `tools/*.ts`, `skills/`, and an optional `workspace.ts`), assembles them, and registers them onto your Mastra instance during build. Tools under `agents/*/tools` are bundled alongside the top-level `tools/` directory, and skills under `agents/*/skills` are inlined into the bundle (a `createSkill()` module, a packaged `SKILL.md` directory with its `references/`, or a flat `<skill>.md`). Each file-based agent is given a default workspace unless `workspace.ts` or `config.workspace` overrides it, and files committed under `agents/<name>/workspace/` are mirrored into the bundle and used to seed that workspace at runtime. The bundler also discovers declared subagents under `agents/<name>/subagents/<childId>/` (one level deep), assembles each from its own directory, emits nested `assembleAgentFromFsEntry` calls, and mirrors subagent `workspace/` seeds to a nested `workspace/<parent>/<child>` path. Projects with no file-based agents are unaffected — the original entry is used unchanged.
+You can now define agents by file convention instead of registering each one in code: drop a directory under `src/mastra/agents/<name>/`, run a Mastra build/dev, and the agent is bundled and registered onto your Mastra instance automatically. A directory becomes an agent when it has a `config.ts` or `instructions.md`; `tools/*.ts` add tools, `skills/` add skills (a `createSkill()` module, a packaged `SKILL.md` with its `references/`, or a flat `<skill>.md`), and `subagents/<childId>/` (one level deep) add delegatable subagents. Each agent gets a default workspace unless `workspace.ts` / `config.workspace` overrides it, and files committed under `agents/<name>/workspace/` are mirrored into the bundle to seed that workspace at runtime. Projects with no file-based agents are unaffected — the original entry is used unchanged.
+
+```text
+src/mastra/agents/weather/
+  config.ts          # export default agentConfig({ model: 'openai/gpt-4o' })
+  instructions.md
+  tools/get_weather.ts
+  workspace/cities.json   # mirrored into the agent's workspace
+```
