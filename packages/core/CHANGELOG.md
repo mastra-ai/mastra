@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 1.48.0-alpha.8
+
+### Minor Changes
+
+- Added `createCodingAgent` factory and a reusable `buildBasePrompt` so other projects can build a coding agent on top of the same defaults MastraCode uses. ([#18695](https://github.com/mastra-ai/mastra/pull/18695))
+
+  The factory wires sensible, portable defaults that you can override per field:
+  - **Workspace** — a local filesystem + sandbox rooted at `process.cwd()` (set `basePath`, pass your own `workspace`, or pass `workspace: undefined` to opt out entirely).
+  - **Task signals** — `TaskSignalProvider` so a task list persists across turns.
+  - **Error handling** — retries on `ECONNRESET` and bad-request errors, plus prefill and provider-history compatibility processors.
+  - **Goal judging** — the default goal judge prompt.
+
+  `buildBasePrompt` is parameterized with `productName`, `coAuthorName` (both default to "Mastra Code"), and `coAuthorEmail` (defaults to "noreply@mastra.ai"), so you can brand the system prompt and commit trailer without forking it.
+
+  ```ts
+  import { createCodingAgent } from '@mastra/core/coding-agent';
+
+  const agent = createCodingAgent({
+    id: 'my-coding-agent',
+    name: 'My Coding Agent',
+    model: 'openai/gpt-5',
+    instructions: 'You help with my project.',
+    tools: {},
+    basePath: '/path/to/repo',
+  });
+  ```
+
+### Patch Changes
+
+- Fixed background task execution metadata updates so they no longer rewrite the model-visible tool invocation state. ([#18556](https://github.com/mastra-ai/mastra/pull/18556))
+
 ## 1.48.0-alpha.7
 
 ### Minor Changes
