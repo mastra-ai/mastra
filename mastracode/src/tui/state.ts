@@ -423,6 +423,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
 
   result.voiceController = new VoiceController({
     authStorage: result.authStorage,
+    settings: loadSettings().voice,
     onTranscript: text => editor.insertVoiceTranscript(text),
     onPartialTranscript: text => editor.replaceVoiceTranscript(text),
     showInfo: message => showInfo(result, message),

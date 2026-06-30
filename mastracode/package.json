@@ -97,6 +97,8 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/voice-deepgram": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mastra/server": "workspace:*",
     "@mastra/stagehand": "workspace:*",
