@@ -264,6 +264,7 @@ program
   .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
   .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
+  .option('--region <region>', 'Region for new environments (e.g., us, eu)')
   .option('--debug', 'Enable debug logs', false)
   .action(wrapAction(unifiedDeployAction));
 

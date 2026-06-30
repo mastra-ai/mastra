@@ -20,6 +20,7 @@ export function registerEnvCommands(program: Command) {
     .argument('<project>', 'Project name, slug, or ID')
     .requiredOption('-n, --name <name>', 'Environment name (e.g., staging, preview)')
     .option('-t, --type <type>', 'Environment type (production, staging, preview)', 'staging')
+    .option('-r, --region <region>', 'Region for the environment (e.g., us, eu)')
     .option('--json', 'Output as JSON')
     .action(createEnvironmentAction);
 
@@ -89,7 +90,7 @@ async function listEnvironmentsAction(projectArg: string, options?: { json?: boo
 
 async function createEnvironmentAction(
   projectArg: string,
-  options: { name: string; type?: string; json?: boolean },
+  options: { name: string; type?: string; region?: string; json?: boolean },
 ) {
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);
@@ -100,6 +101,7 @@ async function createEnvironmentAction(
   const environment = await createEnvironment(token, orgId, project.id, {
     name: options.name,
     type,
+    ...(options.region ? { region: options.region } : {}),
   });
 
   if (options.json) {

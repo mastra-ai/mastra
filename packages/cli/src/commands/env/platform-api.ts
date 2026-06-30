@@ -13,6 +13,7 @@ export interface Environment {
   name: string;
   slug: string;
   type: 'production' | 'staging' | 'preview';
+  region: string | null;
   branch: string | null;
   instanceUrl: string | null;
   customServerUrl: string | null;
@@ -60,7 +61,7 @@ export async function createEnvironment(
   token: string,
   orgId: string,
   projectId: string,
-  env: { name: string; type: 'production' | 'staging' | 'preview' },
+  env: { name: string; type: 'production' | 'staging' | 'preview'; region?: string },
 ): Promise<Environment> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     method: 'POST',

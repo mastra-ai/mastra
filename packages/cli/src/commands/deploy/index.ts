@@ -525,6 +525,7 @@ export interface DeployOptions {
   config?: string;
   skipBuild?: boolean;
   skipPreflight?: boolean;
+  region?: string;
   debug?: boolean;
   envFile?: string;
 }
@@ -647,6 +648,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     environment = await createEnvironment(token, orgId, projectId, {
       name: envResolution.name,
       type: envResolution.type,
+      ...(opts.region ? { region: opts.region } : {}),
     });
     p.log.success(`Created ${envResolution.type} environment "${envResolution.name}"`);
   }
