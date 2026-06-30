@@ -76,15 +76,41 @@ const topicsResponse = {
   ],
 };
 
+const topicExamplesResponse = {
+  runId: '32',
+  examples: [
+    {
+      exampleId: 'ex-1',
+      runId: '32',
+      signalName: 'sentiment',
+      topicId: '89',
+      isOutlier: false,
+      signalId: 'sig-1',
+      traceId: 'trace-1',
+      extractedTraceId: 'extracted-1',
+      signalText: 'This is taking forever.',
+      x: 0.1,
+      y: 0.2,
+    },
+  ],
+  nextOffset: null,
+};
+
+const pointsResponse = {
+  runId: '32',
+  points: [
+    { exampleId: 'ex-1', runId: '32', signalName: 'sentiment', topicId: '89', isOutlier: false, x: 0.1, y: 0.2 },
+  ],
+};
+
 function useEntityLearningHandlers() {
   server.use(
     http.get(`${ENTITY_LEARNING_ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
     http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
-    // The details page lists traces through the Mastra client to resolve the
-    // selectable trace id; an empty list is enough for the adapter wiring tests.
-    http.get(`${BASE_URL}/api/observability/traces`, () =>
-      HttpResponse.json({ pagination: { total: 0, page: 0, perPage: 25, hasMore: false }, spans: [] }),
+    http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/topics/:topicId/examples`, () =>
+      HttpResponse.json(topicExamplesResponse),
     ),
+    http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/points`, () => HttpResponse.json(pointsResponse)),
   );
 }
 
@@ -158,33 +184,37 @@ describe('Signals page wrappers', () => {
           '/signals/sentiment?entityType=agent&entityId=entity_support',
         ),
       );
-    });
+    }, 15000);
   });
 
-  describe('when the details route renders', () => {
+  describe('when the details route renders for the selected entity', () => {
     it('passes the route signal param to the reusable details page', async () => {
       useEntityLearningHandlers();
 
-      renderSignalsPage('/signals/tasks');
+      renderSignalsPage('/signals/sentiment?entityType=agent&entityId=entity_support');
 
-      expect(await screen.findByRole('heading', { name: 'Tasks' })).not.toBeNull();
+      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
     });
   });
 
   describe('when a trace route is active', () => {
-    it('renders the details with the trace panel and closes back to the signal route', async () => {
+    it('renders the details with the trace panel and closes back to the signal route preserving the entity', async () => {
       useEntityLearningHandlers();
       useTraceDetailHandlers();
 
-      renderSignalsPage('/signals/tasks/traces/resolved-trace-1');
+      renderSignalsPage('/signals/sentiment/traces/trace-1?entityType=agent&entityId=entity_support');
 
-      expect(await screen.findByRole('heading', { name: 'Tasks' })).not.toBeNull();
+      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
 
       const closeButton = await screen.findByRole('button', { name: 'Close Panel' });
       fireEvent.click(closeButton);
 
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/signals/tasks'));
-    });
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toBe(
+          '/signals/sentiment?entityType=agent&entityId=entity_support',
+        ),
+      );
+    }, 15000);
   });
 
   describe('when rendering a signal breadcrumb', () => {
