@@ -63,6 +63,9 @@ const durableAgenticInputSchema = z.object({
   // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
+  // JSON-safe snapshot of requestContext.entries() so durable steps can read
+  // it (e.g. is-task-complete scorers pass it as customContext).
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
 });
 
 // Re-export shared output schema (identical across implementations)
@@ -275,7 +278,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       )
       // Run the agentic loop with dowhile
       .dowhile(singleIterationWorkflow, async params => {
-        const { inputData } = params;
+        const { inputData, mastra } = params;
         const state = inputData as IterationState;
         const initData = params.getInitData() as DurableAgenticWorkflowInput;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -308,6 +311,17 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         }
 
         const isFinal = !shouldContinue || !underMaxSteps || stopWhenMatched;
+
+        // Rotate messageId for the next iteration. Each iteration's assistant
+        // response is a distinct message, mirroring the non-durable agentic
+        // loop which calls rotateResponseMessageId() between iterations. The
+        // mutated state.messageId flows into the next singleIterationWorkflow
+        // input via map-to-llm-input.
+        if (!isFinal) {
+          const nextMessageId =
+            (mastra as Mastra | undefined)?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
+          state.messageId = nextMessageId;
+        }
 
         // Emit an iteration-complete event for observability. This fires after
         // every iteration (including the last one) so client callbacks can

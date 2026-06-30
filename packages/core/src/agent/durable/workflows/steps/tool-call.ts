@@ -18,6 +18,7 @@ import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type { DurableToolCallInput, SerializableDurableOptions, AgentSuspendedEventData } from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
+import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
 
@@ -189,9 +190,16 @@ export function createDurableToolCallStep() {
         };
       }
 
-      // 1. Resolve the tool from global registry first, then Mastra
+      // 1. Resolve the tool from global registry first, then by provider-tool
+      // model-facing name (e.g. `web_search` resolves to `webSearch` when the
+      // provider tool advertises the snake-case name), then fall back to the
+      // Mastra-wide tool registry. Mirrors the non-durable tool-call step.
       const registryEntry = globalRunRegistry.get(runId);
       let tool = registryEntry?.tools?.[toolName];
+
+      if (!tool) {
+        tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
+      }
 
       if (!tool) {
         tool = resolveTool(toolName, mastra as Mastra);

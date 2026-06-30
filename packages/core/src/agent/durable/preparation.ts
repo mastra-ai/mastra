@@ -23,6 +23,31 @@ import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructu
 import { createWorkflowInput } from './utils/serialize-state';
 
 /**
+ * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
+ * is-task-complete scorers) can see the same `customContext` the non-durable
+ * path passes. Best-effort: entries that fail a JSON round-trip are skipped
+ * so a single non-serializable value can't break the workflow input.
+ */
+function snapshotRequestContextEntries(
+  requestContext: RequestContext | undefined,
+): Record<string, unknown> | undefined {
+  if (!requestContext) return undefined;
+  const out: Record<string, unknown> = {};
+  let any = false;
+  for (const [key, value] of requestContext.entries()) {
+    try {
+      const cloned = JSON.parse(JSON.stringify(value));
+      out[key as string] = cloned;
+      any = true;
+    } catch {
+      // Skip non-serializable entries silently — they wouldn't survive the
+      // wire on cross-process engines anyway.
+    }
+  }
+  return any ? out : undefined;
+}
+
+/**
  * Mirror of Agent#convertInstructionsToString — used for the AGENT_RUN span
  * `attributes.instructions` field so durable runs publish the same shape as
  * non-durable runs. Kept local to avoid promoting the private method.
@@ -531,6 +556,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messageId,
     agentSpanData: agentSpan?.exportSpan(),
     modelSpanData: modelSpan?.exportSpan(),
+    requestContextEntries: snapshotRequestContextEntries(requestContext),
   });
 
   // 14. Create registry entry for non-serializable state
