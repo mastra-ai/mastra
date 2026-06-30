@@ -7,6 +7,14 @@ packages:
 
 # File-based agents
 
+**Added in:** `@mastra/core@1.48.0`
+
+:::experimental
+
+This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
 You can define an agent by file convention instead of constructing it in code. Mastra discovers a directory under `src/mastra/agents/<name>/`, assembles an `Agent` from its files, and registers it on your `Mastra` instance. This works alongside agents created with `new Agent()` — a project can mix both styles.
 
 ## When to use file-based agents
