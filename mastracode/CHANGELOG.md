@@ -1,5 +1,15 @@
 # mastracode
 
+## 0.27.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`e84e791`](https://github.com/mastra-ai/mastra/commit/e84e79174031d7bc8793ca6c805eb38b06e7cfb1)]:
+  - @mastra/core@1.48.0-alpha.9
+  - @mastra/react@1.2.1-alpha.9
+  - @mastra/server@1.48.0-alpha.9
+  - @mastra/hono@1.5.3-alpha.9
+
 ## 0.27.0-alpha.8
 
 ### Patch Changes
