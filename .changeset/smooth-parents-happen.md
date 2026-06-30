@@ -2,7 +2,7 @@
 '@mastra/memory': patch
 '@mastra/client-js': patch
 '@mastra/server': patch
-'@mastra/playground': patch
+'@internal/playground': patch
 ---
 
 add Studio support for observational memory extractors
