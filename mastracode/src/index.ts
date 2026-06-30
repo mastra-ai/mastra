@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
-import { Agent } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type {
   IntervalHandler,
@@ -13,6 +13,7 @@ import type {
   AgentControllerRequestContext,
   Session,
 } from '@mastra/core/agent-controller';
+import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
@@ -518,9 +519,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       })
     : undefined;
-  const codeAgent: Agent = new Agent({
+  const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    // Workspace is wired per-request at the AgentController level (see
+    // `config.workspace` below), so opt out of the factory's default local
+    // workspace. An explicit `undefined` is required: the factory only builds a
+    // default when the `workspace` key is absent.
+    workspace: undefined,
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage),

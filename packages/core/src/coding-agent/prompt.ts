@@ -1,6 +1,10 @@
 /**
- * Base system prompt — shared behavioral instructions for all modes.
+ * Base system prompt — shared behavioral instructions for a coding agent.
  * This is the "brain" that makes the agent a good coding assistant.
+ *
+ * Product-specific strings (the agent's display name and the commit
+ * `Co-Authored-By` name) are parameterized via `productName` / `coAuthorName`
+ * and default to "Mastra Code" so existing callers keep identical output.
  */
 
 export interface PromptContext {
@@ -14,12 +18,18 @@ export interface PromptContext {
   modelId?: string;
   activePlan?: { title: string; plan: string; approvedAt: string } | null;
   toolGuidance: string;
+  /** Display name used in the prompt header. Default: "Mastra Code". */
+  productName?: string;
+  /** Name used in the commit `Co-Authored-By` line. Default: "Mastra Code". */
+  coAuthorName?: string;
 }
 
 export function buildBasePrompt(ctx: PromptContext): string {
   const commonBinaries = formatCommonBinaries(ctx.commonBinaries);
+  const productName = ctx.productName ?? 'Mastra Code';
+  const coAuthorName = ctx.coAuthorName ?? 'Mastra Code';
 
-  return `You are Mastra Code, an interactive CLI coding agent that helps users with software engineering tasks.
+  return `You are ${productName}, an interactive CLI coding agent that helps users with software engineering tasks.
 
 # Environment
 Working directory: ${ctx.projectPath}
@@ -45,7 +55,7 @@ ${ctx.toolGuidance}
 - Identify existing conventions (naming, structure, error handling) and follow them.
 
 ## Goal Mode Awareness
-- Mastra Code has a goal mode for longer-running work. A goal is a persistent objective that the agent continues pursuing across turns until a judge decides the goal is complete, should continue, should pause, or should wait for user input.
+- ${productName} has a goal mode for longer-running work. A goal is a persistent objective that the agent continues pursuing across turns until a judge decides the goal is complete, should continue, should pause, or should wait for user input.
 - Users can start goal mode directly with /goal <objective>. In plan mode, plans submitted with the submit_plan tool may also be started as a goal if the user selects that option in the approval UI.
 - Help users create good goals by making objectives concrete, outcome-focused, verifiable, and bounded. Prefer goals that state the desired end state, relevant constraints, and what proof or verification should be produced.
 - When writing implementation plans, make them goal-ready: structure steps so they can be carried out autonomously after approval, include clear verification criteria, call out risks/blockers, and avoid vague instructions that would leave the goal judge unable to determine completion.
@@ -72,7 +82,7 @@ ${ctx.toolGuidance}
 Don't commit files likely to contain secrets (\`.env\`, \`*.key\`, \`credentials.json\`). Warn if asked.
 
 ## Commits
-Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: Mastra Code${ctx.modelId ? ` (${ctx.modelId})` : ''} <noreply@mastra.ai>\` in the message body.
+Write commit messages that explain WHY, not just WHAT. Match the repo's existing style. Include \`Co-Authored-By: ${coAuthorName}${ctx.modelId ? ` (${ctx.modelId})` : ''} <noreply@mastra.ai>\` in the message body.
 
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.
