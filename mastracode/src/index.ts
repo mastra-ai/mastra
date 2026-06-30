@@ -961,3 +961,34 @@ export async function mountAgentControllerOnMastra(
  * case: `bootLocalAgentController` (local) or {@link mountAgentControllerOnMastra} (server).
  */
 export const createMastraCode = bootLocalAgentController;
+
+/**
+ * Programmatic headless API. `runMC` runs an already-built controller/session
+ * (from {@link createMastraCode}) as an async-iterable run that also resolves to
+ * a typed result. Also available via the `mastracode/headless` subpath.
+ */
+export {
+  runMC,
+  runMCCli,
+  hasHeadlessFlag,
+  autoApprovePolicy,
+  denyPolicy,
+  permissionModeToPolicy,
+  formatHuman,
+  formatJsonl,
+  renderTextResult,
+  renderJsonResult,
+} from './headless/index.js';
+export type {
+  RunMCOptions,
+  RunMCResult,
+  RunMCStatus,
+  RunMCUsage,
+  RunMCToolCall,
+  RunMCToolResult,
+  RunMCError,
+  RunMCThreadOptions,
+  MCRun,
+  ResolutionPolicy,
+  PermissionMode,
+} from './headless/index.js';
