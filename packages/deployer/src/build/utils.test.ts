@@ -596,15 +596,17 @@ describe('injectStudioHtmlConfig', () => {
       requestContextPresets: "''",
       experimentalUI: "'true'",
       agentSignals: "'true'",
-      signalsUI: "'false'",
+      organizationId: "''",
+      platformProjectId: "''",
+      platformObservabilityEndpoint: "''",
       autoDetectUrl: "'false'",
     });
 
     expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
   });
 
-  it('should inject MASTRA_SIGNALS_UI placeholder', () => {
-    const html = "window.MASTRA_SIGNALS_UI = '%%MASTRA_SIGNALS_UI%%';";
+  it('should inject MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT placeholder', () => {
+    const html = "window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';";
 
     const result = injectStudioHtmlConfig(html, {
       host: "'localhost'",
@@ -620,10 +622,12 @@ describe('injectStudioHtmlConfig', () => {
       requestContextPresets: "''",
       experimentalUI: "'false'",
       agentSignals: "'true'",
-      signalsUI: "'true'",
+      organizationId: "'org-123'",
+      platformProjectId: "'proj-456'",
+      platformObservabilityEndpoint: "'https://observability.example.com'",
       autoDetectUrl: "'false'",
     });
 
-    expect(result).toBe("window.MASTRA_SIGNALS_UI = 'true';");
+    expect(result).toBe("window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'https://observability.example.com';");
   });
 });

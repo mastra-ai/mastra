@@ -111,7 +111,9 @@ export const HEAD = handle(app);
       requestContextPresets: `''`,
       experimentalUI: `'false'`,
       agentSignals: process.env.MASTRA_AGENT_SIGNALS === 'false' ? `'false'` : `'true'`,
-      signalsUI: process.env.MASTRA_SIGNALS_UI === 'true' ? `'true'` : `'false'`,
+      organizationId: `'${process.env.MASTRA_ORGANIZATION_ID || ''}'`,
+      platformProjectId: `'${process.env.MASTRA_PLATFORM_PROJECT_ID || ''}'`,
+      platformObservabilityEndpoint: `'${process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || ''}'`,
     });
 
     writeFileSync(indexPath, html);

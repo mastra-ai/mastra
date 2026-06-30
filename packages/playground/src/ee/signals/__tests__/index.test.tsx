@@ -1,85 +1,109 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import type * as ReactRouter from 'react-router';
 import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from '..';
 import { SignalCrumb } from '../signal-crumb';
+import { server } from '@/test/msw-server';
 
-const { navigate } = vi.hoisted(() => ({
-  navigate: vi.fn(),
+const BASE_URL = 'http://localhost:4111';
+const OBSERVABILITY_ENDPOINT = 'https://observability.test';
+const ENTITY_LEARNING_ROOT = `${OBSERVABILITY_ENDPOINT}/entity-learning`;
+
+type EntityLearningWindow = typeof globalThis & {
+  MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
+};
+const w = window as EntityLearningWindow;
+
+// `react-resizable-panels` drives layout through a ResizeObserver-backed group
+// controller that throws under jsdom. It is a third-party DOM boundary, so we
+// stub it to plain elements and keep every first-party component (the route
+// adapters, the overview page, the details page, the trace panel) real per the
+// package testing rules — our own hooks/services/components are never mocked.
+vi.mock('react-resizable-panels', () => ({
+  Group: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Panel: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Separator: () => null,
+  usePanelRef: () => ({ current: null }),
 }));
 
-vi.mock('react-router', async importOriginal => {
-  const actual = await importOriginal<typeof ReactRouter>();
+// The overview page lists entities and the topics (clusters) of the selected
+// entity. `entity_support` exposes the `sentiment` and `behavior` signals.
+const entitiesResponse = {
+  entities: [
+    {
+      organizationId: 'org-1',
+      projectId: 'proj-1',
+      entityType: 'agent',
+      entityId: 'entity_support',
+      availableSignals: ['sentiment'],
+      latestRunId: '32',
+      latestRunAt: '2026-06-29T00:00:00.000Z',
+      runCount: 1,
+      topicCount: 1,
+      sourceItemCount: 10,
+      groupedItemCount: 9,
+      outlierItemCount: 1,
+    },
+  ],
+};
 
-  return {
-    ...actual,
-    useNavigate: () => navigate,
-  };
-});
+const topicsResponse = {
+  run: {
+    runId: '32',
+    signalName: 'sentiment',
+    topicCount: 1,
+    sourceItemCount: 10,
+    groupedItemCount: 9,
+    outlierItemCount: 1,
+  },
+  topics: [
+    {
+      topicId: '89',
+      runId: '32',
+      signalName: 'sentiment',
+      name: 'Frustrated escalations',
+      description: 'Users expressing frustration before escalating.',
+      itemCount: 9,
+      coverage: 0.9,
+      score: 0.9,
+    },
+  ],
+};
 
-vi.mock('@mastra/playground-ui/ee/signals/components/signal-details-utils', () => ({
-  getSignalName: (signalId: string) => (signalId === 'tasks' ? 'Tasks' : signalId),
-}));
+function useEntityLearningHandlers() {
+  server.use(
+    http.get(`${ENTITY_LEARNING_ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+    http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
+    // The details page lists traces through the Mastra client to resolve the
+    // selectable trace id; an empty list is enough for the adapter wiring tests.
+    http.get(`${BASE_URL}/api/observability/traces`, () =>
+      HttpResponse.json({ pagination: { total: 0, page: 0, perPage: 25, hasMore: false }, spans: [] }),
+    ),
+  );
+}
 
-vi.mock('@mastra/playground-ui/ee/signals/components/signals-overview-page', () => ({
-  SignalsOverviewPage: ({ onSignalSelect }: { onSignalSelect: (signal: { id: string }) => void }) => (
-    <button type="button" onClick={() => onSignalSelect({ id: 'tasks' })}>
-      Select signal
-    </button>
-  ),
-}));
-
-vi.mock('@mastra/playground-ui/ee/signals/components/signal-details-page', () => ({
-  SignalDetailsPage: ({
-    signalId,
-    selectedTraceId,
-    tracePanel,
-    onTraceSelect,
-  }: {
-    signalId?: string;
-    selectedTraceId: string | null;
-    tracePanel?: ReactNode;
-    onTraceSelect: (signalId: string, traceId: string) => void;
-  }) => (
-    <div>
-      <span>signal:{signalId}</span>
-      <span>trace:{selectedTraceId ?? 'none'}</span>
-      <button type="button" onClick={() => onTraceSelect(signalId ?? 'missing', 'resolved-trace-1')}>
-        Select trace
-      </button>
-      {tracePanel}
-    </div>
-  ),
-  SignalTraceDetailsPanel: ({
-    traceId,
-    selectedSpanId,
-    onSpanSelect,
-    onClose,
-  }: {
-    traceId: string;
-    selectedSpanId: string | null;
-    onSpanSelect: (spanId: string | null) => void;
-    onClose: () => void;
-  }) => (
-    <aside aria-label="Trace details">
-      <span>details:{traceId}</span>
-      <span>span:{selectedSpanId ?? 'none'}</span>
-      <button type="button" onClick={() => onSpanSelect('span-1')}>
-        Select span
-      </button>
-      <button type="button" onClick={onClose}>
-        Close trace
-      </button>
-    </aside>
-  ),
-}));
+// The details/trace route renders the real trace panel, which lazily fetches a
+// trace's spans through the Mastra client. The route adapter only owns the
+// signal/trace param wiring and close navigation, not the panel internals
+// (covered in playground-ui), so an empty observability response is enough to
+// mount it without coupling this test to internal trace-detail route shapes.
+function useTraceDetailHandlers() {
+  server.use(
+    http.get(`${BASE_URL}/api/observability/*`, () =>
+      HttpResponse.json({ spans: [], pagination: { total: 0, page: 0, perPage: 25, hasMore: false } }),
+    ),
+  );
+}
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}</div>;
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
 function SignalsTestShell() {
@@ -92,69 +116,88 @@ function SignalsTestShell() {
 }
 
 function renderSignalsPage(initialEntry = '/signals') {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route path="/signals" element={<SignalsTestShell />}>
-          <Route index element={<SignalsOverviewPage />} />
-          <Route path=":signalId" element={<SignalDetailsPage />} />
-          <Route path=":signalId/traces/:traceId" element={<SignalTraceIdPage />} />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[initialEntry]}>
+          <Routes>
+            <Route path="/signals" element={<SignalsTestShell />}>
+              <Route index element={<SignalsOverviewPage />} />
+              <Route path=":signalId" element={<SignalDetailsPage />} />
+              <Route path=":signalId/traces/:traceId" element={<SignalTraceIdPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </MastraReactProvider>,
   );
 }
 
+beforeEach(() => {
+  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = OBSERVABILITY_ENDPOINT;
+});
+
 afterEach(() => {
   cleanup();
-  navigate.mockClear();
+  delete w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT;
 });
 
 describe('Signals page wrappers', () => {
-  it('navigates from the overview component callback to the signal route', () => {
-    renderSignalsPage();
+  describe('when an entity is selected on the overview', () => {
+    it('navigates to the signal route preserving the entity query params', async () => {
+      useEntityLearningHandlers();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Select signal' }));
+      renderSignalsPage('/signals?entityType=agent&entityId=entity_support');
 
-    expect(navigate).toHaveBeenCalledWith('/signals/tasks', { viewTransition: true });
+      const seeDetails = await screen.findByRole('button', { name: /See details/ });
+      fireEvent.click(seeDetails);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toBe(
+          '/signals/sentiment?entityType=agent&entityId=entity_support',
+        ),
+      );
+    });
   });
 
-  it('passes the route signal param to the reusable details page', () => {
-    renderSignalsPage('/signals/tasks');
+  describe('when the details route renders', () => {
+    it('passes the route signal param to the reusable details page', async () => {
+      useEntityLearningHandlers();
 
-    expect(screen.getByText('signal:tasks')).not.toBeNull();
-    expect(screen.getByText('trace:none')).not.toBeNull();
+      renderSignalsPage('/signals/tasks');
+
+      expect(await screen.findByRole('heading', { name: 'Tasks' })).not.toBeNull();
+    });
   });
 
-  it('navigates from reusable trace selection callbacks to the trace route', () => {
-    renderSignalsPage('/signals/tasks');
+  describe('when a trace route is active', () => {
+    it('renders the details with the trace panel and closes back to the signal route', async () => {
+      useEntityLearningHandlers();
+      useTraceDetailHandlers();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Select trace' }));
+      renderSignalsPage('/signals/tasks/traces/resolved-trace-1');
 
-    expect(navigate).toHaveBeenCalledWith('/signals/tasks/traces/resolved-trace-1');
+      expect(await screen.findByRole('heading', { name: 'Tasks' })).not.toBeNull();
+
+      const closeButton = await screen.findByRole('button', { name: 'Close Panel' });
+      fireEvent.click(closeButton);
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/signals/tasks'));
+    });
   });
 
-  it('passes trace route params into the reusable details and trace panel components', () => {
-    renderSignalsPage('/signals/tasks/traces/trace-1');
+  describe('when rendering a signal breadcrumb', () => {
+    it('resolves the signal name from the playground-ui EE boundary', () => {
+      render(
+        <MemoryRouter initialEntries={['/signals/tasks']}>
+          <Routes>
+            <Route path="/signals/:signalId" element={<SignalCrumb />} />
+          </Routes>
+        </MemoryRouter>,
+      );
 
-    expect(screen.getByText('signal:tasks')).not.toBeNull();
-    expect(screen.getByText('trace:trace-1')).not.toBeNull();
-    expect(screen.getByText('details:trace-1')).not.toBeNull();
-    expect(screen.getByText('span:none')).not.toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close trace' }));
-    expect(navigate).toHaveBeenCalledWith('/signals/tasks');
-  });
-
-  it('renders signal breadcrumbs from the playground-ui EE boundary', () => {
-    render(
-      <MemoryRouter initialEntries={['/signals/tasks']}>
-        <Routes>
-          <Route path="/signals/:signalId" element={<SignalCrumb />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText('Tasks')).not.toBeNull();
+      expect(screen.getByText('Tasks')).not.toBeNull();
+    });
   });
 });
