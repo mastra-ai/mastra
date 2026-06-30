@@ -468,13 +468,13 @@ export const weatherTool = createTool({
                     properties: [
                       {
                         name: 'span',
-                        type: '(name: string, fn: () => Promise<T> | T) => Promise<T>',
+                        type: '(name: string, fn: () => Promise<T> | T, attributes?: Record<string, unknown>) => Promise<T>',
                         description:
                           'Wraps a function in a child span for tracing. When no tracing context is active, runs the function directly.',
                       },
                       {
                         name: 'log',
-                        type: '(level: string, message: string, attributes?: Record<string, unknown>) => void',
+                        type: "(level: 'debug' | 'info' | 'warn' | 'error' | 'fatal', message: string, data?: Record<string, unknown>) => void",
                         description:
                           'Emits a structured log event attached to the current span. No-op when tracing is inactive.',
                       },

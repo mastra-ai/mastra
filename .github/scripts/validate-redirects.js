@@ -35,6 +35,18 @@ const checkLocalFile = urlPath => {
     return parentPossiblePaths.some(filePath => existsSync(filePath));
   }
 
+  // For .md suffixed paths, check if the parent page exists
+  // (.md routes are served at runtime from the same source pages)
+  if (cleanPath.endsWith('.md')) {
+    const parentPath = cleanPath.replace(/\.md$/, '');
+    const parentPossiblePaths = [
+      path.resolve(__dirname, '../../docs/src/content/en', parentPath + '.mdx'),
+      path.resolve(__dirname, '../../docs/src/content/en', parentPath + '/index.mdx'),
+      path.resolve(__dirname, '../../docs/src/content/en', parentPath, 'index.mdx'),
+    ];
+    return parentPossiblePaths.some(filePath => existsSync(filePath));
+  }
+
   // Try different possible file locations
   const possiblePaths = [
     path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '.mdx'),
