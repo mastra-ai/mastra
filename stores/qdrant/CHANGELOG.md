@@ -1,5 +1,14 @@
 # @mastra/qdrant
 
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Improve type safety for `describeIndex` metric field — removes compiler suppression so TypeScript can fully validate the returned `IndexStats` shape ([#18573](https://github.com/mastra-ai/mastra/pull/18573))
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+
 ## 1.1.0
 
 ### Minor Changes

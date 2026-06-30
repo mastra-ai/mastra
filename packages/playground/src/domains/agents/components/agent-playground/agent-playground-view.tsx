@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { AgentLayout } from '../agent-layout';
 import { SidebarPanel } from '../sidebar-panel';

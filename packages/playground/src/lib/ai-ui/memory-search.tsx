@@ -1,6 +1,8 @@
 import type { MemorySearchResult, MemorySearchResponse } from '@mastra/client-js';
-import { Button, Txt, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, X, ExternalLink } from 'lucide-react';
 import { useState, useCallback, useRef, useEffect } from 'react';
 

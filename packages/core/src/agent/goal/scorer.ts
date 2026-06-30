@@ -4,7 +4,9 @@ import type { AgentMemoryOption, ToolsInput } from '../../agent/types';
 import { createScorer } from '../../evals';
 import type { ScorerJudgeConfig } from '../../evals';
 import type { MastraModelConfig } from '../../llm';
+import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
+import type { RequestContext } from '../../request-context';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
 
 // The goal scorer is an LLM-as-judge that grades the agent's latest output
@@ -101,6 +103,9 @@ export function createGoalScorer({
   memory,
   defaultMemoryOptions,
   onStream,
+  maxSteps,
+  mastra,
+  requestContext,
 }: {
   judgeModel: MastraModelConfig;
   prompt?: string;
@@ -108,10 +113,13 @@ export function createGoalScorer({
   memory?: MastraMemory;
   defaultMemoryOptions?: AgentMemoryOption;
   onStream?: ScorerJudgeConfig['onStream'];
+  maxSteps?: number;
+  mastra?: Mastra;
+  requestContext?: RequestContext<any>;
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
-  return createScorer({
+  const scorer = createScorer({
     id: GOAL_SCORER_ID,
     name: 'Goal (LLM)',
     description:
@@ -123,8 +131,14 @@ export function createGoalScorer({
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),
       ...(onStream ? { onStream } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
+      ...(requestContext ? { requestContext } : {}),
     },
-  })
+  });
+  if (mastra) {
+    scorer.__registerMastra(mastra);
+  }
+  return scorer
     .analyze({
       description: 'Judge the latest output against the objective',
       outputSchema: analyzeOutputSchema,

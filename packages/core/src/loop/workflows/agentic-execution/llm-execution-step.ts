@@ -44,7 +44,7 @@ import {
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
-import { makeCoreTool } from '../../../utils';
+import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { RunScopeContext } from '../../run-scope-access';
@@ -1098,6 +1098,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
                         resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
                         logger,
+                        mastra: mastra
+                          ? createMastraProxy({ mastra, logger: logger || new ConsoleLogger({ level: 'error' }) })
+                          : undefined,
+                        memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
                         agentName: agentId,
                         requestContext: requestContext || new RequestContext(),
                         outputWriter,
@@ -1178,7 +1182,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
             supportedUrls: resolvedSupportedUrls,
           };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          const llmPromptForModel =
+            currentStep.model?.specificationVersion === 'v3' || currentStep.model?.specificationVersion === 'v4'
+              ? messageList.get.all.aiV6.llmPrompt
+              : messageList.get.all.aiV5.llmPrompt;
+          let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
           if (autoResumeSuspendedTools) {
             const messages = messageList.get.all.db();
@@ -1927,6 +1935,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList,
             stepNumber,
             finishReason: immediateFinishReason,
+            providerMetadata: outputStream._getImmediateProviderMetadata(),
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
             usage: outputStream._getImmediateUsage(),

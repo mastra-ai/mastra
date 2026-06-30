@@ -4,7 +4,12 @@
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
-import type { Harness, HarnessEvent, HarnessMessage, Session } from '@mastra/core/harness';
+import type {
+  AgentController,
+  AgentControllerEvent,
+  AgentControllerMessage,
+  Session,
+} from '@mastra/core/agent-controller';
 
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
@@ -202,7 +207,7 @@ function resolveExitCode(reason?: string): number {
 
 function autoResolve<TState extends Record<string, unknown>>(
   session: Session<TState>,
-  event: HarnessEvent,
+  event: AgentControllerEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
     case 'tool_approval_required': {
@@ -242,7 +247,7 @@ function autoResolve<TState extends Record<string, unknown>>(
   }
 }
 
-function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): void {
+function formatDefault(event: AgentControllerEvent, ctx: { lastTextLength: number }): void {
   switch (event.type) {
     case 'agent_start':
       ctx.lastTextLength = 0;
@@ -299,14 +304,14 @@ function createEmptySummary(): HeadlessSummary {
   return { text: '', toolCalls: [], toolResults: [] };
 }
 
-function extractAssistantText(message: HarnessMessage): string {
+function extractAssistantText(message: AgentControllerMessage): string {
   return message.content
     .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
     .map(c => c.text)
     .join('');
 }
 
-function aggregateIntoSummary(event: HarnessEvent, summary: HeadlessSummary): void {
+function aggregateIntoSummary(event: AgentControllerEvent, summary: HeadlessSummary): void {
   switch (event.type) {
     case 'message_end':
       if (event.message.role === 'assistant') {
@@ -345,7 +350,7 @@ function aggregateIntoSummary(event: HarnessEvent, summary: HeadlessSummary): vo
 
 function finalizeSummary<TState extends Record<string, unknown>>(
   summary: HeadlessSummary,
-  endEvent: Extract<HarnessEvent, { type: 'agent_end' }>,
+  endEvent: Extract<AgentControllerEvent, { type: 'agent_end' }>,
   session: Session<TState>,
 ): void {
   summary.finishReason = endEvent.reason;
@@ -371,13 +376,13 @@ async function resolveThread<TState extends Record<string, unknown>>(
 }
 
 /**
- * Run headless mode: subscribe to harness events with auto-approval,
+ * Run headless mode: subscribe to controller events with auto-approval,
  * optionally resume a thread, send the prompt, and wait for completion.
  *
  * Returns the exit code (0 = success, 1 = error/aborted, 2 = timeout).
  */
 export async function runHeadless<TState extends Record<string, unknown>>(
-  harness: Harness<TState>,
+  controller: AgentController<TState>,
   session: Session<TState>,
   args: HeadlessArgs & { prompt: string },
   effectiveDefaults?: Record<string, string>,
@@ -424,7 +429,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   if (args.model) {
     // Highest priority: explicit --model flag
-    const available = await harness.listAvailableModels();
+    const available = await controller.listAvailableModels();
     const match = available.find(m => m.id === args.model);
     if (!match) {
       return failEarly(`Unknown model: "${args.model}"`);
@@ -439,7 +444,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
     // --mode flag: look up model from effectiveDefaults (resolved from settings at startup)
     const modelId = effectiveDefaults?.[args.mode];
     if (modelId) {
-      const available = await harness.listAvailableModels();
+      const available = await controller.listAvailableModels();
       const match = available.find(m => m.id === modelId);
       if (!match) {
         return failEarly(`Unknown model "${modelId}" configured for mode "${args.mode}"`);
@@ -510,7 +515,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   // --- Resource ID ---
   if (args.resourceId) {
-    await harness.setResourceId(session, { resourceId: args.resourceId });
+    await controller.setResourceId(session, { resourceId: args.resourceId });
     if (!emit) process.stderr.write(`[resource] ${args.resourceId}\n`);
   }
 
@@ -624,7 +629,7 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   }
 
   const result = await createMastraCode({ settingsPath: args.settings });
-  const { harness, session, mcpManager, effectiveDefaults } = result;
+  const { controller, session, mcpManager, effectiveDefaults } = result;
 
   if (mcpManager?.hasServers()) {
     try {
@@ -636,15 +641,15 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
 
   setupDebugLogging();
 
-  const exitCode = await runHeadless(harness, session, { ...args, prompt }, effectiveDefaults);
+  const exitCode = await runHeadless(controller, session, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();
   const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
-    harness.getMastra()?.stopWorkers(),
-    harness?.stopHeartbeats(),
+    controller.getMastra()?.stopWorkers(),
+    controller?.stopIntervals(),
     closeSignalsPubSub?.(),
   ]);
 

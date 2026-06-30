@@ -421,6 +421,28 @@ export async function executeConditional(
     stepsToRun = possibleStepToRun ? [possibleStepToRun] : stepsToRun;
   }
 
+  // Arms whose condition did not evaluate truthy must never be reported as running. When time
+  // travelling into a conditional, the reconstructed stepResults pre-mark the targeted arm as
+  // 'running', but the condition can select a different arm. Reconcile here so the non-truthy
+  // targeted arm is recorded as 'skipped' instead of leaving a stale 'running' status that
+  // would persist and render the wrong branch as active on a rehydrated run. Scoped to
+  // time-travel so normal start/resume flows are untouched.
+  if (timeTravel && timeTravel.executionPath.length > 0) {
+    entry.steps.forEach((armEntry, index) => {
+      if (armEntry.type !== 'step') return;
+      if (truthyIndexes.includes(index)) return;
+      const armId = armEntry.step.id;
+      const existing = stepResults[armId];
+      if (existing?.status !== 'running') return;
+      stepResults[armId] = {
+        status: 'skipped',
+        payload: existing.payload ?? {},
+        startedAt: existing.startedAt ?? Date.now(),
+        endedAt: Date.now(),
+      };
+    });
+  }
+
   // Update conditional span with evaluation results
   conditionalSpan?.update({
     attributes: {

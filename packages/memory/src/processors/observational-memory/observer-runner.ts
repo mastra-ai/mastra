@@ -4,6 +4,7 @@ import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { ProviderMetadata } from '@mastra/core/stream';
 
 import { omDebug } from './debug';
 import { withOmInternalThreadId } from './internal-request-context';
@@ -179,6 +180,7 @@ export class ObserverRunner {
     suggestedContinuation?: string;
     threadTitle?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    providerMetadata?: ProviderMetadata;
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
@@ -283,6 +285,7 @@ export class ObserverRunner {
       usage: usage
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
+      providerMetadata: result.providerMetadata,
     };
   }
 
@@ -304,6 +307,7 @@ export class ObserverRunner {
       { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    providerMetadata?: ProviderMetadata;
   }> {
     const inputTokens = Array.from(messagesByThread.values()).reduce(
       (total, messages) => total + this.tokenCounter.countMessages(messages),
@@ -440,6 +444,7 @@ export class ObserverRunner {
       usage: usage
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
+      providerMetadata: result.providerMetadata,
     };
   }
 }

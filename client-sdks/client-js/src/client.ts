@@ -89,7 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
-  Harness,
+  AgentController,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -198,6 +198,11 @@ import type {
   ScheduleResponse,
   ListScheduleTriggersParams,
   ListScheduleTriggersResponse,
+  Heartbeat,
+  ListHeartbeatsParams,
+  CreateHeartbeatInput,
+  UpdateHeartbeatOptions,
+  RunHeartbeatResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -254,22 +259,22 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists the harnesses hosted on the connected Mastra instance.
-   * @returns Promise containing an array of harness identifiers
+   * Lists the agent controllers hosted on the connected Mastra instance.
+   * @returns Promise containing an array of agent controller identifiers
    */
-  public async listHarnesses(): Promise<{ id: string }[]> {
-    const body = await this.request<{ harnesses: { id: string }[] }>('/harness');
-    return body.harnesses;
+  public async listAgentControllers(): Promise<{ id: string }[]> {
+    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+    return body.agentControllers;
   }
 
   /**
-   * Scopes to a harness hosted on the connected Mastra instance. Use
-   * `getHarness(id).session(resourceId)` to create/resume a session, stream its
-   * events, and send messages.
-   * @param harnessId - The id the harness is registered under on Mastra
+   * Scopes to an agent controller hosted on the connected Mastra instance. Use
+   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * stream its events, and send messages.
+   * @param controllerId - The id the agent controller is registered under on Mastra
    */
-  public getHarness(harnessId: string) {
-    return new Harness(this.options, harnessId);
+  public getAgentController(controllerId: string) {
+    return new AgentController(this.options, controllerId);
   }
 
   /**
@@ -2209,12 +2214,14 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists workflow schedules with optional filtering by workflowId or status.
+   * Lists schedules with optional filtering by workflowId, status, ownerType, or ownerId.
    */
   public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
     const searchParams = new URLSearchParams();
     if (params.workflowId) searchParams.set('workflowId', params.workflowId);
     if (params.status) searchParams.set('status', params.status);
+    if (params.ownerType) searchParams.set('ownerType', params.ownerType);
+    if (params.ownerId) searchParams.set('ownerId', params.ownerId);
     const qs = searchParams.toString();
     return this.request(`/schedules${qs ? `?${qs}` : ''}`);
   }
@@ -2257,5 +2264,97 @@ export class MastraClient extends BaseResource {
    */
   public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
+  }
+
+  /**
+   * Lists heartbeats across all agents. Pass `agentId` to scope the list to
+   * a single agent. Filter further by `threadId`, `resourceId`, or `name`.
+   */
+  public listHeartbeats(params: ListHeartbeatsParams = {}): Promise<Heartbeat[]> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.name) searchParams.set('name', params.name);
+    const qs = searchParams.toString();
+    return this.request<{ heartbeats: Heartbeat[] }>(`/heartbeats${qs ? `?${qs}` : ''}`).then(
+      response => response.heartbeats,
+    );
+  }
+
+  /**
+   * Gets a single heartbeat by id.
+   */
+  public getHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}`);
+  }
+
+  /**
+   * Creates a heartbeat for the agent named by `agentId`. By default each call
+   * creates a new heartbeat with a random `hb_<uuid>` id — multiple heartbeats
+   * per agent/thread are supported. Use `name` to label distinct heartbeats.
+   * Pass `id` to choose a stable id (normalized to `hb_<slug>`); creating one
+   * with an id that already exists throws.
+   *
+   * Trigger (fire) history is read through the generic schedules surface:
+   * `listScheduleTriggers(heartbeat.id)`.
+   */
+  public createHeartbeat(options: CreateHeartbeatInput): Promise<Heartbeat> {
+    return this.request(`/heartbeats`, {
+      method: 'POST',
+      body: options,
+    });
+  }
+
+  /**
+   * Patches an existing heartbeat. `threadId` / `resourceId` are immutable —
+   * to retarget, delete and recreate.
+   */
+  public updateHeartbeat(heartbeatId: string, patch: UpdateHeartbeatOptions): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+  }
+
+  /**
+   * Deletes a heartbeat.
+   */
+  public deleteHeartbeat(heartbeatId: string): Promise<{ message: string }> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Pauses a heartbeat. Idempotent — pausing an already-paused heartbeat
+   * returns the current state unchanged.
+   */
+  public pauseHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}/pause`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Resumes a paused heartbeat. Recomputes nextFireAt from "now" so a
+   * long-paused heartbeat does not fire a backlog. Idempotent.
+   */
+  public resumeHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Fires a heartbeat manually, out-of-band from the cron schedule. Behaves
+   * like a scheduled fire (honoring `ifActive` / `ifIdle`) but
+   * does not advance `nextFireAt`. The returned `claimId` is the trigger row's
+   * runId — look it up via `listScheduleTriggers(heartbeatId)`.
+   */
+  public runHeartbeat(heartbeatId: string): Promise<RunHeartbeatResponse> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}/run`, {
+      method: 'POST',
+    });
   }
 }

@@ -10,6 +10,8 @@ export {
   deserializeDate,
 } from './serialize-state';
 
+export { applyToolPayloadTransformToChunk } from './apply-tool-payload-transform';
+
 export {
   resolveRuntimeDependencies,
   resolveModel,

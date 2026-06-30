@@ -1,4 +1,4 @@
-import { isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '@mastra/playground-ui';
+import { isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '@mastra/playground-ui/utils/file';
 import type { FilePart } from '@mastra/react';
 
 import { InMessageAttachment } from './in-message-attachment';

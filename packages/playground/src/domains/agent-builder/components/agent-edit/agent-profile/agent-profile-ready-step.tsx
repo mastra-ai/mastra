@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentStepContainer } from './agent-step-container';

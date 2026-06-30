@@ -30,6 +30,19 @@ import type { SlackProviderConfig, SlashCommandConfig, SlackConnectOptions, Slac
 const PLATFORM = 'slack';
 
 /**
+ * Remove trailing slashes from a base URL so callback paths like
+ * `${baseUrl}/slack/oauth/callback` don't produce double slashes when the
+ * configured value (e.g. MASTRA_BASE_URL) includes a trailing slash.
+ */
+export function stripTrailingSlash(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) {
+    end--;
+  }
+  return end === url.length ? url : url.slice(0, end);
+}
+
+/**
  * Create a hash of the agent config for change detection.
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
@@ -542,7 +555,7 @@ export class SlackProvider implements ChannelProvider {
   #getBaseUrl(): string | undefined {
     // Explicit config takes precedence
     if (this.#baseUrl) {
-      return this.#baseUrl;
+      return stripTrailingSlash(this.#baseUrl);
     }
 
     // Derive from Mastra server config + environment
@@ -564,7 +577,7 @@ export class SlackProvider implements ChannelProvider {
    * Only needed if not using Mastra server config.
    */
   setBaseUrl(baseUrl: string): void {
-    this.#baseUrl = baseUrl;
+    this.#baseUrl = stripTrailingSlash(baseUrl);
   }
 
   /**

@@ -4,7 +4,7 @@
  * Tests that `providerOptions` can be forwarded through `agent.stream()` and
  * coexist with model settings that ARE observable on the wire.
  *
- * Important harness limitation: the OpenAI v5 provider does not serialize
+ * Important controller limitation: the OpenAI v5 provider does not serialize
  * `providerOptions` (e.g. `openai.store`, `openai.user`) into the
  * chat-completions request body that AIMock captures — they are carried through
  * a separate provider channel. So we cannot assert those keys directly on the

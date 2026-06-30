@@ -17,7 +17,7 @@ import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
 
-let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
+let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
@@ -64,7 +64,7 @@ async function tuiMain(pipedInput?: string | null) {
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
   });
-  harness = result.harness;
+  controller = result.controller;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
@@ -104,7 +104,7 @@ async function tuiMain(pipedInput?: string | null) {
   applyThemeMode(themeMode, detectedBgHex);
 
   // createMastraCode() brought up shared resources and minted the single
-  // session that all work runs through. The Harness owns no session of its own.
+  // session that all work runs through. The AgentController owns no session of its own.
   const session = result.session;
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
@@ -117,7 +117,7 @@ async function tuiMain(pipedInput?: string | null) {
   });
 
   const tui = new MastraTUI({
-    harness,
+    controller: controller,
     session,
     hookManager,
     analytics,
@@ -137,7 +137,7 @@ async function tuiMain(pipedInput?: string | null) {
     void loadBrowser()
       .then(browser => {
         if (!browser) return;
-        harness.setBrowser(browser);
+        controller.setBrowser(browser);
         void session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
       })
       .catch(() => {});
@@ -149,8 +149,8 @@ const asyncCleanup = async () => {
   const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
-    harness?.getMastra()?.stopWorkers(),
-    harness?.stopHeartbeats(),
+    controller?.getMastra()?.stopWorkers(),
+    controller?.stopIntervals(),
     closeSignalsPubSub?.(),
     analytics?.shutdown(),
   ]);

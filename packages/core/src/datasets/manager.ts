@@ -87,7 +87,12 @@ export class DatasetsManager {
 
   /**
    * Create a new dataset.
-   * Zod schemas are automatically converted to JSON Schema.
+   *
+   * Accepts Zod schemas for `inputSchema` / `groundTruthSchema` (typed as
+   * `unknown` here); they are normalized to JSON Schema via `zodToJsonSchema`
+   * before being forwarded to the storage-canonical
+   * {@link import('../storage/types.js').CreateDatasetInput} shape. All other
+   * fields mirror `CreateDatasetInput` exactly.
    */
   async create(input: {
     name: string;
