@@ -28,6 +28,8 @@ interface MesaTestEnv {
 }
 
 let mesaTestEnv: MesaTestEnv | undefined;
+const hasMesaApiKey = Boolean(process.env.MESA_API_KEY);
+const describeWithMesaApiKey = hasMesaApiKey ? describe : describe.skip;
 
 function createTestRepoName(): string {
   return `mastra-test-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -50,26 +52,23 @@ function isNotFoundError(error: unknown): boolean {
   );
 }
 
-beforeAll(async () => {
-  const apiKey = process.env.MESA_API_KEY;
+if (hasMesaApiKey) {
+  beforeAll(async () => {
+    const apiKey = process.env.MESA_API_KEY!;
+    const mesa = new Mesa({ apiKey });
+    const org = await mesa.resolveOrg();
+    const repo = createTestRepoName();
 
-  if (!apiKey) {
-    throw new Error('MesaFilesystem integration tests require MESA_API_KEY.');
-  }
+    await mesa.repos.create({ name: repo });
 
-  const mesa = new Mesa({ apiKey });
-  const org = await mesa.resolveOrg();
-  const repo = createTestRepoName();
-
-  await mesa.repos.create({ name: repo });
-
-  mesaTestEnv = {
-    apiKey,
-    org,
-    repo,
-    mesa,
-  };
-});
+    mesaTestEnv = {
+      apiKey,
+      org,
+      repo,
+      mesa,
+    };
+  });
+}
 
 function getMesaTestEnv(): MesaTestEnv {
   if (!mesaTestEnv) {
@@ -250,7 +249,7 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
   }
 }
 
-describe('MesaFilesystem integration', () => {
+describeWithMesaApiKey('MesaFilesystem integration', () => {
   it('creates an isolated Mesa repo for the test run', () => {
     const env = getMesaTestEnv();
 
@@ -305,26 +304,32 @@ describe('MesaFilesystem integration', () => {
   });
 });
 
-createFilesystemTestSuite({
-  suiteName: 'MesaFilesystem Conformance',
-  createFilesystem: async () => {
-    const testRoot = mesaRepoPath(`conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-    return new RootedMesaFilesystem(createMesaFilesystem(), testRoot);
-  },
-  capabilities: {
-    supportsAppend: true,
-    supportsBinaryFiles: true,
-    supportsMounting: false,
-    supportsForceDelete: true,
-    supportsOverwrite: true,
-    supportsConcurrency: true,
-    supportsEmptyDirectories: true,
-    deleteThrowsOnMissing: true,
-  },
-  testDomains: {
-    // Mesa returns server-side mtimes, but the shared pathOperations suite
-    // assumes stat().modifiedAt is comparable to the local test runner clock.
-    pathOperations: false,
-  },
-  testTimeout: 30000,
-});
+if (hasMesaApiKey) {
+  createFilesystemTestSuite({
+    suiteName: 'MesaFilesystem Conformance',
+    createFilesystem: async () => {
+      const testRoot = mesaRepoPath(`conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+      return new RootedMesaFilesystem(createMesaFilesystem(), testRoot);
+    },
+    capabilities: {
+      supportsAppend: true,
+      supportsBinaryFiles: true,
+      supportsMounting: false,
+      supportsForceDelete: true,
+      supportsOverwrite: true,
+      supportsConcurrency: true,
+      supportsEmptyDirectories: true,
+      deleteThrowsOnMissing: true,
+    },
+    testDomains: {
+      // Mesa returns server-side mtimes, but the shared pathOperations suite
+      // assumes stat().modifiedAt is comparable to the local test runner clock.
+      pathOperations: false,
+    },
+    testTimeout: 30000,
+  });
+} else {
+  describe.skip('MesaFilesystem Conformance', () => {
+    it('requires MESA_API_KEY', () => {});
+  });
+}
