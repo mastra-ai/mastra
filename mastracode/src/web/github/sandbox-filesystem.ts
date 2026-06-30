@@ -124,6 +124,24 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     }
   }
 
+  /**
+   * Guard for write destinations. The lexical guard catches `..`, but a symlink
+   * inside the workdir can redirect a write outside it. For an existing target
+   * we check its realpath; for a not-yet-existing target we check the realpath
+   * of its nearest existing ancestor directory, since a symlinked parent is the
+   * escape vector (e.g. `link -> /etc` then writing `link/passwd`).
+   */
+  private async assertContainedDest(abs: string, inputPath: string): Promise<void> {
+    // First check the target itself (covers overwriting an existing symlink).
+    await this.assertContainedRealpath(abs, inputPath);
+    // Then check the parent directory's realpath; readlink -f resolves the
+    // nearest existing ancestor when the leaf doesn't exist yet.
+    const parent = posixPath.dirname(abs);
+    if (parent && parent !== abs) {
+      await this.assertContainedRealpath(parent, inputPath);
+    }
+  }
+
   private async execOk(script: string, context: string): Promise<SandboxCommandResult> {
     const result = await this.exec(script);
     if (result.exitCode !== 0) {
@@ -150,6 +168,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async writeFile(path: string, content: FileContent, options?: WriteOptions): Promise<void> {
     const abs = this.resolve(path);
+    await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     const dir = posixPath.dirname(abs);
     const mkdir = options?.recursive === false ? '' : `mkdir -p ${shellQuote(dir)} && `;
@@ -162,6 +181,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async appendFile(path: string, content: FileContent): Promise<void> {
     const abs = this.resolve(path);
+    await this.assertContainedDest(abs, path);
     const b64 = toBuffer(content).toString('base64');
     await this.execOk(
       `mkdir -p ${shellQuote(posixPath.dirname(abs))} && printf %s ${shellQuote(b64)} | base64 -d >> ${shellQuote(abs)}`,
@@ -182,6 +202,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const srcAbs = this.resolve(src);
     const destAbs = this.resolve(dest);
     await this.assertContainedRealpath(srcAbs, src);
+    await this.assertContainedDest(destAbs, dest);
     const recursive = options?.recursive ? '-r ' : '';
     if (options?.overwrite === false) {
       const exists = await this.exists(dest);
@@ -194,6 +215,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const srcAbs = this.resolve(src);
     const destAbs = this.resolve(dest);
     await this.assertContainedRealpath(srcAbs, src);
+    await this.assertContainedDest(destAbs, dest);
     if (options?.overwrite === false) {
       const exists = await this.exists(dest);
       if (exists) throw new Error(`Destination exists: ${dest}`);
@@ -205,6 +227,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     const abs = this.resolve(path);
+    await this.assertContainedDest(abs, path);
     const flag = options?.recursive === false ? '' : '-p ';
     await this.execOk(`mkdir ${flag}${shellQuote(abs)}`, `mkdir ${path}`);
   }

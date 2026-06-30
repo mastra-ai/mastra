@@ -26,6 +26,48 @@ export function getLocalSandboxRoot(): string {
 }
 
 /**
+ * Environment variables that are safe to expose to sandboxed commands. The repo
+ * materializer interpolates any required secrets (e.g. the GitHub install token)
+ * directly into the command script, so sandboxed commands never need the
+ * server's own secret env. We therefore pass only a minimal allow-list — enough
+ * for `git`/`sh` to function — and drop everything else so values like
+ * `GITHUB_APP_PRIVATE_KEY`, `WORKOS_API_KEY`, and `APP_DATABASE_URL` are never
+ * handed to a command running against an untrusted checkout.
+ */
+const ALLOWED_ENV_KEYS = new Set([
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TMPDIR',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'TZ',
+  // Git locates its config/templates via these; safe, non-secret.
+  'GIT_EXEC_PATH',
+  'GIT_TEMPLATE_DIR',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+]);
+
+/**
+ * Build a sanitized environment for spawned sandbox commands: only the
+ * allow-listed keys above plus `GIT_*` config knobs that are non-secret by
+ * convention. This prevents leaking the full server environment to commands
+ * that run against untrusted repository contents.
+ */
+export function sandboxEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) continue;
+    if (ALLOWED_ENV_KEYS.has(key)) out[key] = value;
+  }
+  return out;
+}
+
+/**
  * A sandbox backed by the local host. `start()` ensures the root directory
  * exists; commands are spawned via the host shell. Reattach is trivially the
  * same id (the host filesystem persists across opens), so `getInfo()` surfaces
@@ -57,7 +99,9 @@ export class LocalSandbox implements MaterializationSandbox {
     return new Promise<SandboxCommandResult>(resolve => {
       const child = spawn(command, args, {
         cwd: this.root,
-        env: process.env,
+        // Pass only a sanitized allow-list, never the full server environment,
+        // so secrets aren't exposed to commands run against untrusted checkouts.
+        env: sandboxEnv(),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 

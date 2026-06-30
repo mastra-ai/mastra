@@ -122,8 +122,15 @@ export function ProjectsModal({
                       <FolderIcon size={18} className="project-card-icon" />
                     )}
                     <span className="project-card-text">
-                      <span className="project-card-name">{p.name}</span>
-                      <span className="project-card-path">{isGithub ? 'GitHub repo' : p.path}</span>
+                      <span className="project-card-name" title={p.name}>
+                        {p.name}
+                      </span>
+                      {/* For GitHub projects `name` is the `owner/repo` identifier; keep it
+                          visible and show the tracked branch (when known) in the subtitle
+                          instead of a redundant "GitHub repo" label. */}
+                      <span className="project-card-path" title={isGithub ? p.name : p.path}>
+                        {isGithub ? (p.gitBranch ? `branch: ${p.gitBranch}` : 'GitHub repo') : p.path}
+                      </span>
                     </span>
                     <span className={`project-card-source ${isGithub ? 'github' : 'local'}`}>
                       {isGithub ? 'GitHub' : 'Local'}

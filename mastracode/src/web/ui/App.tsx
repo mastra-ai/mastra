@@ -768,13 +768,11 @@ export default function App() {
           closeSidebar();
         }}
         onCreateWorktree={async (branch, baseBranch) => {
-          try {
-            await handleCreateWorktree(branch, baseBranch);
-            toast(`Worktree ${branch} ready`, 'success');
-            closeSidebar();
-          } catch (e) {
-            toast(e instanceof Error ? e.message : String(e), 'error');
-          }
+          // Let the Sidebar surface failures inline (it keeps the input open for
+          // retry); we only handle the success path here.
+          await handleCreateWorktree(branch, baseBranch);
+          toast(`Worktree ${branch} ready`, 'success');
+          closeSidebar();
         }}
         account={
           authState.authEnabled && authState.authenticated ? { user: authState.user, onSignOut: signOut } : undefined
@@ -1034,9 +1032,9 @@ export default function App() {
       )}
 
       {preparing && (
-        <div className="palette-overlay" aria-hidden="true">
+        <div className="palette-overlay">
           <div className="github-preparing" role="status" aria-live="polite">
-            <span className="github-preparing-spinner" />
+            <span className="github-preparing-spinner" aria-hidden="true" />
             {prepareStatus}
           </div>
         </div>

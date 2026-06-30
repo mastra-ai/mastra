@@ -89,15 +89,19 @@ export function Sidebar({
   const [creatingWorktree, setCreatingWorktree] = useState(false);
   const [newBranchDraft, setNewBranchDraft] = useState('');
   const [creatingBusy, setCreatingBusy] = useState(false);
+  const [worktreeError, setWorktreeError] = useState<string | null>(null);
 
   const submitNewWorktree = async () => {
     const branch = newBranchDraft.trim();
     if (!branch || !onCreateWorktree) return;
     setCreatingBusy(true);
+    setWorktreeError(null);
     try {
       await onCreateWorktree(branch);
       setNewBranchDraft('');
       setCreatingWorktree(false);
+    } catch (err) {
+      setWorktreeError(err instanceof Error ? err.message : 'Failed to create worktree');
     } finally {
       setCreatingBusy(false);
     }
@@ -331,18 +335,27 @@ export function Sidebar({
                 placeholder="new-branch-name"
                 aria-label="New worktree branch name"
                 disabled={creatingBusy}
-                onChange={e => setNewBranchDraft(e.target.value)}
+                onChange={e => {
+                  setNewBranchDraft(e.target.value);
+                  if (worktreeError) setWorktreeError(null);
+                }}
                 onKeyDown={e => {
                   if (e.key === 'Enter') void submitNewWorktree();
                   if (e.key === 'Escape') {
                     setCreatingWorktree(false);
                     setNewBranchDraft('');
+                    setWorktreeError(null);
                   }
                 }}
                 onBlur={() => {
-                  if (!newBranchDraft.trim()) setCreatingWorktree(false);
+                  if (!newBranchDraft.trim() && !worktreeError) setCreatingWorktree(false);
                 }}
               />
+              {worktreeError && (
+                <div className="sidebar-newworkspace-error" role="alert">
+                  {worktreeError}
+                </div>
+              )}
             </div>
           )}
 

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { getLocalSandboxRoot, LocalSandbox } from './local-sandbox';
+import { getLocalSandboxRoot, LocalSandbox, sandboxEnv } from './local-sandbox';
 
 let root: string;
 
@@ -73,5 +73,57 @@ describe('LocalSandbox', () => {
   it('stop() is a no-op that does not throw', async () => {
     const sandbox = new LocalSandbox();
     await expect(sandbox.stop()).resolves.toBeUndefined();
+  });
+
+  it('does not expose server secrets to spawned commands', async () => {
+    process.env.GITHUB_APP_PRIVATE_KEY = 'super-secret-key';
+    process.env.WORKOS_API_KEY = 'sk_live_secret';
+    try {
+      const sandbox = new LocalSandbox();
+      await sandbox.start();
+      const res = await sandbox.executeCommand('sh', [
+        '-c',
+        'echo "${GITHUB_APP_PRIVATE_KEY:-MISSING}:${WORKOS_API_KEY:-MISSING}"',
+      ]);
+      expect(res.stdout.trim()).toBe('MISSING:MISSING');
+    } finally {
+      delete process.env.GITHUB_APP_PRIVATE_KEY;
+      delete process.env.WORKOS_API_KEY;
+    }
+  });
+
+  it('still passes PATH so binaries resolve', async () => {
+    const sandbox = new LocalSandbox();
+    await sandbox.start();
+    const res = await sandbox.executeCommand('sh', ['-c', 'echo "${PATH:-MISSING}"']);
+    expect(res.stdout.trim()).not.toBe('MISSING');
+    expect(res.stdout.trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe('sandboxEnv', () => {
+  it('keeps allow-listed keys and drops secrets', () => {
+    const filtered = sandboxEnv({
+      PATH: '/usr/bin',
+      HOME: '/home/me',
+      LANG: 'en_US.UTF-8',
+      GITHUB_APP_PRIVATE_KEY: 'secret',
+      WORKOS_API_KEY: 'secret',
+      APP_DATABASE_URL: 'postgres://secret',
+      RAILWAY_API_TOKEN: 'secret',
+    });
+    expect(filtered.PATH).toBe('/usr/bin');
+    expect(filtered.HOME).toBe('/home/me');
+    expect(filtered.LANG).toBe('en_US.UTF-8');
+    expect(filtered.GITHUB_APP_PRIVATE_KEY).toBeUndefined();
+    expect(filtered.WORKOS_API_KEY).toBeUndefined();
+    expect(filtered.APP_DATABASE_URL).toBeUndefined();
+    expect(filtered.RAILWAY_API_TOKEN).toBeUndefined();
+  });
+
+  it('drops undefined values', () => {
+    const filtered = sandboxEnv({ PATH: '/usr/bin', HOME: undefined });
+    expect(filtered.PATH).toBe('/usr/bin');
+    expect('HOME' in filtered).toBe(false);
   });
 });

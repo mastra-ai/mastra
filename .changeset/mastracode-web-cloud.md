@@ -14,6 +14,8 @@ Turned MastraCode Web into a multi-org cloud coding service. When WorkOS auth an
 
 **Per-(org,user) state isolation.** Agent state (threads, messages, memory, recall vectors) is isolated by the `(organization, user)` pair, each backed by a dedicated libSQL database whose location is derived server-side from a hash of `(orgId, userId)` — never a client-supplied path. By default each tenant gets local libSQL files under `MASTRACODE_TENANT_DB_ROOT`; for hosted deployments, point each tenant at a remote libSQL/Turso database via `MASTRACODE_TENANT_DB_URL_TEMPLATE` (plus optional vector template and auth tokens).
 
+**Sandbox isolation hardening.** Commands run in the local sandbox receive only a sanitized allow-list of environment variables (PATH/HOME/locale/git config), so server secrets such as `GITHUB_APP_PRIVATE_KEY`, `WORKOS_API_KEY`, and `APP_DATABASE_URL` are never exposed to code running against an untrusted checkout. Sandbox filesystem write operations (write/append/copy/move/mkdir) now verify the destination's real path — including a symlinked parent directory — stays within the workspace root, preventing a malicious repo's symlink from redirecting writes outside the sandbox.
+
 **Multi-replica deployment hardening.** Per-(project,user) git writes are serialized across replicas with Postgres advisory locks (`MASTRACODE_DISTRIBUTED_LOCK`, on by default; requires `APP_DATABASE_URL`). OAuth/install state signing requires a replica-stable secret in multi-replica setups, in-memory tenant stacks are evicted by idle timeout and an LRU cap (`MASTRACODE_TENANT_IDLE_MINUTES`, `MASTRACODE_TENANT_MAX_APPS`), and `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1` fails startup when no shared remote tenant DB is configured.
 
 ```bash

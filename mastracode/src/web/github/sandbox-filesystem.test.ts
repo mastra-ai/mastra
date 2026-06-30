@@ -56,6 +56,29 @@ describe('SandboxFilesystem', () => {
     await expect(fs.readFile('/link')).rejects.toThrow(/escapes workspace root \(symlink\)/);
   });
 
+  it('rejects a write whose parent directory is a symlink escaping the workspace', async () => {
+    // The leaf doesn't exist yet, but its parent `evil` resolves to /etc, so
+    // readlink -f on the parent returns an out-of-root path.
+    const { fs, sandbox } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: '/etc', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(fs.writeFile('/evil/passwd', 'x')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    // The write command must never have run.
+    expect(sandbox.calls.some(c => c.includes('base64 -d >'))).toBe(false);
+  });
+
+  it('allows a write when the parent realpath stays inside the workspace', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/src`, stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await fs.writeFile('/src/new.ts', 'x');
+    expect(sandbox.calls.some(c => c.includes('base64 -d >'))).toBe(true);
+  });
+
   it('passes a command timeout to the sandbox', async () => {
     const timeouts: Array<number | undefined> = [];
     const sandbox: SandboxExec = {
@@ -76,8 +99,9 @@ describe('SandboxFilesystem', () => {
     await fs.writeFile('/notes.txt', 'data');
 
     const b64 = Buffer.from('data', 'utf8').toString('base64');
-    expect(sandbox.calls[0]).toContain(`mkdir -p '${WORKDIR}'`);
-    expect(sandbox.calls[0]).toContain(`printf %s '${b64}' | base64 -d > '${WORKDIR}/notes.txt'`);
+    const writeCall = sandbox.calls.find(c => c.includes('base64 -d >'));
+    expect(writeCall).toContain(`mkdir -p '${WORKDIR}'`);
+    expect(writeCall).toContain(`printf %s '${b64}' | base64 -d > '${WORKDIR}/notes.txt'`);
   });
 
   it('lists a directory and parses type/name pairs', async () => {
