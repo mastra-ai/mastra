@@ -18,7 +18,7 @@ Triage one open GitHub issue into a clear next action. Follow the steps in order
 
 ## Triage file
 
-Create the directory if needed, then create/update exactly this file throughout the lifecycle:
+Create the directory if needed, then create/update exactly this file throughout the lifecycle. After each major step, save concise, decision-oriented context before continuing; do not dump raw issue bodies, full comments, raw logs, or full diffs.
 
 ```bash
 mkdir -p .mastracode/issue-triage
@@ -185,9 +185,7 @@ git log -p --max-count=3 -- <relevant-file-or-directory>
 
 - [ ] Keep context concise. Summarize findings; do not paste raw logs, full comments, or full diffs.
 
-- [ ] Use the gathered issue, repo, history, and linked PR context to choose exactly one severity.
-
-- [ ] Do not assign severity from the issue title alone.
+- [ ] Choose exactly one severity from the gathered issue, repo, history, and linked PR context; never assign severity from the title alone.
 
 - [ ] Base severity on observed user impact, affected area, evidence strength, recent-change context, and whether an active PR already addresses it.
 
