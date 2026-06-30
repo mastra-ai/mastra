@@ -100,8 +100,6 @@ For maintainer triage context comments, write review notes for a human maintaine
 - include what still needs human verification
 - include the recommended maintainer action
 
-Ignore Vercel CI failures when preparing triage or PR critique comments unless the issue itself is specifically about Vercel/deployment behavior or the failure is directly relevant to the reported bug.
-
 Do not present triage context as final approval or rejection. Make observations and verification prompts a human can run with.
 ```
 
