@@ -1,56 +1,52 @@
 ---
-title: Early-Return Render Branches, Don't Ternary the Wrapper
+title: Branch the Body, Keep One Wrapper
 impact: MEDIUM
-impactDescription: a loading/empty/mode ternary wrapped around the whole returned JSX buries the real layout and grows unreadable as branches are added
+impactDescription: a ternary tree buries the layout, and duplicating the wrapper in every early return is its own smell that drifts as branches change
 tags: structure, readability, rendering, control-flow, maintainability
 ---
 
-## Early-Return Render Branches, Don't Ternary the Wrapper
+## Branch the Body, Keep One Wrapper
 
-When a component renders distinct top-level states — loading, empty, error, or a mode switch — return each from its own `if` guard instead of nesting ternaries inside the returned JSX. Early returns keep each branch readable on its own and let the main `return` show the real layout without indentation creep.
+When a component renders mutually exclusive top-level states — loading, empty, error, or a mode switch — pick the view with guard clauses (early returns), but keep the layout wrapper in ONE place. Don't ternary the whole returned JSX, and don't paste the wrapper into every branch either. Wrap a small body component that returns the bare content for each state.
 
-**Incorrect (the wrapper is a ternary tree):**
+**Incorrect (a ternary tree inside the wrapper):**
 
 ```tsx
 return (
   <Panel>
-    {isLoading ? (
-      <Skeleton />
-    ) : isDetailOpen ? (
-      <Detail />
-    ) : (
-      <List items={items} />
-    )}
+    {isLoading ? <Skeleton /> : isDetailOpen ? <Detail /> : <List items={items} />}
   </Panel>
 );
 ```
 
-**Correct (one early return per state):**
+**Also incorrect (the wrapper duplicated in every early return):**
 
 ```tsx
-if (isLoading) {
-  return (
-    <Panel>
-      <Skeleton />
-    </Panel>
-  );
-}
-
-if (isDetailOpen) {
-  return (
-    <Panel>
-      <Detail />
-    </Panel>
-  );
-}
-
-return (
-  <Panel>
-    <List items={items} />
-  </Panel>
-);
+if (isLoading) return <Panel><Skeleton /></Panel>;
+if (isDetailOpen) return <Panel><Detail /></Panel>;
+return <Panel><List items={items} /></Panel>;
 ```
 
-All hooks must still run before the first early return — keep `useState`/`useEffect`/data hooks at the top, then branch. Pair this with deriving the branch flags from hooks rather than props (see [`structure-derive-dont-duplicate`](./structure-derive-dont-duplicate.md)); a single flat ternary for a leaf value is fine, but a ternary nested inside another is its own smell (see [`structure-no-nested-ternary`](./structure-no-nested-ternary.md)).
+**Correct (one wrapper; the body early-returns bare content):**
 
-Smell: the component's `return` is `a ? <X/> : b ? <Y/> : <Z/>` over loading/empty/mode flags. Lift each into an `if (...) return ...`.
+```tsx
+function PanelBody(props) {
+  if (isLoading) return <Skeleton />;
+  if (isDetailOpen) return <Detail />;
+  return <List items={items} />;
+}
+
+function ThingPanel(props) {
+  return (
+    <Panel>
+      <PanelBody {...props} />
+    </Panel>
+  );
+}
+```
+
+Hooks must run before the first early return, so they live in the body component, above the guards. Lifting the wrapper to the parent is the same idea — wherever it lives, it appears once.
+
+This applies only to **mutually exclusive** views. When regions coexist in the layout — `<Panel><Detail /><List /></Panel>` — do not hoist one skeleton over both; let each child own its loading state (a skeleton colocated inside `<Detail />` / `<List />`). A top-level early return there would wrongly hide siblings.
+
+Smell: the component's `return` is `a ? <X/> : b ? <Y/> : <Z/>`, or the same layout shell (`<Panel>`, `<Card>`, `<Layout>`) is repeated across several `return`s. Lift the shell out and branch the body.

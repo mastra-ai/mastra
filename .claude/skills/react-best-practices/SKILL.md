@@ -66,7 +66,7 @@ Rules are prioritized by impact:
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
 - Replace ternaries nested inside ternaries with a guard-clause helper or early returns (`structure-no-nested-ternary`)
-- Return distinct render states (loading/empty/mode) from early `if` guards, not a ternary wrapping the JSX (`structure-early-return-render-branches`)
+- Pick the view with early `if` guards but keep the layout wrapper in one place — branch a body component, don't ternary or duplicate the shell (`structure-early-return-render-branches`)
 
 **Testing:**
 

@@ -91,7 +91,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | `structure-component-naming`      | JSX-Returning Helpers Must Be Components              | MEDIUM      | Name reusable JSX-returning helpers as PascalCase components and call them with JSX.          | `references/rules/structure-component-naming.md`      |
 | `structure-derive-dont-duplicate` | Derive Props and Params, Don't Pass Duplicates        | MEDIUM      | Compute a value from a param/prop already in scope instead of accepting it as a separate arg. | `references/rules/structure-derive-dont-duplicate.md` |
 | `structure-no-nested-ternary`     | No Ternaries Nested Inside Ternaries                  | MEDIUM      | Replace a ternary whose branch is another ternary with a guard-clause helper or early returns. | `references/rules/structure-no-nested-ternary.md`     |
-| `structure-early-return-render-branches` | Early-Return Render Branches, Don't Ternary the Wrapper | MEDIUM | Return loading/empty/mode states from early `if` guards instead of a ternary wrapping the JSX. | `references/rules/structure-early-return-render-branches.md` |
+| `structure-early-return-render-branches` | Branch the Body, Keep One Wrapper | MEDIUM | Pick the view with early `if` guards but keep the layout shell in one place — don't ternary it or duplicate it per branch. | `references/rules/structure-early-return-render-branches.md` |
 
 ### 8. Testing
 
