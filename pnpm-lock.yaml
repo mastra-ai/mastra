@@ -2150,6 +2150,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.6)
+      '@tursodatabase/api':
+        specifier: 2.0.4
+        version: 2.0.4
       ai:
         specifier: ^6.0.176
         version: 6.0.177(zod@4.4.3)
@@ -18113,6 +18116,9 @@ packages:
   '@turbopuffer/turbopuffer@0.10.18':
     resolution: {integrity: sha512-3AuyjumzcQ0iLNU6hRTbOt8OeZoVJaHqNQOzIMzM6h290OGEtdCJ6L0L5Hs9gmrpANlaTPN1kUC2fe+/BMpRDw==}
 
+  '@tursodatabase/api@2.0.4':
+    resolution: {integrity: sha512-jgWNzy9kmOqZDaTblWUb3fqhl9qfmB2GuTLq7DVL8xQ5AAEkwKR2W6A/XZsqt8kS/CZ6qCH9yeDy2PhQvOYoDg==}
+
   '@tursodatabase/database-common@0.4.4':
     resolution: {integrity: sha512-iuSYWgBQEETjwfWOmi3E4Q++jQTb+VOPXeaKozQqW8fXtgU6ZaYUMmWbqQVMGSS9sAWZlZi9qyPVz0rkT8zoqQ==}
 
@@ -28855,6 +28861,9 @@ packages:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
     deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+
+  whatwg-fetch@3.6.20:
+    resolution: {integrity: sha512-EqhiFU6daOA8kpjOWTL0olhVOF3i7OrFzSYiGsEMB8GcXS+RrzauAERX65xMeNWVqxA6HXH2m69Z9LaKKdisfg==}
 
   whatwg-mimetype@4.0.0:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
@@ -40578,6 +40587,10 @@ snapshots:
     dependencies:
       pako: 2.1.0
       undici: 7.25.0
+
+  '@tursodatabase/api@2.0.4':
+    dependencies:
+      whatwg-fetch: 3.6.20
 
   '@tursodatabase/database-common@0.4.4': {}
 
@@ -54023,6 +54036,8 @@ snapshots:
   whatwg-encoding@3.1.1:
     dependencies:
       iconv-lite: 0.6.3
+
+  whatwg-fetch@3.6.20: {}
 
   whatwg-mimetype@4.0.0: {}
 
