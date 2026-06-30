@@ -1,5 +1,29 @@
 # @mastra/inngest
 
+## 1.8.0-alpha.2
+
+### Minor Changes
+
+- Added support for the fine-grained authorization (FGA) `actor` signal on the Inngest execution engine. ([#18674](https://github.com/mastra-ai/mastra/pull/18674))
+
+  Workflows running on the Inngest engine can now pass a trusted `actor` through `run.start()`, `startAsync()`, `resume()`, `stream()`, and `timeTravel()`. The signal is re-threaded across durable step and nested-workflow boundaries, so every nested agent, tool, and memory FGA check sees the same actor. Previously `actor` was only threaded through the default engine, so trusted background workflows on Inngest lost the membership bypass at each step re-entry.
+
+  **Usage**
+
+  ```ts
+  const run = await workflow.createRun();
+  await run.start({
+    inputData,
+    requestContext, // includes organizationId / tenant scope
+    actor: { actorKind: 'system', sourceWorkflow: 'nightly-sync' },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c)]:
+  - @mastra/core@1.48.0-alpha.7
+
 ## 1.8.0-alpha.1
 
 ### Minor Changes

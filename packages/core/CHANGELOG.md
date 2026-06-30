@@ -1,5 +1,53 @@
 # @mastra/core
 
+## 1.48.0-alpha.7
+
+### Minor Changes
+
+- Added file-based agents: define an agent by file convention under `src/mastra/agents/<name>/` alongside agents created with `new Agent()`. ([#18609](https://github.com/mastra-ai/mastra/pull/18609))
+
+  A directory becomes an agent when it has a `config.ts` or `instructions.md`. The directory name is the agent name. `instructions.md` supplies the instructions, `tools/*.ts` supply tools, and `skills/` supplies skills (a `createSkill()` module, a packaged `SKILL.md` directory, or a flat `<skill>.md`). Each file-based agent also gets a workspace by default (contained filesystem + shell sandbox rooted at a per-agent `workspace/` dir); customize it with a `workspace.ts` default export or `config.workspace`. Both styles register into the same Mastra instance and show up together in Studio, the server, and the bundler.
+
+  **Before**
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  export const weather = new Agent({
+    id: 'weather',
+    name: 'weather',
+    instructions: 'You are a weather assistant.',
+    model: 'openai/gpt-4o',
+  });
+  ```
+
+  **After (file-based, optional)**
+
+  ```ts
+  // src/mastra/agents/weather/config.ts
+  import { agentConfig } from '@mastra/core/agent';
+
+  export default agentConfig({
+    model: 'openai/gpt-4o',
+    // instructions taken from instructions.md, tools from tools/*.ts
+  });
+  ```
+
+  A file-based agent can also declare **subagents** under `agents/<name>/subagents/<childId>/`, using the same directory layout as an agent (`config.ts`, `instructions.md`, `tools/`, `skills/`, `workspace.ts` / `workspace/`). Each subagent is assembled independently and wired into the parent's `agents` map, so the loop exposes it as a delegation tool named after the directory. A subagent's `config.ts` must set a non-empty `description` (build error otherwise), subagents inherit nothing from the parent, and they are one level deep (a nested `subagents/` directory is ignored with a warning). A subagent id colliding with a parent tool key or another subagent id is a build error; an id also present in `config.agents` keeps the `config.agents` entry with a warning.
+
+  Code-registered agents win on name collisions, and a `config.ts` that exports `new Agent()` is used as-is (its sibling `instructions.md`, `tools/`, and `subagents/` are ignored with a warning), so existing projects are unaffected.
+
+  The core API surface is `agentConfig()` plus the `assembleAgentFromFsEntry()` / `Mastra.__registerFsAgents()` helpers that turn a discovered directory into a registered agent. Directory discovery itself is performed by the build pipeline; importing the `mastra` instance directly as a library does not scan `agents/<name>/` directories, so register those agents in code if you need them outside the build pipeline.
+
+### Patch Changes
+
+- `DurableAgent` now matches `Agent` behavior in three places where the durable loop previously diverged: ([#18677](https://github.com/mastra-ai/mastra/pull/18677))
+  - `isTaskComplete` scorers receive `requestContext` as `customContext`, so the same scorer code works on both agents. Only JSON-serializable entries from `requestContext` are forwarded; non-serializable values are dropped. Do not store secrets in `RequestContext` if you persist durable agent snapshots.
+  - Provider-defined tools (e.g. OpenAI `web_search`) resolve and execute when invoked by the model, instead of surfacing as `ToolNotFoundError`.
+  - Each iteration of a multi-step durable run produces a distinct assistant `messageId`, matching the non-durable loop and unblocking downstream consumers (signal drains, audit logs, replay) that key off message identity.
+
+- Fix a polynomial ReDoS in the model gateway error matcher. The `Missing .+ environment variable` pattern used to classify expected missing-auth errors could backtrack catastrophically on adversarial error messages; it now uses `Missing [^ ]+ environment variable`, which matches the same real messages without the ambiguous overlap. ([#18680](https://github.com/mastra-ai/mastra/pull/18680))
+
 ## 1.48.0-alpha.6
 
 ### Minor Changes
