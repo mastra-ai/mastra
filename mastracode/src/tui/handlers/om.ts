@@ -3,7 +3,7 @@
  * om_status, om_observation_start/end, om_reflection_start/end,
  * om_buffering_start/end/failed, om_activation, and om_*_failed.
  *
- * All omProgress state updates are handled by the Harness display state.
+ * All omProgress state updates are handled by the AgentController display state.
  * These handlers focus on UI component creation/removal.
  */
 import type { Component } from '@earendil-works/pi-tui';
@@ -126,10 +126,10 @@ export function handleOMReflectionEnd(
 ): void {
   const { state } = ctx;
   // Read pre-compression tokens from display state (set during om_reflection_start)
-  // Note: Harness has already updated observationTokens to compressedTokens,
+  // Note: AgentController has already updated observationTokens to compressedTokens,
   // so we use tokensToReflect from the start event via the cycleId context.
   // For display purposes, we read the event parameter directly.
-  const ds = state.harness.getDisplayState();
+  const ds = state.session.displayState.get();
   // Remove in-progress marker — the output box replaces it
   if (state.activeOMMarker) {
     const idx = state.chatContainer.children.indexOf(state.activeOMMarker);

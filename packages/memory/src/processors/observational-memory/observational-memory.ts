@@ -9,6 +9,7 @@ import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/proce
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
+import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import { resolveActivationTTL } from './activation-ttl';
@@ -1988,15 +1989,19 @@ ${formattedMessages}
       writer,
       requestContext,
       observabilityContext,
-    ).finally(() => {
-      // Clean up the operation tracking
-      BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-      // Clear persistent flag
-      unregisterOp(record.id, 'bufferingObservation');
-      this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
-        omError('[OM] Failed to clear buffering observation flag', err);
+    )
+      .catch(err => {
+        omError('[OM] async buffering observation failed', err);
+      })
+      .finally(() => {
+        // Clean up the operation tracking
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        // Clear persistent flag
+        unregisterOp(record.id, 'bufferingObservation');
+        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+          omError('[OM] Failed to clear buffering observation flag', err);
+        });
       });
-    });
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
   }
@@ -2081,11 +2086,16 @@ ${formattedMessages}
     // 2. When MessageList creates new messages for streaming content after the seal,
     //    those new messages have their own IDs and don't overwrite the sealed messages
     // 3. The sealed messages remain intact with their content at the time of buffering
-    await this.messageHistory.persistMessages({
-      messages: messagesToBuffer,
-      threadId,
-      resourceId: freshRecord.resourceId ?? undefined,
-    });
+    try {
+      await this.messageHistory.persistMessages({
+        messages: messagesToBuffer,
+        threadId,
+        resourceId: freshRecord.resourceId ?? undefined,
+      });
+    } catch (err) {
+      omError('[OM] Failed to persist sealed messages before buffering — skipping observation cycle', err);
+      return;
+    }
 
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -3368,6 +3378,7 @@ ${formattedMessages}
 
     let observed = false;
     let observationUsage: ObserveHookUsage | undefined;
+    let observationProviderMetadata: ProviderMetadata | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
@@ -3406,11 +3417,16 @@ ${formattedMessages}
         }).run();
         observed = result.observed;
         observationUsage = result.usage;
+        observationProviderMetadata = result.providerMetadata;
       } catch (error) {
         observationError = error instanceof Error ? error : new Error(String(error));
         throw error;
       } finally {
-        hooks?.onObservationEnd?.({ usage: observationUsage, error: observationError });
+        hooks?.onObservationEnd?.({
+          usage: observationUsage,
+          error: observationError,
+          ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
+        });
       }
     });
 

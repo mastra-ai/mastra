@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -107,6 +106,55 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('cart')).toBeTruthy();
+  });
+
+  // Regression: a persisted reactive (non-user) `signal` row must render a
+  // SignalBadge on read-back. This conversion existed at 1.41.0 and was lost
+  // when the chat renderer was rewritten (PR #17774); the row was dropped.
+  it('renders a persisted reactive signal row as a signal badge on read-back', () => {
+    const { container } = renderRow(
+      baseMessage({
+        id: 'sig-1',
+        role: 'signal' as MastraDBMessage['role'],
+        type: 'reactive' as MastraDBMessage['type'],
+        content: {
+          format: 2,
+          metadata: { signal: { type: 'reactive', tagName: 'system-reminder' } },
+          parts: [{ type: 'text', text: 'reactive signal body' }],
+        } as never,
+      }),
+    );
+    expect(container.textContent).toContain('system-reminder');
+    expect(container.textContent).toContain('reactive signal body');
+  });
+
+  // A non-user signal whose payload is not a renderable signal shape must be
+  // dropped, not rendered as an empty assistant bubble.
+  it('drops a non-user signal whose payload is not a renderable signal shape', () => {
+    const { container } = renderRow(
+      baseMessage({
+        id: 'sig-unknown',
+        role: 'signal' as MastraDBMessage['role'],
+        type: 'internal' as MastraDBMessage['type'],
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'internal signal body' }],
+        } as never,
+      }),
+    );
+    expect(container.textContent).toBe('');
+  });
+
+  it('renders a persisted user signal row as a user message on read-back', () => {
+    renderRow(
+      baseMessage({
+        id: 'sig-user',
+        role: 'signal' as MastraDBMessage['role'],
+        type: 'user' as MastraDBMessage['type'],
+        content: { format: 2, parts: [{ type: 'text', text: 'echoed user signal' }] },
+      }),
+    );
+    expect(screen.getByText('echoed user signal')).toBeTruthy();
   });
 
   it('routes a tool-invocation part into ToolCard (generic tool badge)', () => {
@@ -277,5 +325,72 @@ describe('MessageRow', () => {
     );
     expect(screen.getByText('boom went wrong')).toBeTruthy();
     expect(screen.getByText('Error')).toBeTruthy();
+  });
+
+  describe('when an assistant message contains a step-start part', () => {
+    it('does not render the debug "Fallback:" text and still renders the text part', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' } as never, { type: 'text', text: 'real content' }],
+          },
+        }),
+      );
+
+      expect(screen.getByText('real content')).toBeTruthy();
+      expect(container.textContent).not.toContain('Fallback:');
+      expect(container.textContent).not.toContain('step-start');
+    });
+  });
+
+  describe('when a task signal carries an empty task snapshot', () => {
+    it('hides the signal badge (tasks render in the docked TaskPanel)', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'data-signal',
+                data: { type: 'state', tagName: 'current-task-list', metadata: { value: { tasks: [] } } },
+              } as never,
+            ],
+          },
+        }),
+      );
+      expect(container.textContent).toBe('');
+    });
+  });
+
+  describe('when a task signal carries an item with an invalid status', () => {
+    it('rejects the task shape and falls back to the generic state badge', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'data-signal',
+                data: {
+                  type: 'state',
+                  tagName: 'current-task-list',
+                  metadata: {
+                    state: { id: 'current-task-list' },
+                    value: {
+                      tasks: [{ id: 't1', content: 'Do thing', status: 'bogus', activeForm: 'Doing thing' }],
+                    },
+                  },
+                },
+              } as never,
+            ],
+          },
+        }),
+      );
+      expect(screen.getByText('current-task-list')).toBeTruthy();
+    });
   });
 });

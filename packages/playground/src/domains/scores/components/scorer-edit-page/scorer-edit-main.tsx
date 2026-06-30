@@ -1,4 +1,4 @@
-import { CodeEditor } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import type { UseFormReturn } from 'react-hook-form';
 import { Controller } from 'react-hook-form';
 

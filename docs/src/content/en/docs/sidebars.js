@@ -66,6 +66,27 @@ const sidebars = {
           id: 'studio/observability',
           label: 'Observability',
         },
+        {
+          type: 'category',
+          label: 'Editor',
+          items: [
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'editor/tools',
+              label: 'Tools',
+            },
+            {
+              type: 'doc',
+              id: 'editor/prompts',
+              label: 'Prompts',
+            },
+          ],
+        },
       ],
     },
     {
@@ -81,6 +102,11 @@ const sidebars = {
           type: 'doc',
           id: 'agents/using-tools',
           label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'agents/skills',
+          label: 'Skills',
         },
         {
           type: 'html',
@@ -116,40 +142,36 @@ const sidebars = {
           id: 'agents/goals',
           label: 'Goals',
           customProps: {
-            tags: ['new'],
+            tags: ['beta'],
           },
         },
         {
           type: 'doc',
           id: 'agents/background-tasks',
           label: 'Background Tasks',
+        },
+        {
+          type: 'doc',
+          id: 'agents/durable-agents',
+          label: 'Durable Agents',
           customProps: {
-            tags: ['new'],
+            tags: ['beta'],
           },
         },
         {
           type: 'doc',
           id: 'agents/channels',
           label: 'Channels',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'agents/a2a',
           label: 'A2A',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'agents/acp',
           label: 'ACP',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -169,7 +191,7 @@ const sidebars = {
           id: 'agents/code-mode',
           label: 'Code Mode',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -177,13 +199,21 @@ const sidebars = {
           id: 'agents/signals',
           label: 'Signals',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
           type: 'doc',
           id: 'agents/signal-providers',
           label: 'Signal Providers',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/heartbeats',
+          label: 'Heartbeats',
           customProps: {
             tags: ['alpha'],
           },
@@ -303,77 +333,22 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Editor',
+      label: 'Agent Builder',
+      customProps: {
+        tags: ['new'],
+      },
       items: [
-        {
-          type: 'doc',
-          id: 'editor/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'editor/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'editor/prompts',
-          label: 'Prompts',
-        },
-        {
-          type: 'category',
-          label: 'Agent Builder',
-          customProps: {
-            tags: ['new'],
-          },
-          items: [
-            { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-            { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-            { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-            { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-            { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-            { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-            { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-            { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-            { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-            { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-            { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Streaming',
-      items: [
-        {
-          type: 'doc',
-          id: 'streaming/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/events',
-          label: 'Events',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/tool-streaming',
-          label: 'Tool Streaming',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/workflow-streaming',
-          label: 'Workflow Streaming',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/background-task-streaming',
-          label: 'Background Task Streaming',
-          customProps: {
-            tags: ['new'],
-          },
-        },
+        { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+        { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+        { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+        { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+        { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+        { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+        { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+        { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+        { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
+        { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+        { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
       ],
     },
     {
@@ -390,9 +365,45 @@ const sidebars = {
           type: 'doc',
           id: 'mcp/mcp-apps',
           label: 'MCP Apps',
-          customProps: {
-            tags: ['new'],
-          },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'AgentController',
+      customProps: {
+        tags: ['beta'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'agent-controller/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/session',
+          label: 'Session',
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/modes',
+          label: 'Modes',
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/threads-and-state',
+          label: 'Threads and State',
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/subagents',
+          label: 'Subagents',
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/tool-approvals',
+          label: 'Tool Approvals',
         },
       ],
     },
@@ -435,9 +446,6 @@ const sidebars = {
     {
       type: 'category',
       label: 'Browser',
-      customProps: {
-        tags: ['new'],
-      },
       items: [
         {
           type: 'doc',
@@ -556,6 +564,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/fga',
               label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/google',
+              label: 'Google',
             },
             {
               type: 'doc',
@@ -797,6 +810,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'evals/quick-checks',
+          label: 'Quick Checks',
+        },
+        {
+          type: 'doc',
+          id: 'evals/gates-and-verdicts',
+          label: 'Gates and Verdicts',
+        },
+        {
+          type: 'doc',
           id: 'evals/custom-scorers',
           label: 'Custom Scorers',
         },
@@ -825,40 +848,6 @@ const sidebars = {
               label: 'Running Experiments',
             },
           ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Mastra platform',
-      customProps: {
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/observability',
-          label: 'Observability',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/server',
-          label: 'Server',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/configuration',
-          label: 'Configuration',
         },
       ],
     },
@@ -921,23 +910,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Build with AI',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'build-with-ai/skills',
-          label: 'Skills',
-        },
-        {
-          type: 'doc',
-          id: 'build-with-ai/mcp-docs-server',
-          label: 'MCP Docs Server',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Community',
       items: [
         {
@@ -954,6 +926,52 @@ const sidebars = {
           type: 'doc',
           id: 'community/discord',
           label: 'Discord',
+        },
+      ],
+    },
+  ],
+  platformSidebar: [
+    {
+      type: 'category',
+      label: 'Mastra platform',
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/github',
+          label: 'GitHub integration',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/database',
+          label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
         },
       ],
     },

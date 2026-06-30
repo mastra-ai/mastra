@@ -6,7 +6,7 @@
  * Also includes formatToolResult helper.
  */
 
-import type { TaskItemInput } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/signals';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
@@ -25,7 +25,7 @@ import { getMarkdownTheme } from '../theme.js';
 import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
-  const color = ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = ctx.state.session?.mode?.resolve?.()?.metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -145,23 +145,23 @@ export function handleToolApprovalRequired(
       state.ui.hideOverlay();
       state.pendingApprovalDismiss = null;
       if (action.type === 'approve') {
-        state.harness.respondToToolApproval({ decision: 'approve' });
+        state.session.respondToToolApproval({ decision: 'approve' });
       } else if (action.type === 'always_allow_category') {
-        state.harness.respondToToolApproval({ decision: 'always_allow_category' });
+        state.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
-        state.harness.setState({ yolo: true } as any);
-        state.harness.respondToToolApproval({ decision: 'approve' });
+        void state.session.state.set({ yolo: true } as any);
+        state.session.respondToToolApproval({ decision: 'approve' });
       } else {
-        state.harness.respondToToolApproval({ decision: 'decline' });
+        state.session.respondToToolApproval({ decision: 'decline' });
       }
     },
   });
 
-  // Set up Ctrl+C dismiss to decline
-  state.pendingApprovalDismiss = () => {
+  // Set up dismissal to decline
+  state.pendingApprovalDismiss = declineContext => {
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
-    state.harness.respondToToolApproval({ decision: 'decline' });
+    state.session.respondToToolApproval({ decision: 'decline', declineContext });
   };
 
   // Show the dialog as an overlay
@@ -240,7 +240,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     state.ui.requestRender();
   }
 
-  // File modification tracking is handled by the Harness display state
+  // File modification tracking is handled by the AgentController display state
 }
 
 export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, partialResult: unknown): void {
@@ -363,7 +363,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
  */
 export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
   const { state } = ctx;
-  const ds = state.harness.getDisplayState();
+  const ds = state.session.displayState.get();
   const buffer = ds.toolInputBuffers.get(toolCallId);
   if (buffer === undefined) return;
 
@@ -392,7 +392,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
         }
       }
 
-      // For submit_plan, stream the title/plan args into the inline purple plan box.
+      // For submit_plan, stream the path arg into the inline purple plan box.
       if (buffer.toolName === 'submit_plan') {
         const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
         if (planComponent) {
@@ -443,7 +443,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
  * Clean up the input buffer when tool input streaming ends.
  */
 export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: string): void {
-  // Buffer cleanup handled by Harness display state
+  // Buffer cleanup handled by AgentController display state
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
@@ -458,7 +458,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     (subagentComponent as any)._pendingResult = resultText;
   }
 
-  // File modification tracking is handled by the Harness display state
+  // File modification tracking is handled by the AgentController display state
 
   // Clean up ask_user component tracking
   state.pendingAskUserComponents.delete(toolCallId);

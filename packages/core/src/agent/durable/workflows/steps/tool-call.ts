@@ -6,16 +6,18 @@ import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
+import type { ExportedSpan, SpanType } from '../../../../observability';
 import { ChunkFrom } from '../../../../stream/types';
-import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
+import { createStep } from '../../../../workflows/workflow';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type { DurableToolCallInput, SerializableDurableOptions, AgentSuspendedEventData } from '../../types';
+import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
 
@@ -31,6 +33,8 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
+  stepSpanData: z.any().optional(),
 });
 
 /**
@@ -137,10 +141,45 @@ export function createDurableToolCallStep() {
           memoryConfig?: MemoryConfig;
           threadExists?: boolean;
         };
+        agentSpanData?: unknown;
+        modelSpanData?: unknown;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
       const logger = (mastra as any)?.getLogger?.();
+
+      // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before
+      // pausing — stores persist only span-end events, so an un-ended root is dropped if
+      // the run is never resumed. On resume a fresh root is opened (see DurableAgent.resume).
+      const endSpansAsSuspended = (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
+        try {
+          const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          if (!obs) return;
+          const output = {
+            status: 'suspended' as const,
+            reason: info.reason,
+            toolName: info.toolName,
+            toolCallId: info.toolCallId,
+          };
+          // After a prior resume, end the resume spans (registry override) — they are the
+          // active root for this segment. Otherwise end the threaded originals.
+          const reg = globalRunRegistry.get(runId);
+          const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+          const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+          if (typedInput.stepSpanData) {
+            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
+          }
+          if (modelSpanData) {
+            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({ output });
+          }
+          if (agentSpanData) {
+            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({ output });
+          }
+        } catch (error) {
+          // Span bookkeeping must never break suspension.
+          logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);
+        }
+      };
 
       // If the tool was already executed by the provider, return the output
       if (providerExecuted && output !== undefined) {
@@ -218,8 +257,22 @@ export function createDurableToolCallStep() {
           },
         });
 
-      // 2. Check if tool requires approval
-      const requiresApproval = await toolRequiresApproval(tool, agentOptions.requireToolApproval, args);
+      // 2. Check if tool requires approval. Prefer the live policy on the
+      //    in-process registry (which preserves the function form with real
+      //    toolName/args); fall back to the JSON-safe boolean shadow on the
+      //    serialized workflow input for cross-process engines.
+      const registryRequireToolApproval = registryEntry?.requireToolApproval;
+      const effectiveRequireToolApproval =
+        registryRequireToolApproval !== undefined ? registryRequireToolApproval : agentOptions.requireToolApproval;
+      const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
+        toolName,
+        requestContext: registryEntry?.requestContext
+          ? Object.fromEntries(
+              [...registryEntry.requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+            )
+          : undefined,
+        workspace: registryEntry?.workspace,
+      });
 
       if (requiresApproval && !resumeData) {
         const resumeSchema = JSON.stringify({
@@ -253,6 +306,9 @@ export function createDurableToolCallStep() {
 
         // Flush messages before suspension
         await doFlush();
+
+        // End the trace's open spans as suspended before pausing.
+        endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
 
         // Suspend and wait for approval
         return suspend(
@@ -304,11 +360,24 @@ export function createDurableToolCallStep() {
         };
       }
 
+      // Rebuild the forwarded model_step span and pass it as the tool's tracing context so
+      // the TOOL_CALL span nests under the LLM call (matches the non-durable path).
+      const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+      const stepSpan =
+        typedInput.stepSpanData && observability
+          ? observability.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
+          : undefined;
+      const toolTracingContext = stepSpan ? { currentSpan: stepSpan } : undefined;
+
       const toolOptions = {
         toolCallId,
         messages: [],
         workspace,
         requestContext,
+        tracingContext: toolTracingContext,
+        // Forward per-call ActorSignal so FGA checks inside tool execution
+        // see the same actor as the non-durable Agent path.
+        actor: agentOptions?.actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
 
         // In-execution suspend callback — allows tools to suspend mid-execution
@@ -343,6 +412,8 @@ export function createDurableToolCallStep() {
             }
 
             await doFlush();
+
+            endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
 
             return suspend(
               {
@@ -380,6 +451,8 @@ export function createDurableToolCallStep() {
             }
 
             await doFlush();
+
+            endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
             return suspend(
               {
@@ -646,12 +719,20 @@ export function createDurableToolCallStep() {
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {
           try {
-            await emitChunkEvent(pubsub, runId, {
-              type: 'tool-result',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, result },
-            });
+            const resultChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-result' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, result },
+              },
+              {
+                policy: registryEntry?.toolPayloadTransform,
+                tools: registryEntry?.tools,
+                logger: logger as any,
+              },
+            );
+            await emitChunkEvent(pubsub, runId, resultChunk);
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
@@ -667,12 +748,20 @@ export function createDurableToolCallStep() {
         // Emit tool-error chunk (non-fatal — error result is returned regardless)
         if (pubsub) {
           try {
-            await emitChunkEvent(pubsub, runId, {
-              type: 'tool-error',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, error: toolError },
-            });
+            const errorChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-error' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, error: toolError },
+              },
+              {
+                policy: registryEntry?.toolPayloadTransform,
+                tools: registryEntry?.tools,
+                logger: logger as any,
+              },
+            );
+            await emitChunkEvent(pubsub, runId, errorChunk);
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }

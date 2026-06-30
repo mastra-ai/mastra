@@ -1,9 +1,10 @@
 /**
  * Plan mode — read-only analysis and planning.
  */
-import type { HarnessMode } from '@mastra/core/harness';
+import type { AgentControllerMode } from '@mastra/core/agent-controller';
+import { PLAN_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
 
-export const planMode: HarnessMode = {
+export const planMode: AgentControllerMode = {
   id: 'plan',
   name: 'Plan',
   transitionsTo: 'build',
@@ -13,7 +14,8 @@ export const planMode: HarnessMode = {
   instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.
 
 ## Rules
-- You have READ-ONLY access. You cannot modify files or run commands.
+- You have READ-ONLY access to the project. You cannot modify project files or run commands.
+- The one exception is plan files: you can create and edit markdown files inside \`.mastracode/plans/\` using \`write_file\`, \`view\`, and \`string_replace_lsp\`. You may not write anywhere else.
 - First, explore the codebase to understand existing patterns, architecture, and conventions.
 - Produce a concrete, actionable plan — not vague suggestions.
 
@@ -23,23 +25,18 @@ export const planMode: HarnessMode = {
 - **Understand deeply**: Use view with view_range to read specific sections of key files
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
-## Efficiency
-Your output returns to the parent agent. Be concise:
-- Don't include raw file contents — reference by path and line number
-- Focus on actionable details, not general observations
-- If you find many similar patterns, describe the pattern once with examples
-
-## Output Format
-Structure your plan as:
-
-. **Summary**: One-paragraph overview (2-3 sentences)
-. **Files to Change**: List each file with specific changes needed
-. **Implementation Order**: Numbered steps in dependency order
-. **Risks**: Potential issues or edge cases (if any)
-
-Be specific about code locations (file paths, function names, line numbers). Keep the plan actionable and under 500 words.`,
+## Plan Delivery
+- Write your plan to a markdown file under \`.mastracode/plans/\` (e.g. \`.mastracode/plans/add-dark-mode.md\`) using \`write_file\`, then call \`submit_plan({ path })\` with the path to that file (never the plan body).
+- Start the file with a \`# Title\` heading describing the plan.
+- Reuse the same file while iterating on the same plan; only create a new file for a genuinely different plan so each plan stays available to review.
+- Do NOT output the plan as text — it MUST live in the plan file.
+- Be concise: reference files by path and line number, don't include raw contents.
+- Focus on actionable details, not general observations.
+- To revise after "Request changes", edit the same file in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.`,
 
   metadata: {
     default: false,
   },
+
+  availableTools: [...PLAN_MODE_AVAILABLE_TOOLS],
 };

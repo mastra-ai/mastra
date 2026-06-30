@@ -29,6 +29,25 @@ export const GOAL_STATE_TYPE = 'goal';
 export const DEFAULT_GOAL_MAX_RUNS = 50;
 
 /**
+ * Score the default goal scorer emits to signal an explicit "waiting for the
+ * user" checkpoint (tri-state decision `waiting`). It is deliberately neither 1
+ * (complete) nor 0 (continue): the generic completion reducer treats it as "not
+ * passed" (so the loop does not declare the goal done), while the goal step
+ * detects this exact value and stops the auto-loop (`isContinued = false`) so
+ * the user gets a chance to provide input. The record stays `active` — the next
+ * agent turn is still judged. Shared between `scorer.ts` and `goal-step.ts`.
+ */
+export const GOAL_SCORE_WAITING = 0.5;
+
+/**
+ * Stable id of the built-in goal scorer (see `createGoalScorer`). The goal step
+ * uses this to attribute the `GOAL_SCORE_WAITING` sentinel to the default
+ * scorer only — a custom `goal.scorer` that happens to return `0.5` must not be
+ * misread as an explicit "waiting" checkpoint.
+ */
+export const GOAL_SCORER_ID = 'goal-scorer';
+
+/**
  * Default goal-judge system prompt. Ported from MastraCode's `JUDGE_SYSTEM_PROMPT`
  * so the native goal scorer behaves like the original `/goal` judge. A
  * user-supplied `goal.prompt` (or per-objective `prompt`) overrides this.
@@ -37,11 +56,14 @@ export const DEFAULT_GOAL_JUDGE_PROMPT = `You are the goal judge. Your decision 
 
 Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
 
-The goal is complete when its requirements have been fully achieved.
-The goal is NOT complete when the assistant should keep working autonomously toward the objective, including when it asked for input that the goal did not explicitly require.
-If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification.
+Use "done" when the goal is fully achieved.
+Use "waiting" when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint.
+Use "waiting" when the latest user message asks a question or requests clarification and the latest assistant message answers it; let the user acknowledge the answer, ask a follow-up, or otherwise return control before continuing goal work. Use common sense and do not wait if the user explicitly asked the assistant to continue autonomously after answering.
+Use "continue" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.
+If your previous decision was "waiting" for an explicit user checkpoint, keep choosing "waiting" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.
+If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose "continue" when the assistant should proceed to the next step. Do not choose "waiting" for judge-controlled checkpoints, because that would mean waiting for yourself.
 
-When the goal is not yet complete, be specific about what still needs to be accomplished and write your feedback as an instruction for what the assistant should do next.`;
+Your "reason" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished. When choosing "continue", write the reason as an instruction for what the assistant should do next. When choosing "waiting", explain what specific user checkpoint is still outstanding.`;
 
 /**
  * Effective goal settings resolved per evaluation. `judgeModelId` is `undefined`
@@ -52,6 +74,7 @@ export interface EffectiveGoalSettings {
   judgeModelId: string | undefined;
   maxRuns: number;
   prompt: string;
+  maxSteps: number | undefined;
 }
 
 /** The agent-level goal config the loop step resolves defaults from. */
@@ -59,6 +82,7 @@ export interface AgentGoalConfigDefaults {
   judgeModelId?: string;
   maxRuns?: number;
   prompt?: string;
+  maxSteps?: number;
 }
 
 /**
@@ -74,6 +98,7 @@ export function resolveEffectiveGoalSettings(
     judgeModelId: record?.judgeModelId ?? agentDefaults?.judgeModelId,
     maxRuns: record?.maxRuns ?? agentDefaults?.maxRuns ?? DEFAULT_GOAL_MAX_RUNS,
     prompt: record?.prompt ?? agentDefaults?.prompt ?? DEFAULT_GOAL_JUDGE_PROMPT,
+    maxSteps: agentDefaults?.maxSteps,
   };
 }
 

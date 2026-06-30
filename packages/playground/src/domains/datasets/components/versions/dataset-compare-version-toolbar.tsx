@@ -1,4 +1,5 @@
-import { Column, SelectFieldBlock } from '@mastra/playground-ui';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { format } from 'date-fns';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 

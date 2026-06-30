@@ -20,23 +20,29 @@ vi.mock('../prompts/agent-instructions.js', () => ({
 import { getDynamicInstructions } from '../instructions.js';
 
 describe('getDynamicInstructions', () => {
-  it('builds commit attribution guidance from restored harness model state', async () => {
+  it('builds commit attribution guidance from restored controller model state', async () => {
     const prompt = await getDynamicInstructions({
       requestContext: {
-        get: vi.fn(key =>
-          key === 'harness'
+        get: vi.fn(key => {
+          const getState = vi.fn(() => ({
+            projectPath: '/tmp/project',
+            projectName: 'test-project',
+            gitBranch: 'main',
+            permissionRules: { tools: {} },
+          }));
+          return key === 'controller'
             ? {
-                modeId: 'build',
-                getState: vi.fn(() => ({
-                  projectPath: '/tmp/project',
-                  projectName: 'test-project',
-                  gitBranch: 'main',
-                  currentModelId: 'anthropic/claude-opus-4-6',
-                  permissionRules: { tools: {} },
-                })),
+                getState,
+                session: {
+                  modeId: 'build',
+                  modelId: 'anthropic/claude-opus-4-6',
+                  state: {
+                    get: getState,
+                  },
+                },
               }
-            : undefined,
-        ),
+            : undefined;
+        }),
       },
     });
 

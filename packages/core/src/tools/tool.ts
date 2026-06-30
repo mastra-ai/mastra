@@ -1,3 +1,4 @@
+import type { ToolBackgroundConfig } from '../background-tasks';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -253,6 +254,12 @@ export class Tool<
   mcpMetadata?: McpMetadata;
 
   /**
+   * Background task configuration for this tool.
+   * When enabled, the tool can be executed in the background while the agent conversation continues.
+   */
+  background?: ToolBackgroundConfig;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -284,6 +291,7 @@ export class Tool<
     this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
     this.mcpMetadata = opts.mcpMetadata;
+    this.background = opts.background;
     this.onInputStart = opts.onInputStart;
     this.onInputDelta = opts.onInputDelta;
     this.onInputAvailable = opts.onInputAvailable;
@@ -295,10 +303,20 @@ export class Tool<
     if (opts.execute) {
       const originalExecute = opts.execute;
       this.execute = async (inputData: TSchemaIn, context?: any) => {
-        // Validate input if schema exists
-        const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
-        if (error) {
-          return error;
+        // When a tool is being resumed (resumeData present in context), skip input
+        // validation. The original args were already validated during the initial
+        // execution, and during resume the tool's execute function checks resumeData
+        // and returns early without using the input args.
+        const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
+
+        let data: any = inputData;
+        if (!isResuming) {
+          // Validate input if schema exists
+          const validationResult = validateToolInput(this.inputSchema, inputData, this.id);
+          if (validationResult.error) {
+            return validationResult.error;
+          }
+          data = validationResult.data;
         }
 
         // Validate request context if schema exists

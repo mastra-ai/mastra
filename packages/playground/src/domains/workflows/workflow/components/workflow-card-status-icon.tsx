@@ -1,4 +1,4 @@
-import { Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CircleCheck, CircleDashed, CircleX, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 
 import type { WorkflowCardDisplayStatus } from './types';

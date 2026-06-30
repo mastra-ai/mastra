@@ -6,7 +6,7 @@ import type {
   DataOmBufferingEndPart,
   DataOmBufferingFailedPart,
 } from '@mastra/memory/processors';
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Brain, CheckCircle2, XCircle, Loader2, CloudCog } from 'lucide-react';
 import { useEffect } from 'react';
 

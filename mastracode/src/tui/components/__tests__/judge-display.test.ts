@@ -1,7 +1,7 @@
 import process from 'node:process';
 import stripAnsi from 'strip-ansi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { JudgeDisplayComponent } from '../judge-display.js';
+import { evaluationToJudgeResult, JudgeDisplayComponent } from '../judge-display.js';
 
 const WIDTH = 80;
 
@@ -95,5 +95,58 @@ describe('JudgeDisplayComponent', () => {
     expect(activityIndex).toBeGreaterThan(-1);
     expect(reasonIndex).toBe(activityIndex + 2);
     expect(separator).toMatch(/^\s*│\s+│\s*$/);
+  });
+});
+
+describe('evaluationToJudgeResult', () => {
+  const basePayload = {
+    objective: 'Ship it',
+    iteration: 4,
+    maxRuns: 500,
+    results: [],
+    duration: 0,
+    timedOut: false,
+    maxRunsReached: false,
+    suppressFeedback: false,
+  };
+
+  it('maps a judge-failure payload to paused and surfaces the cause (no infinite "continue")', () => {
+    // Mirrors the reported bug: a judge that 400s used to render "continue" and
+    // loop forever. Core now emits status:'paused' with the cause in `reason`.
+    const result = evaluationToJudgeResult({
+      ...basePayload,
+      passed: false,
+      status: 'paused',
+      judgeFailed: true,
+      pausedReason: 'Scorer threw an error: Scorer Run Failed: Bad Request',
+      reason: 'Scorer threw an error: Scorer Run Failed: Bad Request',
+    } as any);
+
+    expect(result.decision).toBe('paused');
+    expect(result.reason).toContain('Bad Request');
+  });
+
+  it('maps a waitingForUser evaluation to the waiting decision', () => {
+    const result = evaluationToJudgeResult({
+      ...basePayload,
+      passed: false,
+      status: 'active',
+      waitingForUser: true,
+      reason: 'Waiting for user to review the implementation.',
+    } as any);
+
+    expect(result.decision).toBe('waiting');
+    expect(result.reason).toContain('review the implementation');
+  });
+
+  it('still maps an active/incomplete evaluation to continue', () => {
+    const result = evaluationToJudgeResult({
+      ...basePayload,
+      passed: false,
+      status: 'active',
+      reason: 'Keep working.',
+    } as any);
+
+    expect(result.decision).toBe('continue');
   });
 });

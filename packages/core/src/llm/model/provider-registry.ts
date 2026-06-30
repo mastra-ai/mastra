@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
-import { getGatewayId, shouldEnableGateway } from './gateways/index.js';
+import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -647,7 +647,16 @@ export class GatewayRegistry {
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models, attachmentCapabilities } = await fetchProvidersFromGateways(gateways);
+      const { providers, models, attachmentCapabilities, failedGateways } = await fetchProvidersFromGateways(gateways);
+
+      // If any gateway failed, skip writing to prevent partial results from
+      // overwriting the complete bundled registry. The existing static registry
+      // already contains all provider data, so a partial write would only
+      // remove providers (e.g. writing only Netlify providers when models.dev
+      // is down strips all direct providers like openai, anthropic, etc.).
+      if (failedGateways.length > 0) {
+        return;
+      }
 
       // Get package root for file paths
       const packageRoot = getPackageRoot();
