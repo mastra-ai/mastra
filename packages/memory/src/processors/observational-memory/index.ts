@@ -31,6 +31,13 @@ export { getObservationsAsOf } from './observation-utils';
 
 // Types
 export { ModelByInputTokens, type ModelByInputTokensConfig } from './model-by-input-tokens';
+export { Extractor } from './extractor';
+export type {
+  ExtractorConfig,
+  ExtractorOnExtractedContext,
+  ExtractorRuntimeContext,
+  ExtractorSource,
+} from './extractor';
 
 export type {
   ObservationalMemoryConfig,
