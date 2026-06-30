@@ -69,5 +69,7 @@ om-debug.log
 om-reflector-fixture.json
 .notion
 .dev/lima
-.mastracode/
+.mastracode/*
+!.mastracode/commands/
+!.mastracode/commands/gh-issue-triage.md
 .tmp-mc-e2e-vitest/
