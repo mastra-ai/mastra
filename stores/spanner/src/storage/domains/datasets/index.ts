@@ -399,11 +399,35 @@ export class DatasetsSpanner extends DatasetsStorage {
         filterConditions.push(`${quoteIdent('candidateId', 'column name')} = @candidateId`);
         filterParams.candidateId = args.filters.candidateId;
       }
+      if (args.filters?.targetType !== undefined) {
+        filterConditions.push(`${quoteIdent('targetType', 'column name')} = @targetType`);
+        filterParams.targetType = args.filters.targetType;
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // Spanner stores `targetIds` as a JSON array column; unnest it and intersect
+        // with the supplied IDs. This matches dataset rows whose targetIds overlap
+        // with any of the supplied values.
+        filterConditions.push(
+          `EXISTS (SELECT 1 FROM UNNEST(JSON_QUERY_ARRAY(${quoteIdent('targetIds', 'column name')})) AS t WHERE JSON_VALUE(t) IN UNNEST(@targetIds))`,
+        );
+        filterParams.targetIds = args.filters.targetIds;
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        filterConditions.push(`LOWER(${quoteIdent('name', 'column name')}) LIKE LOWER(@nameSubstring)`);
+        filterParams.nameSubstring = `%${args.filters.name}%`;
+      }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
+      // Spanner cannot infer the element type of empty arrays, so declare ARRAY<STRING>
+      // for `targetIds` whenever the filter is in play.
+      const filterTypes: Record<string, any> =
+        args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0
+          ? { targetIds: { type: 'array', child: { type: 'string' } } }
+          : {};
 
       const [countRows] = await this.database.run({
         sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereClause}`,
         params: filterParams,
+        types: filterTypes,
         json: true,
       });
       const total = Number((countRows as Array<{ count: number | string }>)[0]?.count ?? 0);
@@ -416,6 +440,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...filterParams, limit, offset },
+        types: filterTypes,
         json: true,
       });
       const datasets = (rows as Array<Record<string, any>>).map(rowToDataset);

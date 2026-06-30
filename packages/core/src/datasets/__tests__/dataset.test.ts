@@ -197,18 +197,44 @@ describe('Dataset', () => {
   it('listItems without version returns { items, pagination }', async () => {
     await ds.addItem({ input: { a: 1 } });
     const result = await ds.listItems();
-    expect('items' in (result as any)).toBe(true);
-    expect('pagination' in (result as any)).toBe(true);
-    expect((result as any).items.length).toBeGreaterThanOrEqual(1);
+    expect(result.items.length).toBeGreaterThanOrEqual(1);
+    expect(result.pagination).toBeDefined();
   });
 
-  // 15. listItems — with version
-  it('listItems with version returns DatasetItem[]', async () => {
+  // 15. listItems — with version returns paginated shape
+  it('listItems with version returns { items, pagination } at that version', async () => {
     const item = await ds.addItem({ input: { a: 1 } });
     const result = await ds.listItems({ version: item.datasetVersion });
-    // When version is set, returns DatasetItem[] (from getItemsByVersion)
-    expect(Array.isArray(result)).toBe(true);
-    expect((result as any[]).length).toBeGreaterThanOrEqual(1);
+    expect(result.items.length).toBeGreaterThanOrEqual(1);
+    expect(result.pagination).toBeDefined();
+  });
+
+  // 15a. listItems — version + search
+  it('listItems with version + search filters at that version', async () => {
+    await ds.addItem({ input: { q: 'apple' } });
+    await ds.addItem({ input: { q: 'banana' } });
+    const last = await ds.addItem({ input: { q: 'apricot' } });
+
+    const result = await ds.listItems({ version: last.datasetVersion, search: 'ap' });
+    expect(result.items.length).toBe(2);
+    expect(result.items.every(i => JSON.stringify(i.input).includes('ap'))).toBe(true);
+  });
+
+  // 15b. listItems — version + pagination
+  it('listItems with version respects page/perPage', async () => {
+    for (let i = 0; i < 5; i++) {
+      await ds.addItem({ input: { a: i } });
+    }
+    const latest = await ds.addItem({ input: { a: 5 } });
+
+    const page0 = await ds.listItems({ version: latest.datasetVersion, page: 0, perPage: 2 });
+    expect(page0.items).toHaveLength(2);
+    expect(page0.pagination.total).toBe(6);
+    expect(page0.pagination.hasMore).toBe(true);
+
+    const page1 = await ds.listItems({ version: latest.datasetVersion, page: 1, perPage: 2 });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.pagination.hasMore).toBe(true);
   });
 
   // 16. updateItem
@@ -564,7 +590,7 @@ describe('Dataset', () => {
       await ds.addItem({ input: { i } });
     }
     const result = await ds.listItems({ perPage: 2 });
-    expect('items' in (result as any)).toBe(true);
-    expect((result as any).items.length).toBe(2);
+    expect(result.items).toHaveLength(2);
+    expect(result.pagination.total).toBe(5);
   });
 });

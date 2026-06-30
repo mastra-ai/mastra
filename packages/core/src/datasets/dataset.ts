@@ -10,6 +10,7 @@ import type {
   DatasetItemPayload,
   DatasetItemRow,
   DatasetVersion,
+  ListDatasetItemsOutput,
   UpdateDatasetInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
@@ -178,24 +179,21 @@ export class Dataset {
   }
 
   /**
-   * List items in the dataset, optionally at a specific version.
+   * List items in the dataset, optionally at a specific version, with
+   * optional substring search and pagination. Always returns a paginated
+   * `{ items, pagination }` shape.
    */
   async listItems(args?: {
     version?: number;
     page?: number;
     perPage?: number;
     search?: string;
-  }): Promise<
-    | DatasetItem[]
-    | { items: DatasetItem[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }
-  > {
+  }): Promise<ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
-    if (args?.version) {
-      return store.getItemsByVersion({ datasetId: this.id, version: args.version });
-    }
     return store.listItems({
       datasetId: this.id,
-      search: args?.search,
+      ...(args?.version !== undefined ? { version: args.version } : {}),
+      ...(args?.search ? { search: args.search } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }

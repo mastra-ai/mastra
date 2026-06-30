@@ -428,6 +428,20 @@ export class DatasetsMySQL extends DatasetsStorage {
         filterParts.push(`${quoteIdentifier('candidateId', 'column name')} = ?`);
         filterArgs.push(args.filters.candidateId);
       }
+      if (args.filters?.targetType !== undefined) {
+        filterParts.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        filterArgs.push(args.filters.targetType);
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // JSON_OVERLAPS returns true if any value in JSON_ARRAY(?,?,...) is present in `targetIds`.
+        const placeholders = args.filters.targetIds.map(() => '?').join(',');
+        filterParts.push(`JSON_OVERLAPS(${quoteIdentifier('targetIds', 'column name')}, JSON_ARRAY(${placeholders}))`);
+        filterArgs.push(...args.filters.targetIds);
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        filterParts.push(`LOWER(${quoteIdentifier('name', 'column name')}) LIKE LOWER(?)`);
+        filterArgs.push(`%${args.filters.name}%`);
+      }
       const whereClause = {
         sql: filterParts.length > 0 ? `WHERE ${filterParts.join(' AND ')}` : '',
         args: filterArgs,
