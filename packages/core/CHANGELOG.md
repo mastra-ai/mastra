@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 1.48.0-alpha.9
+
+### Minor Changes
+
+- support inline JSON prompt injection ([#18652](https://github.com/mastra-ai/mastra/pull/18652))
+
+  Added `structuredOutput.jsonPromptInjection: 'inline'` to
+  append JSON schema instructions to the latest user message
+  instead of the system prompt. This helps keep the system
+  prompt stable on providers that cache prompt prefixes.
+
+  ```ts
+  await agent.generate('Summarize this text', {
+    structuredOutput: {
+      schema,
+      jsonPromptInjection: 'inline',
+    },
+  });
+  ```
+
 ## 1.48.0-alpha.8
 
 ### Minor Changes
