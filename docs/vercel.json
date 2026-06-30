@@ -847,7 +847,12 @@
     },
     {
       "source": "/docs/community/discord",
-      "destination": "/templates",
+      "destination": "https://discord.gg/BTYqqHKUrf",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing",
+      "destination": "/docs/license",
       "permanent": true
     }
   ]

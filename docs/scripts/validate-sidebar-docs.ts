@@ -58,6 +58,8 @@ const IGNORED_PATTERNS = [
   /\/_partial-.*\.mdx$/, // Partial MDX files that are imported into other docs
   // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
   /\/mastra-platform\/.*/,
+  /\/agents\/networks/,
+  /\/license/,
 ]
 
 function extractDocIds(items: SidebarItem[]): Set<string> {

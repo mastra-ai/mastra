@@ -76,22 +76,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/file-based-agents',
-              label: 'File-based Agents',
-              customProps: {
-                tags: ['beta'],
-              },
-            },
-            {
-              type: 'doc',
               id: 'agents/structured-output',
               label: 'Structured Output',
-            },
-
-            {
-              type: 'doc',
-              id: 'agents/guardrails',
-              label: 'Guardrails',
             },
             {
               type: 'doc',
@@ -105,6 +91,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agents/channels',
+              label: 'Channels',
+            },
+            {
+              type: 'doc',
               id: 'agents/durable-agents',
               label: 'Durable Agents',
               customProps: {
@@ -113,8 +104,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/channels',
-              label: 'Channels',
+              id: 'agents/guardrails',
+              label: 'Guardrails',
             },
             {
               type: 'doc',
@@ -123,18 +114,10 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/heartbeats',
-              label: 'Heartbeats',
+              id: 'agents/file-based-agents',
+              label: 'File-based Agents',
               customProps: {
                 tags: ['beta'],
-              },
-            },
-            {
-              type: 'doc',
-              id: 'agents/networks',
-              label: 'Networks',
-              customProps: {
-                tags: ['deprecated'],
               },
             },
             {
@@ -179,6 +162,14 @@ const sidebars = {
                   type: 'doc',
                   id: 'agents/signal-providers',
                   label: 'Signal Providers',
+                  customProps: {
+                    tags: ['beta'],
+                  },
+                },
+                {
+                  type: 'doc',
+                  id: 'agents/heartbeats',
+                  label: 'Heartbeats',
                   customProps: {
                     tags: ['beta'],
                   },
@@ -959,22 +950,6 @@ const sidebars = {
               label: 'Workflow Runners',
             },
           ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Community',
-      items: [
-        {
-          type: 'doc',
-          id: 'community/licensing',
-          label: 'License',
-        },
-        {
-          type: 'doc',
-          id: 'community/discord',
-          label: 'Discord',
         },
       ],
     },
