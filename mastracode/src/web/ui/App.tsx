@@ -1,6 +1,7 @@
 import type { PlanResume } from '@mastra/client-js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useApiConfig } from '../../shared/api/config';
 import { CommandPalette } from './CommandPalette';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import type { SlashCommand } from './commands';
@@ -36,6 +37,8 @@ import { useAgentControllerSession } from './useAgentControllerSession';
 
 export default function App() {
   const { toast } = useToast();
+  const { baseUrl } = useApiConfig();
+
   // ── Projects (localStorage) ─────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>(() => loadProjects());
   // Restore the last active project on reload (if it still exists), so the
@@ -61,6 +64,7 @@ export default function App() {
     agentControllerId: 'code',
     resourceId,
     projectPath: activeProject?.path,
+    baseUrl,
     enabled: sessionEnabled,
   });
   const { transcript, status, modes, threads, send, steer, abort, approveTool, respondSuspension } = session;
@@ -148,11 +152,12 @@ export default function App() {
   // (not just when a whole new entry is appended).
   const lastTranscriptEntry = transcript.entries[transcript.entries.length - 1];
   const streamingLen =
-    lastTranscriptEntry?.kind === 'assistant'
-      ? lastTranscriptEntry.segments.reduce(
-          (n, s) => (s.kind === 'text' || s.kind === 'thinking' ? n + s.text.length : n),
-          0,
-        )
+    lastTranscriptEntry?.kind === 'message' && lastTranscriptEntry.message.role === 'assistant'
+      ? lastTranscriptEntry.message.content.parts.reduce((n, part) => {
+          if (part.type === 'text') return n + part.text.length;
+          if (part.type === 'reasoning') return n + part.reasoning.length;
+          return n;
+        }, 0)
       : 0;
 
   // True when the user has scrolled up far enough that new content would land
@@ -216,8 +221,17 @@ export default function App() {
   // streamed for the current turn.
   const lastEntry = transcript.entries[transcript.entries.length - 1];
   const lastEntryHasText =
-    lastEntry?.kind === 'assistant' && lastEntry.segments.some(s => s.kind === 'text' && s.text.trim().length > 0);
-  const showWorkingIndicator = busy && !(lastEntry?.kind === 'assistant' && lastEntry.streaming && lastEntryHasText);
+    lastEntry?.kind === 'message' &&
+    lastEntry.message.role === 'assistant' &&
+    lastEntry.message.content.parts.some(part => part.type === 'text' && part.text.trim().length > 0);
+  const showWorkingIndicator =
+    busy &&
+    !(
+      lastEntry?.kind === 'message' &&
+      lastEntry.message.role === 'assistant' &&
+      lastEntry.streaming &&
+      lastEntryHasText
+    );
 
   // A restored active project from a pre-resourceId build won't have one yet;
   // backfill it so the session can connect. Runs once per project that needs it.

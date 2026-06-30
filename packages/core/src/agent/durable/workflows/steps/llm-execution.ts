@@ -301,12 +301,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               };
             }
 
-            // Get messages for LLM (using async llmPrompt for proper format conversion)
+            // Forward the model's `supportedUrls` (may be a Promise) so URLs a provider
+            // fetches natively (e.g. Vertex `gs://`) pass through instead of being
+            // downloaded/inlined. Mirrors loop/workflows/agentic-execution/llm-execution-step.ts.
+            let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
+            const modelSupportedUrls = currentModel?.supportedUrls;
+            if (modelSupportedUrls) {
+              resolvedSupportedUrls =
+                typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function'
+                  ? await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>)
+                  : (modelSupportedUrls as Record<string, RegExp[]>);
+            }
             const llmPromptForModel =
               currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
                 ? messageList.get.all.aiV6.llmPrompt
                 : messageList.get.all.aiV5.llmPrompt;
-            const inputMessages = (await llmPromptForModel()) as LanguageModelV2Prompt;
+            const inputMessages = (await llmPromptForModel({
+              supportedUrls: resolvedSupportedUrls,
+            })) as LanguageModelV2Prompt;
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution

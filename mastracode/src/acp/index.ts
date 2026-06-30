@@ -46,7 +46,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
       await Promise.allSettled([
         mcpManager?.disconnect(),
         controller?.getMastra()?.stopWorkers(),
-        controller?.stopHeartbeats(),
+        controller?.stopIntervals(),
         closeSignalsPubSub?.(),
       ]);
 

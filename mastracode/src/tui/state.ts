@@ -14,6 +14,7 @@ import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
 import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
+import { loadSettings } from '../onboarding/settings.js';
 import { detectProject } from '../utils/project.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
@@ -34,9 +35,11 @@ import type { TaskProgressComponent } from './components/task-progress.js';
 import type { TemporalGapComponent } from './components/temporal-gap.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
+import { showError, showInfo } from './display.js';
 
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+import { VoiceController } from './voice/voice-controller.js';
 
 export interface PendingSignalMessage {
   component: Component;
@@ -161,6 +164,7 @@ export interface TUIState {
   editor: CustomEditor;
   footer: Container;
   terminal: Terminal;
+  voiceController?: VoiceController;
 
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
@@ -416,5 +420,19 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     const color = result.session.mode.resolve()?.metadata?.color;
     return typeof color === 'string' ? color : undefined;
   };
+
+  result.voiceController = new VoiceController({
+    authStorage: result.authStorage,
+    onTranscript: text => editor.insertVoiceTranscript(text),
+    onPartialTranscript: text => editor.replaceVoiceTranscript(text),
+    showInfo: message => showInfo(result, message),
+    showError: message => showError(result, message),
+    onListeningChange: listening => editor.setVoiceListening(listening),
+  });
+  editor.voiceInput = result.voiceController;
+  if (loadSettings().voice.enabled) {
+    result.voiceController.restoreEnabled();
+  }
+
   return result;
 }

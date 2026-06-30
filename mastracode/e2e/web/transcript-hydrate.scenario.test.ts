@@ -2,12 +2,22 @@ import type { AgentControllerMessage } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 
 import { initialTranscript, transcriptReducer } from '../../src/web/ui/transcript.js';
-import type { TimelineEntry } from '../../src/web/ui/transcript.js';
+import type { MessageEntry, TimelineEntry } from '../../src/web/ui/transcript.js';
 
-/** Flatten an assistant entry's ordered text/thinking segments to a string. */
-function assistantText(entry: TimelineEntry): string {
-  if (entry.kind !== 'assistant') return '';
-  return entry.segments.map(s => (s.kind === 'text' || s.kind === 'thinking' ? s.text : '')).join('');
+/** Flatten a message entry's ordered text/reasoning parts to a string. */
+function messageText(entry: TimelineEntry): string {
+  if (entry.kind !== 'message') return '';
+  return entry.message.content.parts
+    .map(part => {
+      if (part.type === 'text') return part.text;
+      if (part.type === 'reasoning') return part.reasoning;
+      return '';
+    })
+    .join('');
+}
+
+function toolParts(entry: MessageEntry) {
+  return entry.message.content.parts.filter(part => part.type === 'tool-invocation');
 }
 
 /**
@@ -41,15 +51,22 @@ describe('transcript hydrate (thread history rendering)', () => {
     expect(state.modeId).toBe('build');
     expect(state.modelId).toBe('openai/gpt-5.4-mini');
     expect(state.entries).toHaveLength(2);
-    expect(state.entries[0]).toMatchObject({ kind: 'user', id: 'u1', text: 'hello there' });
-    expect(state.entries[1]).toMatchObject({ kind: 'assistant', id: 'a1', streaming: false });
-    expect(assistantText(state.entries[1])).toBe('hi, how can I help?');
+    expect(state.entries[0]).toMatchObject({ kind: 'message', id: 'u1', message: { role: 'user' } });
+    expect(messageText(state.entries[0])).toBe('hello there');
+    expect(state.entries[1]).toMatchObject({
+      kind: 'message',
+      id: 'a1',
+      message: { role: 'assistant' },
+      streaming: false,
+    });
+    expect(messageText(state.entries[1])).toBe('hi, how can I help?');
   });
 
-  it('omits system messages from the rendered transcript', () => {
+  it('keeps system messages in the hydrated message timeline', () => {
     const messages = [systemMsg('s1', 'you are a coding agent'), userMsg('u1', 'go')];
     const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages, threadId: 't' });
-    expect(state.entries.map(e => e.kind)).toEqual(['user']);
+    expect(state.entries.map(e => (e.kind === 'message' ? e.message.role : e.kind))).toEqual(['system', 'user']);
+    expect(messageText(state.entries[0])).toBe('you are a coding agent');
   });
 
   it('replaces prior transcript contents (switching threads is a clean swap)', () => {
@@ -69,7 +86,7 @@ describe('transcript hydrate (thread history rendering)', () => {
     });
     expect(state.threadId).toBe('B');
     expect(state.entries).toHaveLength(2);
-    const allText = state.entries.map(e => (e.kind === 'user' ? e.text : assistantText(e))).join('\n');
+    const allText = state.entries.map(e => messageText(e)).join('\n');
     expect(allText).toContain('thread B message');
     expect(allText).not.toContain('thread A message');
   });
@@ -91,17 +108,16 @@ describe('transcript hydrate (thread history rendering)', () => {
       threadId: 't',
     });
 
-    const assistant = state.entries.find(e => e.kind === 'assistant');
+    const assistant = state.entries.find(e => e.kind === 'message' && e.message.role === 'assistant');
     expect(assistant).toBeDefined();
-    if (assistant?.kind !== 'assistant') throw new Error('expected assistant entry');
-    expect(assistantText(assistant)).toBe('Let me read that file.');
-    const toolIds = Object.keys(assistant.toolsById);
-    expect(toolIds).toHaveLength(1);
-    expect(assistant.toolsById['tc-1']).toMatchObject({
+    if (assistant?.kind !== 'message') throw new Error('expected assistant entry');
+    expect(messageText(assistant)).toBe('Let me read that file.');
+    const tools = toolParts(assistant);
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.toolInvocation).toMatchObject({
+      state: 'result',
       toolCallId: 'tc-1',
       toolName: 'read_file',
-      args: { path: 'README.md' },
-      status: 'done',
       result: 'file contents here',
     });
   });
@@ -122,15 +138,13 @@ describe('transcript hydrate (thread history rendering)', () => {
     } as unknown as AgentControllerMessage;
     const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [msg], threadId: 't' });
     const assistant = state.entries[0];
-    if (assistant.kind !== 'assistant') throw new Error('expected assistant entry');
-    // The segment order must mirror content order, not bucket tools at the end.
-    expect(assistant.segments.map(s => (s.kind === 'tool' ? `tool:${s.toolCallId}` : s.kind))).toEqual([
-      'text',
-      'tool:tc-1',
-      'text',
-      'tool:tc-2',
-      'text',
-    ]);
+    if (assistant.kind !== 'message') throw new Error('expected assistant entry');
+    // The part order must mirror content order, not bucket tools at the end.
+    expect(
+      assistant.message.content.parts.map(part =>
+        part.type === 'tool-invocation' ? `tool:${part.toolInvocation.toolCallId}` : part.type,
+      ),
+    ).toEqual(['text', 'tool:tc-1', 'text', 'tool:tc-2', 'text']);
   });
 
   it('marks a tool as errored when its result is an error', () => {
@@ -144,8 +158,11 @@ describe('transcript hydrate (thread history rendering)', () => {
     } as unknown as AgentControllerMessage;
     const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [msg], threadId: 't' });
     const assistant = state.entries[0];
-    if (assistant.kind !== 'assistant') throw new Error('expected assistant entry');
-    expect(assistant.toolsById['tc-9'].status).toBe('error');
+    if (assistant.kind !== 'message') throw new Error('expected assistant entry');
+    const [tool] = toolParts(assistant);
+    expect(tool?.toolInvocation.state).toBe('output-error');
+    expect(tool?.toolInvocation.result).toBe('command not found');
+    expect(tool?.toolInvocation.errorText).toBe('command not found');
   });
 
   it('produces an empty transcript for a thread with no history', () => {
