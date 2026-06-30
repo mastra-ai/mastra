@@ -28,6 +28,16 @@ vi.mock('@mastra/core/agent', () => ({
   SignalProvider: class {},
 }));
 
+// The code agent is built via the core `createCodingAgent` factory. Forward the
+// config mastracode passes to the same constructor spy the tests assert against,
+// returning a mocked Agent instance.
+vi.mock('@mastra/core/coding-agent', () => ({
+  createCodingAgent: (config: unknown) => {
+    agentConstructorMock(config);
+    return {};
+  },
+}));
+
 const agentConstructorMock = vi.fn();
 
 const controllerConstructorMock = vi.fn();

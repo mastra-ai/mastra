@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import type { ProviderMetadata } from '@mastra/core/stream';
 
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import {
@@ -31,6 +32,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     { observations: string; currentTask?: string; suggestedContinuation?: string; threadTitle?: string }
   >();
   private totalBatchUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  private lastBatchProviderMetadata: ProviderMetadata | undefined;
   private observationResults: Array<{
     threadId: string;
     threadMessages: MastraDBMessage[];
@@ -258,11 +260,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         this.totalBatchUsage.outputTokens += batchResult.usage.outputTokens ?? 0;
         this.totalBatchUsage.totalTokens += batchResult.usage.totalTokens ?? 0;
       }
+      if (batchResult.providerMetadata) {
+        this.lastBatchProviderMetadata = batchResult.providerMetadata;
+      }
     }
 
     return {
       observations: '',
       usage: this.totalBatchUsage.totalTokens > 0 ? this.totalBatchUsage : undefined,
+      providerMetadata: this.lastBatchProviderMetadata,
     };
   }
 

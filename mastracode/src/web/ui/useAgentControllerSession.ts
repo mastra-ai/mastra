@@ -103,6 +103,12 @@ export function useAgentControllerSession({
 
   const sessionRef = useRef<Session | null>(null);
   const agentControllerRef = useRef<ReturnType<MastraClient['getAgentController']> | null>(null);
+  // The session-init effect intentionally does not re-run on projectPath changes
+  // (that would re-subscribe the stream). Mirror the latest value into a ref so
+  // thread creation always tags with the current worktree path, even when the
+  // path resolves a tick after the session connects.
+  const projectPathRef = useRef(projectPath);
+  projectPathRef.current = projectPath;
   const [models, setModels] = useState<AgentControllerAvailableModel[]>([]);
   const [settings, setSettings] = useState<AgentControllerSessionSettings | null>(null);
 
@@ -229,8 +235,9 @@ export function useAgentControllerSession({
       try {
         const [created, agentControllerModes] = await Promise.all([
           // Scope initial thread selection to the active project so worktrees
-          // sharing a resourceId each resume their own thread.
-          session.create({ tags: projectPath ? { projectPath } : undefined }),
+          // sharing a resourceId each resume their own thread. Read the ref so a
+          // path that resolved just after connect still tags the thread.
+          session.create({ tags: projectPathRef.current ? { projectPath: projectPathRef.current } : undefined }),
           controller.listModes(),
         ]);
         if (disposed) return;
@@ -293,12 +300,19 @@ export function useAgentControllerSession({
     };
   }, [agentControllerId, resourceId, baseUrl, refreshThreads, enabled]);
 
-  const send = useCallback(async (text: string) => {
-    const session = sessionRef.current;
-    if (!session || !text.trim()) return;
-    dispatch({ type: 'localUser', text });
-    await session.sendMessage(text);
-  }, []);
+  const send = useCallback(
+    async (text: string) => {
+      const session = sessionRef.current;
+      if (!session || !text.trim()) return;
+      dispatch({ type: 'localUser', text });
+      await session.sendMessage(text);
+      // The first message in the zero state turns the freshly-bound thread into
+      // a listable one (and gives it a title). Refresh so it shows in the
+      // sidebar instead of staying on "No conversations yet".
+      void refreshThreads();
+    },
+    [refreshThreads],
+  );
 
   const steer = useCallback(async (text: string) => {
     const session = sessionRef.current;

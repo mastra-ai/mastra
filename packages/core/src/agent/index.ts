@@ -5,8 +5,23 @@ export * from './types';
 export * from './signals';
 export * from '../signals/signal-provider';
 export * from '../signals/webhook-signal-provider';
+export {
+  HEARTBEAT_SCHEDULE_PREFIX,
+  HeartbeatInputSchema,
+  HeartbeatOutputSchema,
+  Heartbeats,
+  toHeartbeat,
+  type HeartbeatInput,
+  type HeartbeatOutput,
+  type HeartbeatRunStatus,
+  type Heartbeat,
+  type CreateHeartbeatInput,
+  type UpdateHeartbeatInput,
+  type ListHeartbeatsFilter,
+} from './heartbeat';
 export * from './agent';
 export * from './utils';
+export * from './fs-routing';
 
 // Note: DurableAgent is NOT re-exported here to avoid circular dependencies.
 // Import from '@mastra/core/agent/durable' instead:

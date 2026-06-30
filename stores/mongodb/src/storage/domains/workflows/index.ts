@@ -209,16 +209,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
       const updatedDoc = await collection.findOneAndUpdate(
-        {
-          workflow_name: workflowName,
-          run_id: runId,
-          // Only update if snapshot exists and has context
-          'snapshot.context': { $exists: true },
-        },
+        { workflow_name: workflowName, run_id: runId },
         [
           {
             $set: {
-              // Merge the new options into the existing snapshot
               snapshot: {
                 $mergeObjects: ['$snapshot', opts],
               },
@@ -234,8 +228,20 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       }
 
       const snapshot = typeof updatedDoc.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc.snapshot;
+
+      if (!snapshot?.context) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Snapshot not found for runId ${runId}`,
+          details: { workflowName, runId },
+        });
+      }
+
       return snapshot;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),

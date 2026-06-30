@@ -72,6 +72,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
         { type: 'doc', id: 'agents/listSkills', label: '.listSkills()' },
+        { type: 'doc', id: 'agents/listSuspendedRuns', label: '.listSuspendedRuns()' },
         { type: 'doc', id: 'agents/listTools', label: '.listTools()' },
         { type: 'doc', id: 'agents/listWorkflows', label: '.listWorkflows()' },
         { type: 'doc', id: 'agents/network', label: '.network()' },
@@ -163,6 +164,15 @@ const sidebars = {
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Coding Agent',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'coding-agent/build-base-prompt', label: 'buildBasePrompt()' },
+        { type: 'doc', id: 'coding-agent/create-coding-agent', label: 'createCodingAgent()' },
       ],
     },
     {

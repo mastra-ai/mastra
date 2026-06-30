@@ -269,6 +269,13 @@ export interface DurableAgenticWorkflowInput {
   modelSpanData?: unknown;
   /** Starting step index for continuation across iterations */
   stepIndex?: number;
+  /**
+   * JSON-safe snapshot of `requestContext.entries()` from the call site.
+   * Threaded through workflow input so durable steps (e.g. `is-task-complete`
+   * scorers) can pass it as `customContext`, matching the non-durable path.
+   * Only plain JSON-safe entries should appear here.
+   */
+  requestContextEntries?: Record<string, unknown>;
 }
 
 /**

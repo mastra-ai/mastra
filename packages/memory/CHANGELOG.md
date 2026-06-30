@@ -1,5 +1,38 @@
 # @mastra/memory
 
+## 1.21.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+  - @mastra/schema-compat@1.3.2-alpha.1
+
+## 1.21.3-alpha.1
+
+### Patch Changes
+
+- Expose `providerMetadata` on Observational Memory `ObserveHooks` results ([#18563](https://github.com/mastra-ai/mastra/pull/18563))
+
+  `onObservationEnd` and `onReflectionEnd` now receive the OM model call's `providerMetadata` alongside `usage`, so you can read per-call provider details — for example the AI Gateway's cost and generation id — straight from the hook instead of wrapping the observer/reflector models in a model-stream middleware:
+
+  ```ts
+  const hooks: ObserveHooks = {
+    onObservationEnd: ({ usage, providerMetadata }) => {
+      const gateway = providerMetadata?.gateway;
+      recordCost({ tokens: usage?.totalTokens, cost: gateway?.cost, generationId: gateway?.generationId });
+    },
+    onReflectionEnd: ({ usage, providerMetadata }) => {
+      recordCost({ tokens: usage?.totalTokens, cost: providerMetadata?.gateway?.cost });
+    },
+  };
+  ```
+
+  The field is additive and optional, and is omitted entirely when the provider emits no metadata, so existing hook consumers are unaffected. For batched observations and multi-attempt reflections it reflects the last batch/attempt that emitted provider metadata.
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+
 ## 1.21.3-alpha.0
 
 ### Patch Changes
