@@ -1,20 +1,20 @@
 /**
- * Vercel sandbox provider descriptor for MastraEditor.
+ * Vercel serverless sandbox provider descriptor for MastraEditor.
  *
  * @example
  * ```typescript
- * import { vercelSandboxProvider } from '@mastra/vercel';
+ * import { vercelServerlessSandboxProvider } from '@mastra/vercel';
  *
  * const editor = new MastraEditor({
- *   sandboxes: [vercelSandboxProvider],
+ *   sandboxes: [vercelServerlessSandboxProvider],
  * });
  * ```
  */
 import type { SandboxProvider } from '@mastra/core/editor';
-import { VercelSandbox } from './sandbox';
+import { VercelServerlessSandbox } from './serverless';
 
 /**
- * Serializable subset of VercelSandboxOptions for editor storage.
+ * Serializable subset of VercelServerlessSandboxOptions for editor storage.
  */
 interface VercelProviderConfig {
   token?: string;
@@ -27,9 +27,9 @@ interface VercelProviderConfig {
   commandTimeout?: number;
 }
 
-export const vercelSandboxProvider: SandboxProvider<VercelProviderConfig> = {
-  id: 'vercel',
-  name: 'Vercel Sandbox',
+export const vercelServerlessSandboxProvider: SandboxProvider<VercelProviderConfig> = {
+  id: 'vercel-serverless',
+  name: 'Vercel Sandbox (Serverless)',
   description: 'Serverless sandbox powered by Vercel Functions',
   configSchema: {
     type: 'object',
@@ -53,5 +53,5 @@ export const vercelSandboxProvider: SandboxProvider<VercelProviderConfig> = {
       commandTimeout: { type: 'number', description: 'Per-invocation timeout in ms', default: 55000 },
     },
   },
-  createSandbox: config => new VercelSandbox(config),
+  createSandbox: config => new VercelServerlessSandbox(config),
 };
