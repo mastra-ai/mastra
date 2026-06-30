@@ -419,6 +419,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolName: sanitizeToolName(toolCall.toolName),
                     args: toolCall.args,
                     result: toolCall.result,
+                    // Preserve the approval decision for an approved approval-gated tool in a mixed
+                    // turn (one tool errored, another approved) so it round-trips on recall too.
+                    ...(toolCall.approval ? { approval: toolCall.approval } : {}),
                   },
                   ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
                     ? {
