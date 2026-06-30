@@ -144,8 +144,27 @@ baseURL })`) so its own loop turns also hit the mock; match the delegated prompt
 - `fsRouted: true` — build the agent via file-system routing (`assembleAgentFromFsEntry`) instead of
   `new Agent(...)`, then register it through `Mastra.__registerFsAgents` — exactly how the bundler
   injects an `agents/<name>/` directory. `instructions` is treated as the `instructions.md` body and
-  `tools` as the discovered `tools/*` map. Use it to prove a file-based agent runs identically to a
-  code-registered one through the real loop. Requires a static `instructions` string.
+  `tools` as the discovered `tools/*` map. Requires a static `instructions` string. This is an alias
+  for opting a single scenario into the file-routing path; most scenarios get fs coverage for free via
+  the `'fs'` engine variant below.
+
+### Engine / agent variants (`describeForAllEngines`)
+
+`describeForAllEngines(name, factory, { skip })` runs the factory once per `EngineVariant`. The first
+three select the _execution engine_; `'fs'` selects the _agent-assembly method_ and runs on the normal
+engine:
+
+- `'normal'` — direct engine, `new Agent(...)`.
+- `'evented'` — evented workflow engine (`MASTRA_EVENTED_EXECUTION=true`).
+- `'durable'` — `createDurableAgent` wrapper.
+- `'fs'` — agent assembled from file-system routing (`instructions.md` body + discovered `tools/*`) and
+  registered through `Mastra.__registerFsAgents`, then run on the normal engine. Equivalent to setting
+  `fsRouted: true` for that variant.
+
+Because `'fs'` is part of `ALL_ENGINE_VARIANTS`, every scenario using `describeForAllEngines` covers the
+file-routing path automatically. Scenarios whose inputs the file-routing model cannot represent —
+dynamic-function `instructions`, `sharedAgent`, or `agents`/`workflows`/`goal` config — opt out with
+`{ skip: ['fs'] }` (alongside any engines they already skip).
 
 ### Error-state scenarios
 

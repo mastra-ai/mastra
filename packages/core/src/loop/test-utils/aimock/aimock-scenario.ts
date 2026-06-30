@@ -150,13 +150,18 @@ async function buildScenarioAgent({
 
   const defaultInstructions = 'You are a test agent driven by scripted AIMock responses.';
 
+  // The `'fs'` variant assembles the agent via file-system routing; the explicit
+  // `fsRouted` flag is kept as an alias so a single scenario can opt in without
+  // running across the whole engine matrix.
+  const isFs = engine === 'fs' || fsRouted === true;
+
   let agent: any;
-  if (fsRouted) {
+  if (isFs) {
     // Build the agent exactly as the bundler would for an `agents/<name>/`
     // directory: a partial `config.ts` plus `instructions.md` and `tools/*`.
     // This proves a file-routed agent runs identically through the real loop.
     if (typeof instructions === 'function') {
-      throw new Error('fsRouted scenarios require a static `instructions` string (the instructions.md body).');
+      throw new Error("the 'fs' agent variant requires a static `instructions` string (the instructions.md body).");
     }
     const fsTools = tools
       ? Object.entries(tools as Record<string, any>).map(([key, tool]) => ({ key, tool }))
@@ -174,7 +179,6 @@ async function buildScenarioAgent({
         ...(goal ? { goal } : {}),
         ...(errorProcessors ? { errorProcessors } : {}),
         ...(defaultOptions ? { defaultOptions } : {}),
-        ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -205,18 +209,18 @@ async function buildScenarioAgent({
 
   // Registering the agent on a Mastra instance with storage is required for the
   // suspended snapshot rows that approveToolCall/declineToolCall resume from.
-  // For fsRouted runs, register through the real file-routing path
+  // For the fs variant, register through the real file-routing path
   // (`__registerFsAgents`) instead of the constructor map, so the scenario
   // exercises exactly how the bundler injects file-based agents.
   const mastra = new Mastra({
-    agents: fsRouted ? {} : { [agentId]: registrableAgent as any },
+    agents: isFs ? {} : { [agentId]: registrableAgent as any },
     logger: false,
     storage: new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
     ...(pubsub ? { pubsub } : {}),
   });
 
-  if (fsRouted) {
+  if (isFs) {
     mastra.__registerFsAgents({ [agentId]: registrableAgent as any });
   }
 

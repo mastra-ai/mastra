@@ -160,5 +160,5 @@ describeForAllEngines(
       expect(requests.length).toBe(3);
     });
   },
-  { skip: ['durable'] },
+  { skip: ['durable', 'fs'] },
 );
