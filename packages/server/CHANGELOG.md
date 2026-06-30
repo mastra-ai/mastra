@@ -1,5 +1,21 @@
 # @mastra/server
 
+## 1.48.0-alpha.7
+
+### Patch Changes
+
+- Allow `'fs'` as an agent/scorer definition source in the server handlers and response schemas. File-based agents are registered with `source: 'fs'`, and the scorer/agent list endpoints now surface and validate that value instead of failing schema validation. ([#18609](https://github.com/mastra-ai/mastra/pull/18609))
+
+  ```ts
+  // GET /api/agents now returns file-based agents alongside code/stored ones:
+  {
+    "weather": { "name": "weather", "source": "fs" /* was rejected before */ }
+  }
+  ```
+
+- Updated dependencies [[`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c)]:
+  - @mastra/core@1.48.0-alpha.7
+
 ## 1.48.0-alpha.6
 
 ### Patch Changes
