@@ -47,7 +47,7 @@ describe('VercelSandbox', () => {
     it('creates an instance with defaults', () => {
       const sandbox = new VercelSandbox();
       expect(sandbox.name).toBe('VercelSandbox');
-      expect(sandbox.provider).toBe('vercel-microvm');
+      expect(sandbox.provider).toBe('vercel-sandbox');
       expect(sandbox.status).toBe('pending');
       expect(sandbox.id).toMatch(/^vercel-sandbox-/);
       expect(sandbox.processes).toBeDefined();
@@ -218,7 +218,7 @@ describe('VercelSandbox', () => {
       await sandbox._start();
 
       const info = sandbox.getInfo();
-      expect(info.provider).toBe('vercel-microvm');
+      expect(info.provider).toBe('vercel-sandbox');
       expect(info.metadata?.runtime).toBe('node24');
       expect(info.metadata?.timeout).toBe(120_000);
       expect(info.metadata?.domains).toEqual({ 8080: 'https://port-8080.vercel.run' });

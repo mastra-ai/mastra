@@ -101,7 +101,7 @@ export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
 export class VercelSandbox extends MastraSandbox {
   readonly id: string;
   readonly name = 'VercelSandbox';
-  readonly provider = 'vercel-microvm';
+  readonly provider = 'vercel-sandbox';
   status: ProviderStatus = 'pending';
 
   declare readonly processes: VercelSandboxProcessManager;
