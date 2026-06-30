@@ -85,6 +85,185 @@ export function webAuthTenant(c: Context): WebAuthTenant | undefined {
 }
 
 /**
+ * Lazily-created provider used to authenticate session cookies on public
+ * `/auth/*` routes that the gate skips (e.g. the GitHub connect/callback
+ * navigations). Kept module-level so callers outside `mountWebAuth` — such as
+ * the GitHub routes, which are mounted on a separate sub-app — can reuse it.
+ */
+let sessionProvider: MastraAuthWorkos | undefined;
+
+function getSessionProvider(): MastraAuthWorkos {
+  if (!sessionProvider) {
+    sessionProvider = new MastraAuthWorkos({
+      redirectUri: process.env.WORKOS_REDIRECT_URI,
+      // Resolve `organizationId` from a single membership when the JWT lacks the
+      // claim. This is what lets a freshly bootstrapped personal org take effect
+      // on the next request without forcing a re-login.
+      fetchMemberships: true,
+    });
+  }
+  return sessionProvider;
+}
+
+/** Build a predictable personal-org name from the user's profile. */
+function personalOrgName(user: WebAuthUser, userId: string): string {
+  const label = user.email ?? user.name ?? userId;
+  return `${label}'s org`;
+}
+
+/** Pull a stable error code out of a WorkOS SDK error, if present. */
+function workosErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const e = error as { code?: unknown; rawData?: { code?: unknown } };
+  if (typeof e.code === 'string') return e.code;
+  if (e.rawData && typeof e.rawData.code === 'string') return e.rawData.code;
+  return undefined;
+}
+
+/**
+ * True when `createOrganization` rejected because an org is already bound to
+ * this `externalId` — i.e. a prior bootstrap created the org but never attached
+ * the membership. The org can be recovered via `getOrganizationByExternalId`.
+ */
+function isExternalIdAlreadyUsed(error: unknown): boolean {
+  return workosErrorCode(error) === 'external_id_already_used';
+}
+
+/**
+ * True when `createOrganizationMembership` rejected because the user is already
+ * a member of the org. Safe to ignore: the desired end state already holds.
+ */
+function isMembershipAlreadyExists(error: unknown): boolean {
+  const code = workosErrorCode(error);
+  return code === 'organization_membership_already_exists' || code === 'entity_already_exists';
+}
+
+/**
+ * Ensure the authenticated user belongs to a WorkOS organization, creating a
+ * personal org on first use when they have none.
+ *
+ * The `organizationId` we need for org-scoped GitHub features lives in the
+ * WorkOS session, not our app DB, so personal (no-org) accounts otherwise dead
+ * end at `organization_required`. This puts the user into a real WorkOS org:
+ *
+ * - If the user already has an `organizationId` → no-op, return it.
+ * - Else list their memberships:
+ *   - ≥1 membership → return the first org id (they already belong somewhere;
+ *     we never auto-create when a membership exists).
+ *   - 0 memberships → create a personal org + membership and return its id.
+ *
+ * Idempotency: the create call carries `externalId = workosId` and a stable
+ * `idempotencyKey`, so concurrent/retried first logins never create duplicate
+ * personal orgs. If a prior run created the org but never attached the
+ * membership, the create rejects with `external_id_already_used`; we recover the
+ * existing org by `externalId` and (re)attach the membership instead of failing.
+ *
+ * Best-effort: any WorkOS error (e.g. API key lacking org-create permission) is
+ * swallowed and returns `undefined`, leaving the user in their no-org state
+ * rather than failing the request. Callers keep the existing
+ * `organization_required` behavior in that case.
+ */
+export async function ensureUserHasOrganization(
+  provider: MastraAuthWorkos,
+  user: WebAuthUser,
+): Promise<string | undefined> {
+  const existingOrg = getWebAuthOrgId(user);
+  if (existingOrg) return existingOrg;
+
+  const userId = getWebAuthUserId(user);
+  if (!userId) return undefined;
+
+  try {
+    const workos = provider.getWorkOS();
+
+    const memberships = await workos.userManagement
+      .listOrganizationMemberships({ userId })
+      .then(page => page.autoPagination());
+
+    const firstExisting = memberships.find(m => m.organizationId)?.organizationId;
+    if (firstExisting) return firstExisting;
+
+    // Create the personal org. A prior partial bootstrap (org created, but the
+    // membership step never landed) leaves an org already bound to this
+    // externalId, so the create 400s with `external_id_already_used`. Recover by
+    // looking the existing org up by externalId instead of dead-ending forever.
+    let organizationId: string;
+    try {
+      const organization = await workos.organizations.createOrganization(
+        {
+          name: personalOrgName(user, userId),
+          externalId: userId,
+          metadata: { mastracodePersonalOrg: 'true', workosUserId: userId },
+        },
+        { idempotencyKey: `mastracode-personal-org:${userId}` },
+      );
+      organizationId = organization.id;
+    } catch (error) {
+      if (!isExternalIdAlreadyUsed(error)) throw error;
+      const existing = await workos.organizations.getOrganizationByExternalId(userId);
+      organizationId = existing.id;
+    }
+
+    // Idempotently attach the user. If they are already a member (e.g. the org
+    // existed from a prior run), tolerate the conflict and keep the org id.
+    try {
+      await workos.userManagement.createOrganizationMembership({ organizationId, userId });
+    } catch (error) {
+      if (!isMembershipAlreadyExists(error)) throw error;
+    }
+
+    return organizationId;
+  } catch (error) {
+    console.warn(
+      `[WorkOS] Failed to bootstrap personal organization for user ${userId}. ` +
+        'The user will see organization_required until this succeeds. ' +
+        'Ensure the WorkOS API key can create organizations/memberships.',
+      error,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Resolve the authenticated user for a request, stashing it on the context.
+ *
+ * The gate only authenticates non-`/auth/*` requests via the `Authorization`
+ * header, so cookie-based browser navigations to public `/auth/*` routes (the
+ * GitHub connect/callback flow) arrive without a gate-stashed user. This reads
+ * the WorkOS session cookie from the raw request the same way `/auth/me` does,
+ * caches the result on the context, and returns it so downstream helpers like
+ * {@link webAuthTenant} work uniformly on both gated and public routes.
+ *
+ * Returns `undefined` when there is no valid session (or auth is disabled).
+ */
+export async function ensureWebAuthUser(c: Context): Promise<WebAuthUser | undefined> {
+  const existing = getWebAuthUser(c);
+  if (existing) return existing;
+  if (!isWebAuthEnabled()) return undefined;
+
+  const token = getBearerToken(c.req.header('Authorization'));
+  let user: WebAuthUser | null = null;
+  try {
+    user = (await getSessionProvider().authenticateToken(token, c.req.raw)) as WebAuthUser | null;
+  } catch {
+    user = null;
+  }
+  if (!user) return undefined;
+
+  // Bootstrap a personal org for no-org accounts so org-scoped features (GitHub
+  // connect) work without leaving the app. Mutating the resolved user lets the
+  // current request see the org immediately; subsequent requests resolve it via
+  // the provider's single-membership fallback (`fetchMemberships: true`).
+  if (!getWebAuthOrgId(user)) {
+    const orgId = await ensureUserHasOrganization(getSessionProvider(), user);
+    if (orgId) user.organizationId = orgId;
+  }
+
+  c.set(WEB_AUTH_USER_KEY, user);
+  return user;
+}
+
+/**
  * Web auth is enabled only when both WorkOS credentials are present. These are
  * the same env vars `@mastra/auth-workos` reads, so configuration stays
  * consistent with the rest of the repo.
@@ -158,7 +337,10 @@ export function mountWebAuth(app: Hono<any>, options: MountWebAuthOptions = {}):
   if (!isWebAuthEnabled()) return false;
 
   const redirectUri = options.redirectUri ?? process.env.WORKOS_REDIRECT_URI;
-  const provider = new MastraAuthWorkos({ redirectUri });
+  // `fetchMemberships: true` lets `authenticateToken` resolve `organizationId`
+  // from a single membership when the JWT has no org claim — required so a
+  // bootstrapped personal org resolves without re-auth.
+  const provider = new MastraAuthWorkos({ redirectUri, fetchMemberships: true });
 
   // ── Public auth routes ────────────────────────────────────────────────
   // Registered before the gate so they remain reachable while unauthenticated.
@@ -238,6 +420,12 @@ export function mountWebAuth(app: Hono<any>, options: MountWebAuthOptions = {}):
     }
 
     if (user) {
+      // Bootstrap a personal org for no-org accounts so the org id resolves on
+      // this request (see ensureWebAuthUser for the rationale).
+      if (!getWebAuthOrgId(user)) {
+        const orgId = await ensureUserHasOrganization(provider, user);
+        if (orgId) user.organizationId = orgId;
+      }
       c.set(WEB_AUTH_USER_KEY, user);
       return next();
     }

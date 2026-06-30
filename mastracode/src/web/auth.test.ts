@@ -1,7 +1,10 @@
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { WebAuthUser } from './auth.js';
 import {
+  ensureUserHasOrganization,
   getWebAuthOrgId,
   getWebAuthUser,
   getWebAuthUserId,
@@ -18,12 +21,34 @@ const mockGetLoginUrl = vi.fn((_redirectUri: string, _state: string) => 'https:/
 const mockHandleCallback = vi.fn(async () => ({ user: { email: 'a@b.com' }, cookies: ['wos_session=sealed; Path=/'] }));
 const mockGetLogoutUrl = vi.fn(async () => 'https://workos.example/logout');
 
+// WorkOS SDK surface used by the personal-org bootstrap. Each test controls the
+// list/create behavior; defaults model "no memberships, creates org_new".
+const mockListMemberships = vi.fn(async () => ({
+  autoPagination: async () => [] as Array<{ organizationId: string }>,
+}));
+const mockCreateOrganization = vi.fn(
+  async (_payload: Record<string, unknown>, _requestOptions?: Record<string, unknown>) => ({ id: 'org_new' }),
+);
+const mockCreateMembership = vi.fn(async () => ({ id: 'om_new' }));
+const mockGetOrgByExternalId = vi.fn(async (_externalId: string) => ({ id: 'org_recovered' }));
+const mockGetWorkOS = vi.fn(() => ({
+  organizations: {
+    createOrganization: mockCreateOrganization,
+    getOrganizationByExternalId: mockGetOrgByExternalId,
+  },
+  userManagement: {
+    listOrganizationMemberships: mockListMemberships,
+    createOrganizationMembership: mockCreateMembership,
+  },
+}));
+
 vi.mock('@mastra/auth-workos', () => ({
   MastraAuthWorkos: class {
     getLoginUrl = mockGetLoginUrl;
     handleCallback = mockHandleCallback;
     authenticateToken = mockAuthenticate;
     getLogoutUrl = mockGetLogoutUrl;
+    getWorkOS = mockGetWorkOS;
   },
 }));
 
@@ -43,6 +68,21 @@ function disableEnv() {
 beforeEach(() => {
   vi.clearAllMocks();
   disableEnv();
+  // Restore default bootstrap mock behavior after clearAllMocks wipes it.
+  mockListMemberships.mockResolvedValue({ autoPagination: async () => [] });
+  mockCreateOrganization.mockResolvedValue({ id: 'org_new' });
+  mockCreateMembership.mockResolvedValue({ id: 'om_new' });
+  mockGetOrgByExternalId.mockResolvedValue({ id: 'org_recovered' });
+  mockGetWorkOS.mockReturnValue({
+    organizations: {
+      createOrganization: mockCreateOrganization,
+      getOrganizationByExternalId: mockGetOrgByExternalId,
+    },
+    userManagement: {
+      listOrganizationMemberships: mockListMemberships,
+      createOrganizationMembership: mockCreateMembership,
+    },
+  });
 });
 
 afterEach(() => {
@@ -255,6 +295,10 @@ describe('org-tenant identity', () => {
   });
 
   it('webAuthTenant omits orgId for personal (no-org) users but keeps userId', async () => {
+    // Bootstrap is best-effort: when org creation fails, the user genuinely
+    // stays no-org, so the tenant must still expose a userId without an orgId.
+    mockCreateOrganization.mockRejectedValue(new Error('insufficient permissions'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockAuthenticate.mockResolvedValue({ workosId: 'user_solo', email: 'solo@e.com' });
     const app = new Hono();
     mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
@@ -266,5 +310,100 @@ describe('org-tenant identity', () => {
     const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: null, userId: 'user_solo' });
+  });
+});
+
+describe('ensureUserHasOrganization (personal-org bootstrap)', () => {
+  beforeEach(enableEnv);
+
+  function makeProvider() {
+    // The mocked MastraAuthWorkos has no real constructor side effects; cast
+    // through unknown so we can call the real ensureUserHasOrganization helper.
+    return new MastraAuthWorkos() as unknown as Parameters<typeof ensureUserHasOrganization>[0];
+  }
+
+  it('creates an org + membership for a no-org user with zero memberships', async () => {
+    const user: WebAuthUser = { workosId: 'user_1', email: 'solo@example.com' };
+    const orgId = await ensureUserHasOrganization(makeProvider(), user);
+
+    expect(orgId).toBe('org_new');
+    expect(mockCreateOrganization).toHaveBeenCalledTimes(1);
+    const [payload, requestOptions] = mockCreateOrganization.mock.calls[0]!;
+    // Idempotency: externalId + stable idempotency key keyed on the user id.
+    expect(payload).toMatchObject({ externalId: 'user_1' });
+    expect(requestOptions).toEqual({ idempotencyKey: 'mastracode-personal-org:user_1' });
+    expect(mockCreateMembership).toHaveBeenCalledWith({ organizationId: 'org_new', userId: 'user_1' });
+  });
+
+  it('returns an existing membership org without creating a new one', async () => {
+    mockListMemberships.mockResolvedValue({ autoPagination: async () => [{ organizationId: 'org_existing' }] });
+    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_2' });
+
+    expect(orgId).toBe('org_existing');
+    expect(mockCreateOrganization).not.toHaveBeenCalled();
+    expect(mockCreateMembership).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op (no SDK calls) when the user already has an organizationId', async () => {
+    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_3', organizationId: 'org_a' });
+
+    expect(orgId).toBe('org_a');
+    expect(mockGetWorkOS).not.toHaveBeenCalled();
+    expect(mockListMemberships).not.toHaveBeenCalled();
+    expect(mockCreateOrganization).not.toHaveBeenCalled();
+  });
+
+  it('swallows WorkOS create errors and returns undefined (user stays no-org)', async () => {
+    mockCreateOrganization.mockRejectedValue(new Error('insufficient permissions'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_4' });
+
+    expect(orgId).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it('recovers the existing org by externalId when create hits external_id_already_used', async () => {
+    // A prior partial bootstrap created the org but never attached membership,
+    // so create now 400s. We must look the org up and (re)attach the user.
+    mockCreateOrganization.mockRejectedValue({ code: 'external_id_already_used' });
+
+    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_partial' });
+
+    expect(orgId).toBe('org_recovered');
+    expect(mockGetOrgByExternalId).toHaveBeenCalledWith('user_partial');
+    expect(mockCreateMembership).toHaveBeenCalledWith({
+      organizationId: 'org_recovered',
+      userId: 'user_partial',
+    });
+  });
+
+  it('reads the WorkOS error code from rawData when recovering', async () => {
+    mockCreateOrganization.mockRejectedValue({ rawData: { code: 'external_id_already_used' } });
+
+    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_raw' });
+
+    expect(orgId).toBe('org_recovered');
+  });
+
+  it('tolerates an already-existing membership on the recovered org', async () => {
+    mockCreateOrganization.mockRejectedValue({ code: 'external_id_already_used' });
+    mockCreateMembership.mockRejectedValue({ code: 'organization_membership_already_exists' });
+
+    const orgId = await ensureUserHasOrganization(makeProvider(), { workosId: 'user_member' });
+
+    expect(orgId).toBe('org_recovered');
+  });
+
+  it('gate bootstraps a no-org user so webAuthTenant yields the new org', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_boot', email: 'boot@example.com' });
+    const app = new Hono();
+    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/api/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+
+    const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot' });
+    expect(mockCreateOrganization).toHaveBeenCalledTimes(1);
   });
 });

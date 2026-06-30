@@ -1,7 +1,7 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { useEffect, useRef, useState } from 'react';
 
-import { CloseIcon, EllipsisIcon, FolderIcon, PlusIcon, Wordmark } from './icons';
+import { CloseIcon, EllipsisIcon, FolderIcon, GithubIcon, PlusIcon, Wordmark } from './icons';
 import type { Project } from './projects';
 
 const MAX_THREADS = 5;
@@ -136,7 +136,11 @@ export function Sidebar({
           onClick={onManageProjects}
           title={activeProject ? (activeProject.path ?? activeProject.name) : 'Select a project'}
         >
-          <FolderIcon size={16} className="project-switcher-icon" />
+          {activeProject?.source === 'github' ? (
+            <GithubIcon size={16} className="project-switcher-icon" />
+          ) : (
+            <FolderIcon size={16} className="project-switcher-icon" />
+          )}
           <span className="project-switcher-text">
             {activeProject ? (
               <>
@@ -149,14 +153,13 @@ export function Sidebar({
               <span className="project-switcher-name">Select a project…</span>
             )}
           </span>
+          {activeProject && (
+            <span className={`project-switcher-source ${activeProject.source === 'github' ? 'github' : 'local'}`}>
+              {activeProject.source === 'github' ? 'GitHub' : 'Local'}
+            </span>
+          )}
           <CloseIcon size={13} className="project-switcher-chevron" />
         </button>
-
-        {onConnectGithub && (
-          <button className="sidebar-github-btn" onClick={onConnectGithub} title="Connect a GitHub repository">
-            <span>Connect GitHub repo</span>
-          </button>
-        )}
       </div>
 
       {/* ── Threads (scoped to active project) ────────────────────────── */}
@@ -252,6 +255,13 @@ export function Sidebar({
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Connect GitHub repo (sits just above the account footer) ──── */}
+      {onConnectGithub && (
+        <button className="sidebar-github-btn" onClick={onConnectGithub} title="Connect a GitHub repository">
+          <span>Connect GitHub repo</span>
+        </button>
       )}
 
       {/* ── Account (only when WorkOS auth is active) ─────────────────── */}

@@ -272,15 +272,21 @@ export WORKOS_REDIRECT_URI=https://your-host/auth/callback   # optional
 export WORKOS_COOKIE_PASSWORD=...                            # optional (recommended in prod)
 ```
 
+On first authenticated use, a user with no WorkOS organization is automatically given a personal
+org (the org is created and the user added as a member), so org-scoped features work without
+hand-creating an org in the WorkOS dashboard. The WorkOS API key must be allowed to create
+organizations and memberships; if it isn't, bootstrap fails soft (logged) and the user keeps the
+`organization_required` response.
+
 **GitHub projects** — when the GitHub App variables are set _and_ WorkOS auth is enabled,
 signed-in users can install the GitHub App, pick repositories, and turn each repo into a project.
 The tenant boundary is the **WorkOS organization**: the GitHub App installation and the connected
 project (repo) are owned by the org, while each user inside the org gets their own isolated
 sandbox, worktrees, branches, and PRs against that repo. The **same repo can be connected
 independently by different orgs** without ever seeing each other's projects, sandboxes, or state.
-Users without a WorkOS organization (personal accounts) can't use GitHub projects, but still get
-isolated agent state. Repo and project metadata persist in a separate application Postgres
-(`APP_DATABASE_URL`):
+Personal accounts are bootstrapped into a personal org on first use (see above), so they can
+connect GitHub projects too; users always get isolated agent state regardless. Repo and project
+metadata persist in a separate application Postgres (`APP_DATABASE_URL`):
 
 ```bash
 export GITHUB_APP_ID=...

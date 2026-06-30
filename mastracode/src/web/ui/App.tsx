@@ -294,6 +294,7 @@ export default function App() {
   // resourceId, then activate it. The hook re-mounts with that resourceId,
   // creating/resuming the shared session; projectPath is pushed once connected.
   const [preparing, setPreparing] = useState(false);
+  const [prepareStatus, setPrepareStatus] = useState('Preparing sandbox…');
   const handleSelectProject = async (project: Project | null) => {
     if (!project) {
       setActiveProjectId(null);
@@ -304,9 +305,10 @@ export default function App() {
     // reattach the sandbox, clone/pull the repo, then bind the sandbox into the
     // session state so the workspace reattaches to it.
     if (project.source === 'github' && project.githubProjectId) {
+      setPrepareStatus('Preparing sandbox…');
       setPreparing(true);
       try {
-        const result = await ensureRepoMaterialized(project.githubProjectId);
+        const result = await ensureRepoMaterialized(project.githubProjectId, ev => setPrepareStatus(ev.message));
         githubBindingRef.current = {
           githubProjectId: result.githubProjectId,
           sandboxId: result.sandboxId,
@@ -966,8 +968,9 @@ export default function App() {
 
       {preparing && (
         <div className="palette-overlay" aria-hidden="true">
-          <div className="github-preparing" role="status">
-            Preparing sandbox…
+          <div className="github-preparing" role="status" aria-live="polite">
+            <span className="github-preparing-spinner" />
+            {prepareStatus}
           </div>
         </div>
       )}

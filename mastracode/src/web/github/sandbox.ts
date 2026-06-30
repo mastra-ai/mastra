@@ -19,6 +19,7 @@
 import { RailwaySandbox } from '@mastra/railway';
 import { eq } from 'drizzle-orm';
 import { getAppDb } from './db';
+import { getLocalSandboxRoot, LocalSandbox } from './local-sandbox';
 import { githubProjectSandboxes } from './schema';
 import type { GithubProjectSandboxRow } from './schema';
 
@@ -43,6 +44,29 @@ export interface MaterializationSandbox {
 }
 
 /**
+ * A coarse-grained step of the sandbox-preparation flow, reported as it happens
+ * so the UI can show the user what the server is doing instead of a static
+ * "Preparing…" toast. `phase` is a stable machine token; `message` is
+ * user-facing copy.
+ */
+export interface PrepareProgress {
+  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
+  message: string;
+}
+
+/** Callback invoked with each preparation step. Best-effort; never throws. */
+export type ProgressFn = (event: PrepareProgress) => void;
+
+function reportProgress(onProgress: ProgressFn | undefined, event: PrepareProgress): void {
+  if (!onProgress) return;
+  try {
+    onProgress(event);
+  } catch {
+    // Progress reporting must never break the actual work.
+  }
+}
+
+/**
  * Factory that builds a (not-yet-started) sandbox. When `providerSandboxId` is
  * provided the sandbox should reattach to that existing VM instead of
  * provisioning a new one.
@@ -55,21 +79,31 @@ export type SandboxFactory = (opts: {
 }) => MaterializationSandbox;
 
 /**
- * Default sandbox provider id. Today only Railway is wired; the factory keeps
- * this swappable.
+ * Resolve the active sandbox provider. An explicit `MASTRACODE_SANDBOX_PROVIDER`
+ * always wins. Otherwise we pick automatically: Railway when a Railway token is
+ * configured, else the local host-process provider. This means a repo can
+ * always be opened — Railway in a configured cloud deploy, local in dev — with
+ * no extra env wiring.
  */
 export function getSandboxProvider(): string {
-  return process.env.MASTRACODE_SANDBOX_PROVIDER || 'railway';
+  const explicit = process.env.MASTRACODE_SANDBOX_PROVIDER;
+  if (explicit) return explicit;
+  return process.env.RAILWAY_API_TOKEN ? 'railway' : 'local';
 }
 
 /**
- * True when a sandbox provider is configured. Required to *open* a GitHub repo
- * project (connecting/picking repos works without it).
+ * True when a sandbox provider is usable. The local provider is always usable
+ * (it runs git on the host process), so this is only false when an explicit
+ * provider is misconfigured (e.g. `railway` selected without a token, or an
+ * unknown provider name).
  */
 export function isSandboxEnabled(): boolean {
   const provider = getSandboxProvider();
   if (provider === 'railway') {
     return Boolean(process.env.RAILWAY_API_TOKEN);
+  }
+  if (provider === 'local') {
+    return true;
   }
   return false;
 }
@@ -84,6 +118,11 @@ export function computeSandboxWorkdir(repoFullName: string): string {
   if (base) {
     // If the configured base already ends with the repo name, use it as-is.
     return base.endsWith(`/${repoName}`) ? base : `${base.replace(/\/$/, '')}/${repoName}`;
+  }
+  // The local provider runs on the host filesystem, where `/workspace` is not
+  // writable; check out under the local sandbox root instead.
+  if (getSandboxProvider() === 'local') {
+    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
   }
   return `/workspace/${repoName}`;
 }
@@ -145,7 +184,7 @@ export class SandboxBudgetError extends Error {
   }
 }
 
-/** Default factory: a Railway sandbox, optionally reattaching by id. */
+/** Railway-backed sandbox, optionally reattaching by id. */
 const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes }) =>
   new RailwaySandbox({
     ...(providerSandboxId ? { sandboxId: providerSandboxId } : {}),
@@ -153,16 +192,27 @@ const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMin
     ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
   });
 
-let sandboxFactory: SandboxFactory = railwayFactory;
+/** Local host-process sandbox (single-user dev; no tenant isolation). */
+const localFactory: SandboxFactory = ({ providerSandboxId }) =>
+  new LocalSandbox(providerSandboxId ? { sandboxId: providerSandboxId } : {});
+
+/**
+ * Default factory: dispatch on the configured provider. Resolved per call so
+ * `MASTRACODE_SANDBOX_PROVIDER` is honored without re-importing the module.
+ */
+const defaultFactory: SandboxFactory = opts =>
+  getSandboxProvider() === 'local' ? localFactory(opts) : railwayFactory(opts);
+
+let sandboxFactory: SandboxFactory = defaultFactory;
 
 /** Override the sandbox factory (tests / alternative providers). */
 export function setSandboxFactory(factory: SandboxFactory): void {
   sandboxFactory = factory;
 }
 
-/** Reset to the default Railway factory. */
+/** Reset to the default provider-dispatching factory. */
 export function resetSandboxFactory(): void {
-  sandboxFactory = railwayFactory;
+  sandboxFactory = defaultFactory;
 }
 
 /**
@@ -179,7 +229,10 @@ async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<s
  * Provision a new sandbox (persisting its provider id on first open) or
  * reattach to the stored one. Returns a started, live sandbox.
  */
-export async function ensureProjectSandbox(row: GithubProjectSandboxRow): Promise<MaterializationSandbox> {
+export async function ensureProjectSandbox(
+  row: GithubProjectSandboxRow,
+  onProgress?: ProgressFn,
+): Promise<MaterializationSandbox> {
   const idleTimeoutMinutes = getSandboxIdleMinutes();
 
   // Reattach path: if we have a stored sandbox id, try to reattach. The VM may
@@ -187,6 +240,7 @@ export async function ensureProjectSandbox(row: GithubProjectSandboxRow): Promis
   // case `start()` fails. Recover by clearing the stale id and provisioning a
   // fresh sandbox so the next open succeeds instead of being permanently wedged.
   if (row.sandboxId) {
+    reportProgress(onProgress, { phase: 'reattaching', message: 'Reconnecting to your sandbox…' });
     const reattached = sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes });
     try {
       await reattached.start();
@@ -206,6 +260,7 @@ export async function ensureProjectSandbox(row: GithubProjectSandboxRow): Promis
     throw new SandboxBudgetError(max);
   }
 
+  reportProgress(onProgress, { phase: 'provisioning', message: 'Provisioning a new sandbox…' });
   const sandbox = sandboxFactory({ idleTimeoutMinutes });
   await sandbox.start();
   liveSandboxCount += 1;
@@ -332,6 +387,7 @@ export async function materializeRepo(
   repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
+  onProgress?: ProgressFn,
 ): Promise<void> {
   const workdir = sandboxRow.sandboxWorkdir;
   const repo = repoInfo.repoFullName;
@@ -362,16 +418,23 @@ export async function materializeRepo(
 
   try {
     if (!sandboxRow.materializedAt) {
-      // 2a. First open: clone the default branch into the workdir.
+      // 2a. First open: shallow-clone the default branch into the workdir. A
+      // shallow single-branch clone is dramatically faster for large repos; the
+      // later re-open uses `git pull --ff-only`, which works on shallow clones.
+      reportProgress(onProgress, {
+        phase: 'cloning',
+        message: `Cloning ${repo} (first open can take a minute)…`,
+      });
       const clone = await sh(
         sandbox,
-        `git clone --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
+        `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
       );
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
       }
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
+      reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
       const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
@@ -390,6 +453,7 @@ export async function materializeRepo(
   }
 
   // 4. Mark materialized.
+  reportProgress(onProgress, { phase: 'finalizing', message: 'Finalizing workspace…' });
   await getAppDb()
     .update(githubProjectSandboxes)
     .set({ materializedAt: new Date() })

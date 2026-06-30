@@ -13,7 +13,8 @@
 
 import { and, eq } from 'drizzle-orm';
 import type { Context, Hono } from 'hono';
-import { getWebAuthUser, webAuthTenant } from '../auth';
+import { streamSSE } from 'hono/streaming';
+import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import {
   buildInstallUrl,
@@ -44,7 +45,7 @@ import {
   teardownProjectSandbox,
   WorktreeError,
 } from './sandbox';
-import type { GitIdentity, MaterializationSandbox } from './sandbox';
+import type { GitIdentity, MaterializationSandbox, PrepareProgress, ProgressFn } from './sandbox';
 import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
 import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
 
@@ -155,7 +156,10 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
   const redirectUri = options.redirectUri ?? `${(options.baseUrl ?? '').replace(/\/$/, '')}/auth/github/callback`;
 
   // ── Connect: redirect to the GitHub App install URL ─────────────────────
-  app.get('/auth/github/connect', c => {
+  app.get('/auth/github/connect', async c => {
+    // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
+    // the session from the request cookie before scoping the tenant.
+    await ensureWebAuthUser(c);
     const resolved = resolveOrgTenant(c);
     if ('response' in resolved) return resolved.response;
     const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
@@ -164,6 +168,9 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
 
   // ── Callback: confirm identity, persist the installation against the org ──
   app.get('/auth/github/callback', async c => {
+    // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
+    // the session from the request cookie before scoping the tenant.
+    await ensureWebAuthUser(c);
     const resolved = resolveOrgTenant(c);
     if ('response' in resolved) return resolved.response;
     const { orgId, userId } = resolved.tenant;
@@ -173,6 +180,16 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
     if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
       // CSRF / cross-user/org linking protection: the signed state must belong
       // to the same logged-in user *and* their current org.
+      console.warn(
+        '[GitHub] Install callback rejected: state/tenant mismatch.',
+        JSON.stringify({
+          stateValid: Boolean(stateTenant),
+          stateOrgId: stateTenant?.orgId,
+          stateUserId: stateTenant?.userId,
+          sessionOrgId: orgId,
+          sessionUserId: userId,
+        }),
+      );
       return c.redirect('/?github=error');
     }
 
@@ -205,7 +222,11 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
             target: [githubInstallations.orgId, githubInstallations.installationId],
           });
       }
-    } catch {
+    } catch (error) {
+      console.warn(
+        `[GitHub] Install callback failed to persist installations for org ${orgId} / user ${userId}.`,
+        error,
+      );
       return c.redirect('/?github=error');
     }
 
@@ -315,38 +336,31 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
       return c.json({ error: 'Project not found' }, 404);
     }
 
-    const sandboxRow = await loadOrCreateSandboxRow(project, userId);
+    // Stream live server-side progress when the client asks for it (EventSource
+    // / fetch with `Accept: text/event-stream`); otherwise fall back to a single
+    // JSON response so non-streaming callers and tests keep working unchanged.
+    const wantsStream = (c.req.header('accept') ?? '').includes('text/event-stream');
+    if (wantsStream) {
+      return streamSSE(c, async stream => {
+        try {
+          const result = await prepareProject(
+            project,
+            userId,
+            ev => void stream.writeSSE({ event: 'progress', data: JSON.stringify(ev) }),
+          );
+          await stream.writeSSE({ event: 'done', data: JSON.stringify(result) });
+        } catch (err) {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify(ensureErrorPayload(err).body) });
+        }
+      });
+    }
 
     try {
-      const sandbox = await ensureProjectSandbox(sandboxRow);
-      // Re-read the sandbox binding so we have the freshly persisted sandboxId.
-      const [fresh] = await getAppDb()
-        .select()
-        .from(githubProjectSandboxes)
-        .where(eq(githubProjectSandboxes.id, sandboxRow.id));
-      const token = await mintInstallationToken(project.installationId);
-      const finalRow = fresh ?? sandboxRow;
-      await materializeRepo(
-        finalRow,
-        { repoFullName: project.repoFullName, defaultBranch: project.defaultBranch },
-        sandbox,
-        token,
-      );
-
-      return c.json({
-        resourceId: project.id,
-        githubProjectId: project.id,
-        sandboxId: finalRow.sandboxId,
-        sandboxWorkdir: finalRow.sandboxWorkdir,
-      });
+      const result = await prepareProject(project, userId);
+      return c.json(result);
     } catch (err) {
-      if (err instanceof SandboxBudgetError) {
-        return c.json({ error: err.code, message: err.message }, 429);
-      }
-      if (err instanceof MaterializeError) {
-        return c.json({ error: err.code, message: err.message }, 502);
-      }
-      return c.json({ error: 'materialize_failed', message: err instanceof Error ? err.message : String(err) }, 500);
+      const { status, body } = ensureErrorPayload(err);
+      return c.json(body, status);
     }
   });
 
@@ -402,6 +416,68 @@ async function loadOrCreateSandboxRow(project: GithubProjectRow, userId: string)
     .from(githubProjectSandboxes)
     .where(and(eq(githubProjectSandboxes.githubProjectId, project.id), eq(githubProjectSandboxes.userId, userId)));
   return row!;
+}
+
+interface EnsureResult {
+  resourceId: string;
+  githubProjectId: string;
+  sandboxId: string | null;
+  sandboxWorkdir: string;
+}
+
+/**
+ * Provision/reattach the caller's sandbox and materialize the repo into it,
+ * emitting coarse progress events as each server step happens. Shared by both
+ * the JSON and SSE variants of the `/ensure` route. Throws on failure so the
+ * caller can shape the response (HTTP status vs SSE `error` event).
+ */
+async function prepareProject(
+  project: GithubProjectRow,
+  userId: string,
+  onProgress?: ProgressFn,
+): Promise<EnsureResult> {
+  const sandboxRow = await loadOrCreateSandboxRow(project, userId);
+  const sandbox = await ensureProjectSandbox(sandboxRow, onProgress);
+  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
+  const [fresh] = await getAppDb()
+    .select()
+    .from(githubProjectSandboxes)
+    .where(eq(githubProjectSandboxes.id, sandboxRow.id));
+  const token = await mintInstallationToken(project.installationId);
+  const finalRow = fresh ?? sandboxRow;
+  await materializeRepo(
+    finalRow,
+    { repoFullName: project.repoFullName, defaultBranch: project.defaultBranch },
+    sandbox,
+    token,
+    onProgress,
+  );
+  const result: EnsureResult = {
+    resourceId: project.id,
+    githubProjectId: project.id,
+    sandboxId: finalRow.sandboxId,
+    sandboxWorkdir: finalRow.sandboxWorkdir,
+  };
+  const done: PrepareProgress = { phase: 'done', message: 'Workspace ready.' };
+  onProgress?.(done);
+  return result;
+}
+
+/** Shape an /ensure failure into an HTTP status + JSON body (also used as the SSE error payload). */
+function ensureErrorPayload(err: unknown): {
+  status: 429 | 502 | 500;
+  body: { error: string; message: string };
+} {
+  if (err instanceof SandboxBudgetError) {
+    return { status: 429, body: { error: err.code, message: err.message } };
+  }
+  if (err instanceof MaterializeError) {
+    return { status: 502, body: { error: err.code, message: err.message } };
+  }
+  return {
+    status: 500,
+    body: { error: 'materialize_failed', message: err instanceof Error ? err.message : String(err) },
+  };
 }
 
 /** Map a sandbox/worktree error to an actionable HTTP response. */

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as AuthModule from '../auth';
 
 // ── Phase 2 org-isolation scenario tests ─────────────────────────────────
 // These prove the org-tenancy boundary end to end through the real GitHub
@@ -15,6 +16,35 @@ vi.mock('drizzle-orm', () => ({
   eq: (column: any, value: any) => ({ kind: 'eq', column: column?.name, value }),
   and: (...conds: any[]) => ({ kind: 'and', conds: conds.filter(Boolean) }),
 }));
+
+// Partially mock `../auth`: keep the real helpers (getWebAuthUser/webAuthTenant)
+// so middleware-stashed users flow through unchanged, but make
+// `ensureWebAuthUser` simulate cookie-based session resolution + personal-org
+// bootstrap on `/auth/*` routes the gate skips. A no-org cookie user comes back
+// with an `organizationId` populated (mirroring `ensureUserHasOrganization`), so
+// downstream `webAuthTenant` yields a real tenant instead of an org gate 403.
+let cookieUser: { workosId: string; organizationId?: string } | null = null;
+// Bootstrap is always attempted for no-org users, but the WorkOS create can
+// fail (e.g. missing API permissions); toggle to exercise that failure path.
+let bootstrapSucceeds = true;
+vi.mock('../auth', async () => {
+  const actual = (await vi.importActual('../auth')) as typeof AuthModule;
+  return {
+    ...actual,
+    ensureWebAuthUser: async (c: any) => {
+      const existing = actual.getWebAuthUser(c);
+      if (existing) return existing;
+      if (!cookieUser) return undefined;
+      const u = cookieUser as { workosId: string; organizationId?: string };
+      // Bootstrap: a personal (no-org) user gets a personal org. When the WorkOS
+      // create fails, the user stays no-org and the org gate still fires.
+      const organizationId = u.organizationId ?? (bootstrapSucceeds ? `org-personal-${u.workosId}` : undefined);
+      const resolved: { workosId: string; organizationId?: string } = { workosId: u.workosId, organizationId };
+      c.set('webAuthUser', resolved);
+      return resolved;
+    },
+  };
+});
 
 interface Tables {
   installations: Array<{
@@ -239,6 +269,8 @@ beforeEach(() => {
   tables.worktrees = [];
   featureEnabled = true;
   sandboxEnabled = true;
+  cookieUser = null;
+  bootstrapSucceeds = true;
   // No Postgres in these scenario tests: keep the project lock in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   mintCount = 0;
@@ -450,5 +482,38 @@ describe('install flow binds the installation to the org', () => {
     );
     expect(res.headers.get('location')).toBe('/?github=error');
     expect(tables.installations).toHaveLength(0);
+  });
+});
+
+// ── Personal-org bootstrap: no-org cookie connect reaches install ─────────
+// A user who signs in with no WorkOS organization used to dead-end at the org
+// gate (`organization_required`). With bootstrap, `ensureWebAuthUser` gives the
+// personal account an org on first authenticated use, so a cookie-only
+// navigation to `/auth/github/connect` redirects to the GitHub App install with
+// the bootstrapped org encoded in the signed state — not a 403.
+describe('personal-org bootstrap on the cookie connect flow', () => {
+  it('redirects a no-org cookie user to install with the bootstrapped org', async () => {
+    // The gate skips `/auth/*`, so no user is stashed up front; the cookie user
+    // has no organization yet.
+    cookieUser = { workosId: 'solo1' };
+
+    const res = await buildApp(null).request('/auth/github/connect');
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get('location') ?? '';
+    // Bootstrap produced a personal org; the signed state carries (org, user).
+    expect(location).toContain('state=state.org-personal-solo1.solo1');
+  });
+
+  it('still org-gates a no-org cookie user when bootstrap fails', async () => {
+    // When the WorkOS org create fails (e.g. missing API permissions), the
+    // personal account stays no-org, so the org gate fires as before.
+    bootstrapSucceeds = false;
+    cookieUser = { workosId: 'solo1' };
+
+    const res = await buildApp(null).request('/auth/github/connect');
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('organization_required');
   });
 });

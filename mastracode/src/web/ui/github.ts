@@ -98,32 +98,106 @@ export interface MaterializeResult {
   sandboxWorkdir: string;
 }
 
+/** A coarse-grained step of the server-side sandbox preparation. */
+export interface PrepareProgress {
+  phase: 'reattaching' | 'provisioning' | 'preparing-workspace' | 'cloning' | 'pulling' | 'finalizing' | 'done';
+  message: string;
+}
+
 /**
  * Materialize a GitHub project into its cloud sandbox: provision/reattach the
- * sandbox and clone/pull the repo inside it. Returns the resourceId used to open
- * the project. Throws an Error whose message carries the server's error code so
- * the UI can surface "sandbox not configured" distinctly.
+ * sandbox and clone/pull the repo inside it. Streams live server-side progress
+ * via SSE, invoking `onProgress` for each step so the UI can show the user what
+ * is happening. Returns the resourceId used to open the project. Throws an Error
+ * whose message carries the server's error code so the UI can surface
+ * "sandbox not configured" distinctly.
  */
-export async function ensureRepoMaterialized(githubProjectId: string): Promise<MaterializeResult> {
+export async function ensureRepoMaterialized(
+  githubProjectId: string,
+  onProgress?: (event: PrepareProgress) => void,
+): Promise<MaterializeResult> {
   const res = await fetch(`/api/web/github/projects/${encodeURIComponent(githubProjectId)}/ensure`, {
     method: 'POST',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'text/event-stream' },
   });
+
+  // Non-2xx responses are sent as plain JSON (auth gate, 503, 404, etc.) rather
+  // than as an SSE stream, so handle those before reading the event stream.
   if (!res.ok) {
-    let code = `http_${res.status}`;
-    let message = `Failed to prepare project (${res.status})`;
-    try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      if (body.error) code = body.error;
-      if (body.message) message = body.message;
-    } catch {
-      /* ignore non-JSON */
-    }
-    const err = new Error(message) as Error & { code?: string };
-    err.code = code;
-    throw err;
+    throw await ensureError(res);
   }
-  return (await res.json()) as MaterializeResult;
+
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('text/event-stream') || !res.body) {
+    // Server fell back to a single JSON response — read it directly.
+    return (await res.json()) as MaterializeResult;
+  }
+
+  let result: MaterializeResult | undefined;
+  let failure: (Error & { code?: string }) | undefined;
+
+  await readSSE(res.body, (event, data) => {
+    if (event === 'progress') {
+      onProgress?.(JSON.parse(data) as PrepareProgress);
+    } else if (event === 'done') {
+      result = JSON.parse(data) as MaterializeResult;
+    } else if (event === 'error') {
+      const body = JSON.parse(data) as { error?: string; message?: string };
+      failure = new Error(body.message ?? 'Failed to prepare project') as Error & { code?: string };
+      failure.code = body.error;
+    }
+  });
+
+  if (failure) throw failure;
+  if (!result) throw new Error('Sandbox preparation ended without a result.');
+  return result;
+}
+
+/** Build an Error carrying the server's error code from a non-OK JSON response. */
+async function ensureError(res: Response): Promise<Error & { code?: string }> {
+  let code = `http_${res.status}`;
+  let message = `Failed to prepare project (${res.status})`;
+  try {
+    const body = (await res.json()) as { error?: string; message?: string };
+    if (body.error) code = body.error;
+    if (body.message) message = body.message;
+  } catch {
+    /* ignore non-JSON */
+  }
+  const err = new Error(message) as Error & { code?: string };
+  err.code = code;
+  return err;
+}
+
+/**
+ * Minimal SSE reader over a fetch ReadableStream. Parses `event:`/`data:` frames
+ * separated by blank lines and invokes `onEvent` for each. Defaults the event
+ * name to `message` per the SSE spec.
+ */
+async function readSSE(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: string, data: string) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      let event = 'message';
+      const dataLines: string[] = [];
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+      }
+      if (dataLines.length > 0) onEvent(event, dataLines.join('\n'));
+    }
+  }
 }
 
 /**

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as AuthModule from '../auth';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -91,8 +92,14 @@ vi.mock('./client', () => ({
   mintInstallationToken: vi.fn(async () => 'install-token'),
 }));
 
-const ensureProjectSandbox = vi.fn(async (_row: any) => ({ id: 'sb' }));
-const materializeRepo = vi.fn(async () => {});
+const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
+  onProgress?.({ phase: 'provisioning', message: 'Provisioning a new sandbox…' });
+  return { id: 'sb' };
+});
+const materializeRepo = vi.fn(async (..._args: any[]) => {
+  const onProgress = _args[4] as ((e: any) => void) | undefined;
+  onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
+});
 const reattachProjectSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
@@ -122,7 +129,7 @@ vi.mock('./sandbox', () => {
     computeSandboxWorkdir: (repo: string) => `/workspace/${repo.split('/').pop()}`,
     getSandboxProvider: () => 'railway',
     isSandboxEnabled: () => sandboxEnabled,
-    ensureProjectSandbox: (row: any) => ensureProjectSandbox(row),
+    ensureProjectSandbox: (row: any, onProgress?: any) => ensureProjectSandbox(row, onProgress),
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
@@ -148,6 +155,31 @@ vi.mock('./config', () => ({
     return { orgId, userId };
   },
 }));
+
+// Partially mock `../auth`: keep all real helpers (getWebAuthUser/webAuthTenant)
+// so the harness's middleware-stashed user flows through normally, but make
+// `ensureWebAuthUser` simulate cookie-based session resolution on `/auth/*`
+// routes the gate skips — it stashes `cookieUser` onto the context the same way
+// production resolves a session cookie before scoping the tenant.
+let cookieUser: { workosId: string; organizationId?: string } | null = null;
+vi.mock('../auth', async () => {
+  const actual = (await vi.importActual('../auth')) as typeof AuthModule;
+  return {
+    ...actual,
+    ensureWebAuthUser: async (c: any) => {
+      const existing = actual.getWebAuthUser(c);
+      if (existing) return existing;
+      if (!cookieUser) return undefined;
+      const u = cookieUser as { workosId: string; organizationId?: string };
+      const withOrg: { workosId: string; organizationId?: string } = {
+        workosId: u.workosId,
+        organizationId: u.organizationId ?? 'org1',
+      };
+      c.set('webAuthUser', withOrg);
+      return withOrg;
+    },
+  };
+});
 
 import { mountGithubRoutes } from './routes';
 
@@ -250,6 +282,7 @@ beforeEach(() => {
   tables.worktrees = [];
   featureEnabled = true;
   sandboxEnabled = true;
+  cookieUser = null;
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
@@ -301,6 +334,30 @@ describe('connect + callback', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
+  });
+
+  it('resolves the session cookie on a cookie-only connect navigation (gate skips /auth/*)', async () => {
+    // A top-level browser navigation to /auth/github/connect carries only the
+    // session cookie — no Authorization header — and the auth gate skips
+    // `/auth/*`, so no user is stashed up front. The route must still resolve
+    // the session (via ensureWebAuthUser) and redirect to install, not 401.
+    cookieUser = { workosId: 'u1' };
+    const res = await buildApp(null).request('/auth/github/connect');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('state=state.org1.u1');
+  });
+
+  it('401s on a cookie-only connect navigation when there is no session', async () => {
+    cookieUser = null;
+    const res = await buildApp(null).request('/auth/github/connect');
+    expect(res.status).toBe(401);
+  });
+
+  it('persists installations on a cookie-only callback navigation', async () => {
+    cookieUser = { workosId: 'u1' };
+    const res = await buildApp(null).request('/auth/github/callback?state=state.org1.u1&code=abc');
+    expect(res.headers.get('location')).toBe('/?github=connected');
+    expect(tables.installations).toHaveLength(1);
   });
 
   it('rejects a callback whose state belongs to another user', async () => {
@@ -459,6 +516,31 @@ describe('ensure (materialize)', () => {
       method: 'POST',
     });
     expect(res.status).toBe(404);
+  });
+
+  it('streams server-side progress events when the client accepts an event stream', async () => {
+    tables.projects.push({
+      id: 'p1',
+      orgId: 'org1',
+      userId: 'u1',
+      installationId: 7,
+      repoFullName: 'octo/hello',
+      defaultBranch: 'main',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects/p1/ensure', {
+      method: 'POST',
+      headers: { Accept: 'text/event-stream' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const body = await res.text();
+    // Progress events surface each server step, then a terminal `done` carries the result.
+    expect(body).toContain('event: progress');
+    expect(body).toContain('Provisioning a new sandbox…');
+    expect(body).toContain('Cloning octo/hello…');
+    expect(body).toContain('event: done');
+    expect(body).toContain('"resourceId":"p1"');
   });
 });
 

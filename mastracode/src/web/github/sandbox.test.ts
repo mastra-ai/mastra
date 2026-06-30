@@ -23,6 +23,7 @@ import {
   ensureProjectSandbox,
   ensureWorktree,
   getSandboxIdleMinutes,
+  getSandboxProvider,
   isSandboxEnabled,
   isValidGitRef,
   materializeRepo,
@@ -96,13 +97,34 @@ afterEach(() => {
   delete process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
 });
 
+describe('getSandboxProvider', () => {
+  it('defaults to railway when a Railway token is set', () => {
+    process.env.RAILWAY_API_TOKEN = 'tok';
+    expect(getSandboxProvider()).toBe('railway');
+  });
+
+  it('falls back to local when no Railway token is set', () => {
+    expect(getSandboxProvider()).toBe('local');
+  });
+
+  it('honors an explicit provider override', () => {
+    process.env.MASTRACODE_SANDBOX_PROVIDER = 'railway';
+    expect(getSandboxProvider()).toBe('railway');
+  });
+});
+
 describe('isSandboxEnabled', () => {
   it('is true for railway when a token is set', () => {
     process.env.RAILWAY_API_TOKEN = 'tok';
     expect(isSandboxEnabled()).toBe(true);
   });
 
-  it('is false without a token', () => {
+  it('is true without a token (auto-falls back to local)', () => {
+    expect(isSandboxEnabled()).toBe(true);
+  });
+
+  it('is false when railway is explicitly selected without a token', () => {
+    process.env.MASTRACODE_SANDBOX_PROVIDER = 'railway';
     expect(isSandboxEnabled()).toBe(false);
   });
 
@@ -111,10 +133,16 @@ describe('isSandboxEnabled', () => {
     process.env.RAILWAY_API_TOKEN = 'tok';
     expect(isSandboxEnabled()).toBe(false);
   });
+
+  it('is true for the local provider without any token', () => {
+    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
+    expect(isSandboxEnabled()).toBe(true);
+  });
 });
 
 describe('computeSandboxWorkdir', () => {
-  it('defaults to /workspace/<repo>', () => {
+  it('defaults to /workspace/<repo> for the railway provider', () => {
+    process.env.RAILWAY_API_TOKEN = 'tok';
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/workspace/hello');
   });
 
@@ -126,6 +154,13 @@ describe('computeSandboxWorkdir', () => {
   it('does not double-append when the base already ends in the repo name', () => {
     process.env.MASTRACODE_SANDBOX_WORKDIR = '/srv/hello';
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/hello');
+  });
+
+  it('checks out under the local sandbox root for the local provider', () => {
+    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
+    process.env.MASTRACODE_LOCAL_SANDBOX_ROOT = '/tmp/mc-sandboxes';
+    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
+    delete process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
   });
 });
 
@@ -223,7 +258,7 @@ describe('materializeRepo', () => {
 
     const joined = sandbox.calls.join('\n');
     expect(sandbox.calls[0]).toBe('git --version');
-    expect(joined).toContain('git clone --branch');
+    expect(joined).toContain('git clone --depth=1 --single-branch --branch');
     expect(joined).toContain('https://x-access-token:tok-123@github.com/octocat/hello.git');
     // token scrubbed afterwards
     expect(joined).toContain('remote set-url origin');
