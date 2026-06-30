@@ -1,6 +1,8 @@
-import { test, expect, Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
-import { expectExactEdgeStatuses, type EdgeExpectation } from '../../__utils__/workflow-edges';
+import { expectExactEdgeStatuses } from '../../__utils__/workflow-edges';
+import type { EdgeExpectation } from '../../__utils__/workflow-edges';
 
 /**
  * FEATURE: Workflow debug mode "Run next step" — deterministic edge activation.
@@ -139,39 +141,45 @@ async function driveFullRun(page: Page, takenArm: 'short-text' | 'long-text') {
   await expectStepSuccess(page, 13); // final-step
 }
 
-test('every edge of the short-text branch run is deterministically colored', async ({ page }) => {
-  await page.goto('/workflows/complexWorkflow/graph');
+test.describe('Workflow debug edge coloring', () => {
+  test.describe('when a debug run takes the short-text branch', () => {
+    test('colors every edge of the short-text branch run deterministically', async ({ page }) => {
+      await page.goto('/workflows/complexWorkflow/graph');
 
-  // ARRANGE: input "A" keeps text short, so the conditional takes short-text.
-  await page.getByRole('textbox', { name: 'Text' }).fill('A');
-  await page.getByRole('switch', { name: 'Debug' }).click();
-  await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      // ARRANGE: input "A" keeps text short, so the conditional takes short-text.
+      await page.getByRole('textbox', { name: 'Text' }).fill('A');
+      await page.getByRole('switch', { name: 'Debug' }).click();
+      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
 
-  // ACT: start per-step, then drive every step to completion.
-  await runButton(page).click();
-  await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
-  await driveFullRun(page, 'short-text');
+      // ACT: start per-step, then drive every step to completion.
+      await runButton(page).click();
+      await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
+      await driveFullRun(page, 'short-text');
 
-  // ASSERT: the COMPLETE edge map for the short-text path.
-  await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
-  const { mapParallel, mapBranch } = await resolveMappingIds(page);
-  await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'short-text', 'long-text'));
-});
+      // ASSERT: the COMPLETE edge map for the short-text path.
+      await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
+      const { mapParallel, mapBranch } = await resolveMappingIds(page);
+      await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'short-text', 'long-text'));
+    });
+  });
 
-test('every edge of the long-text branch run is deterministically colored', async ({ page }) => {
-  await page.goto('/workflows/complexWorkflow/graph');
+  test.describe('when a debug run takes the long-text branch', () => {
+    test('colors every edge of the long-text branch run deterministically', async ({ page }) => {
+      await page.goto('/workflows/complexWorkflow/graph');
 
-  // ARRANGE: input "HELLO" grows past 10 chars by the conditional -> long-text arm.
-  await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
-  await page.getByRole('switch', { name: 'Debug' }).click();
-  await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
+      // ARRANGE: input "HELLO" grows past 10 chars by the conditional -> long-text arm.
+      await page.getByRole('textbox', { name: 'Text' }).fill('HELLO');
+      await page.getByRole('switch', { name: 'Debug' }).click();
+      await expect(page.getByRole('switch', { name: 'Debug' })).toBeChecked();
 
-  await runButton(page).click();
-  await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
-  await driveFullRun(page, 'long-text');
+      await runButton(page).click();
+      await expect(page.locator(DEBUG_CONTROLS)).toBeVisible({ timeout: 20000 });
+      await driveFullRun(page, 'long-text');
 
-  // ASSERT: the COMPLETE edge map for the long-text path (mirror of short-text).
-  await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
-  const { mapParallel, mapBranch } = await resolveMappingIds(page);
-  await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'long-text', 'short-text'));
+      // ASSERT: the COMPLETE edge map for the long-text path (mirror of short-text).
+      await expect(page.locator('[data-edge-to="add-letter"]')).toHaveAttribute('data-edge-status', 'success');
+      const { mapParallel, mapBranch } = await resolveMappingIds(page);
+      await expectExactEdgeStatuses(page, expectedEdges(mapParallel, mapBranch, 'long-text', 'short-text'));
+    });
+  });
 });

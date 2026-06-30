@@ -6,6 +6,7 @@ import type {
   ToolCategory,
 } from '@mastra/client-js';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
 
 import { CustomProvidersSection } from './CustomProvidersSection';
 import {
@@ -34,7 +35,6 @@ interface SettingsPanelProps {
   models: AgentControllerAvailableModel[];
   currentModelId: string | null;
   settings: AgentControllerSessionSettings | null;
-  baseUrl?: string;
   /** Active project's resourceId — required to activate a model pack on its session. */
   resourceId?: string;
   onThemeChange: (theme: Theme) => void;
@@ -63,7 +63,7 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => JSX.Element }[] = [
+const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => ReactElement }[] = [
   { id: 'general', label: 'General', icon: PaletteIcon },
   { id: 'model', label: 'Model', icon: SearchIcon },
   { id: 'packs', label: 'Packs', icon: LayersIcon },
@@ -86,7 +86,6 @@ export function SettingsPanel({
   models,
   currentModelId,
   settings,
-  baseUrl,
   resourceId,
   onThemeChange,
   onDensityChange,
@@ -147,8 +146,8 @@ export function SettingsPanel({
                 onBehaviorChange={onBehaviorChange}
               />
             )}
-            {tab === 'packs' && <ModelPacksSection baseUrl={baseUrl} resourceId={resourceId} models={models} />}
-            {tab === 'memory' && <OMSection baseUrl={baseUrl} resourceId={resourceId} models={models} />}
+            {tab === 'packs' && <ModelPacksSection resourceId={resourceId} models={models} />}
+            {tab === 'memory' && <OMSection resourceId={resourceId} models={models} />}
             {tab === 'behavior' && (
               <BehaviorTab
                 settings={settings}
@@ -157,8 +156,8 @@ export function SettingsPanel({
                 setPermissionForCategory={setPermissionForCategory}
               />
             )}
-            {tab === 'providers' && <ProvidersSection baseUrl={baseUrl} />}
-            {tab === 'custom-providers' && <CustomProvidersSection baseUrl={baseUrl} />}
+            {tab === 'providers' && <ProvidersSection />}
+            {tab === 'custom-providers' && <CustomProvidersSection />}
           </div>
         </div>
       </div>

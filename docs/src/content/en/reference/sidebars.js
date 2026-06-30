@@ -20,6 +20,25 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'AgentController',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'agent-controller/agent-controller-class',
+          label: 'AgentController Class',
+          customProps: { tags: ['beta'] },
+        },
+        {
+          type: 'doc',
+          id: 'agent-controller/session',
+          label: 'Session Class',
+          customProps: { tags: ['beta'] },
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       collapsed: true,
       items: [
@@ -53,6 +72,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
         { type: 'doc', id: 'agents/listSkills', label: '.listSkills()' },
+        { type: 'doc', id: 'agents/listSuspendedRuns', label: '.listSuspendedRuns()' },
         { type: 'doc', id: 'agents/listTools', label: '.listTools()' },
         { type: 'doc', id: 'agents/listWorkflows', label: '.listWorkflows()' },
         { type: 'doc', id: 'agents/network', label: '.network()' },
@@ -74,7 +94,11 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
         { type: 'doc', id: 'ai-sdk/with-mastra', label: 'withMastra()' },
         { type: 'doc', id: 'ai-sdk/workflow-route', label: 'workflowRoute()' },
-        { type: 'doc', id: 'ai-sdk/workflow-snapshot-to-stream', label: 'workflowSnapshotToStream()' },
+        {
+          type: 'doc',
+          id: 'ai-sdk/workflow-snapshot-to-stream',
+          label: 'workflowSnapshotToStream()',
+        },
       ],
     },
     {
@@ -106,6 +130,15 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Channel Providers',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
+        { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'CLI',
       collapsed: true,
       items: [
@@ -131,6 +164,15 @@ const sidebars = {
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Coding Agent',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'coding-agent/build-base-prompt', label: 'buildBasePrompt()' },
+        { type: 'doc', id: 'coding-agent/create-coding-agent', label: 'createCodingAgent()' },
       ],
     },
     {
@@ -299,25 +341,6 @@ const sidebars = {
             { type: 'doc', id: 'datasets/update', label: '.update()' },
             { type: 'doc', id: 'datasets/updateItem', label: '.updateItem()' },
           ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Harness',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'harness/harness-class',
-          label: 'Harness Class',
-          customProps: { tags: ['beta'] },
-        },
-        {
-          type: 'doc',
-          id: 'harness/session',
-          label: 'Session Class',
-          customProps: { tags: ['beta'] },
         },
       ],
     },
@@ -494,6 +517,7 @@ const sidebars = {
         { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },
         { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
         { type: 'doc', id: 'pubsub/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+        { type: 'doc', id: 'pubsub/lease-provider', label: 'LeaseProvider' },
         { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
         { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
         { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
@@ -542,7 +566,12 @@ const sidebars = {
           label: 'createNotificationInboxTool()',
           customProps: { tags: ['beta'] },
         },
-        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['beta'] } },
+        {
+          type: 'doc',
+          id: 'signals/signal-provider',
+          label: 'SignalProvider',
+          customProps: { tags: ['beta'] },
+        },
         {
           type: 'doc',
           id: 'signals/task-signal-provider',
@@ -625,7 +654,12 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
-        { type: 'doc', id: 'tools/create-code-mode', label: 'createCodeMode()', customProps: { tags: ['beta'] } },
+        {
+          type: 'doc',
+          id: 'tools/create-code-mode',
+          label: 'createCodeMode()',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/document-chunker-tool', label: 'createDocumentChunkerTool()' },
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },

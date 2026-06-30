@@ -1,6 +1,7 @@
-import { test, expect, Page } from '@playwright/test';
-import { expectCurrentBreadcrumb } from '../../../__utils__/route-header';
+import type { Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { resetStorage } from '../../../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../../../__utils__/route-header';
 
 // Helper to generate unique scorer names
 function uniqueScorerName(prefix = 'Test Scorer') {
@@ -104,278 +105,298 @@ test.afterEach(async () => {
   await resetStorage();
 });
 
-test.describe('Page Structure & Initial State', () => {
-  test('displays page title and header correctly', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
+test.describe('CMS create scorer page', () => {
+  test.describe('when the create page first loads', () => {
+    test('displays page title and header correctly', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
 
-    await expect(page).toHaveTitle(/Mastra Studio/);
-    await expectCurrentBreadcrumb(page, 'Create scorer');
-  });
-
-  test('displays Create scorer button', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
-
-    const createButton = page.getByRole('button', { name: 'Create scorer' });
-    await expect(createButton).toBeVisible();
-    await expect(createButton).toBeEnabled();
-  });
-});
-
-test.describe('Required Field Validation', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/cms/scorers/create');
-  });
-
-  test('shows validation error when name is empty', async ({ page }) => {
-    await fillScorerFields(page, {
-      description: 'Test description',
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-      instructions: 'Test instructions',
+      await expect(page).toHaveTitle(/Mastra Studio/);
+      await expectCurrentBreadcrumb(page, 'Create scorer');
     });
 
-    await page.getByRole('button', { name: 'Create scorer' }).click();
+    test('displays Create scorer button', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
 
-    await expect(page.getByText('Name is required')).toBeVisible();
-  });
-
-  test('shows validation error when provider is not selected', async ({ page }) => {
-    await fillScorerFields(page, {
-      name: uniqueScorerName(),
-      description: 'Test description',
-      instructions: 'Test instructions',
-    });
-
-    await page.getByRole('button', { name: 'Create scorer' }).click();
-
-    await expect(page.getByText(/provider is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
-      timeout: 5000,
+      const createButton = page.getByRole('button', { name: 'Create scorer' });
+      await expect(createButton).toBeVisible();
+      await expect(createButton).toBeEnabled();
     });
   });
 
-  test('shows validation error when model is not selected', async ({ page }) => {
-    await fillScorerFields(page, {
-      name: uniqueScorerName(),
-      description: 'Test description',
-      provider: 'OpenAI',
-      instructions: 'Test instructions',
+  test.describe('when the scorer name is empty', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/cms/scorers/create');
     });
 
-    await page.getByRole('button', { name: 'Create scorer' }).click();
+    test('shows validation error when name is empty', async ({ page }) => {
+      await fillScorerFields(page, {
+        description: 'Test description',
+        provider: 'OpenAI',
+        model: 'gpt-4o-mini',
+        instructions: 'Test instructions',
+      });
 
-    await expect(page.getByText(/model is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
-      timeout: 5000,
+      await page.getByRole('button', { name: 'Create scorer' }).click();
+
+      await expect(page.getByText('Name is required')).toBeVisible();
     });
   });
 
-  test('shows error toast when submitting empty form', async ({ page }) => {
-    await page.getByRole('button', { name: 'Create scorer' }).click();
-
-    await expect(page.getByText('Please fill in all required fields')).toBeVisible();
-  });
-});
-
-test.describe('Scorer Creation Persistence', () => {
-  test('creates scorer and redirects to detail page', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
-
-    const scorerName = uniqueScorerName('Persistence Test');
-    await fillRequiredFields(page, scorerName);
-
-    await page.getByRole('button', { name: 'Create scorer' }).click();
-
-    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
-    await expect(page.getByText('Scorer created successfully')).toBeVisible();
-  });
-
-  test('persists all fields and verifies them on edit page', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
-
-    const scorerName = uniqueScorerName('Full Persist');
-    const description = 'A comprehensive test scorer';
-    const instructions = 'Score the response based on accuracy and completeness.';
-
-    await fillScorerFields(page, {
-      name: scorerName,
-      description,
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-      scoreRangeMin: '0',
-      scoreRangeMax: '10',
-      samplingType: 'ratio',
-      samplingRate: '0.5',
-      instructions,
+  test.describe('when the scorer provider is not selected', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/cms/scorers/create');
     });
 
-    await page.getByRole('button', { name: 'Create scorer' }).click();
+    test('shows validation error when provider is not selected', async ({ page }) => {
+      await fillScorerFields(page, {
+        name: uniqueScorerName(),
+        description: 'Test description',
+        instructions: 'Test instructions',
+      });
 
-    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+      await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    // Click the Edit button on the detail page
-    const editLink = page.getByRole('link', { name: 'Edit' });
-    await expect(editLink).toBeVisible({ timeout: 10000 });
-    await editLink.click();
-
-    // Wait for the edit page to load
-    await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
-
-    // Verify the route header tracks the scorer being edited
-    await expectCurrentBreadcrumb(page, scorerName);
-
-    // Verify Publish button is visible
-    await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
-
-    // Verify name
-    await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
-
-    // Verify description
-    await expect(page.locator('#scorer-description')).toHaveValue(description);
-
-    // Verify provider/model selections persisted on the edit page.
-    await expect(page.getByRole('combobox').nth(1)).not.toContainText('Select provider');
-    await expect(page.getByRole('combobox').nth(2)).not.toContainText('Select model');
-
-    // Verify score range
-    await expect(page.getByPlaceholder('Min')).toHaveValue('0');
-    await expect(page.getByPlaceholder('Max')).toHaveValue('10');
-
-    // Verify sampling type is ratio
-    await expect(page.locator('#sampling-ratio')).toBeChecked();
-
-    // Verify sampling rate
-    await expect(page.getByPlaceholder('Rate (0-1)')).toHaveValue('0.5');
-
-    // Verify instructions
-    await expect(page.locator('.cm-content')).toContainText(instructions);
+      await expect(page.getByText(/provider is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
+        timeout: 5000,
+      });
+    });
   });
 
-  test('persists minimal fields with correct defaults on edit page', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
-
-    const scorerName = uniqueScorerName('Minimal Persist');
-    await fillRequiredFields(page, scorerName);
-
-    await page.getByRole('button', { name: 'Create scorer' }).click();
-
-    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
-
-    // Wait for Edit link to be visible before clicking
-    const editLink = page.getByRole('link', { name: 'Edit' });
-    await expect(editLink).toBeVisible({ timeout: 10000 });
-    await editLink.click();
-
-    await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
-
-    // Verify name is set
-    await expect(page.locator('#scorer-name')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
-
-    // Verify description has the value set by fillRequiredFields
-    await expect(page.locator('#scorer-description')).toHaveValue('Test scorer description');
-
-    // Verify default score range (0-1)
-    await expect(page.getByPlaceholder('Min')).toHaveValue('0');
-    await expect(page.getByPlaceholder('Max')).toHaveValue('1');
-
-    // Verify ratio rate input is not visible (sampling type is none by default)
-    await expect(page.getByPlaceholder('Rate (0-1)')).not.toBeVisible();
-  });
-
-  test('data persists after page reload on edit page', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
-
-    const scorerName = uniqueScorerName('Reload Persist');
-    const instructions = 'Evaluate response quality on a scale.';
-
-    await fillScorerFields(page, {
-      name: scorerName,
-      description: 'Test description for reload',
-      provider: 'OpenAI',
-      model: 'gpt-4o-mini',
-      instructions,
+  test.describe('when the scorer model is not selected', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/cms/scorers/create');
     });
 
-    await page.getByRole('button', { name: 'Create scorer' }).click();
+    test('shows validation error when model is not selected', async ({ page }) => {
+      await fillScorerFields(page, {
+        name: uniqueScorerName(),
+        description: 'Test description',
+        provider: 'OpenAI',
+        instructions: 'Test instructions',
+      });
 
-    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+      await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    // Navigate to edit page
-    const editLink = page.getByRole('link', { name: 'Edit' });
-    await expect(editLink).toBeVisible({ timeout: 10000 });
-    await editLink.click();
-
-    await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
-
-    // Reload the page
-    await page.reload();
-
-    // Verify name persists after reload
-    await expect(page.locator('#scorer-name')).toHaveValue(scorerName, { timeout: 10000 });
-
-    // Verify instructions persist after reload
-    await expect(page.locator('.cm-content')).toContainText(instructions, { timeout: 10000 });
+      await expect(page.getByText(/model is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
+        timeout: 5000,
+      });
+    });
   });
-});
 
-test.describe('Error Handling', () => {
-  test('shows error toast and allows retry on creation failure', async ({ page }) => {
-    await page.route('**/stored/scorers', route => {
-      if (route.request().method() === 'POST') {
-        route.fulfill({
-          status: 500,
-          contentType: 'application/json',
-          body: JSON.stringify({ message: 'Internal server error' }),
-        });
-      } else {
-        route.continue();
-      }
+  test.describe('when the empty scorer form is submitted', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/cms/scorers/create');
     });
 
-    await page.goto('/cms/scorers/create');
+    test('shows error toast when submitting empty form', async ({ page }) => {
+      await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    await fillRequiredFields(page, uniqueScorerName('Error Test'));
-
-    await page.getByRole('button', { name: 'Create scorer' }).click();
-
-    await expect(page.getByText(/Failed to create scorer/i)).toBeVisible({ timeout: 10000 });
-
-    // Should stay on create page with button still enabled
-    await expect(page).toHaveURL(/\/cms\/scorers\/create/);
-    await expect(page.getByRole('button', { name: 'Create scorer' })).toBeEnabled();
+      await expect(page.getByText('Please fill in all required fields')).toBeVisible();
+    });
   });
-});
 
-test.describe('Form Reset After Creation', () => {
-  test('shows clean form when navigating back to create page', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
+  test.describe('when a scorer is created and saved', () => {
+    test('creates scorer and redirects to detail page', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
 
-    const scorerName = uniqueScorerName('Reset Test');
-    await fillRequiredFields(page, scorerName);
+      const scorerName = uniqueScorerName('Persistence Test');
+      await fillRequiredFields(page, scorerName);
 
-    await page.getByRole('button', { name: 'Create scorer' }).click();
-    await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+      await page.getByRole('button', { name: 'Create scorer' }).click();
 
-    // Navigate back to create page
-    await page.goto('/cms/scorers/create');
+      await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+      await expect(page.getByText('Scorer created successfully')).toBeVisible();
+    });
 
-    // Form should be empty
-    await expect(page.locator('#scorer-name')).toHaveValue('');
-    await expect(page.locator('#scorer-description')).toHaveValue('');
+    test('persists all fields and verifies them on edit page', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
+
+      const scorerName = uniqueScorerName('Full Persist');
+      const description = 'A comprehensive test scorer';
+      const instructions = 'Score the response based on accuracy and completeness.';
+
+      await fillScorerFields(page, {
+        name: scorerName,
+        description,
+        provider: 'OpenAI',
+        model: 'gpt-4o-mini',
+        scoreRangeMin: '0',
+        scoreRangeMax: '10',
+        samplingType: 'ratio',
+        samplingRate: '0.5',
+        instructions,
+      });
+
+      await page.getByRole('button', { name: 'Create scorer' }).click();
+
+      await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+
+      // Click the Edit button on the detail page
+      const editLink = page.getByRole('link', { name: 'Edit' });
+      await expect(editLink).toBeVisible({ timeout: 10000 });
+      await editLink.click();
+
+      // Wait for the edit page to load
+      await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
+
+      // Verify the route header tracks the scorer being edited
+      await expectCurrentBreadcrumb(page, scorerName);
+
+      // Verify Publish button is visible
+      await expect(page.getByRole('button', { name: 'Publish' })).toBeVisible();
+
+      // Verify name
+      await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
+
+      // Verify description
+      await expect(page.locator('#scorer-description')).toHaveValue(description);
+
+      // Verify provider/model selections persisted on the edit page.
+      await expect(page.getByRole('combobox').nth(1)).not.toContainText('Select provider');
+      await expect(page.getByRole('combobox').nth(2)).not.toContainText('Select model');
+
+      // Verify score range
+      await expect(page.getByPlaceholder('Min')).toHaveValue('0');
+      await expect(page.getByPlaceholder('Max')).toHaveValue('10');
+
+      // Verify sampling type is ratio
+      await expect(page.locator('#sampling-ratio')).toBeChecked();
+
+      // Verify sampling rate
+      await expect(page.getByPlaceholder('Rate (0-1)')).toHaveValue('0.5');
+
+      // Verify instructions
+      await expect(page.locator('.cm-content')).toContainText(instructions);
+    });
+
+    test('persists minimal fields with correct defaults on edit page', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
+
+      const scorerName = uniqueScorerName('Minimal Persist');
+      await fillRequiredFields(page, scorerName);
+
+      await page.getByRole('button', { name: 'Create scorer' }).click();
+
+      await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+
+      // Wait for Edit link to be visible before clicking
+      const editLink = page.getByRole('link', { name: 'Edit' });
+      await expect(editLink).toBeVisible({ timeout: 10000 });
+      await editLink.click();
+
+      await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
+
+      // Verify name is set
+      await expect(page.locator('#scorer-name')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('#scorer-name')).toHaveValue(scorerName);
+
+      // Verify description has the value set by fillRequiredFields
+      await expect(page.locator('#scorer-description')).toHaveValue('Test scorer description');
+
+      // Verify default score range (0-1)
+      await expect(page.getByPlaceholder('Min')).toHaveValue('0');
+      await expect(page.getByPlaceholder('Max')).toHaveValue('1');
+
+      // Verify ratio rate input is not visible (sampling type is none by default)
+      await expect(page.getByPlaceholder('Rate (0-1)')).not.toBeVisible();
+    });
+
+    test('data persists after page reload on edit page', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
+
+      const scorerName = uniqueScorerName('Reload Persist');
+      const instructions = 'Evaluate response quality on a scale.';
+
+      await fillScorerFields(page, {
+        name: scorerName,
+        description: 'Test description for reload',
+        provider: 'OpenAI',
+        model: 'gpt-4o-mini',
+        instructions,
+      });
+
+      await page.getByRole('button', { name: 'Create scorer' }).click();
+
+      await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+
+      // Navigate to edit page
+      const editLink = page.getByRole('link', { name: 'Edit' });
+      await expect(editLink).toBeVisible({ timeout: 10000 });
+      await editLink.click();
+
+      await expect(page).toHaveURL(/\/cms\/scorers\/[a-zA-Z0-9-]+\/edit/, { timeout: 15000 });
+
+      // Reload the page
+      await page.reload();
+
+      // Verify name persists after reload
+      await expect(page.locator('#scorer-name')).toHaveValue(scorerName, { timeout: 10000 });
+
+      // Verify instructions persist after reload
+      await expect(page.locator('.cm-content')).toContainText(instructions, { timeout: 10000 });
+    });
   });
-});
 
-test.describe('Provider-Model Interaction', () => {
-  test('provider selection updates available models', async ({ page }) => {
-    await page.goto('/cms/scorers/create');
+  test.describe('when scorer creation fails on the server', () => {
+    test('shows error toast and allows retry on creation failure', async ({ page }) => {
+      await page.route('**/stored/scorers', route => {
+        if (route.request().method() === 'POST') {
+          route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ message: 'Internal server error' }),
+          });
+        } else {
+          route.continue();
+        }
+      });
 
-    // Select an available provider from the kitchen-sink fixture.
-    await selectComboboxOption(page, 0, 'OpenAI');
+      await page.goto('/cms/scorers/create');
 
-    // Open model dropdown
-    const modelCombobox = page.getByRole('combobox').nth(1);
-    await modelCombobox.click();
+      await fillRequiredFields(page, uniqueScorerName('Error Test'));
 
-    // Should have GPT models
-    await expect(page.getByRole('option', { name: /gpt-4/i }).first()).toBeVisible();
+      await page.getByRole('button', { name: 'Create scorer' }).click();
+
+      await expect(page.getByText(/Failed to create scorer/i)).toBeVisible({ timeout: 10000 });
+
+      // Should stay on create page with button still enabled
+      await expect(page).toHaveURL(/\/cms\/scorers\/create/);
+      await expect(page.getByRole('button', { name: 'Create scorer' })).toBeEnabled();
+    });
+  });
+
+  test.describe('when navigating back to the create page after a creation', () => {
+    test('shows clean form when navigating back to create page', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
+
+      const scorerName = uniqueScorerName('Reset Test');
+      await fillRequiredFields(page, scorerName);
+
+      await page.getByRole('button', { name: 'Create scorer' }).click();
+      await expect(page).toHaveURL(/\/scorers\/[a-zA-Z0-9-]+/, { timeout: 15000 });
+
+      // Navigate back to create page
+      await page.goto('/cms/scorers/create');
+
+      // Form should be empty
+      await expect(page.locator('#scorer-name')).toHaveValue('');
+      await expect(page.locator('#scorer-description')).toHaveValue('');
+    });
+  });
+
+  test.describe('when selecting a provider and model', () => {
+    test('provider selection updates available models', async ({ page }) => {
+      await page.goto('/cms/scorers/create');
+
+      // Select an available provider from the kitchen-sink fixture.
+      await selectComboboxOption(page, 0, 'OpenAI');
+
+      // Open model dropdown
+      const modelCombobox = page.getByRole('combobox').nth(1);
+      await modelCombobox.click();
+
+      // Should have GPT models
+      await expect(page.getByRole('option', { name: /gpt-4/i }).first()).toBeVisible();
+    });
   });
 });

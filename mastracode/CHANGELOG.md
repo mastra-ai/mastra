@@ -1,5 +1,344 @@
 # mastracode
 
+## 0.27.0-alpha.8
+
+### Patch Changes
+
+- MastraCode now builds its code agent through the new `createCodingAgent` factory from `@mastra/core/coding-agent` instead of constructing the `Agent` inline. No user-facing behavior changes — the system prompt and agent configuration are unchanged. ([#18695](https://github.com/mastra-ai/mastra/pull/18695))
+
+- Updated dependencies [[`0ac14ce`](https://github.com/mastra-ai/mastra/commit/0ac14cea48e1b0a7857782153c78f7242fdf7e1a), [`c2f0b7f`](https://github.com/mastra-ai/mastra/commit/c2f0b7f1370f4428d165f51f0d1d9a48331cc257)]:
+  - @mastra/core@1.48.0-alpha.8
+  - @mastra/react@1.2.1-alpha.8
+  - @mastra/server@1.48.0-alpha.8
+  - @mastra/hono@1.5.3-alpha.8
+
+## 0.27.0-alpha.7
+
+### Minor Changes
+
+- Reworked headless mode into a real programmatic API. You can now run MastraCode from Node/CI code with `runMC({ controller, session, prompt })`, which returns a handle that streams live events as an async-iterable and resolves to a typed result with status, text, usage, tool calls, and an exit code — it never calls `process.exit` or writes to global streams. The CLI is now a thin adapter over the same runner. ([#18680](https://github.com/mastra-ai/mastra/pull/18680))
+
+  ```ts
+  import { createMastraCode, runMC } from 'mastracode';
+
+  const { controller, session } = await createMastraCode({ settingsPath });
+
+  const run = runMC({ controller, session, prompt: 'Fix the failing test' });
+  for await (const event of run) {
+    // optional: react to live progress events
+  }
+  const result = await run.result;
+  process.exitCode = result.exitCode; // 0 success, 1 error/aborted/max-turns, 2 timeout
+  ```
+
+  Approvals and suspensions are resolved by a pluggable policy (default keeps the previous auto-approve behavior); a built-in `denyPolicy` plus `permissionModeToPolicy` are exported, and a new `--permission-mode {auto|deny}` flag selects between them. A new `--max-turns` flag (and `maxTurns` option) caps assistant turns and reports a `max_turns` status with exit code 1 when the cap is hit mid-task.
+
+  Breaking changes / migration:
+  - Output flags consolidated: the `--format` and `--output-format` flags are replaced by a single `--output` flag with values `human`, `json`, or `jsonl`.
+    - Before: `mastracode --prompt "..." --output-format json`
+    - After: `mastracode --prompt "..." --output json`
+  - Programmatic entry point changed from the old `runHeadless`/`headlessMain` to `runMC` (pure runner) and `runMCCli` (CLI adapter). `runMC` takes an already-built `controller` + `session` from `createMastraCode` and returns a result object instead of only an exit code.
+
+- Turned MastraCode Web into a multi-org cloud coding service. When WorkOS auth and a GitHub App are configured, a team can sign in, connect their repos, and run coding agents that branch, commit, push, and open pull requests — all from isolated cloud sandboxes. When the relevant environment variables are absent, the server and UI behave exactly as before (local-path projects, single shared store, no auth UI), so this is fully opt-in. ([#18567](https://github.com/mastra-ai/mastra/pull/18567))
+
+  **Authentication (WorkOS AuthKit).** Setting `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` protects every route: unauthenticated visitors are redirected to the WorkOS hosted login, signed-in users get an encrypted session, expired sessions bounce back to login, and the sidebar shows the signed-in email with a Sign out button. Users with no WorkOS organization get a personal org bootstrapped on first authenticated use (idempotent, with recovery from partial creations), so personal accounts can use org-scoped features without hand-creating an org.
+
+  **Org-owned GitHub projects.** With the GitHub App env vars set (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, `APP_DATABASE_URL`), users install/connect the app, pick repos they can access, and turn each into a project. The installation and connected repos belong to the WorkOS organization; the same repo can be connected independently by different orgs with no cross-visibility. Each repo is materialized into an isolated cloud sandbox on open — cloned (or pulled) inside the sandbox with a short-lived installation token that never reaches the browser and is scrubbed from the remote afterward.
+
+  **Cloud coding-agent write-back.** From a connected repo, each user gets their own sandbox, git worktrees, and feature branches. The agent runs against the selected worktree (file edits and commands bind to its path) and can commit, push, and open pull requests via the in-sandbox `gh` CLI, authenticated with short-lived per-operation installation tokens. The sidebar shows a nested project → worktree → conversations tree with a "+ New worktree" affordance; conversations scope per worktree.
+
+  **Sandbox providers.** A provider is selected automatically: Railway when `RAILWAY_API_TOKEN` is set, otherwise a local provider that runs git directly on the host (single-user local dev only — no tenant isolation). `MASTRACODE_SANDBOX_PROVIDER` overrides explicitly. Idle sandboxes are torn down and re-provisioned on the next open; a per-replica live-sandbox cap (`MASTRACODE_MAX_SANDBOXES`) and a per-user teardown route bound resource use.
+
+  **Per-(org,user) state isolation.** Agent state (threads, messages, memory, recall vectors) is isolated by the `(organization, user)` pair, each backed by a dedicated libSQL database whose location is derived server-side from a hash of `(orgId, userId)` — never a client-supplied path. By default each tenant gets local libSQL files under `MASTRACODE_TENANT_DB_ROOT`; for hosted deployments, point each tenant at a remote libSQL/Turso database via `MASTRACODE_TENANT_DB_URL_TEMPLATE` (plus optional vector template and auth tokens).
+
+  **Sandbox isolation hardening.** Commands run in the local sandbox receive only a sanitized allow-list of environment variables (PATH/HOME/locale/git config), so server secrets such as `GITHUB_APP_PRIVATE_KEY`, `WORKOS_API_KEY`, and `APP_DATABASE_URL` are never exposed to code running against an untrusted checkout. Sandbox filesystem write operations (write/append/copy/move/mkdir) now verify the destination's real path — including a symlinked parent directory — stays within the workspace root, preventing a malicious repo's symlink from redirecting writes outside the sandbox.
+
+  **Multi-replica deployment hardening.** Per-(project,user) git writes are serialized across replicas with Postgres advisory locks (`MASTRACODE_DISTRIBUTED_LOCK`, on by default; requires `APP_DATABASE_URL`). OAuth/install state signing requires a replica-stable secret in multi-replica setups, in-memory tenant stacks are evicted by idle timeout and an LRU cap (`MASTRACODE_TENANT_IDLE_MINUTES`, `MASTRACODE_TENANT_MAX_APPS`), and `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1` fails startup when no shared remote tenant DB is configured.
+
+  ```bash
+  # Auth + GitHub App (opt-in)
+  WORKOS_API_KEY=sk_xxxxxxxx
+  WORKOS_CLIENT_ID=client_xxxxxxxx
+  GITHUB_APP_ID=123456
+  GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+  GITHUB_APP_CLIENT_ID=Iv1.xxxxxxxx
+  GITHUB_APP_CLIENT_SECRET=xxxxxxxx
+  GITHUB_APP_SLUG=your-app-slug
+  APP_DATABASE_URL=postgres://user:pass@host:5432/mastracode_web
+
+  # Multi-replica hosted deployment
+  GITHUB_APP_WEBHOOK_SECRET=...                      # replica-stable state signing
+  MASTRACODE_DISTRIBUTED_LOCK=1                       # cross-replica git write locks
+  MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1              # require shared remote tenant DBs
+  MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io
+  MASTRACODE_TENANT_IDLE_MINUTES=30
+  MASTRACODE_TENANT_MAX_APPS=100
+  MASTRACODE_MAX_SANDBOXES=50
+  ```
+
+  Still deferred: collaboration within a project (multiple users sharing one worktree/sandbox/branch), org admin/roles and membership management, and org-level project deletion.
+
+- Auto-provision a per-tenant Turso database in deployed MastraCode Web environments. ([#18690](https://github.com/mastra-ai/mastra/pull/18690))
+
+  Previously, hosting per-`(org, user)` agent state on Turso required each tenant's database to already exist at the URL produced by `MASTRACODE_TENANT_DB_URL_TEMPLATE`. There was no way to create those databases on demand, so the only zero-setup option was server-local libSQL files — which are ephemeral and not shared across replicas.
+
+  Setting `MASTRACODE_TURSO_PLATFORM_TOKEN` and `MASTRACODE_TURSO_ORG` now enables a third tenant-storage mode: the first time a tenant is seen, its own Turso database is created via the Turso Platform API (idempotent — an "already exists" race recovers the hostname via `databases.get`), a scoped auth token is minted, and the stable database-name/hostname mapping is persisted in the app Postgres (`tenant_databases` table, requires `APP_DATABASE_URL`). All replicas converge on the same database and cold starts never re-create it. Only the durable mapping is stored; the auth token is minted fresh per resolution, so no long-lived credential is persisted.
+
+  Resolution priority is: explicit `MASTRACODE_TENANT_DB_URL_TEMPLATE` → Turso auto-provisioning → local libSQL files. Turso provisioning also satisfies `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1`. The `@tursodatabase/api` client is loaded dynamically, so deployments that don't use Turso never pull it in at runtime.
+
+  ```bash
+  MASTRACODE_TURSO_PLATFORM_TOKEN=...    # Turso Platform API token
+  MASTRACODE_TURSO_ORG=my-org            # org that owns provisioned databases
+  MASTRACODE_TURSO_GROUP=default         # optional group (default "default")
+  APP_DATABASE_URL=postgres://...        # required for the mapping table
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c)]:
+  - @mastra/core@1.48.0-alpha.7
+  - @mastra/server@1.48.0-alpha.7
+  - @mastra/hono@1.5.3-alpha.7
+  - @mastra/react@1.2.1-alpha.7
+
+## 0.27.0-alpha.6
+
+### Patch Changes
+
+- Renamed the AgentController interval API. `heartbeatHandlers` is now `intervalHandlers`, the `HeartbeatHandler` type is now `IntervalHandler`, and the `removeHeartbeat()`/`stopHeartbeats()` methods are now `removeInterval()`/`stopIntervals()`. This better reflects that these are fixed-interval background tasks, not liveness pings, and is distinct from the unrelated `mastra.heartbeats` scheduled-agent feature. ([#18665](https://github.com/mastra-ai/mastra/pull/18665))
+
+  **Before**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    heartbeatHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeHeartbeat({ id: 'sync' });
+  await controller.stopHeartbeats();
+  ```
+
+  **After**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    intervalHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeInterval({ id: 'sync' });
+  await controller.stopIntervals();
+  ```
+
+- Improved MastraCode web chat so hydrated and streaming messages render consistently, including tool cards, reasoning, and failed-tool states. ([#18620](https://github.com/mastra-ai/mastra/pull/18620))
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`65a66db`](https://github.com/mastra-ai/mastra/commit/65a66dbe249a0d92d828c605b955e73a983cf3b0), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+  - @mastra/schema-compat@1.3.2-alpha.1
+  - @mastra/mcp@1.12.1-alpha.0
+  - @mastra/react@1.2.1-alpha.6
+  - @mastra/memory@1.21.3-alpha.2
+  - @mastra/server@1.48.0-alpha.6
+  - @mastra/hono@1.5.3-alpha.6
+
+## 0.27.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`c607ece`](https://github.com/mastra-ai/mastra/commit/c607eceeda028a80b24d00ee7dae376db73df526), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+  - @mastra/server@1.48.0-alpha.5
+  - @mastra/memory@1.21.3-alpha.1
+  - @mastra/hono@1.5.3-alpha.5
+
+## 0.27.0-alpha.4
+
+### Minor Changes
+
+- Added voice input to the MastraCode TUI. Enable it with /voice, then hold the spacebar to dictate a prompt and release to finish. Your speech streams into the input in real time as you talk and is transcribed with OpenAI Whisper. The setting persists across restarts. ([#18624](https://github.com/mastra-ai/mastra/pull/18624))
+
+  Requires an OpenAI API key (set `OPENAI_API_KEY` or configure it via `/api-keys`) and a local audio recorder on your `PATH` — `rec`/`sox` (recommended for live streaming) or `ffmpeg` on macOS, and `pw-record`/`parecord`/`arecord`/`sox` on Linux.
+
+- Added Amazon Bedrock as a model provider in Mastra Code. Bedrock models surfaced by models.dev are now selectable via `/models` and usable as build/plan/fast or subagent models with the `amazon-bedrock/<modelId>` form. Models are only offered when AWS credentials are detected. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+  Bedrock authenticates with AWS SigV4 through the standard AWS credential chain (`fromNodeProviderChain`), so environment variables, shared `~/.aws` profiles, SSO, and container/instance roles all work without extra configuration. Set `AWS_REGION` (defaults to `us-east-1`) to target a region, or `AWS_BEARER_TOKEN_BEDROCK` to use Bedrock API-key auth instead.
+
+  ```sh
+  # Pick a Bedrock model from the picker
+  /models
+
+  # Or set it directly via the build/plan/fast slots
+  /build amazon-bedrock/<modelId>
+  ```
+
+### Patch Changes
+
+- Amazon Bedrock models now appear under their own `amazon-bedrock/<model>` provider in the model picker instead of the `mastracode/amazon-bedrock/<model>` namespace. Bedrock is resolved through a dedicated Amazon Bedrock gateway that authenticates with the AWS credential chain (SigV4) and surfaces models from the public models.dev catalog. Saved model selections using the previous `mastracode/amazon-bedrock/...` IDs are still resolved at runtime, so existing config keeps working. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+  - @mastra/server@1.48.0-alpha.4
+  - @mastra/hono@1.5.3-alpha.4
+
+## 0.27.0-alpha.3
+
+### Patch Changes
+
+- Fixed MCP HTTP server URLs so `${VAR}` references resolve from the environment, the same way header values already do. A server configured with `"url": "${MCP_SERVER_URL}"` is now connected instead of being silently skipped as an invalid URL. ([#18579](https://github.com/mastra-ai/mastra/pull/18579))
+
+- MCP stdio servers now resolve `${VAR}` references in their `env` values from the host environment, matching the existing behavior for HTTP server headers. You can reference secrets from the environment instead of hardcoding them in `mcp.json`: ([#18529](https://github.com/mastra-ai/mastra/pull/18529))
+
+  ```json
+  {
+    "mcpServers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+      }
+    }
+  }
+  ```
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`e05dade`](https://github.com/mastra-ai/mastra/commit/e05dade21c3e2551893ad939e6028cdafd84a1b2), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/schema-compat@1.3.2-alpha.0
+  - @mastra/server@1.48.0-alpha.3
+  - @mastra/mcp@1.12.0
+  - @mastra/memory@1.21.3-alpha.0
+  - @mastra/hono@1.5.3-alpha.3
+
+## 0.27.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+  - @mastra/server@1.48.0-alpha.2
+  - @mastra/hono@1.5.3-alpha.2
+
+## 0.27.0-alpha.1
+
+### Minor Changes
+
+- **Improved web settings data loading** ([#18518](https://github.com/mastra-ai/mastra/pull/18518))
+  - Settings panels now avoid duplicate requests and refresh lists after saves or removals.
+  - Provider keys, custom providers, model packs, observational memory, and the directory picker now stay in sync automatically.
+  - Streaming chat behavior is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [[`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`8e9c0fb`](https://github.com/mastra-ai/mastra/commit/8e9c0fb48fd58da2efcdff2cf1202ee41092c315)]:
+  - @mastra/core@1.48.0-alpha.1
+  - @mastra/server@1.48.0-alpha.1
+  - @mastra/hono@1.5.3-alpha.1
+
+## 0.26.1-alpha.0
+
+### Patch Changes
+
+- Set goal judge `maxSteps` to 1000 (matching the main agent) so the judge has ample budget for complex goals requiring heavy verification. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+- Updated dependencies [[`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`9566d27`](https://github.com/mastra-ai/mastra/commit/9566d27ead3d95bdbe5a69e5a082a68222829cf2)]:
+  - @mastra/core@1.48.0-alpha.0
+  - @mastra/server@1.48.0-alpha.0
+  - @mastra/hono@1.5.3-alpha.0
+
+## 0.26.0
+
+### Minor Changes
+
+- Added a live tokens/sec counter to the MastraCode terminal and web status lines. ([#18501](https://github.com/mastra-ai/mastra/pull/18501))
+
+  The counter shows how fast the model is generating, measured over decode time only — the window from the first streamed token of a step to when that step finishes. This excludes time-to-first-token, tool execution, and scheduling gaps, so the number reflects real generation speed instead of reading artificially low. Reasoning tokens are included, and the rate is smoothed with an exponential moving average for a stable readout.
+
+  The last reading stays visible while idle so you can read it after a turn finishes, and it clears when the next turn begins.
+
+- Add a browser UI for MastraCode. ([#18364](https://github.com/mastra-ai/mastra/pull/18364))
+
+  The web app boots the real MastraCode Harness, registers it on a Mastra
+  instance, mounts the Harness HTTP routes (via `@mastra/server`) on a Hono
+  server, and serves a React UI built with Vite. The UI drives a session over the
+  `@mastra/client-js` harness resource (SSE event stream + JSON commands) and
+  reaches feature parity with the terminal for the core interactive workflows:
+  chat streaming, tool execution, tool approvals, interactive suspensions
+  (`ask_user` / `submit_plan` / `request_access`), mode/model switching, thread
+  lifecycle, task tracking, goals, notifications, steer/abort, follow-ups, a
+  TUI-parity status line (message/reflection budgets and active-goal indicator),
+  and project-scoped workspaces with a server-driven directory picker.
+
+  A full Settings surface mirrors the terminal's configuration commands: model
+  selection, behavior (`yolo`, thinking level, notifications, smart editing,
+  per-category tool permissions), observational-memory models and thresholds,
+  model packs, API keys, and custom providers. These are backed by
+  `/api/web/config/*` routes that read and write the same global `settings.json`
+  the terminal uses, so configuration stays in sync across the terminal and the
+  browser.
+
+  The web server shares its storage with the registered Harness, and projects
+  resolve the same `resourceId` as the terminal, so the two share durable threads
+  and observations for a given project. Thread lists are scoped by project path so
+  worktrees that share a `resourceId` don't bleed each other's threads.
+
+  Internally, harness startup is shared through a single base factory with small
+  per-environment helpers, so the terminal app and the web server build the exact
+  same harness without duplicating wiring. The published `mastracode` package
+  remains terminal-only — the web UI lives in the repository for local
+  development and is excluded from the published package.
+
+  Includes a scenario test suite that drives the production stack
+  (`MastraClient` → Hono → `@mastra/server` routes → Harness → AIMock) end to end.
+
+### Patch Changes
+
+- Fixed MastraCode queued follow-up E2E tests to wait for stable terminal output. ([#18507](https://github.com/mastra-ai/mastra/pull/18507))
+
+- Reworked plan mode to use named plan files. The agent writes its plan to a markdown file under `.mastracode/plans/` and calls `submit_plan` with the `path` to that file, so multiple plans stay on disk for review. The host validates the submitted path is a `.md` file inside `.mastracode/plans/` before reading it, so the tool can't be pointed at arbitrary files. Plan mode can write any `.md` file inside `.mastracode/plans/` (enforced by a tool guard) but nothing else, submitted plan snapshots are persisted for history replay, revision diffs are computed from a real line-ending-normalized LCS diff and only shown when the change is small relative to the plan, "Request Changes" stops the run immediately with no trailing model output, and diffs only compare revisions of the same plan file. ([#18490](https://github.com/mastra-ai/mastra/pull/18490))
+
+- Fixed thread auto-resume selecting the wrong thread in git worktrees by scoping startup selection to threads tagged with the current project path. When Mastra Code detects a matching project thread on a different resource after resourceId drift, it now prompts before cloning and resuming that thread under the current resource; accepting the prompt leaves the old thread untouched and loads the clone, while declining starts fresh and leaves the old resource untouched. ([#18333](https://github.com/mastra-ai/mastra/pull/18333))
+
+- Switched internal imports to the canonical `@mastra/core/agent-controller` entrypoint, replacing the deprecated `@mastra/core/harness` path and `Harness` types. Updated the web client to call `getAgentController()` and use the new `AgentControllerEvent` type, renamed the `useHarnessSession` hook to `useAgentControllerSession`, and renamed the `handleHarnessEvent` ACP mapper to `handleAgentControllerEvent`. ([#18510](https://github.com/mastra-ai/mastra/pull/18510))
+
+- Resolve all Harness models through gateways. The Harness now builds its available-models catalog, model auth status, mode agents, Observational Memory models, and subagents from the gateways you register, instead of the separate `resolveModel`, `customModelCatalogProvider`, and `modelAuthChecker` config hooks. Removed those three options from `HarnessConfig` (and the `ModelAuthChecker` type) — register a gateway via `gateways` instead. ([#18382](https://github.com/mastra-ai/mastra/pull/18382))
+
+  `listAvailableModels()` and `getCurrentModelAuthStatus()` are now sourced entirely from gateways: model discovery comes from each gateway's `fetchProviders()` (a network call for gateways like models.dev and Netlify), and auth status is resolved through the same gateway chain the model router uses at run time (`resolveAuth()`, falling back to `getApiKey()`). There is no static provider-registry fallback — everything the model picker shows comes from a gateway.
+
+  The gateway-chain operations shared by `ModelRouterLanguageModel` and the Harness (gateway merging, model→gateway selection, auth resolution, provider/model listing) are now centralized in a new `GatewayManager` class exported from `@mastra/core`. Both consumers delegate to it, eliminating duplicated logic. `defaultGateways` is still re-exported from the same paths for backward compatibility.
+
+- Fixed OAuth logins (such as Anthropic and OpenAI sign-in) not being recognized for the selected model. The model status bar no longer shows a false "missing API key" error, and the `/api-keys` command and web settings panel now display a distinct "oauth" status for providers you are signed into instead of treating them as unset. ([#18503](https://github.com/mastra-ai/mastra/pull/18503))
+
+- Added support for reading MCP server config from a project root `.mcp.json` (the file Claude Code uses). Projects that already keep their MCP servers there no longer need a duplicate under `.mastracode/`. The root file sits below `.mastracode/mcp.json` in priority, so project-specific config still wins. ([#18494](https://github.com/mastra-ai/mastra/pull/18494))
+
+- MastraCode now passes a deterministic session `id` and `ownerId` to the Harness session. The session id is derived from the project resource ID and is stable across restarts for the same project directory. The owner id is derived from the machine hostname and project root path, tying the session to the local machine. ([#18372](https://github.com/mastra-ai/mastra/pull/18372))
+
+- Expand `${VAR}`, `${VAR:-default}`, and bare `$VAR` references in MCP server HTTP headers. Header values such as `"x-api-key": "${MY_API_KEY}"` in `mcp.json` are now resolved from the environment when the config is loaded, instead of being sent verbatim. This matches how Claude Code reads `.mcp.json` and lets header-authenticated HTTP servers pull secrets from the environment. ([#18240](https://github.com/mastra-ai/mastra/pull/18240))
+
+- Updated plan and explore modes to declare `availableTools` allowlists so tool visibility is gated at LLM-call time instead of workspace construction. Plan mode includes read-only tools plus plan-file editing and delivery tools; explore mode includes only read-only tools. Build mode remains unrestricted. Workspace creation no longer branches on mode for tool visibility — all modes now share the same workspace instance. ([#18463](https://github.com/mastra-ai/mastra/pull/18463))
+
+- Improved plan mode UX: "Request changes" stops the agent via processor-based abort and lets you provide revision feedback via chat. Plan resubmissions show a diff of what changed. Plans save to title-derived filenames (e.g. `add-dark-mode.md`) for multi-plan support. Plan filename displayed in TUI header. ([#18323](https://github.com/mastra-ai/mastra/pull/18323))
+
+- Add MastraCode browser tool availability scenarios ([#18498](https://github.com/mastra-ai/mastra/pull/18498))
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`42d74d5`](https://github.com/mastra-ai/mastra/commit/42d74d5671f95aa6076576e32a9b7d11f13dd208), [`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`b4e97e6`](https://github.com/mastra-ai/mastra/commit/b4e97e676232a3a398ef32d3e78faa0c91c5fa1c), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`06e0d63`](https://github.com/mastra-ai/mastra/commit/06e0d63d42bc2a202e18bc091f3781f409f5e6fb), [`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`438a971`](https://github.com/mastra-ai/mastra/commit/438a9715c8b4398e5eaf8914a1f19dc8a85dc1de), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`77518cc`](https://github.com/mastra-ai/mastra/commit/77518ccb5bb8cc684875081e64213dc85cffdbee), [`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`8a68844`](https://github.com/mastra-ai/mastra/commit/8a688443013816105a09f89c6afa34b5ff13e26d), [`bb2a13b`](https://github.com/mastra-ai/mastra/commit/bb2a13bb4b32e6bb807200fe7b18ae8fa4322118), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`a73cd1a`](https://github.com/mastra-ai/mastra/commit/a73cd1a62a5e4ca023dcc39ba150029f4f1f74c1), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`0b5cc47`](https://github.com/mastra-ai/mastra/commit/0b5cc4726dc18d9a685a27520db39ff1b36bb89a), [`87f38a3`](https://github.com/mastra-ai/mastra/commit/87f38a3de03e24731f2dd6f8ed6a60b6722b85a1), [`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98), [`fe98ef2`](https://github.com/mastra-ai/mastra/commit/fe98ef2e66dbfcbd7d645c88c9ee1e67b458a136), [`e1f272d`](https://github.com/mastra-ai/mastra/commit/e1f272d2bf1963c0ccb060f34b103b0b780bbff0), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`26f54af`](https://github.com/mastra-ai/mastra/commit/26f54afb5dbfbbb02d4d09bec4bd7c5029751767), [`793ea0f`](https://github.com/mastra-ai/mastra/commit/793ea0f52f831178837f21c83af6af93bf4ce638), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`507a5c4`](https://github.com/mastra-ai/mastra/commit/507a5c461bdc3136ad80744c0efbb55ce1f18f97), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`307573b`](https://github.com/mastra-ai/mastra/commit/307573b9ff3149b70c79540dbc86f1319b180f29), [`79b3626`](https://github.com/mastra-ai/mastra/commit/79b3626f8d647307eb07c8da14c9073c2699719d), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59), [`74f447a`](https://github.com/mastra-ai/mastra/commit/74f447a6fae171ac3a6ec2d9e61be171ca46d23c), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.47.0
+  - @mastra/server@1.47.0
+  - @mastra/observability@1.15.2
+  - @mastra/memory@1.21.2
+  - @mastra/pg@1.14.2
+  - @mastra/libsql@1.14.2
+  - @mastra/github-signals@0.2.2
+  - @mastra/schema-compat@1.3.1
+  - @mastra/hono@1.5.2
+  - @mastra/mcp@1.12.0
+
+## 0.26.0-alpha.8
+
+### Patch Changes
+
+- Reworked plan mode to use named plan files. The agent writes its plan to a markdown file under `.mastracode/plans/` and calls `submit_plan` with the `path` to that file, so multiple plans stay on disk for review. The host validates the submitted path is a `.md` file inside `.mastracode/plans/` before reading it, so the tool can't be pointed at arbitrary files. Plan mode can write any `.md` file inside `.mastracode/plans/` (enforced by a tool guard) but nothing else, submitted plan snapshots are persisted for history replay, revision diffs are computed from a real line-ending-normalized LCS diff and only shown when the change is small relative to the plan, "Request Changes" stops the run immediately with no trailing model output, and diffs only compare revisions of the same plan file. ([#18490](https://github.com/mastra-ai/mastra/pull/18490))
+
+- Updated dependencies [[`8a68844`](https://github.com/mastra-ai/mastra/commit/8a688443013816105a09f89c6afa34b5ff13e26d)]:
+  - @mastra/core@1.47.0-alpha.7
+  - @mastra/server@1.47.0-alpha.7
+  - @mastra/hono@1.5.2-alpha.7
+
 ## 0.26.0-alpha.7
 
 ### Patch Changes

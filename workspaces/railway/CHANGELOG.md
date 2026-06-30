@@ -1,5 +1,14 @@
 # @mastra/railway
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed Railway sandbox templates so they are built once during sandbox creation. ([#18605](https://github.com/mastra-ai/mastra/pull/18605))
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+
 ## 0.2.0
 
 ### Minor Changes

@@ -1,0 +1,144 @@
+---
+title: "Reference: buildBasePrompt() | Coding Agent"
+description: "API reference for buildBasePrompt(), which builds the shared base system prompt for a coding agent from a PromptContext."
+packages:
+  - "@mastra/core"
+---
+
+# buildBasePrompt()
+
+`buildBasePrompt()` builds the shared base system prompt for a coding agent — the behavioral instructions that make the agent a good coding assistant. It takes a `PromptContext` describing the current environment (project, platform, git branch, mode, model) and returns the prompt as a string.
+
+Product-specific strings are parameterized through `productName`, `coAuthorName`, and `coAuthorEmail`, so you can rebrand the prompt and commit trailer without forking it. They default to `"Mastra Code"` / `"noreply@mastra.ai"`, so existing callers keep identical output.
+
+Use this with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent) when you build dynamic instructions for the agent.
+
+## Usage example
+
+Build the base prompt from a `PromptContext`:
+
+```typescript title="src/mastra/prompt.ts"
+import { buildBasePrompt } from '@mastra/core/coding-agent'
+
+const prompt = buildBasePrompt({
+  projectPath: process.cwd(),
+  projectName: 'my-app',
+  gitBranch: 'main',
+  platform: process.platform,
+  date: new Date().toDateString(),
+  mode: 'build',
+  modelId: '__GATEWAY_OPENAI_MODEL_BASE__',
+  toolGuidance: '',
+})
+```
+
+To rebrand the prompt, pass the product and co-author fields:
+
+```typescript
+const prompt = buildBasePrompt({
+  // ...environment fields
+  productName: 'Acme Coder',
+  coAuthorName: 'Acme Bot',
+  coAuthorEmail: 'bot@acme.dev',
+})
+```
+
+## Parameters
+
+`buildBasePrompt()` takes a single `PromptContext` object.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'projectPath',
+    type: 'string',
+    description: 'Absolute path to the project root.',
+  },
+  {
+    name: 'projectName',
+    type: 'string',
+    description: 'Display name of the project.',
+  },
+  {
+    name: 'gitBranch',
+    type: 'string',
+    description: 'Current git branch, if the project is a git repository.',
+    isOptional: true,
+  },
+  {
+    name: 'platform',
+    type: 'string',
+    description: 'Operating system platform (for example, the value of process.platform).',
+  },
+  {
+    name: 'commonBinaries',
+    type: '{ name: string; path: string | null }[]',
+    description: 'Common binaries detected on the system, each with a name and resolved path (or null when not found).',
+    isOptional: true,
+  },
+  {
+    name: 'date',
+    type: 'string',
+    description: 'Current date string injected into the prompt.',
+  },
+  {
+    name: 'mode',
+    type: 'string',
+    description: 'Active agent mode (for example, "build" or "plan").',
+  },
+  {
+    name: 'modelId',
+    type: 'string',
+    description: 'Identifier of the active model, included in the commit Co-Authored-By line when provided.',
+    isOptional: true,
+  },
+  {
+    name: 'activePlan',
+    type: '{ title: string; plan: string; approvedAt: string } | null',
+    description: 'The currently approved plan, if any.',
+    isOptional: true,
+  },
+  {
+    name: 'toolGuidance',
+    type: 'string',
+    description: 'Tool-usage guidance section appended to the prompt.',
+  },
+  {
+    name: 'productName',
+    type: 'string',
+    description: 'Display name used in the prompt header.',
+    isOptional: true,
+    defaultValue: 'Mastra Code',
+  },
+  {
+    name: 'coAuthorName',
+    type: 'string',
+    description: 'Name used in the commit Co-Authored-By line.',
+    isOptional: true,
+    defaultValue: 'Mastra Code',
+  },
+  {
+    name: 'coAuthorEmail',
+    type: 'string',
+    description: 'Email used in the commit Co-Authored-By line.',
+    isOptional: true,
+    defaultValue: 'noreply@mastra.ai',
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'prompt',
+    type: 'string',
+    description: 'The base system prompt for the coding agent.',
+  },
+]}
+/>
+
+## Related
+
+- [`createCodingAgent()`](/reference/coding-agent/create-coding-agent)

@@ -376,9 +376,12 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   useAgent?: boolean;
 
   /**
-   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   * Whether to use prompt injection instead of native response format to coerce the LLM to respond with JSON text.
+   * true and 'system' inject JSON instructions into the leading system message.
+   * 'inline' appends JSON instructions to the latest user message.
+   * false or omitted uses the provider's native response format.
    */
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
 
   /**
    * Optional logger instance for structured logging
@@ -489,6 +492,11 @@ export interface GoalConfig {
    * own judging). When omitted, the default judge is text-only.
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
+   * Max steps the judge agent may take per evaluation (its internal agentic-loop
+   * budget). When omitted the judge uses the model loop's default (5).
+   */
+  maxSteps?: number;
   /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.

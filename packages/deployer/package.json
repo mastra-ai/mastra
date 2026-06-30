@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.47.0-alpha.6",
+  "version": "1.48.0-alpha.8",
   "description": "",
   "type": "module",
   "files": [
@@ -112,6 +112,7 @@
     "esbuild": "^0.28.0",
     "find-workspaces": "^0.3.1",
     "fs-extra": "^11.3.5",
+    "gray-matter": "^4.0.3",
     "hono": "^4.12.8",
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",

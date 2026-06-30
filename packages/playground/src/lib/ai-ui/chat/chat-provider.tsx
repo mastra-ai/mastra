@@ -1,6 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
+import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
+import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';

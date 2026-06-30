@@ -3,6 +3,7 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { ObservationModelContext, ObserveHooks } from '../types';
 
@@ -34,12 +35,14 @@ export interface ObserverOutput {
   suggestedContinuation?: string;
   threadTitle?: string;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  providerMetadata?: ProviderMetadata;
 }
 
 /** Result returned from ObservationStrategy.run(). */
 export interface ObservationRunResult {
   observed: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  providerMetadata?: ProviderMetadata;
 }
 
 /** Processed observation ready for persistence. */
