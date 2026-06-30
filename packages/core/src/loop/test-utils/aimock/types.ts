@@ -334,6 +334,15 @@ export interface RunLoopScenarioOptions {
    * the same agent+storage must persist across calls.
    */
   sharedAgent?: { agent: any; mastra: any };
+  /**
+   * Build the agent via file-system routing (`assembleAgentFromFsEntry`) instead
+   * of `new Agent(...)`, then register it through `Mastra.__registerFsAgents`.
+   * `instructions` is treated as the `instructions.md` body and `tools` as the
+   * discovered `tools/*` map, so the exact same scenario runs an FS-assembled
+   * agent through the real loop. Used to prove file-based agents behave
+   * identically to code-registered ones.
+   */
+  fsRouted?: boolean;
 }
 
 /**

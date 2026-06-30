@@ -141,6 +141,11 @@ baseURL })`) so its own loop turns also hit the mock; match the delegated prompt
 - `pubsub: new InMemoryPubSub()` — attach a PubSub instance to the Mastra backing the agent, enabling
   the signal API (`subscribeToThread()`, `sendMessage()`, `sendStateSignal()`). Combine with the
   `agent` returned by `runLoopScenario` to drive thread subscriptions and assert signal metadata.
+- `fsRouted: true` — build the agent via file-system routing (`assembleAgentFromFsEntry`) instead of
+  `new Agent(...)`, then register it through `Mastra.__registerFsAgents` — exactly how the bundler
+  injects an `agents/<name>/` directory. `instructions` is treated as the `instructions.md` body and
+  `tools` as the discovered `tools/*` map. Use it to prove a file-based agent runs identically to a
+  code-registered one through the real loop. Requires a static `instructions` string.
 
 ### Error-state scenarios
 
