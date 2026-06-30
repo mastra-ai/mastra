@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const execaMock = vi.hoisted(() => vi.fn());
@@ -9,6 +10,8 @@ vi.mock('execa', () => ({ execa: execaMock }));
 
 import { detectEntry, discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from '../install.js';
 import { loadPluginRegistry } from '../registry.js';
+
+const mastracodePackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 let tempDir: string | undefined;
 
@@ -119,7 +122,7 @@ describe('installLocalPlugin', () => {
     await expect(installLocalPlugin(pluginDir, 'project', { projectRoot, homeDir })).resolves.toBe('acme.local');
 
     expect(fs.realpathSync(path.join(pluginDir, 'node_modules', 'mastracode'))).toBe(
-      fs.realpathSync(path.resolve('..', 'mastracode')),
+      fs.realpathSync(mastracodePackageRoot),
     );
     expect(loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json'))).toEqual({
       disabledPlugins: [],

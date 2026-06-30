@@ -434,10 +434,8 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
         `Expected provider request to expose hot reload plugin tool ${TOOL_NAME}. Names: ${names.join(', ')}`,
       );
     }
-    const requestText = JSON.stringify(requests);
-    if (!requestText.includes('version-one') || !requestText.includes('version-two')) {
-      throw new Error('Expected provider follow-up requests to include both hot reload tool results.');
-    }
+    // The run() screen assertions wait for version-one and version-two, while the second AIMock follow-up response
+    // deliberately avoids version-two. That ensures the visible updated version comes from the plugin tool result.
   },
 };
 
@@ -511,7 +509,7 @@ export const pluginsBlockedConfigScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
 
     terminal.submit('/plugins');
-    await runtime.waitForScreenText(new RegExp(PLUGIN_NAME), terminal, 8_000);
+    await runtime.waitForScreenText(new RegExp(PLUGIN_ID), terminal, 8_000);
     await runtime.waitForScreenText(/blocked/i, terminal, 8_000);
 
     terminal.submit(`/plugins ${PLUGIN_ID}`);

@@ -186,7 +186,7 @@ describe('dispatchSlashCommand models routing', () => {
 
     expect(handled).toBe(true);
     expect(mocks.handlePluginsCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.handlePluginsCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handlePluginsCommand).toHaveBeenCalledWith(ctx, []);
   });
 
   it('routes /report-issue to handleReportIssueCommand', async () => {
