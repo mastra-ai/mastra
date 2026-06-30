@@ -1,5 +1,5 @@
 /**
- * Vercel Sandbox Provider
+ * Vercel Serverless Sandbox Provider
  *
  * Deploys code as Vercel serverless functions and executes commands
  * via HTTP invocation. Stateless — no persistent filesystem, no
@@ -20,9 +20,7 @@ import type {
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { getExecutorSource } from '../executor';
 
-const LOG_PREFIX = '[VercelSandbox]';
-
-let deprecatedNameWarned = false;
+const LOG_PREFIX = '[VercelServerlessSandbox]';
 
 const VERCEL_API_BASE = 'https://api.vercel.com';
 
@@ -40,7 +38,7 @@ function shellQuote(arg: string): string {
 // Options
 // =============================================================================
 
-export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
+export interface VercelServerlessSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Vercel API token. Falls back to VERCEL_TOKEN env var. */
   token?: string;
   /** Vercel team ID for team-scoped deployments. */
@@ -68,13 +66,10 @@ export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
 // Implementation
 // =============================================================================
 
-/**
- * @deprecated Will be renamed to `VercelServerlessSandbox` in a future release.
- */
-export class VercelSandbox extends MastraSandbox {
+export class VercelServerlessSandbox extends MastraSandbox {
   readonly id: string;
-  readonly name = 'VercelSandbox';
-  readonly provider = 'vercel';
+  readonly name = 'VercelServerlessSandbox';
+  readonly provider = 'vercel-serverless';
   status: ProviderStatus = 'pending';
 
   private readonly _token: string;
@@ -93,15 +88,10 @@ export class VercelSandbox extends MastraSandbox {
   private _protectionBypass: string | null = null;
   private _createdAt: Date | null = null;
 
-  constructor(options: VercelSandboxOptions = {}) {
-    super({ name: 'VercelSandbox' });
+  constructor(options: VercelServerlessSandboxOptions = {}) {
+    super({ name: 'VercelServerlessSandbox' });
 
-    if (!deprecatedNameWarned) {
-      deprecatedNameWarned = true;
-      console.warn('VercelSandbox will be renamed to VercelServerlessSandbox in a future release.');
-    }
-
-    this.id = `vercel-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    this.id = `vercel-serverless-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this._token = options.token || process.env.VERCEL_TOKEN || '';
     this._teamId = options.teamId;
     this._projectName = options.projectName;

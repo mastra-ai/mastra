@@ -102,6 +102,8 @@
     "@mastra/server": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
+    "@mastra/voice-deepgram": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "ai": "^6.0.176",
     "chalk": "^5.5.0",
