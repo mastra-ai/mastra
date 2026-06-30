@@ -7,7 +7,6 @@ import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
-import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
@@ -66,6 +65,7 @@ import {
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
+import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
@@ -1184,18 +1184,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messages: messageList.get.all.db(),
           });
 
-          if (readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager') && currentStep.tools) {
-            const bgPrompt = generateBackgroundTaskSystemPrompt(
-              currentStep.tools,
-              readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
-            );
-            inputMessages = inputMessages.map((message, index) => {
-              if (message.role === 'system' && index === 0) {
-                message.content = message.content + `\n\n${bgPrompt}`;
-              }
-              return message;
-            });
-          }
+          inputMessages = injectBackgroundTaskPrompt({
+            inputMessages,
+            backgroundTaskManager: readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager'),
+            tools: currentStep.tools,
+            agentBackgroundConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
+          });
 
           // Run `processLLMRequest` for any input processors that implement it.
           // This hook lets processors rewrite the outbound prompt transiently

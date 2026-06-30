@@ -6,6 +6,7 @@ import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
+import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
@@ -324,6 +325,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               autoResume: execOptions.autoResumeSuspendedTools,
               inputMessages,
               messages: messageList.get.all.db(),
+            });
+
+            // Tell the model about background-task capabilities when a
+            // background-task manager is wired in. Mirrors the non-durable
+            // agentic-execution step so background-enabled tools surface the
+            // same `_background` guidance to the LLM.
+            inputMessages = injectBackgroundTaskPrompt({
+              inputMessages,
+              backgroundTaskManager: registryEntry?.backgroundTaskManager,
+              tools: currentTools as Record<string, { background?: any; description?: string }> | undefined,
+              agentBackgroundConfig: registryEntry?.backgroundTasksConfig,
             });
 
             // Enable defer mode - step-finish won't auto-close the step span
