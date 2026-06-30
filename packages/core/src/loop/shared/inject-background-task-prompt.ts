@@ -1,9 +1,6 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import {
-  generateBackgroundTaskSystemPrompt,
-  type AgentBackgroundConfig,
-  type BackgroundTaskManager,
-} from '../../background-tasks';
+import type { AgentBackgroundConfig, BackgroundTaskManager } from '../../background-tasks';
+import { generateBackgroundTaskSystemPrompt } from '../../background-tasks';
 
 export interface InjectBackgroundTaskPromptOptions {
   /** Current LLM input messages — returned untouched when injection is skipped. */
