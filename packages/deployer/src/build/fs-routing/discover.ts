@@ -128,7 +128,11 @@ async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools
       continue;
     }
     const path = join(toolsDir, basename);
-    if ((await stat(path)).isDirectory()) {
+    // Use lstat so symlinks are detected (not followed). Skip symlinks and
+    // directories: a symlinked tool file could point anywhere on the build
+    // machine and be embedded into generated import code.
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink() || stats.isDirectory()) {
       continue;
     }
     tools.push({ key: toolKey(basename), path: slash(path) });
@@ -198,7 +202,14 @@ async function discoverSkills(skillsDir: string): Promise<DiscoveredFsSkill[]> {
       continue;
     }
     const path = join(skillsDir, basename);
-    const isDir = (await stat(path)).isDirectory();
+    // Use lstat so symlinks are detected (not followed). Skip symlinks: a
+    // symlinked skill module/markdown could point anywhere on the build machine
+    // and be bundled or inlined into the generated output.
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink()) {
+      continue;
+    }
+    const isDir = stats.isDirectory();
 
     // Packaged skill directory: <skill>/SKILL.md (+ references/)
     if (isDir) {

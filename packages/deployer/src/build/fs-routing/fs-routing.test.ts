@@ -170,6 +170,40 @@ describe('discoverFsAgents', () => {
     }
   });
 
+  it('skips symlinked tool modules so arbitrary files are not bundled', async () => {
+    // A file outside the agent dir a symlinked tool would otherwise import.
+    const secret = join(dir, 'secret.ts');
+    await writeFile(secret, `export default { secret: true };`);
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      tools: { 'real.ts': `export default {};` },
+    });
+    await symlink(secret, join(dir, 'agents', 'weather', 'tools', 'leak.ts'));
+
+    const tools = (await discoverFsAgents(dir))[0]!.tools;
+    expect(tools.map(t => t.key)).toEqual(['real']);
+  });
+
+  it('skips symlinked skill modules so arbitrary files are not bundled', async () => {
+    const secret = join(dir, 'secret-skill.ts');
+    await writeFile(secret, `export default {};`);
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      skills: { 'support.ts': `export default {};` },
+    });
+    await symlink(secret, join(dir, 'agents', 'weather', 'skills', 'leak.ts'));
+
+    const skills = (await discoverFsAgents(dir))[0]!.skills;
+    expect(skills).toHaveLength(1);
+    const skill = skills[0]!;
+    expect(skill.kind).toBe('module');
+    if (skill.kind === 'module') {
+      expect(skill.path).toMatch(/support\.ts$/);
+    }
+  });
+
   it('discovers a flat markdown skill, defaulting name to the filename', async () => {
     await writeAgent('weather', {
       config: `export default { model: 'openai/gpt-4o' };`,
