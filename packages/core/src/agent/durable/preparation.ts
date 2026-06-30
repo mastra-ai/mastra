@@ -603,6 +603,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // real (toolName, args) on each call. The boolean shadow on the
     // serialized workflow input is the cross-process fallback.
     requireToolApproval: execOptions?.requireToolApproval,
+    // Agent-level goal config (judge resolver, tools resolver, scorer).
+    // Non-serializable — cross-process engines skip goal evaluation.
+    goal: agent.__getGoalConfig(),
     cleanup: () => {},
   };
 

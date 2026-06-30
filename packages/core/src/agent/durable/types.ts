@@ -32,6 +32,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
+import type { GoalConfig } from '../types';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -610,6 +611,13 @@ export interface RunRegistryEntry {
    * Cross-process engines without this slot fall back to maxSteps only.
    */
   isTaskComplete?: AgentExecutionOptions['isTaskComplete'];
+  /**
+   * Agent-level goal configuration. Contains closures (judge resolver,
+   * tools resolver, scorer) that cannot survive the wire; the durable goal
+   * step reads this from the in-process registry. Cross-process engines
+   * without this slot simply skip goal evaluation.
+   */
+  goal?: GoalConfig;
   /**
    * Per-call global tool-approval policy. When `RequireToolApproval` is a
    * function it cannot be serialized into the workflow input, so the closure
