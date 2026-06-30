@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseCommandFile, scanCommandDirectory } from '../slash-command-loader.js';
+import { loadCustomCommands, parseCommandFile, scanCommandDirectory } from '../slash-command-loader.js';
 
 describe('slash command loader', () => {
   it('parses goal metadata from frontmatter', async () => {
@@ -30,5 +30,21 @@ describe('slash command loader', () => {
 
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({ name: 'review', goal: true });
+  });
+
+  it('loads plugin command directories after built-in custom command locations', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'mastracode-project-'));
+    const pluginCommandsDir = await mkdtemp(join(tmpdir(), 'mastracode-plugin-commands-'));
+    await writeFile(
+      join(pluginCommandsDir, 'alexandria.md'),
+      '---\ndescription: Ask Alexandria\n---\nAsk $ARGUMENTS\n',
+    );
+
+    const commands = await loadCustomCommands(projectDir, '.mastracode', [pluginCommandsDir]);
+
+    expect(commands.find(command => command.name === 'alexandria')).toMatchObject({
+      description: 'Ask Alexandria',
+      sourcePath: join(pluginCommandsDir, 'alexandria.md'),
+    });
   });
 });

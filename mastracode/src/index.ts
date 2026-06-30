@@ -71,6 +71,7 @@ import {
   saveSettings,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import { PluginManager } from './plugins/manager.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
@@ -144,6 +145,20 @@ function applyEffectiveDefaultsToModes(
   });
 }
 
+function addPluginToolsToModeAllowlists(
+  modes: AgentControllerMode[],
+  pluginToolNames: string[],
+): AgentControllerMode[] {
+  if (pluginToolNames.length === 0) return modes;
+  return modes.map(mode => {
+    if (!mode.availableTools) return mode;
+    return {
+      ...mode,
+      availableTools: Array.from(new Set([...mode.availableTools, ...pluginToolNames])),
+    };
+  });
+}
+
 export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
@@ -189,6 +204,10 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Disable plugin discovery/loading. Default: false */
+  disablePlugins?: boolean;
+  /** Override the plugin manager. Primarily useful for tests or embedding. */
+  pluginManager?: PluginManager;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
    * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
@@ -455,6 +474,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ? undefined
     : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
 
+  const pluginManager = config?.disablePlugins
+    ? undefined
+    : (config?.pluginManager ?? new PluginManager({ projectRoot: project.rootPath, configDir, homeDir }));
+  const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
+  const pluginTools = pluginManager?.getPluginTools() ?? {};
+
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
@@ -529,7 +554,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     workspace: undefined,
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage),
+    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
     hooks: createToolHooks(hookManager),
     scorers: {
       outcome: {
@@ -692,7 +717,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
-  const modes = applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
+  const modes = addPluginToolsToModeAllowlists(
+    applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    Object.keys(pluginTools),
+  );
   const defaultModeId =
     modes.find(mode => mode.metadata?.default === true)?.id ??
     modes.find(mode => mode.id === 'build')?.id ??
@@ -763,6 +791,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       projectPath: project.rootPath,
       projectName: project.name,
       gitBranch: project.gitBranch,
+      pluginSkillPaths: loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.skillPaths ?? []) : [])),
+      pluginCommandPaths: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' ? (plugin.commandPaths ?? []) : [],
+      ),
+      pluginInstructions: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
+      ),
       yolo: true,
       ...globalInitialState,
       ...config?.initialState,
@@ -810,6 +845,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     memory,
     mcpManager,
     hookManager,
+    pluginManager,
+    loadedPlugins,
+    pluginTools,
     signalsPubSub,
     authStorage,
     resolveModel,

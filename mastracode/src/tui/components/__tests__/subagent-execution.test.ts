@@ -66,6 +66,24 @@ describe('SubagentExecutionComponent', () => {
     expect(lines.some(l => l.includes('⋯'))).toBe(true);
   });
 
+  it('honors custom labels, icons, and activity height', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Answer question', mockTui, undefined, {
+      label: 'mastra',
+      maxActivityLines: 3,
+      icons: { running: '…', success: 'ok', error: 'bad' },
+    });
+    for (let i = 0; i < 5; i++) {
+      comp.addToolStart(`tool_${i}`, { value: `${i}` });
+    }
+    const lines = renderPlain(comp);
+    const rendered = lines.join('\n');
+
+    expect(rendered).toContain('mastra alexandria');
+    expect(rendered).toContain('… tool_4');
+    expect(rendered).toContain('2 more above');
+    expect(rendered).not.toContain('tool_0');
+  });
+
   it('marks tool calls as completed', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
     comp.addToolStart('search_content', { pattern: 'foo' });
@@ -75,6 +93,15 @@ describe('SubagentExecutionComponent', () => {
     expect(lines.some(l => l.includes('✓') && l.includes('search_content'))).toBe(true);
   });
 
+  it('uses available line width for long string args', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui);
+    comp.addToolStart('view', { path: '.sources/mastra/packages/core/src/agent/workflows/agent-execution-loop.ts' });
+    const rendered = renderPlain(comp).join('\n');
+
+    expect(rendered).toContain('.sources/mastra/packages/core/src/agent/workflows/agent');
+    expect(rendered).not.toContain('.sources/mastra/packages/core/src/agent/wor…');
+  });
+
   it('shows error status on tool call failure', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
     comp.addToolStart('search_content', { pattern: 'foo' });
@@ -82,6 +109,48 @@ describe('SubagentExecutionComponent', () => {
     const lines = renderPlain(comp);
 
     expect(lines.some(l => l.includes('✗') && l.includes('search_content'))).toBe(true);
+  });
+
+  it('keeps assistant text in chronological activity order with tools', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Answer question', mockTui);
+    comp.setText('First answer draft');
+    comp.addToolStart('find_files', { pattern: '**/CODE_OF_CONDUCT*' });
+    comp.addToolEnd('find_files', 'CODE_OF_CONDUCT.md', false);
+    comp.setText('First answer draft Final answer after lookup');
+
+    const rendered = renderPlain(comp).join('\n');
+
+    expect(rendered.indexOf('First answer draft')).toBeLessThan(rendered.indexOf('find_files'));
+    expect(rendered.indexOf('find_files')).toBeLessThan(rendered.indexOf('Final answer after lookup'));
+  });
+
+  it('does not repeat unchanged full text snapshots after tool calls', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Answer question', mockTui);
+    comp.setText('That initial grep only scanned a few directories.');
+    comp.addToolStart('execute_command', { command: 'rg -l package.json' });
+    comp.addToolEnd('execute_command', 'ok', false);
+    comp.setText('That initial grep only scanned a few directories.');
+    comp.addToolStart('execute_command', { command: 'find . -name package.json' });
+    comp.addToolEnd('execute_command', 'ok', false);
+    comp.setText('That initial grep only scanned a few directories.');
+
+    const rendered = renderPlain(comp).join('\n');
+
+    expect(rendered.match(/That initial grep only scanned a few directories\./g)).toHaveLength(1);
+    expect(rendered).toContain('rg -l package.json');
+    expect(rendered).toContain('find . -name package.json');
+  });
+
+  it('does not duplicate streamed assistant text as the expanded final result', () => {
+    const comp = new SubagentExecutionComponent('alexandria', 'Answer question', mockTui, undefined, {
+      expandOnComplete: true,
+    });
+    comp.setText('Final answer after lookup');
+    comp.finish(false, 5000, 'Final answer after lookup');
+
+    const rendered = renderPlain(comp).join('\n');
+
+    expect(rendered.match(/Final answer after lookup/g)).toHaveLength(1);
   });
 
   // ─── Default behavior: NO collapse ──────────────────────────────────────
@@ -266,6 +335,21 @@ describe('SubagentExecutionComponent', () => {
       expect(lines.length).toBeGreaterThan(1);
       expect(lines.some(l => l.includes('╭──'))).toBe(true);
       expect(lines.some(l => l.includes('Find usages'))).toBe(true);
+    });
+
+    it('keeps the latest activity visible when completed activity is capped', () => {
+      const comp = new SubagentExecutionComponent('alexandria', 'Answer a question', mockTui);
+      for (let i = 0; i < 20; i++) {
+        comp.addToolStart(`tool_${i}`, { path: `file-${i}.ts` });
+        comp.addToolEnd(`tool_${i}`, 'ok', false);
+      }
+      comp.finish(false, 5000);
+
+      const rendered = renderPlain(comp).join('\n');
+
+      expect(rendered).toContain('more above (ctrl+e to expand)');
+      expect(rendered).toContain('tool_19');
+      expect(rendered).not.toContain('tool_0');
     });
   });
 });

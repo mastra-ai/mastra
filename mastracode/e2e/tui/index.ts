@@ -73,6 +73,16 @@ import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
 import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
+import {
+  pluginsAssetsLoadingScenario,
+  pluginsBlockedConfigScenario,
+  pluginsCommandUiScenario,
+  pluginsGithubPollUpdateScenario,
+  pluginsLocalHotReloadScenario,
+  pluginsLocalToolScenario,
+  pluginsScaffoldInstallToolScenario,
+  pluginsStreamingToolOutputScenario,
+} from './plugins.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
@@ -209,6 +219,14 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
+  'plugins-local-tool': pluginsLocalToolScenario,
+  'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
+  'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
+  'plugins-blocked-config': pluginsBlockedConfigScenario,
+  'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
+  'plugins-streaming-tool-output': pluginsStreamingToolOutputScenario,
+  'plugins-assets-loading': pluginsAssetsLoadingScenario,
+  'plugins-command-ui': pluginsCommandUiScenario,
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,

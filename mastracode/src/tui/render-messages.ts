@@ -69,6 +69,16 @@ function getCurrentModeColor(state: TUIState): string | undefined {
   return typeof color === 'string' ? color : undefined;
 }
 
+function getTaskFromToolArgs(args: unknown, fallback: string): string {
+  if (args && typeof args === 'object') {
+    const question = (args as Record<string, unknown>).question;
+    if (typeof question === 'string' && question.trim()) return question;
+    const task = (args as Record<string, unknown>).task;
+    if (typeof task === 'string' && task.trim()) return task;
+  }
+  return fallback;
+}
+
 // =============================================================================
 // renderClearedTasksInline
 // =============================================================================
@@ -836,6 +846,32 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               state.chatContainer.addChild(askComponent);
               continue;
             }
+          }
+
+          const pluginRenderConfig = state.pluginManager?.getToolRenderConfig(content.name);
+          if (pluginRenderConfig?.type === 'subagent') {
+            const rawResult = toolResult?.type === 'tool_result' ? formatToolResult(toolResult.result) : undefined;
+            const isErr = toolResult?.type === 'tool_result' && toolResult.isError;
+            const subComponent = new SubagentExecutionComponent(
+              pluginRenderConfig.agentType ?? 'plugin',
+              getTaskFromToolArgs(content.args, content.name),
+              state.ui,
+              pluginRenderConfig.modelId,
+              {
+                collapseOnComplete: false,
+                expandOnComplete: state.quietMode,
+                forked: pluginRenderConfig.forked,
+                label: pluginRenderConfig.label,
+                maxActivityLines: pluginRenderConfig.maxActivityLines,
+                collapsedLines: pluginRenderConfig.collapsedLines,
+                colors: pluginRenderConfig.colors,
+                icons: pluginRenderConfig.icons,
+              },
+            );
+            subComponent.finish(isErr ?? false, 0, rawResult);
+            insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
+            state.allToolComponents.push(subComponent as any);
+            continue;
           }
 
           // Render the tool call

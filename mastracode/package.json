@@ -63,6 +63,16 @@
         "default": "./dist/headless.cjs"
       }
     },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.js"
+      },
+      "require": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
