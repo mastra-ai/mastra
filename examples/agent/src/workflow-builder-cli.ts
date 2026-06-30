@@ -240,8 +240,8 @@ function handleSseBlock(block: string): void {
 function truncatedJson(value: unknown): string {
   const s = JSON.stringify(value);
   if (s === undefined) return String(value);
-  if (s.length <= 400) return s;
-  return s.slice(0, 400) + `… (${s.length - 400} more bytes)`;
+  if (s.length <= 2000) return s;
+  return s.slice(0, 2000) + `… (${s.length - 2000} more bytes)`;
 }
 
 // ============================================================================

@@ -14,13 +14,48 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+/**
+ * Extract a JSON Schema from a Mastra tool's schema field. Tools created via
+ * `createTool({...})` wrap their Zod schemas with `toStandardSchema`, exposing
+ * `['~standard'].jsonSchema` as a `{ input(opts), output(opts) }` converter
+ * (see packages/schema-compat/src/standard-schema/adapters/zod-v3.ts:110-119).
+ * `direction` selects which side — pass 'input' for inputSchema, 'output' for
+ * outputSchema. Returns undefined if the schema is missing or not
+ * standard-schema-compliant — the workflow-builder agent then knows the tool's
+ * shape is opaque and must reshape via mapping.
+ */
+function extractJsonSchema(maybeSchema: unknown, direction: 'input' | 'output'): unknown | undefined {
+  try {
+    const s = maybeSchema as
+      | {
+          ['~standard']?: {
+            jsonSchema?: { input?: (opts: unknown) => unknown; output?: (opts: unknown) => unknown };
+          };
+        }
+      | undefined;
+    const converter = s?.['~standard']?.jsonSchema;
+    return converter?.[direction]?.({ target: 'draft-2020-12' });
+  } catch {
+    return undefined;
+  }
+}
+
 export const listAvailableAgentsTool = createTool({
   id: 'list-available-agents',
   description:
-    'Returns the agents currently registered on the Mastra instance. The agent ids returned here are the only valid values you can put in `{ type: "agent", agentId }` graph entries.',
+    'Returns the agents currently registered on the Mastra instance. The agent ids returned here are the only valid values you can put in `{ type: "agent", agentId }` graph entries. Each row includes `outputShape` so you know what fields the agent step will produce — read it instead of guessing.',
   inputSchema: z.object({}),
   outputSchema: z.object({
-    agents: z.array(z.object({ id: z.string(), description: z.string().optional() })),
+    agents: z.array(
+      z.object({
+        id: z.string(),
+        description: z.string().optional(),
+        // Literal string in v1 because the rehydrator drops agent-step options
+        // today (see packages/core/src/workflows/load-from-storage.ts:198-202).
+        // Phase 2: when structuredOutput round-trips, this becomes a JSON Schema.
+        outputShape: z.string(),
+      }),
+    ),
   }),
   execute: async (_input, { mastra }) => {
     if (!mastra) throw new Error('list-available-agents requires a Mastra context.');
@@ -28,7 +63,11 @@ export const listAvailableAgentsTool = createTool({
     return {
       agents: Object.entries(all)
         .filter(([id]) => id !== 'workflow-builder-agent')
-        .map(([id, a]: [string, any]) => ({ id, description: a?.description })),
+        .map(([id, a]: [string, any]) => ({
+          id,
+          description: a?.description,
+          outputShape: '{ text: string }',
+        })),
     };
   },
 });
@@ -36,10 +75,19 @@ export const listAvailableAgentsTool = createTool({
 export const listAvailableToolsTool = createTool({
   id: 'list-available-tools',
   description:
-    'Returns the tools currently registered on the Mastra instance. The tool ids returned here are the only valid values you can put in `{ type: "tool", toolId }` graph entries.',
+    'Returns the tools currently registered on the Mastra instance. The tool ids returned here are the only valid values you can put in `{ type: "tool", toolId }` graph entries. Each row includes `inputSchema` and `outputSchema` as JSON Schema — read them to know what fields the tool accepts and emits; never invent field names.',
   inputSchema: z.object({}),
   outputSchema: z.object({
-    tools: z.array(z.object({ id: z.string(), description: z.string().optional() })),
+    tools: z.array(
+      z.object({
+        id: z.string(),
+        description: z.string().optional(),
+        // JSON Schema objects. Optional because a tool may not declare a schema;
+        // in that case its shape is opaque and the agent must reshape via mapping.
+        inputSchema: z.any().optional(),
+        outputSchema: z.any().optional(),
+      }),
+    ),
   }),
   execute: async (_input, { mastra }) => {
     if (!mastra) throw new Error('list-available-tools requires a Mastra context.');
@@ -48,7 +96,12 @@ export const listAvailableToolsTool = createTool({
       tools: Object.entries(all)
         // Workflow-builder helper tools are noise to the agent — strip them.
         .filter(([id]) => !['list-available-agents', 'list-available-tools', 'save-workflow'].includes(id))
-        .map(([id, t]: [string, any]) => ({ id, description: t?.description })),
+        .map(([id, t]: [string, any]) => ({
+          id,
+          description: t?.description,
+          inputSchema: extractJsonSchema(t?.inputSchema, 'input'),
+          outputSchema: extractJsonSchema(t?.outputSchema, 'output'),
+        })),
     };
   },
 });
