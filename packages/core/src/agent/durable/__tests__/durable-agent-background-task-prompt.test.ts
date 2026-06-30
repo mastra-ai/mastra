@@ -32,9 +32,14 @@ describe('Bug 3: background-task system prompt on durable', () => {
 
   it('injects the background-task guidance into the leading system message', async () => {
     const promptSnapshots: Array<{ role: string; content: any }[]> = [];
+    let resolveCalled: () => void;
+    const calledPromise = new Promise<void>(r => {
+      resolveCalled = r;
+    });
     const mockModel = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         promptSnapshots.push(prompt as any);
+        resolveCalled();
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -80,7 +85,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
     });
 
     const { cleanup } = await durableAgent.stream('hi', { onChunk: () => {} });
-    await new Promise(r => setTimeout(r, 300));
+    await calledPromise;
     cleanup();
 
     expect(promptSnapshots.length).toBeGreaterThan(0);
@@ -97,9 +102,14 @@ describe('Bug 3: background-task system prompt on durable', () => {
 
   it('skips the injection when no background-task manager is wired in', async () => {
     const promptSnapshots: Array<{ role: string; content: any }[]> = [];
+    let resolveCalled: () => void;
+    const calledPromise = new Promise<void>(r => {
+      resolveCalled = r;
+    });
     const mockModel = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
         promptSnapshots.push(prompt as any);
+        resolveCalled();
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
@@ -142,7 +152,7 @@ describe('Bug 3: background-task system prompt on durable', () => {
     });
 
     const { cleanup } = await durableAgent.stream('hi', { onChunk: () => {} });
-    await new Promise(r => setTimeout(r, 300));
+    await calledPromise;
     cleanup();
 
     expect(promptSnapshots.length).toBeGreaterThan(0);

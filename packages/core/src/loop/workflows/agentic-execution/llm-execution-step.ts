@@ -1051,17 +1051,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   providerOptions: currentStep.providerOptions,
                   modelSettings: currentStep.modelSettings,
                   structuredOutput: currentStep.structuredOutput,
+                  workspace: currentStep.workspace,
                 },
                 processInputStepResult,
               );
-              currentStep.messageId = mergedStepInput.messageId;
-              currentStep.model = mergedStepInput.model;
-              currentStep.tools = mergedStepInput.tools as typeof currentStep.tools;
-              currentStep.toolChoice = mergedStepInput.toolChoice as typeof currentStep.toolChoice;
-              currentStep.activeTools = mergedStepInput.activeTools as typeof currentStep.activeTools;
-              currentStep.providerOptions = mergedStepInput.providerOptions;
-              currentStep.modelSettings = mergedStepInput.modelSettings;
-              currentStep.structuredOutput = mergedStepInput.structuredOutput;
+              // Object.assign mirrors the legacy behavior: every property the
+              // processor returned (including extras like `workspace`) lands on
+              // `currentStep`. This is the contract the regular path relied on
+              // before composeStepInput was extracted.
+              Object.assign(currentStep, mergedStepInput);
               executedStepModel =
                 currentStep.model.provider && currentStep.model.modelId
                   ? `${currentStep.model.provider}/${currentStep.model.modelId}`

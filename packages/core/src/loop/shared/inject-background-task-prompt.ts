@@ -1,7 +1,9 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
-import type { AgentBackgroundConfig } from '../../background-tasks';
-import { generateBackgroundTaskSystemPrompt } from '../../background-tasks';
-import type { BackgroundTaskManager } from '../../background-tasks';
+import {
+  generateBackgroundTaskSystemPrompt,
+  type AgentBackgroundConfig,
+  type BackgroundTaskManager,
+} from '../../background-tasks';
 
 export interface InjectBackgroundTaskPromptOptions {
   /** Current LLM input messages — returned untouched when injection is skipped. */
@@ -32,7 +34,7 @@ export function injectBackgroundTaskPrompt({
   tools,
   agentBackgroundConfig,
 }: InjectBackgroundTaskPromptOptions): LanguageModelV2Prompt {
-  if (!backgroundTaskManager || !tools) {
+  if (!backgroundTaskManager || !tools || agentBackgroundConfig?.disabled) {
     return inputMessages;
   }
 
@@ -41,9 +43,12 @@ export function injectBackgroundTaskPrompt({
     return inputMessages;
   }
 
+  // Return a new array AND new message objects — never mutate caller-owned
+  // prompt objects, otherwise reusing the same prompt later would
+  // accumulate duplicate background-task guidance.
   return inputMessages.map((message, index) => {
     if (message.role === 'system' && index === 0) {
-      message.content = message.content + `\n\n${bgPrompt}`;
+      return { ...message, content: message.content + `\n\n${bgPrompt}` };
     }
     return message;
   });

@@ -28,12 +28,15 @@ export function extractSuspendedToolsFromMessages(
 ): Array<Record<string, unknown>> {
   const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
   const suspendedToolsMessage = assistantMessages.find(message => {
-    const pendingOrSuspendedTools =
-      (message.content.metadata as { suspendedTools?: unknown; pendingToolApprovals?: unknown } | undefined)
-        ?.suspendedTools ||
-      (message.content.metadata as { suspendedTools?: unknown; pendingToolApprovals?: unknown } | undefined)
-        ?.pendingToolApprovals;
-    if (pendingOrSuspendedTools) return true;
+    const metadata = message.content.metadata as
+      | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
+      | undefined;
+    if (
+      (metadata?.suspendedTools && Object.keys(metadata.suspendedTools).length > 0) ||
+      (metadata?.pendingToolApprovals && Object.keys(metadata.pendingToolApprovals).length > 0)
+    ) {
+      return true;
+    }
     const dataToolSuspendedParts = message.content.parts?.filter(
       part =>
         (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
@@ -47,9 +50,13 @@ export function extractSuspendedToolsFromMessages(
   const metadata = suspendedToolsMessage.content.metadata as
     | { suspendedTools?: Record<string, unknown>; pendingToolApprovals?: Record<string, unknown> }
     | undefined;
-  let suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as
-    | Record<string, unknown>
-    | undefined;
+  // Merge both metadata buckets — the same assistant turn can declare both
+  // a suspended tool and a pending approval, and we should not lose one when
+  // the other exists.
+  let suspendedToolObj: Record<string, unknown> | undefined =
+    metadata && (metadata.suspendedTools || metadata.pendingToolApprovals)
+      ? { ...(metadata.suspendedTools ?? {}), ...(metadata.pendingToolApprovals ?? {}) }
+      : undefined;
 
   if (!suspendedToolObj) {
     suspendedToolObj = suspendedToolsMessage.content.parts

@@ -4,6 +4,10 @@ import type { RunProcessInputStepResult } from '../../processors';
 /**
  * Shape of the per-step LLM input fields that an input-processor (or
  * `prepareStep`) is allowed to override.
+ *
+ * Note: this interface lists the canonical fields, but the helper preserves
+ * any additional properties on the current step (e.g. `workspace` from
+ * `PrepareStepResult`) by spreading `current` first.
  */
 export interface StepInputFields {
   messageId: string;
@@ -14,6 +18,9 @@ export interface StepInputFields {
   providerOptions?: any;
   modelSettings?: any;
   structuredOutput?: any;
+  // Index signature so extra fields like `workspace` survive the merge
+  // without having to enumerate every loop-level option here.
+  [key: string]: any;
 }
 
 /**
@@ -36,24 +43,18 @@ export function composeStepInput(
   if (!processInputStepResult) {
     return current;
   }
-  // The runner always returns a fully-populated stepInput (initialized from
-  // the caller's args). `??` would behave identically here; we use plain
-  // assignment to preserve full replacement semantics for any field a
-  // processor set explicitly to a falsy-but-defined value.
+  // Spread `current` first so any extra fields (e.g. `workspace` from
+  // `PrepareStepResult`) survive the merge. Then overlay the processor
+  // result on top — this matches the original `Object.assign(currentStep,
+  // processInputStepResult)` semantics, where all keys present on the
+  // processor result fully replace the corresponding keys on the current
+  // step.
   return {
+    ...current,
+    ...processInputStepResult,
+    // Restore type-narrowed defaults for the canonical fields if the
+    // processor returned undefined for any of them.
     messageId: processInputStepResult.messageId ?? current.messageId,
     model: (processInputStepResult.model ?? current.model) as MastraLanguageModel,
-    tools: 'tools' in processInputStepResult ? processInputStepResult.tools : current.tools,
-    toolChoice: 'toolChoice' in processInputStepResult ? processInputStepResult.toolChoice : current.toolChoice,
-    activeTools:
-      'activeTools' in processInputStepResult ? processInputStepResult.activeTools : current.activeTools,
-    providerOptions:
-      'providerOptions' in processInputStepResult ? processInputStepResult.providerOptions : current.providerOptions,
-    modelSettings:
-      'modelSettings' in processInputStepResult ? processInputStepResult.modelSettings : current.modelSettings,
-    structuredOutput:
-      'structuredOutput' in processInputStepResult
-        ? processInputStepResult.structuredOutput
-        : current.structuredOutput,
   };
 }

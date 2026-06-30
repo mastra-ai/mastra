@@ -2,4 +2,10 @@
 '@mastra/core': patch
 ---
 
-Bring `DurableAgent` to behavioral parity with `Agent` on per-step LLM execution. Tools wired to `autoResumeSuspendedTools` now have the resume system-message rewritten on durable runs the same way regular runs do. Agents with a `BackgroundTaskManager` now have the background-task guidance prompt injected before the LLM call on the durable path. Per-step `model.supportedUrls` (including async resolvers), `downloadRetries` and `downloadConcurrency` flow through a single shared resolver so durable runs honor every model's URL policy. `LLM-call headers` (memory `x-thread-id` / `x-resource-id`, model-config headers, call-time `modelSettings.headers`) merge in the same order on both paths. `prepareStep` / input-processor results are applied identically on both paths — `modelSettings` is replaced rather than shallow-merged, matching the regular agent.
+`DurableAgent` now matches `Agent` for several per-step behaviors that were silently degraded on the durable path:
+
+- Tools suspended for human-in-the-loop now receive the same auto-resume system-message rewrite when `autoResumeSuspendedTools` is enabled.
+- Agents wired to a `BackgroundTaskManager` get the background-task guidance prompt injected before each LLM call.
+- Model `supportedUrls` (including async resolvers) is honored consistently for both regular and durable runs.
+- HTTP headers attached to LLM calls (memory routing, model-config, call-time `modelSettings.headers`) merge in a single documented order and are case-normalized so call-time values reliably override.
+- `prepareStep` and input-processor overrides — including `model`, `tools`, `activeTools`, `providerOptions`, `modelSettings`, `structuredOutput`, and `workspace` — apply identically on both paths.

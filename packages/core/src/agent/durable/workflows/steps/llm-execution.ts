@@ -237,9 +237,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepIndex = (inputData as any).stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
-            // Build structured output for AI SDK if configured
+            // Build structured output for AI SDK if configured. Held in a `let`
+            // because `composeStepInput` (driven by input processors / prepareStep)
+            // is allowed to replace `structuredOutput` for this iteration.
             const structuredOutputConfig = execOptions.structuredOutput;
-            const structuredOutput =
+            let structuredOutput =
               structuredOutputConfig?.schema && !structuredOutputConfig?.structuringModelConfig
                 ? {
                     schema: structuredOutputConfig.schema,
@@ -314,6 +316,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentActiveTools = merged.activeTools;
               currentProviderOptions = merged.providerOptions;
               currentModelSettings = merged.modelSettings;
+              structuredOutput = merged.structuredOutput;
             }
 
             // `downloadRetries` / `downloadConcurrency` are internal-only on the

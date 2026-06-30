@@ -41,10 +41,15 @@ export function mergeLlmCallHeaders({
   modelConfigHeaders,
   callTimeHeaders,
 }: MergeLlmCallHeadersInput): Record<string, string> | undefined {
-  const merged: Record<string, string> = {
-    ...(memoryHeaders ?? {}),
-    ...(modelConfigHeaders ?? {}),
-    ...(callTimeHeaders ?? {}),
-  };
+  // Lowercase keys before merging so later layers reliably override earlier
+  // ones for case-variant duplicates (HTTP header names are case-insensitive,
+  // e.g. `Authorization` vs `authorization`).
+  const merged: Record<string, string> = {};
+  for (const source of [memoryHeaders, modelConfigHeaders, callTimeHeaders]) {
+    if (!source) continue;
+    for (const [key, value] of Object.entries(source)) {
+      merged[key.toLowerCase()] = value;
+    }
+  }
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
