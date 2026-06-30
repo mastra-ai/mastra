@@ -1,5 +1,14 @@
 # @mastra/evals
 
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Eval scorers now receive the original user message for runs started through the agent subscription / `sendMessage` API. Previously `getUserMessageFromRunInput` returned an empty value for these runs, so scorers could not see what the user said (only `agent.stream` and `agent.generate` worked). ([#18546](https://github.com/mastra-ai/mastra/pull/18546))
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+
 ## 1.5.0
 
 ### Minor Changes

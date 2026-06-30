@@ -75,7 +75,6 @@ export type {
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
-const require = createRequire(import.meta.url);
 
 // Per MCP spec, only fallback to SSE for these status codes
 const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
@@ -119,7 +118,8 @@ function loadDatadogTracer(): DatadogTracerLike | null {
   }
 
   try {
-    return require('dd-trace') as DatadogTracerLike;
+    const req = createRequire(import.meta.url);
+    return req('dd-trace') as DatadogTracerLike;
   } catch {
     return null;
   }
@@ -139,8 +139,9 @@ function isDatadogTracerLikelyLoaded(): boolean {
   }
 
   try {
-    const resolvedPath = require.resolve('dd-trace');
-    return Boolean(require.cache[resolvedPath]);
+    const req = createRequire(import.meta.url);
+    const resolvedPath = req.resolve('dd-trace');
+    return Boolean(req.cache[resolvedPath]);
   } catch {
     return false;
   }

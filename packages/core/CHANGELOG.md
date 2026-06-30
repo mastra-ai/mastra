@@ -1,5 +1,44 @@
 # @mastra/core
 
+## 1.48.0-alpha.6
+
+### Minor Changes
+
+- Renamed the AgentController interval API. `heartbeatHandlers` is now `intervalHandlers`, the `HeartbeatHandler` type is now `IntervalHandler`, and the `removeHeartbeat()`/`stopHeartbeats()` methods are now `removeInterval()`/`stopIntervals()`. This better reflects that these are fixed-interval background tasks, not liveness pings, and is distinct from the unrelated `mastra.heartbeats` scheduled-agent feature. ([#18665](https://github.com/mastra-ai/mastra/pull/18665))
+
+  **Before**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    heartbeatHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeHeartbeat({ id: 'sync' });
+  await controller.stopHeartbeats();
+  ```
+
+  **After**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    intervalHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeInterval({ id: 'sync' });
+  await controller.stopIntervals();
+  ```
+
+### Patch Changes
+
+- add agent reference to processor execution context ([#18651](https://github.com/mastra-ai/mastra/pull/18651))
+
+- Fix in-memory observability `listTraces` ignoring the `startExclusive` and `endExclusive` flags on `startedAt`/`endedAt` filters. Exclusive date-range bounds now drop a trace that sits exactly on the boundary, matching the pg/libsql adapters (and the in-memory log/metric filters). Closes #18635. ([#18675](https://github.com/mastra-ai/mastra/pull/18675))
+
+- Fix in-memory scores store `listScoresByScorerId` returning scores in insertion order instead of newest first. The pg and libsql adapters order by `createdAt DESC`, and the sibling `listScoresBySpan` already does, so the in-memory store now sorts the same way before paginating. Closes #18618. ([#18619](https://github.com/mastra-ai/mastra/pull/18619))
+
+- Fixed gs:// and s3:// file/image references being downloaded and corrupted into data: URIs during durable agent execution. The durable LLM step now forwards the model's supportedUrls (matching standard execution), so URLs a provider fetches natively (e.g. Vertex gs://) pass through as references instead of failing with "Failed to download asset" or being base64-wrapped. ([#18649](https://github.com/mastra-ai/mastra/pull/18649))
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb)]:
+  - @mastra/schema-compat@1.3.2-alpha.1
+
 ## 1.48.0-alpha.5
 
 ### Minor Changes

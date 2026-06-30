@@ -12,6 +12,8 @@ import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
 import { getPlansDir } from '../utils/plans.js';
+import { SandboxFilesystem } from '../web/github/sandbox-filesystem.js';
+import { reattachProjectSandbox } from '../web/github/sandbox.js';
 import { GOAL_JUDGE_READONLY_TOOLS, MASTRACODE_WORKSPACE_TOOLS } from './tool-availability.js';
 
 // =============================================================================
@@ -128,9 +130,84 @@ function detectPackageRunner(projectPath: string): string | undefined {
   return 'npx --yes';
 }
 
-export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
+/**
+ * Build (or reuse) a sandbox-backed Workspace for a GitHub project. The sandbox
+ * is reattached by its persisted provider id and a `SandboxFilesystem` is layered
+ * over the in-sandbox checkout so file tools and command tools share one VM.
+ */
+async function getSandboxWorkspace({
+  githubProjectId,
+  sandboxId,
+  workdir,
+  worktreePath,
+  mastra,
+}: {
+  githubProjectId: string;
+  sandboxId: string;
+  workdir: string;
+  worktreePath?: string;
+  mastra?: Mastra;
+}): Promise<Workspace> {
+  // Bind the workspace to the active worktree when one is set, so file tools and
+  // command tools operate inside the feature branch's working tree rather than
+  // the base checkout. Falls back to the repo root when no worktree is active.
+  const boundWorkdir = worktreePath || workdir;
+
+  // Include the sandbox id *and* worktree path in the reuse key: a new sandbox
+  // (e.g. the previous one expired) or a different worktree must each get a
+  // fresh Workspace/ProcessManager instead of reusing one bound to a stale
+  // sandbox or the wrong working tree.
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}`;
+
+  // Reuse the existing remote workspace if already registered (preserves the
+  // reattached sandbox + ProcessManager state across re-opens).
+  try {
+    const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
+    if (existing) {
+      existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+      return existing;
+    }
+  } catch {
+    // Not registered yet.
+  }
+
+  const sandbox = await reattachProjectSandbox(sandboxId);
+  const filesystem = new SandboxFilesystem({ sandbox, workdir: boundWorkdir });
+
+  return new Workspace({
+    id: workspaceId,
+    name: 'Mastra Code Sandbox Workspace',
+    filesystem,
+    sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
+    tools: MASTRACODE_WORKSPACE_TOOLS,
+  });
+}
+
+export async function getDynamicWorkspace({
+  requestContext,
+  mastra,
+}: {
+  requestContext: RequestContext;
+  mastra?: Mastra;
+}) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
+
+  // GitHub/cloud-sandbox-backed project: the repo lives inside a remote sandbox,
+  // not on the server host. Reattach to the already-provisioned + materialized
+  // sandbox (the SPA called `.../ensure` first, persisting sandboxId/workdir on
+  // controller state) and build a sandbox-backed Workspace. LSP/host skill paths
+  // are skipped for these workspaces (follow-up).
+  if (state?.githubProjectId && state.sandboxId && state.sandboxWorkdir) {
+    return getSandboxWorkspace({
+      githubProjectId: state.githubProjectId,
+      sandboxId: state.sandboxId,
+      workdir: state.sandboxWorkdir,
+      worktreePath: state.worktreePath,
+      mastra,
+    });
+  }
+
   const rawProjectPath = state?.projectPath;
 
   if (!rawProjectPath) {
@@ -204,9 +281,9 @@ export async function getGoalJudgeTools({
   requestContext: RequestContext;
   mastra?: Mastra;
 }): Promise<ToolsInput | undefined> {
-  let workspace: Workspace<LocalFilesystem, LocalSandbox>;
+  let workspace: Workspace;
   try {
-    workspace = getDynamicWorkspace({ requestContext, mastra });
+    workspace = await getDynamicWorkspace({ requestContext, mastra });
   } catch {
     return undefined;
   }

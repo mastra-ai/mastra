@@ -8,6 +8,7 @@ import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import type { ExportedSpan, SpanType } from '../../../../observability';
 import { ChunkFrom } from '../../../../stream/types';
+import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
@@ -189,17 +190,52 @@ export function createDurableToolCallStep() {
         };
       }
 
-      // 1. Resolve the tool from global registry first, then Mastra
+      // 1. Resolve the tool from global registry first, then by provider-tool
+      // model-facing name (e.g. `web_search` resolves to `webSearch` when the
+      // provider tool advertises the snake-case name), then by id, then fall
+      // back to the Mastra-wide tool registry (exact name, provider-tool
+      // name, then by id). Mirrors the non-durable tool-call step.
       const registryEntry = globalRunRegistry.get(runId);
       let tool = registryEntry?.tools?.[toolName];
+      let mastraTools: Record<string, any> | undefined;
+
+      if (!tool) {
+        tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
+      }
+
+      if (!tool) {
+        tool = Object.values(registryEntry?.tools ?? {}).find(
+          (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+        ) as typeof tool;
+      }
 
       if (!tool) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
+      if (!tool && mastra) {
+        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
+        if (mastraTools) {
+          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
+          if (!tool) {
+            tool = Object.values(mastraTools).find(
+              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+            ) as typeof tool;
+          }
+        }
+      }
+
+      // Resolve the key the tool is registered under for activeTools filtering.
+      // Prefer the per-run registryEntry key (exact name then identity match),
+      // and fall back to the Mastra-wide registry when the tool was resolved
+      // there. Without this fallback, a globally-registered tool like
+      // `webSearch` invoked by its model-facing name `web_search` would be
+      // hidden whenever `activeTools` was set, because the key from
+      // registryEntry.tools would be `undefined`.
       const toolKey = registryEntry?.tools?.[toolName]
         ? toolName
-        : Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0];
+        : (Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
+          Object.entries(mastraTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0]);
       const effectiveActiveTools = activeTools === null ? undefined : (activeTools ?? agentOptions.activeTools);
       const activeToolKey = toolKey ?? toolName;
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);

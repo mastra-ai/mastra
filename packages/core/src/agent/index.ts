@@ -21,6 +21,7 @@ export {
 } from './heartbeat';
 export * from './agent';
 export * from './utils';
+export * from './fs-routing';
 
 // Note: DurableAgent is NOT re-exported here to avoid circular dependencies.
 // Import from '@mastra/core/agent/durable' instead:
