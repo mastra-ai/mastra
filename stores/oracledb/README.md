@@ -14,6 +14,21 @@ npm install @mastra/oracledb
 - Oracle Database 23ai or later when using vector search
 - A database user with permission to create the Mastra tables and indexes, unless schema initialization is managed separately
 
+## Driver Modes
+
+`@mastra/oracledb` uses node-oracledb Thin mode by default. Thin mode connects directly to Oracle Database and does not require a separate Oracle Client or Oracle Instant Client installation. No workspace configuration change is needed.
+
+To use Thick mode features, install compatible Oracle Client libraries and initialize node-oracledb before creating an `OracleStore`, an `OracleVector`, or any Oracle connection pool. Applications that import `oracledb` directly should declare it as a direct dependency using a version compatible with `@mastra/oracledb`.
+
+```typescript
+import oracledb from 'oracledb';
+
+// macOS or Windows
+oracledb.initOracleClient({ libDir: '/path/to/oracle/instantclient' });
+```
+
+On Linux, configure the system library search path and call `initOracleClient()` without `libDir`. All Oracle connections in a Node.js process use the same mode. See the [node-oracledb initialization guide](https://node-oracledb.readthedocs.io/en/v6.10.0/user_guide/initialization.html) for platform-specific setup.
+
 ## Usage
 
 ### Storage
@@ -276,15 +291,7 @@ It also provides:
 
 ### Monorepo setup notes
 
-**1. Allow native builds** — `oracledb` requires a native Node.js addon. The monorepo defaults `oracledb: false` in `pnpm-workspace.yaml` to avoid building it for contributors who don't need Oracle. Change it to `true` before running `pnpm install`:
-
-```yaml
-# pnpm-workspace.yaml
-allowBuilds:
-  oracledb: true
-```
-
-Without this, `pnpm install` completes silently but the driver fails to load at runtime.
+**1. Use the default Thin mode** — The monorepo keeps the optional `oracledb` install lifecycle disabled. Unit and integration tests use Thin mode, so `pnpm install` and the OracleDB test commands do not require a manual `pnpm-workspace.yaml` change or an Oracle Client installation.
 
 **2. Build workspace dependencies first** — The integration tests depend on built artifacts from `@mastra/core`. Run this from the monorepo root before the first test run:
 

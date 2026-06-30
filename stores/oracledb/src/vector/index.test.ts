@@ -151,6 +151,131 @@ describe('OracleVector vector memory support', () => {
       (vector as any).createVectorIndex(connection, 'memory_messages', 'cosine', { type: 'hnsw' }),
     ).rejects.toThrow(/VECTOR_MEMORY_SIZE|Vector Pool|ORA-51962/i);
   });
+
+  it('keeps createIndex retryable when an HNSW build exhausts the Vector Pool', async () => {
+    type RegistryRow = {
+      indexName: string;
+      tableName: string;
+      dimension: number;
+      metric: string;
+      indexType: string;
+      vectorFormat: string;
+      accuracy: number;
+    };
+
+    const ora51962 = Object.assign(
+      new Error('ORA-51962: The vector memory area is out of space for the current container.'),
+      { errorNum: 51962 },
+    );
+    const duplicateObject = Object.assign(new Error('ORA-00955: name is already used by an existing object'), {
+      errorNum: 955,
+    });
+    let registryRow: RegistryRow | null = null;
+    let tableExists = false;
+    let metadataIndexExists = false;
+    let metadataIndexAttempts = 0;
+    let failVectorBuild = true;
+    let vectorIndexAttempts = 0;
+
+    const execute = vi.fn(async (sql: string, binds: Record<string, unknown> = {}) => {
+      if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+        return { rows: registryRow ? [registryRow] : [] };
+      }
+      if (sql.includes('FROM all_tables')) {
+        return { rows: tableExists ? [{ exists: 1 }] : [] };
+      }
+      if (sql.includes('CREATE TABLE "MASTRA_VEC_RETRYABLE_INDEX"')) {
+        tableExists = true;
+        return { rows: [] };
+      }
+      if (sql.includes('MERGE INTO "MASTRA_VECTOR_INDEXES"')) {
+        registryRow = {
+          indexName: String(binds.index_name),
+          tableName: String(binds.table_name),
+          dimension: Number(binds.dimension),
+          metric: String(binds.metric),
+          indexType: String(binds.index_type),
+          vectorFormat: String(binds.vector_format),
+          accuracy: Number(binds.accuracy),
+        };
+        return { rows: [], rowsAffected: 1 };
+      }
+      if (sql.includes('CREATE INDEX')) {
+        metadataIndexAttempts += 1;
+        if (metadataIndexExists) throw duplicateObject;
+        metadataIndexExists = true;
+        return { rows: [] };
+      }
+      if (sql.includes('CREATE VECTOR INDEX')) {
+        vectorIndexAttempts += 1;
+        if (failVectorBuild) throw ora51962;
+        return { rows: [] };
+      }
+      if (sql.includes('UPDATE "MASTRA_VECTOR_INDEXES"')) {
+        if (!registryRow) throw new Error('registry row missing before index-config update');
+        registryRow = {
+          ...registryRow,
+          metric: String(binds.metric),
+          indexType: String(binds.index_type),
+          accuracy: Number(binds.accuracy),
+        };
+        return { rows: [], rowsAffected: 1 };
+      }
+      return { rows: [], rowsAffected: 1 };
+    });
+    const connection = {
+      execute,
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector } = createVectorWithConnection(connection);
+    const createOptions = {
+      indexName: 'retryable_index',
+      dimension: 3,
+      metric: 'cosine' as const,
+      metadataIndexes: ['tenant_id'],
+      indexConfig: { type: 'hnsw' as const, accuracy: 91 },
+    };
+
+    await expect(vector.createIndex(createOptions)).rejects.toThrow(/VECTOR_MEMORY_SIZE|Vector Pool|ORA-51962/i);
+
+    expect(registryRow).toMatchObject({
+      indexName: 'retryable_index',
+      tableName: 'MASTRA_VEC_RETRYABLE_INDEX',
+      indexType: 'none',
+      accuracy: 95,
+    });
+    const firstAttemptSql = execute.mock.calls.map(call => String(call[0]));
+    const tableCreatePosition = firstAttemptSql.findIndex(sql =>
+      sql.includes('CREATE TABLE "MASTRA_VEC_RETRYABLE_INDEX"'),
+    );
+    const registryWritePosition = firstAttemptSql.findIndex(sql => sql.includes('MERGE INTO "MASTRA_VECTOR_INDEXES"'));
+    const metadataIndexPosition = firstAttemptSql.findIndex(sql => sql.includes('CREATE INDEX'));
+    const vectorIndexPosition = firstAttemptSql.findIndex(sql => sql.includes('CREATE VECTOR INDEX'));
+    expect(tableCreatePosition).toBeGreaterThan(-1);
+    expect(registryWritePosition).toBeGreaterThan(tableCreatePosition);
+    expect(metadataIndexPosition).toBeGreaterThan(registryWritePosition);
+    expect(vectorIndexPosition).toBeGreaterThan(metadataIndexPosition);
+    expect(firstAttemptSql.some(sql => sql.includes('UPDATE "MASTRA_VECTOR_INDEXES"'))).toBe(false);
+
+    failVectorBuild = false;
+    await expect(vector.createIndex(createOptions)).resolves.toBeUndefined();
+
+    expect(vectorIndexAttempts).toBe(2);
+    expect(metadataIndexAttempts).toBe(2);
+    expect(registryRow).toMatchObject({ indexType: 'hnsw', accuracy: 91 });
+    expect(execute.mock.calls.filter(call => String(call[0]).includes('CREATE TABLE "MASTRA_VEC_RETRYABLE_INDEX"'))).toHaveLength(
+      1,
+    );
+    const updateCall = execute.mock.calls.find(call => String(call[0]).includes('UPDATE "MASTRA_VECTOR_INDEXES"'));
+    expect(updateCall?.[1]).toMatchObject({
+      indexName: 'retryable_index',
+      metric: 'cosine',
+      index_type: 'hnsw',
+      accuracy: 91,
+    });
+    expect(connection.commit).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('OracleVector hot path SQL shape', () => {

@@ -142,7 +142,8 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
       const normalizedFormat = normalizeVectorFormat(vectorFormat ?? this.defaultVectorFormat);
       const normalizedMetric = normalizeMetric(metric ?? defaultMetricForFormat(normalizedFormat));
       const mergedConfig = this.mergeIndexConfig(indexConfig);
-      const builtConfig = buildIndex ? mergedConfig : this.mergeIndexConfig({ type: 'none' });
+      const unbuiltConfig = this.mergeIndexConfig({ type: 'none' });
+      const builtConfig = buildIndex ? mergedConfig : unbuiltConfig;
       validateDimension(dimension);
       validateVectorFormatDimension(normalizedFormat, dimension);
       validateMetricForFormat(normalizedMetric, normalizedFormat);
@@ -158,7 +159,8 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
             this.assertCompatibleExistingIndex(existing, logicalIndexName, dimension, normalizedMetric, normalizedFormat);
           } else {
             await this.createVectorTable(connection, logicalIndexName, dimension, normalizedFormat);
-            await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, builtConfig);
+            await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, unbuiltConfig);
+            this.clearIndexMetadata(logicalIndexName);
           }
 
           await this.createMetadataIndexes(
@@ -170,7 +172,7 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
 
           if (buildIndex && mergedConfig.type !== 'none') {
             const createdIndex = await this.createVectorIndex(connection, logicalIndexName, normalizedMetric, mergedConfig, tableName);
-            if (!createdIndex && !vectorIndexRegistryConfigMatches(existing, normalizedMetric, mergedConfig)) {
+            if (!createdIndex && (!tableExists || !vectorIndexRegistryConfigMatches(existing, normalizedMetric, mergedConfig))) {
               throw vectorIndexAlreadyExistsError('CREATE_INDEX', logicalIndexName, existing);
             }
             if (createdIndex) {
@@ -219,6 +221,8 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
         }
 
         await this.createVectorTable(connection, logicalIndexName, dimension, normalizedFormat);
+        await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, unbuiltConfig);
+        this.clearIndexMetadata(logicalIndexName);
         await this.createMetadataIndexes(
           connection,
           logicalIndexName,
@@ -233,8 +237,8 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
               indexType: mergedConfig.type,
             });
           }
+          await this.updateRegistryIndexConfig(connection, logicalIndexName, normalizedMetric, mergedConfig);
         }
-        await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, builtConfig);
         this.cacheIndexMetadata(logicalIndexName, {
           indexName: logicalIndexName,
           tableName,

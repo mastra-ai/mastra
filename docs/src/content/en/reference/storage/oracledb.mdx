@@ -18,6 +18,27 @@ It implements Mastra's composite storage interface, so one `OracleStore` instanc
 npm install @mastra/oracledb@latest
 ```
 
+## Driver modes
+
+`@mastra/oracledb` uses node-oracledb Thin mode by default. Thin mode connects directly to Oracle Database, so the machine running your application does not need a separate Oracle Client or Oracle Instant Client installation.
+
+### Thin mode
+
+No driver initialization is required. Install `@mastra/oracledb` and create the store using your Oracle Database credentials and connect string, as shown below.
+
+### Thick mode
+
+Use Thick mode only when your application needs Oracle Client functionality that is not available in Thin mode. Install compatible Oracle Client libraries, declare `oracledb` as a direct application dependency, and initialize it before creating an `OracleStore`, `OracleVector`, or Oracle connection pool:
+
+```ts
+import oracledb from 'oracledb'
+
+// macOS or Windows
+oracledb.initOracleClient({ libDir: '/path/to/oracle/instantclient' })
+```
+
+On Linux, configure the system library search path and call `initOracleClient()` without `libDir`. All Oracle connections in a Node.js process use the same mode. See the [node-oracledb initialization guide](https://node-oracledb.readthedocs.io/en/v6.10.0/user_guide/initialization.html) for platform-specific setup.
+
 ## Usage
 
 ```ts

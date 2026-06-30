@@ -1,3 +1,4 @@
+import oracledb from 'oracledb';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -23,6 +24,10 @@ const password = process.env.ORACLE_DATABASE_PASSWORD;
 const connectString = process.env.ORACLE_DATABASE_CONNECT_STRING;
 
 describe('Oracle shared connection helpers', () => {
+  it('loads node-oracledb in its default Thin mode', () => {
+    expect(oracledb.thin).toBe(true);
+  });
+
   it('uses external pools without owning their lifecycle', async () => {
     const connectionClose = vi.fn(async () => undefined);
     const pool = {
