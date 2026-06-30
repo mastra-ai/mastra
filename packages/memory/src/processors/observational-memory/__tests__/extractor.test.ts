@@ -14,6 +14,7 @@ import {
   parseExtractedValues,
   parseExtractorValue,
   resolveExtractors,
+  slugifyExtractorName,
   stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
@@ -35,6 +36,10 @@ describe('Extractor', () => {
     });
 
     expect(extractor.mode).toBe('structured');
+  });
+
+  it('trims repeated slug separators without regex backtracking', () => {
+    expect(slugifyExtractorName('---Project---Status---')).toBe('project-status');
   });
 
   it('rejects empty, duplicate, and reserved slugs', () => {

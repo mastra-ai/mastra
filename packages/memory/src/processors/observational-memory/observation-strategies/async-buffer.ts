@@ -153,14 +153,15 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
     const newTitle = processed.threadTitle?.trim();
-    if ((newTitle && newTitle.length >= 3) || processed.extractedValues) {
+    const hasValidThreadTitle = !!newTitle && newTitle.length >= 3;
+    if (hasValidThreadTitle || processed.extractedValues) {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
         const oldTitle = thread.title?.trim();
-        const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
+        const shouldUpdateThreadTitle = hasValidThreadTitle && newTitle !== oldTitle;
         const previousOmMetadata = getThreadOMMetadata(thread.metadata);
         const newMetadata = setThreadOMMetadata(thread.metadata, {
-          threadTitle: processed.threadTitle,
+          ...(hasValidThreadTitle ? { threadTitle: processed.threadTitle } : {}),
           extracted: {
             ...(previousOmMetadata?.extracted ?? {}),
             ...(filterUserExtractedValues(processed.extractedValues) ?? {}),

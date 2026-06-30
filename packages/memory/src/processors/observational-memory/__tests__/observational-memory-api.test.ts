@@ -12,7 +12,7 @@
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
-import { getThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -740,6 +740,43 @@ describe('buffer()', () => {
       const status = await om.getStatus({ threadId });
       expect(status.bufferedChunkCount).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  it('preserves existing OM thread title when buffering only persists extracted values', async () => {
+    const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user info.' });
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observationExtract: [userInfo],
+      observerModel: createMockObserverModel(
+        `<observations>
+* User said their name is Tyler.
+</observations>
+<user-info>
+name: Tyler
+</user-info>`,
+      ),
+    });
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: 'buffer-resource',
+        title: 'Existing thread title',
+        metadata: setThreadOMMetadata({}, { threadTitle: 'Existing OM title' }),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.buffer({ threadId });
+
+    expect(result.buffered).toBe(true);
+    const thread = await storage.getThreadById({ threadId });
+    expect(getThreadOMMetadata(thread?.metadata)).toMatchObject({
+      threadTitle: 'Existing OM title',
+      extracted: { 'user-info': 'name: Tyler' },
+    });
   });
 
   it('should call beforeBuffer callback with candidate messages', async () => {

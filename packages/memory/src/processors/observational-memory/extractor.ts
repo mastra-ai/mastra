@@ -68,19 +68,43 @@ export function isBuiltInExtractorSlug(slug: string): slug is BuiltInExtractorSl
 }
 
 export function slugifyExtractorName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/['"`]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  let normalized = '';
+  let previousWasSeparator = false;
+
+  for (const char of name.trim().toLowerCase()) {
+    const code = char.charCodeAt(0);
+    const isLetter = code >= 97 && code <= 122;
+    const isNumber = code >= 48 && code <= 57;
+    if (isLetter || isNumber) {
+      normalized += char;
+      previousWasSeparator = false;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      continue;
+    }
+    if (!previousWasSeparator && normalized.length > 0) {
+      normalized += '-';
+      previousWasSeparator = true;
+    }
+  }
+
+  return normalized.endsWith('-') ? normalized.slice(0, -1) : normalized;
 }
 
 function assertValidSlug(slug: string, name: string): void {
   if (!slug) {
     throw new Error(`Extractor name "${name}" must produce a non-empty slug.`);
   }
-  if (!/^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$/.test(slug)) {
+  const first = slug.charCodeAt(0);
+  const last = slug.charCodeAt(slug.length - 1);
+  const startsWithLetter = first >= 97 && first <= 122;
+  const endsWithLetterOrNumber = (last >= 97 && last <= 122) || (last >= 48 && last <= 57);
+  const hasOnlySlugCharacters = [...slug].every(char => {
+    const code = char.charCodeAt(0);
+    return (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || char === '-';
+  });
+  if (!startsWithLetter || !endsWithLetterOrNumber || !hasOnlySlugCharacters) {
     throw new Error(`Extractor name "${name}" produced invalid slug "${slug}".`);
   }
 }
