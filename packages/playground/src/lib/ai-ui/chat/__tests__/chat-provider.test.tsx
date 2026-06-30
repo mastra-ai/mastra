@@ -196,7 +196,6 @@ describe('ChatProvider', () => {
             threadId="thread-1"
             initialMessages={[]}
             agentVersionId="v-42"
-            threadMetadata={{ mastra: { agentVersionId: 'v-42' } }}
             requestContext={{ tenant: 'acme' }}
           >
             <SendOnMount text="hi" />
@@ -214,12 +213,9 @@ describe('ChatProvider', () => {
     expect(isRecord(ctx) ? ctx.agentVersionId : undefined).toBe('v-42');
     expect(isRecord(ctx) ? ctx.tenant : undefined).toBe('acme');
 
+    // The version rides on requestContext only; the thread is referenced by id.
     const memory = captured[0].body.memory;
-    const memoryThread = isRecord(memory) ? memory.thread : undefined;
-    expect(isRecord(memoryThread) ? memoryThread.id : undefined).toBe('thread-1');
-    const metadata = isRecord(memoryThread) ? memoryThread.metadata : undefined;
-    const mastra = isRecord(metadata) ? metadata.mastra : undefined;
-    expect(isRecord(mastra) ? mastra.agentVersionId : undefined).toBe('v-42');
+    expect(isRecord(memory) ? memory.thread : undefined).toBe('thread-1');
   });
 
   it('routes to the generate endpoint when chatWithGenerate is set', async () => {

@@ -72,7 +72,6 @@ function AgentChatRegion({
   requestContextSchema,
 }: AgentChatRegionProps) {
   const agentVersionId = useEditorPreviewVersionId({ agentId, urlVersionId });
-  const threadMetadata = useMemo(() => (agentVersionId ? { mastra: { agentVersionId } } : undefined), [agentVersionId]);
 
   return (
     <AgentChat
@@ -80,7 +79,6 @@ function AgentChatRegion({
       agentName={agentName}
       modelVersion={modelVersion}
       agentVersionId={agentVersionId}
-      threadMetadata={threadMetadata}
       supportsMemory={supportsMemory}
       threadId={threadId}
       memory={memory}

@@ -57,7 +57,6 @@ export interface ChatProps {
   agentName?: string;
   modelVersion?: string;
   agentVersionId?: string;
-  threadMetadata?: Record<string, unknown>;
   threadId: string;
   initialMessages?: MastraDBMessage[];
   initialLegacyMessages?: UIMessageWithMetadata[];

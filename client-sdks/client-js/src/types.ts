@@ -1398,12 +1398,7 @@ export interface CreateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
-  /**
-   * Whether the created version is auto-published (activated) immediately.
-   * Defaults to `true` so the Agent Builder's save-goes-live flow is preserved.
-   * The version editor passes `false` to keep the save a draft until the user
-   * explicitly publishes.
-   */
+  /** Auto-publish (activate) the created version immediately. Defaults to `true`; pass `false` to keep the save a draft. */
   publishOnSave?: boolean;
 }
 
@@ -1464,12 +1459,7 @@ export interface UpdateStoredAgentParams {
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
-  /**
-   * Whether the version created by this update is auto-published (activated)
-   * immediately. Defaults to `true` so the Agent Builder's save-goes-live flow
-   * is preserved. The version editor passes `false` to keep the save a draft
-   * until the user explicitly publishes.
-   */
+  /** Auto-publish (activate) the version created by this update. Defaults to `true`; pass `false` to keep the save a draft. */
   publishOnSave?: boolean;
 }
 

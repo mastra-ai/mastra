@@ -683,8 +683,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Publish the initial version so the agent is immediately usable.
       // Without this, the thin record stays as status='draft' with activeVersionId=null,
       // which makes the agent unreachable via status='published' resolution.
-      // Callers that want a draft (the version editor's "Save") pass
-      // publishOnSave: false to skip activation until they explicitly publish.
+      // The version editor's "Save" passes publishOnSave: false to stay a draft until explicit publish.
       if (publishOnSave !== false) {
         const { versions } = await agentsStore.listVersions({ agentId: id, perPage: 1 });
         const initialVersion = versions[0];
@@ -921,8 +920,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // deleting the prior latest version, leaving a single rolling snapshot.
       // When the user explicitly provides a changeMessage we treat that as a
       // commit and keep the new version as a discrete history entry.
-      // The version editor opts out (publishOnSave: false) so each draft save
-      // is preserved as a distinct snapshot the user can publish or discard.
+      // The version editor opts out (publishOnSave: false) so each draft save stays a distinct snapshot.
       const isCodeSource = mastra.getEditor?.()?.getSource?.() === 'code';
       if (isCodeSource && autoVersionResult.versionCreated && !changeMessage && publishOnSave !== false) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 2 });
@@ -936,9 +934,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // visible in list views. The Agent Builder UI has no separate "Publish"
       // button, so without this every edit after creation would create orphaned
       // draft versions that never surface in the list.
-      // The version editor splits Save from Publish and opts out with
-      // publishOnSave: false, keeping the new version a draft until the user
-      // explicitly publishes it.
+      // The version editor splits Save from Publish and opts out (publishOnSave: false) to keep the version a draft.
       if (autoVersionResult.versionCreated && publishOnSave !== false) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];

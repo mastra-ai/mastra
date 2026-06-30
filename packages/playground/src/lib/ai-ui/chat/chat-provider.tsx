@@ -43,7 +43,6 @@ export function ChatProvider({
   requestContext,
   modelVersion,
   agentVersionId,
-  threadMetadata,
   supportsMemory,
 }: Readonly<{ children: ReactNode }> & ChatProps) {
   const { settings: tracingSettings } = useTracingSettings();
@@ -103,7 +102,6 @@ export function ChatProvider({
   } = useChat({
     agentId,
     threadId,
-    threadMetadata,
     initialMessages,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
@@ -246,7 +244,6 @@ export function ChatProvider({
     agentId,
     requestContext,
     agentVersionId,
-    threadMetadata,
     threadId,
     modelSettingsArgs,
     chatWithNetwork,

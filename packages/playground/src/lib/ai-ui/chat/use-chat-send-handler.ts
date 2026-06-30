@@ -57,7 +57,6 @@ const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined =>
 interface SendDeps {
   requestContext?: Record<string, unknown>;
   agentVersionId?: string;
-  threadMetadata?: Record<string, unknown>;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
   chatWithNetwork?: boolean;
@@ -71,7 +70,6 @@ interface UseChatSendHandlerArgs {
   agentId: string;
   requestContext?: Record<string, unknown>;
   agentVersionId?: string;
-  threadMetadata?: Record<string, unknown>;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
   chatWithNetwork?: boolean;
@@ -118,7 +116,6 @@ export const useChatSendHandler = ({
   agentId,
   requestContext,
   agentVersionId,
-  threadMetadata,
   threadId,
   modelSettingsArgs,
   chatWithNetwork,
@@ -147,7 +144,6 @@ export const useChatSendHandler = ({
   const sendDepsRef = useRef<SendDeps>({
     requestContext,
     agentVersionId,
-    threadMetadata,
     threadId,
     modelSettingsArgs,
     chatWithNetwork,
@@ -159,7 +155,6 @@ export const useChatSendHandler = ({
   sendDepsRef.current = {
     requestContext,
     agentVersionId,
-    threadMetadata,
     threadId,
     modelSettingsArgs,
     chatWithNetwork,
@@ -249,7 +244,6 @@ export const useChatSendHandler = ({
             mode: 'network',
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
-            threadMetadata: deps.threadMetadata,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
             signal: controller.signal,
@@ -270,7 +264,6 @@ export const useChatSendHandler = ({
             mode: 'generate',
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
-            threadMetadata: deps.threadMetadata,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
             signal: controller.signal,
@@ -285,7 +278,6 @@ export const useChatSendHandler = ({
             mode: 'stream',
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
-            threadMetadata: deps.threadMetadata,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
             tracingOptions: deps.tracingOptions,
