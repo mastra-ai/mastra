@@ -298,19 +298,6 @@ export type SendAgentNotificationSignalOptions<OUTPUT = unknown> = Extract<
  */
 export type AgentNotificationConfig = {
   deliveryPolicy?: NotificationDeliveryPolicyConfig;
-  /**
-   * Resolves stream options for dispatching a deferred notification to an idle
-   * thread. Called by the notification dispatcher when a previously-deferred
-   * notification becomes due and the target thread is idle.
-   *
-   * Return the same shape you would pass as `streamOptions` inside
-   * `ifIdle` when calling `sendNotificationSignal` directly — typically
-   * includes `requestContext`, `memory`, and model settings.
-   */
-  getNotificationStreamOptions?: (target: {
-    resourceId: string;
-    threadId: string;
-  }) => Record<string, unknown> | Promise<Record<string, unknown> | undefined> | undefined;
 };
 
 /**

@@ -1,5 +1,50 @@
 # @mastra/next
 
+## 0.2.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+  - @mastra/server@1.48.0-alpha.5
+  - @mastra/hono@1.5.3-alpha.5
+
+## 0.2.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+  - @mastra/server@1.48.0-alpha.4
+  - @mastra/hono@1.5.3-alpha.4
+
+## 0.2.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`e05dade`](https://github.com/mastra-ai/mastra/commit/e05dade21c3e2551893ad939e6028cdafd84a1b2), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/server@1.48.0-alpha.3
+  - @mastra/hono@1.5.3-alpha.3
+
+## 0.2.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+  - @mastra/server@1.48.0-alpha.2
+  - @mastra/hono@1.5.3-alpha.2
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`8e9c0fb`](https://github.com/mastra-ai/mastra/commit/8e9c0fb48fd58da2efcdff2cf1202ee41092c315)]:
+  - @mastra/core@1.48.0-alpha.1
+  - @mastra/server@1.48.0-alpha.1
+  - @mastra/hono@1.5.3-alpha.1
+
 ## 0.2.2-alpha.0
 
 ### Patch Changes

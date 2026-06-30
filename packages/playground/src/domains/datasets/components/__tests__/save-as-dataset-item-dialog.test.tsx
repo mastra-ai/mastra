@@ -2,14 +2,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type {
-  ButtonHTMLAttributes,
-  ChangeEvent,
-  HTMLAttributes,
-  PropsWithChildren,
-  ReactNode,
-  SelectHTMLAttributes,
-} from 'react';
+import type { ChangeEvent, HTMLAttributes, PropsWithChildren, ReactNode, SelectHTMLAttributes } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
@@ -28,32 +21,15 @@ type CodeEditorProps = {
 // thin seam so this suite can focus on the dialog's async-seeding logic. The
 // data hooks below are driven through the real @mastra/client-js + React Query
 // stack via MSW.
-vi.mock('@mastra/playground-ui', () => {
-  const SideDialogRoot = ({ isOpen, children }: PropsWithChildren<{ isOpen: boolean }>) =>
-    isOpen ? <div>{children}</div> : null;
-
-  const SideDialog = Object.assign(SideDialogRoot, {
-    Top: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    Content: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    Header: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    Heading: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
-  });
-
-  return {
-    Button: ({ variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
-      <button {...props} />
-    ),
-    Select: ({ children }: PropsWithChildren<SelectHTMLAttributes<HTMLSelectElement>>) => <div>{children}</div>,
-    SelectTrigger: ({ children }: PropsWithChildren<HTMLAttributes<HTMLButtonElement>>) => (
-      <button type="button">{children}</button>
-    ),
-    SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
-    SelectContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    SelectItem: ({ children }: PropsWithChildren<{ value: string }>) => <div>{children}</div>,
-    SideDialog,
-    toast: { error: vi.fn(), success: vi.fn() },
-  };
-});
+vi.mock('@mastra/playground-ui/components/Select', () => ({
+  Select: ({ children }: PropsWithChildren<SelectHTMLAttributes<HTMLSelectElement>>) => <div>{children}</div>,
+  SelectTrigger: ({ children }: PropsWithChildren<HTMLAttributes<HTMLButtonElement>>) => (
+    <button type="button">{children}</button>
+  ),
+  SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
+  SelectContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
+  SelectItem: ({ children }: PropsWithChildren<{ value: string }>) => <div>{children}</div>,
+}));
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -77,12 +53,6 @@ vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
       value={value ?? ''}
       onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
     />
-  ),
-}));
-
-vi.mock('@mastra/playground-ui/components/Label', () => ({
-  Label: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLLabelElement>>) => (
-    <label {...props}>{children}</label>
   ),
 }));
 

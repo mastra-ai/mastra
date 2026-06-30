@@ -23,6 +23,21 @@ export function parseModelRouterId(routerId: string, gatewayPrefix?: string): { 
     };
   }
 
+  // Provider-equals-gateway: a gateway whose provider id is the same as its
+  // gateway id (e.g. amazon-bedrock) uses a 2-part router id (gateway/model),
+  // because there is no separate provider segment to namespace. Catalog ids
+  // for such gateways are always two parts (model ids contain no slashes).
+  if (gatewayPrefix && idParts.length === 2 && idParts[0] === gatewayPrefix) {
+    const modelId = idParts[1];
+    if (!modelId) {
+      throw new Error(`Expected format ${gatewayPrefix}/model, but got ${routerId}`);
+    }
+    return {
+      providerId: gatewayPrefix,
+      modelId,
+    };
+  }
+
   // Standard 3-part format for other prefixed gateways (Netlify, etc.)
   if (gatewayPrefix && idParts.length < 3) {
     throw new Error(

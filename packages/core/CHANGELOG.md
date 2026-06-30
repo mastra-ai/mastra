@@ -1,5 +1,166 @@
 # @mastra/core
 
+## 1.48.0-alpha.5
+
+### Minor Changes
+
+- **Added** heartbeats: schedule an agent to run on a recurring cron, either inside an existing conversation thread or on its own. ([#18184](https://github.com/mastra-ai/mastra/pull/18184))
+
+  A heartbeat fires a prompt to an agent on a schedule. When it has a thread, the run is delivered into that thread as a normal agent signal, so anything watching the thread sees it like any other message; without a thread, the agent just runs in isolation. Each heartbeat has its own id and an optional `name`, so one agent or thread can have several heartbeats with different schedules and prompts. The id is generated for you, or you can pass your own `id` to `create` for a stable handle (it's normalized to `hb_<slug>`). Heartbeats are persisted, so they keep firing across process restarts with no extra setup.
+
+  ```ts
+  const hb = await mastra.heartbeats.create({
+    agentId: 'chef',
+    name: 'morning-checkin',
+    threadId,
+    resourceId,
+    cron: '*/5 * * * *',
+    prompt: 'Check in on the user',
+    ifActive: { behavior: 'discard' }, // skip if the user is mid-conversation
+    ifIdle: { behavior: 'wake' }, // wake the agent if the thread is idle
+  });
+
+  // Threadless: run the agent on a cron with no conversation.
+  await mastra.heartbeats.create({
+    agentId: 'chef',
+    cron: '0 * * * *',
+    prompt: 'Run the hourly summary',
+  });
+
+  await mastra.heartbeats.list({ agentId: 'chef' });
+  await mastra.heartbeats.get(hb.id);
+  await mastra.heartbeats.update(hb.id, { prompt: 'check in gently' });
+  await mastra.heartbeats.pause(hb.id);
+  await mastra.heartbeats.resume(hb.id);
+  await mastra.heartbeats.run(hb.id); // fire once now
+  await mastra.heartbeats.delete(hb.id);
+  ```
+
+  The same CRUD is available over HTTP through `@mastra/server` (under `/api/heartbeats`) and as top-level methods on the `@mastra/client-js` client (`client.createHeartbeat`, `client.getHeartbeat`, `client.listHeartbeats`, etc.).
+
+  **Lifecycle hooks**
+
+  React to heartbeat runs via `heartbeat` on the `Mastra` constructor. It's a single hook bundle that runs for every agent's heartbeats; each hook receives the firing `agentId` so you can branch on it. `prepare` resolves fire-time parameters (for example, creating a fresh thread per fire), and `onFinish` / `onError` / `onAbort` mirror `agent.stream`.
+
+  ```ts
+  new Mastra({
+    // ...
+    heartbeat: {
+      // Return overrides, `null` to skip this fire, or `undefined` to use defaults.
+      prepare: async ({ agentId, heartbeat }) => {
+        if (agentId === 'chef' && heartbeat.name === 'daily-digest') {
+          return { threadId: await createDailyThread(), resourceId: 'slack:U095PUH0FKL' };
+        }
+      },
+      onFinish: ({ agentId, outcome, result, heartbeat }) => {
+        metrics.record({ agentId, heartbeat: heartbeat.name, outcome });
+      },
+      onError: ({ agentId, error, phase, heartbeat }) => {
+        alerts.send(`heartbeat ${agentId}/${heartbeat.name} failed in ${phase}: ${error.message}`);
+      },
+    },
+  });
+  ```
+
+  **Signal shaping**
+
+  A heartbeat fire surfaces to the agent as a signal. By default it uses the `notification` type and renders as `<heartbeat>…</heartbeat>`; override `signalType` and `tagName` to change either. `ifActive` and `ifIdle` mirror the `agent.sendSignal` options shape (`{ behavior, attributes }`, plus `streamOptions` on `ifIdle`) and stay JSON-serializable so they persist with the schedule. `ifIdle.streamOptions` currently accepts `requestContext`, which is rehydrated onto the woken run. Top-level `attributes` are rendered on the signal tag, and top-level `providerOptions` are merged into the signal payload on every fire.
+
+  ```ts
+  await mastra.heartbeats.create({
+    agentId: 'chef',
+    threadId,
+    resourceId,
+    cron: '*/5 * * * *',
+    prompt: 'Check in on the user',
+    tagName: 'check-in', // renders as <check-in>…</check-in>
+    attributes: { source: 'cron' },
+    providerOptions: { openai: { store: false } },
+    ifIdle: {
+      behavior: 'wake',
+      streamOptions: { requestContext: { locale: 'en-US' } },
+    },
+  });
+  ```
+
+- Added storage-backed discovery of suspended agent runs, so human-in-the-loop approval UIs can recover a pending run after a page refresh or server restart. ([#17898](https://github.com/mastra-ai/mastra/pull/17898))
+
+  `agent.listSuspendedRuns()` lists runs waiting on a tool-call approval or on a tool that called `suspend()`. Unlike the in-memory `getActiveThreadRunId()`, it reads from storage, so it works after a restart and across multiple server instances:
+
+  ```ts
+  const { runs, total } = await agent.listSuspendedRuns({ threadId, resourceId });
+  if (runs[0]) {
+    // runs[0].toolCalls -> [{ toolCallId, toolName, args, requiresApproval }]
+    await agent.approveToolCall({ runId: runs[0].runId, toolCallId: runs[0].toolCalls[0].toolCallId });
+  }
+  ```
+
+  Supports `threadId`/`resourceId`/date filters and pagination, mirroring `listWorkflowRuns()`. The same surface is exposed over HTTP as `GET /agents/:agentId/suspended-runs` and on the client SDK as `agent.listSuspendedRuns()`; server-enforced request-context values take precedence over client query parameters, so clients cannot list runs outside their scope.
+
+  `sendToolApproval()` now falls back to this storage-backed discovery when no active run is found in memory for the thread, so approvals keep working after a restart. If several suspended runs match, it throws an error asking for a `toolCallId` to disambiguate.
+
+  **Why:** approval UIs previously had no public way to recover a suspended run after a refresh or restart, forcing apps to parse internal workflow snapshots.
+
+## 1.48.0-alpha.4
+
+### Patch Changes
+
+- Bring `InngestAgent` (Inngest-backed durable agent) to parity with `DurableAgent` for per-call execution options, abort handling, idle-aware resume, and `generate()`. ([#18615](https://github.com/mastra-ai/mastra/pull/18615))
+
+  `InngestAgent.stream()` and `resume()` now accept the same execution-option surface as `DurableAgent`, including `stopWhen`, `activeTools`, `structuredOutput`, `versions`, `system`, `disableBackgroundTasks`, `tracingOptions`, `actor`, `transform`, `prepareStep`, `isTaskComplete`, `delegation`, function-form `requireToolApproval`, and the lifecycle callbacks `onAbort` / `onIterationComplete`. Closure-shaped options (`prepareStep`, `transform`, function-form `isTaskComplete` / `requireToolApproval`, `stopWhen` callbacks) continue to work in-process; they degrade after a worker hop the same way they do for in-memory `DurableAgent`.
+
+  ```ts
+  const result = await inngestAgent.stream(messages, {
+    runId: 'run-1',
+    abortSignal: controller.signal,
+    stopWhen: stepCountIs(5),
+    onIterationComplete: ({ iteration }) => console.log('done', iteration),
+  });
+
+  // Cancel a live run from the caller
+  result.abort();
+
+  // Resume and drive the run to completion in a single call
+  await inngestAgent.resume({ runId: 'run-1', resumeData, untilIdle: true });
+
+  // Durable equivalents of Agent.generate / resumeGenerate
+  const out = await inngestAgent.generate(messages, { runId: 'run-2' });
+  const resumed = await inngestAgent.resumeGenerate({ runId: 'run-2', resumeData });
+  ```
+
+  `@mastra/core` re-exports `globalRunRegistry` and `runResumeDurableStreamUntilIdle` from `@mastra/core/agent/durable` so durable-agent integrations can share the same registry and idle-wrapper plumbing.
+
+- Amazon Bedrock models now appear under their own `amazon-bedrock/<model>` provider in the model picker instead of the `mastracode/amazon-bedrock/<model>` namespace. Bedrock is resolved through a dedicated Amazon Bedrock gateway that authenticates with the AWS credential chain (SigV4) and surfaces models from the public models.dev catalog. Saved model selections using the previous `mastracode/amazon-bedrock/...` IDs are still resolved at runtime, so existing config keeps working. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+- Fixed custom model gateways being overridden by default gateways. GatewayManager now deduplicates gateways by ID (first-wins) so custom gateways take precedence over defaults. Narrowed the auth-availability check to only swallow expected missing-credential errors instead of all errors, so real gateway failures surface during debugging. ([#18602](https://github.com/mastra-ai/mastra/pull/18602))
+
+## 1.48.0-alpha.3
+
+### Patch Changes
+
+- Fixed thread metadata being lost when a processor or working memory writes to it during an agent run. The thread is re-saved when the run finishes, and it was using a stale in-memory snapshot that overwrote any metadata written mid-run via updateThread. The agent now re-reads the latest persisted thread before that save, so mid-run metadata is preserved. Affects all storage backends (Postgres, LibSQL, and others). Fixes #16216. ([#18152](https://github.com/mastra-ai/mastra/pull/18152))
+
+- Fix in-memory workflow storage `getWorkflowRunById` returning `null` when `workflowName` is omitted. `workflowName` is optional in the storage contract and the pg/libsql adapters match by `runId` alone when it is not provided, but the in-memory store always compared `workflow_name === workflowName`, which never matched for an undefined name. It now matches by `runId`, only filters by `workflowName` when provided, and returns the most recent run for parity with the persistent adapters. Closes #18585. ([#18586](https://github.com/mastra-ai/mastra/pull/18586))
+
+- Fixed 'Type instantiation is excessively deep' (TS2589) errors that occurred when defining workflows with Zod schemas. Workflow and step type inference is now significantly faster and no longer causes TypeScript to crash or report depth errors. ([#18608](https://github.com/mastra-ai/mastra/pull/18608))
+
+- Updated dependencies [[`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2-alpha.0
+
+## 1.48.0-alpha.2
+
+### Patch Changes
+
+- Reduce repeated schema work during sub-agent tool conversion for more stable memory usage. ([#18566](https://github.com/mastra-ai/mastra/pull/18566))
+
+## 1.48.0-alpha.1
+
+### Patch Changes
+
+- fix: prevent partial gateway sync from corrupting provider registry ([#18545](https://github.com/mastra-ai/mastra/pull/18545))
+
+- Fixed notification signal delivery to idle threads not including ifIdle with streamOptions. When GitHub notifications or heartbeats wake an idle agent thread, the request context (containing model selection) was missing, causing 'No model selected' errors. Added getNotificationStreamOptions callback to AgentNotificationConfig so the notification dispatcher can resolve stream options for deferred notifications. ([#18549](https://github.com/mastra-ai/mastra/pull/18549))
+
 ## 1.48.0-alpha.0
 
 ### Minor Changes

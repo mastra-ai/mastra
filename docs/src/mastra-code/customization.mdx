@@ -148,15 +148,15 @@ const { controller } = await createMastraCode({
 
 This is equivalent to setting `.mastracode/database.json` but allows configuration at the code level.
 
-## Custom heartbeat handlers
+## Custom interval handlers
 
 Replace or extend the default background tasks:
 
-```typescript title="src/custom-heartbeats.ts"
+```typescript title="src/custom-intervals.ts"
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  heartbeatHandlers: [
+  intervalHandlers: [
     {
       id: 'sync-config',
       intervalMs: 60_000,
@@ -168,7 +168,7 @@ const { controller } = await createMastraCode({
 })
 ```
 
-Heartbeat handlers run on a fixed interval. They start when `controller.init()` is called and stop when `controller.destroy()` is called.
+Interval handlers run on a fixed interval. They start when `controller.init()` is called and stop when `controller.destroy()` is called.
 
 ## Building a custom TUI
 

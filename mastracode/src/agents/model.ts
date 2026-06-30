@@ -2,6 +2,7 @@ import type { AgentControllerRequestContext } from '@mastra/core/agent-controlle
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { loadSettings } from '../onboarding/settings.js';
+import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import {
   MASTRA_GATEWAY_PREFIX,
@@ -46,6 +47,15 @@ export function createMastraCodeModelCatalogProvider(gateway: MastraModelGateway
 }
 
 /**
+ * Placeholder for future model ID normalization.
+ * Currently returns the input unchanged, but exists as a seam
+ * for aliasing, casing fixes, or validation in the future.
+ */
+export function resolveModelId(modelId: string): string {
+  return modelId;
+}
+
+/**
  * Resolve a model ID to the correct provider instance.
  * Shared by the main agent, observer, and reflector.
  *
@@ -61,13 +71,39 @@ export function resolveModel(
   reloadAuthStorage();
   const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
-  const normalizedModelId = stripMastraGatewayPrefix(modelId);
+  // Bedrock was previously cataloged under the MastraCode gateway namespace
+  // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
+  // standalone `amazon-bedrock/<model>` form so they resolve through the
+  // dedicated Bedrock gateway.
+  const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
+  const normalizedInput = modelId.startsWith(bedrockLegacyPrefix)
+    ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
+    : modelId;
+  const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
+  const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');
   const bareModelId = modelParts.join('/');
   if (!providerId || !bareModelId) {
     throw new Error(`Invalid model id: ${modelId}`);
   }
+
+  if (providerId === AMAZON_BEDROCK_GATEWAY_ID) {
+    const bedrockGateway = createAmazonBedrockGateway();
+    const routerId = `${AMAZON_BEDROCK_GATEWAY_ID}/${bareModelId}`;
+    const auth = bedrockGateway.resolveAuth({
+      gatewayId: AMAZON_BEDROCK_GATEWAY_ID,
+      providerId: AMAZON_BEDROCK_GATEWAY_ID,
+      modelId: bareModelId,
+      routerId,
+    });
+    return bedrockGateway.resolveLanguageModel({
+      providerId: AMAZON_BEDROCK_GATEWAY_ID,
+      modelId: bareModelId,
+      apiKey: auth?.apiKey ?? '',
+      headers,
+    });
+  }
+
   const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
   const mgApiKey = MastraCodeGateway.getMemoryGatewayApiKey();

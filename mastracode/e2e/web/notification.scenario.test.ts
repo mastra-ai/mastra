@@ -38,7 +38,7 @@ describe('web scenario: notification', () => {
         // Verify transcript has both the notification-driven response and
         // the transcript state reflects the notification was processed.
         const state = driver.state();
-        const assistantEntries = state.entries.filter(e => e.kind === 'assistant');
+        const assistantEntries = state.entries.filter(e => e.kind === 'message' && e.message.role === 'assistant');
         expect(assistantEntries.length).toBeGreaterThan(0);
       },
     });
@@ -62,7 +62,7 @@ describe('web scenario: notification', () => {
         await driver.waitForText('received the notification', 20_000);
 
         const state = driver.state();
-        expect(state.entries.some(e => e.kind === 'assistant')).toBe(true);
+        expect(state.entries.some(e => e.kind === 'message' && e.message.role === 'assistant')).toBe(true);
       },
     });
   });
