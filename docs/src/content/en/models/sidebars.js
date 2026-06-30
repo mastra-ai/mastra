@@ -578,6 +578,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sakana',
+          label: 'Sakana AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/sarvam',
           label: 'Sarvam AI',
         },

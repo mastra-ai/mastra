@@ -2154,6 +2154,7 @@ export type ProviderModelsMap = {
     'kimi-k2.7-code-highspeed',
   ];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
+  readonly sakana: readonly ['fugu', 'fugu-ultra', 'fugu-ultra-20260615'];
   readonly deepinfra: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
@@ -2173,6 +2174,7 @@ export type ProviderModelsMap = {
     'meta-llama/Llama-4-Scout-17B-16E-Instruct',
     'moonshotai/Kimi-K2.5',
     'moonshotai/Kimi-K2.6',
+    'moonshotai/Kimi-K2.7-Code',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.6',
@@ -2307,6 +2309,7 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-6',
+    'claude-sonnet-5',
   ];
   readonly 'tencent-coding-plan': readonly [
     'glm-5',
@@ -3407,7 +3410,6 @@ export type ProviderModelsMap = {
     'openrouter/bodybuilder',
     'openrouter/free',
     'openrouter/fusion',
-    'openrouter/owl-alpha',
     'openrouter/pareto-code',
     'perceptron/perceptron-mk1',
     'perplexity/sonar',
@@ -4582,6 +4584,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4-5',
     'anthropic/claude-sonnet-4-5-20250929',
     'anthropic/claude-sonnet-4-6',
+    'anthropic/claude-sonnet-5',
     'gemini/gemini-2.5-flash',
     'gemini/gemini-2.5-flash-image',
     'gemini/gemini-2.5-flash-lite',
@@ -4590,6 +4593,7 @@ export type ProviderModelsMap = {
     'gemini/gemini-3-pro-image',
     'gemini/gemini-3.1-flash-image',
     'gemini/gemini-3.1-flash-lite',
+    'gemini/gemini-3.1-flash-lite-image',
     'gemini/gemini-3.1-pro-preview',
     'gemini/gemini-3.1-pro-preview-customtools',
     'gemini/gemini-3.5-flash',

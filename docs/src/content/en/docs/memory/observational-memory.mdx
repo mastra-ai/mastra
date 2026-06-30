@@ -179,6 +179,120 @@ OM uses fast local token estimation for this thresholding work. Text is estimate
 
 The Observer can also see attachments in the history it reviews. OM keeps readable placeholders like `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript for readability, and forwards the actual attachment parts alongside the text. Image-like `file` parts are upgraded to image inputs for the Observer when possible, while non-image attachments are forwarded as file parts with normalized token counting. This applies to both normal thread observation and batched resource-scope observation.
 
+### Extractors
+
+Use extractors when you want OM to persist specific values alongside observations. Built-in values such as **current task**, **suggested response**, and **thread title** use the same extraction pipeline as custom values.
+
+The following example extracts a compact user profile from observations:
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Extractor, Memory } from '@mastra/memory'
+import { z } from 'zod'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      observation: {
+        extract: [
+          new Extractor({
+            name: 'User profile',
+            instructions: 'Extract stable user profile facts that should be remembered.',
+            schema: z.object({
+              preferredName: z.string().optional(),
+              timezone: z.string().optional(),
+              tools: z.array(z.string()).optional(),
+            }),
+          }),
+        ],
+      },
+    },
+  },
+})
+
+export const agent = new Agent({
+  name: 'assistant',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  memory,
+})
+```
+
+Adding a `schema` makes the extractor run as a follow-up structured output request. Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector response.
+
+```typescript title="src/mastra/agents/agent.ts"
+new Extractor({
+  name: 'Mood',
+  instructions: 'Extract the user mood as a short phrase.',
+})
+```
+
+By default, OM shows the last extracted value to the extractor on later runs. Set `includePreviousExtraction: false` when the Observer should not see the previous value.
+
+```typescript title="src/mastra/agents/agent.ts"
+new Extractor({
+  name: 'Latest blocker',
+  instructions: 'Extract any blockers the agent is running into.',
+  includePreviousExtraction: false,
+})
+```
+
+Use dynamic `instructions` or `schema` functions when an extractor needs runtime context, such as the active memory instance or request context:
+
+```typescript title="src/mastra/agents/agent.ts"
+new Extractor({
+  name: 'Workspace summary',
+  instructions: ({ memory }) =>
+    memory ? 'Extract workspace facts for this memory instance.' : 'Extract workspace facts.',
+})
+```
+
+### Working memory updates
+
+Use `observationalMemory.observation.manageWorkingMemory` to let the Observer manage working memory automatically. The main agent no longer needs to call the working memory tool while it handles the user request, so working memory updates don't depend on the agent remembering to make them.
+
+This also keeps working memory prompt-cache friendly. Working memory normally lives in the system prompt, so updates can invalidate the prompt cache. OM-managed working memory defaults `workingMemory.useStateSignals` to `true`, which moves working memory into state signals instead.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+    observationalMemory: {
+      enabled: true,
+      observation: {
+        manageWorkingMemory: true,
+      },
+    },
+  },
+})
+```
+
+This setting adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true`. Set `workingMemory.agentManaged: true` if the main agent should still receive working memory tool and instruction injection.
+
+Use `onExtracted` to normalize or react to custom extracted values before they are persisted:
+
+```typescript title="src/mastra/agents/agent.ts"
+new Extractor({
+  name: 'Project status',
+  instructions: 'Extract the current project status.',
+  schema: z.string(),
+  async onExtracted({ current, sendSignal }) {
+    await sendSignal?.({
+      type: 'user-message',
+      contents: `Project status extracted: ${current}`,
+    })
+    return current.trim().toLowerCase()
+  },
+})
+```
+
+Extractor failures are reported in OM markers and do not block other successful extractor values. See [the API reference](/reference/memory/observational-memory#extractor-api) for the full `Extractor` shape.
+
 If your Observer model is text-only or its API rejects multimodal input, set `observation.observeAttachments` to `false` to drop attachments before they reach the Observer. The readable placeholders (`[Image #1: ...]`, `[File #1: ...]`) are kept in the transcript so the Observer can still reason about what was shared without receiving the binary payload. The same filter applies to tool results that contain image or file parts:
 
 ```typescript

@@ -22,6 +22,7 @@ export interface ObservationRunOpts {
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  agent?: ProcessorContext['agent'];
   sendSignal?: ProcessorContext['sendSignal'];
   requestContext?: RequestContext;
   currentModel?: ObservationModelContext;
@@ -34,6 +35,8 @@ export interface ObserverOutput {
   currentTask?: string;
   suggestedContinuation?: string;
   threadTitle?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   providerMetadata?: ProviderMetadata;
 }
@@ -58,9 +61,13 @@ export interface ProcessedObservation {
     suggestedResponse?: string;
     currentTask?: string;
     threadTitle?: string;
+    extracted?: Record<string, unknown>;
+    extractionFailures?: Array<{ slug: string; error: string }>;
     lastObservedMessageCursor?: { createdAt: string; id: string };
   }>;
   suggestedContinuation?: string;
   currentTask?: string;
   threadTitle?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
