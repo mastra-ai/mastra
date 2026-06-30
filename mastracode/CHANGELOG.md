@@ -1,5 +1,42 @@
 # mastracode
 
+## 0.27.0-alpha.6
+
+### Patch Changes
+
+- Renamed the AgentController interval API. `heartbeatHandlers` is now `intervalHandlers`, the `HeartbeatHandler` type is now `IntervalHandler`, and the `removeHeartbeat()`/`stopHeartbeats()` methods are now `removeInterval()`/`stopIntervals()`. This better reflects that these are fixed-interval background tasks, not liveness pings, and is distinct from the unrelated `mastra.heartbeats` scheduled-agent feature. ([#18665](https://github.com/mastra-ai/mastra/pull/18665))
+
+  **Before**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    heartbeatHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeHeartbeat({ id: 'sync' });
+  await controller.stopHeartbeats();
+  ```
+
+  **After**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    intervalHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeInterval({ id: 'sync' });
+  await controller.stopIntervals();
+  ```
+
+- Improved MastraCode web chat so hydrated and streaming messages render consistently, including tool cards, reasoning, and failed-tool states. ([#18620](https://github.com/mastra-ai/mastra/pull/18620))
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`65a66db`](https://github.com/mastra-ai/mastra/commit/65a66dbe249a0d92d828c605b955e73a983cf3b0), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+  - @mastra/schema-compat@1.3.2-alpha.1
+  - @mastra/mcp@1.12.1-alpha.0
+  - @mastra/react@1.2.1-alpha.6
+  - @mastra/memory@1.21.3-alpha.2
+  - @mastra/server@1.48.0-alpha.6
+  - @mastra/hono@1.5.3-alpha.6
+
 ## 0.27.0-alpha.5
 
 ### Patch Changes
