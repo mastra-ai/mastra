@@ -797,6 +797,15 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         createdAt: now,
         updatedAt: now,
       });
+      await schedules.createSchedule({
+        id: 'hb_test-heartbeat',
+        target: { type: 'heartbeat', agentId: 'test-agent', prompt: 'ping' },
+        cron: '* * * * *',
+        status: 'active',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     const saveStoredResponseFixtures = async (memoryStore: Awaited<ReturnType<InMemoryStore['getStore']>>) => {
