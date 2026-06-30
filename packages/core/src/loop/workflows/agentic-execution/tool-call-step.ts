@@ -553,6 +553,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   args: inputData.args,
                 },
                 __streamState: streamState.serialize(),
+                __agentId: agentId,
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -674,6 +675,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args: inputData.args,
                   },
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
                   // Persist the inner suspended run id in the workflow snapshot, partitioned
                   // per tool call (resumeLabel = toolCallId). The shared per-message
                   // pendingToolApprovals metadata is keyed by toolName and flushed/rehydrated
@@ -725,6 +727,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                 },

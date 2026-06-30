@@ -1,5 +1,30 @@
 # @mastra/memory
 
+## 1.21.3-alpha.1
+
+### Patch Changes
+
+- Expose `providerMetadata` on Observational Memory `ObserveHooks` results ([#18563](https://github.com/mastra-ai/mastra/pull/18563))
+
+  `onObservationEnd` and `onReflectionEnd` now receive the OM model call's `providerMetadata` alongside `usage`, so you can read per-call provider details — for example the AI Gateway's cost and generation id — straight from the hook instead of wrapping the observer/reflector models in a model-stream middleware:
+
+  ```ts
+  const hooks: ObserveHooks = {
+    onObservationEnd: ({ usage, providerMetadata }) => {
+      const gateway = providerMetadata?.gateway;
+      recordCost({ tokens: usage?.totalTokens, cost: gateway?.cost, generationId: gateway?.generationId });
+    },
+    onReflectionEnd: ({ usage, providerMetadata }) => {
+      recordCost({ tokens: usage?.totalTokens, cost: providerMetadata?.gateway?.cost });
+    },
+  };
+  ```
+
+  The field is additive and optional, and is omitted entirely when the provider emits no metadata, so existing hook consumers are unaffected. For batched observations and multi-attempt reflections it reflects the last batch/attempt that emitted provider metadata.
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+
 ## 1.21.3-alpha.0
 
 ### Patch Changes

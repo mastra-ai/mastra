@@ -72,6 +72,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
         { type: 'doc', id: 'agents/listSkills', label: '.listSkills()' },
+        { type: 'doc', id: 'agents/listSuspendedRuns', label: '.listSuspendedRuns()' },
         { type: 'doc', id: 'agents/listTools', label: '.listTools()' },
         { type: 'doc', id: 'agents/listWorkflows', label: '.listWorkflows()' },
         { type: 'doc', id: 'agents/network', label: '.network()' },

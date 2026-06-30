@@ -5,6 +5,7 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { ProviderMetadata } from '@mastra/core/stream';
 
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
@@ -256,6 +257,7 @@ export class ReflectorRunner {
     observations: string;
     suggestedContinuation?: string;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    providerMetadata?: ProviderMetadata;
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
     const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
@@ -264,6 +266,7 @@ export class ReflectorRunner {
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    let finalProviderMetadata: ProviderMetadata | undefined;
 
     const startLevel: CompressionLevel = compressionStartLevel ?? 0;
     let currentLevel: CompressionLevel = startLevel;
@@ -361,6 +364,7 @@ export class ReflectorRunner {
         totalUsage.outputTokens += usage.outputTokens ?? 0;
         totalUsage.totalTokens += usage.totalTokens ?? 0;
       }
+      finalProviderMetadata = result.providerMetadata ?? finalProviderMetadata;
 
       parsed = parseReflectorOutput(result.text, observations);
 
@@ -425,6 +429,7 @@ export class ReflectorRunner {
       observations: parsed.observations,
       suggestedContinuation: parsed.suggestedContinuation,
       usage: totalUsage.totalTokens > 0 ? totalUsage : undefined,
+      providerMetadata: finalProviderMetadata,
     };
   }
 
@@ -455,8 +460,11 @@ export class ReflectorRunner {
 
     reflectionHooks?.onReflectionStart?.();
     const asyncOp = this.doAsyncBufferedReflection(record, bufferKey, writer, requestContext, observabilityContext)
-      .then(usage => {
-        reflectionHooks?.onReflectionEnd?.({ usage });
+      .then(outcome => {
+        reflectionHooks?.onReflectionEnd?.({
+          usage: outcome?.usage,
+          ...(outcome?.providerMetadata ? { providerMetadata: outcome.providerMetadata } : {}),
+        });
       })
       .catch(async error => {
         if (writer) {
@@ -503,7 +511,13 @@ export class ReflectorRunner {
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
-  ): Promise<{ inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined> {
+  ): Promise<
+    | {
+        usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+        providerMetadata?: ProviderMetadata;
+      }
+    | undefined
+  > {
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
@@ -600,7 +614,7 @@ export class ReflectorRunner {
       await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
     }
 
-    return reflectResult.usage;
+    return { usage: reflectResult.usage, providerMetadata: reflectResult.providerMetadata };
   }
 
   /**
@@ -979,6 +993,7 @@ export class ReflectorRunner {
       : undefined;
 
     let reflectionUsage: ObserveHookUsage | undefined;
+    let reflectionProviderMetadata: ProviderMetadata | undefined;
     let reflectionError: Error | undefined;
     try {
       const compressionStartLevel = await this.getCompressionStartLevel(requestContext);
@@ -994,6 +1009,7 @@ export class ReflectorRunner {
         observabilityContext,
       );
       reflectionUsage = reflectResult.usage;
+      reflectionProviderMetadata = reflectResult.providerMetadata;
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({
@@ -1050,7 +1066,11 @@ export class ReflectorRunner {
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
-      reflectionHooks?.onReflectionEnd?.({ usage: reflectionUsage, error: reflectionError });
+      reflectionHooks?.onReflectionEnd?.({
+        usage: reflectionUsage,
+        error: reflectionError,
+        ...(reflectionProviderMetadata ? { providerMetadata: reflectionProviderMetadata } : {}),
+      });
       unregisterOp(record.id, 'reflecting');
     }
   }

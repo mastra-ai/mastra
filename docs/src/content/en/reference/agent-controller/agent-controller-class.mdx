@@ -331,8 +331,8 @@ await agentController.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
-    name: 'heartbeatHandlers',
-    type: 'HeartbeatHandler[]',
+    name: 'intervalHandlers',
+    type: 'IntervalHandler[]',
     description:
       'Periodic background tasks started during `init()`. Use for gateway sync, cache refresh, and similar tasks.',
     isOptional: true,
@@ -432,7 +432,7 @@ await agentController.sendMessage({ content: 'Hello!' })
 
 #### `init()`
 
-Initialize the agentController. Loads storage, initializes a static workspace (dynamic factory workspaces are resolved per-session during `createSession`), propagates memory and workspace to mode agents, and starts heartbeat handlers. Call this before using the agentController.
+Initialize the agentController. Loads storage, initializes a static workspace (dynamic factory workspaces are resolved per-session during `createSession`), propagates memory and workspace to mode agents, and starts interval handlers. Call this before using the agentController.
 
 ```typescript
 await agentController.init()
@@ -490,26 +490,26 @@ const thread = await agentController.selectOrCreateThread()
 
 #### `destroy()`
 
-Stop all heartbeat handlers and clean up resources.
+Stop all interval handlers and clean up resources.
 
 ```typescript
 await agentController.destroy()
 ```
 
-#### `removeHeartbeat({ id })`
+#### `removeInterval({ id })`
 
-Remove a specific heartbeat handler by ID. Calls the handler's `shutdown()` callback if defined.
+Remove a specific interval handler by ID. Calls the handler's `shutdown()` callback if defined.
 
 ```typescript
-await agentController.removeHeartbeat({ id: 'gateway-sync' })
+await agentController.removeInterval({ id: 'gateway-sync' })
 ```
 
-#### `stopHeartbeats()`
+#### `stopIntervals()`
 
-Stop and remove all heartbeat handlers.
+Stop and remove all interval handlers.
 
 ```typescript
-await agentController.stopHeartbeats()
+await agentController.stopIntervals()
 ```
 
 #### `getCurrentAgent()`
