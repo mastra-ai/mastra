@@ -12,6 +12,8 @@ export interface SignalsEntityFilterProps {
 
 const ALL_TYPES = '__all__';
 
+const capitalize = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
+
 /**
  * Two-step entity picker (entity type → entity) mirroring the traces filter
  * intent. Lets the user scope the Signals page to any entity reported by the
@@ -23,7 +25,7 @@ export function SignalsEntityFilter({ entities, selected, onChange }: SignalsEnt
   const selectedType = selected?.entityType ?? ALL_TYPES;
 
   const entitiesForType = useMemo(() => {
-    if (selectedType === ALL_TYPES) return entities;
+    if (selectedType === ALL_TYPES) return [];
     return entities.filter(entity => entity.entityType === selectedType);
   }, [entities, selectedType]);
 
@@ -45,7 +47,7 @@ export function SignalsEntityFilter({ entities, selected, onChange }: SignalsEnt
   return (
     <div className="flex flex-wrap items-center gap-3" role="search" aria-label="Filter signals by entity">
       <label className="flex items-center gap-2">
-        <span className="font-mono text-xs uppercase text-neutral3">Entity type</span>
+        <span className="whitespace-nowrap font-mono text-xs uppercase text-neutral3">Entity type</span>
         <Select value={selectedType} onValueChange={handleTypeChange}>
           <SelectTrigger size="sm" variant="outline" className="min-w-40" aria-label="Entity type">
             <SelectValue />
@@ -54,7 +56,7 @@ export function SignalsEntityFilter({ entities, selected, onChange }: SignalsEnt
             <SelectItem value={ALL_TYPES}>All types</SelectItem>
             {entityTypes.map(entityType => (
               <SelectItem key={entityType} value={entityType}>
-                {entityType}
+                {capitalize(entityType)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -62,7 +64,7 @@ export function SignalsEntityFilter({ entities, selected, onChange }: SignalsEnt
       </label>
 
       <label className="flex items-center gap-2">
-        <span className="font-mono text-xs uppercase text-neutral3">Entity</span>
+        <span className="whitespace-nowrap font-mono text-xs uppercase text-neutral3">Entity</span>
         <Select
           value={selected?.entityId ?? ''}
           onValueChange={handleEntityChange}
@@ -74,7 +76,7 @@ export function SignalsEntityFilter({ entities, selected, onChange }: SignalsEnt
           <SelectContent>
             {entitiesForType.map(entity => (
               <SelectItem key={entity.entityId} value={entity.entityId}>
-                {entity.entityType} · {entity.entityId}
+                {entity.entityId}
               </SelectItem>
             ))}
           </SelectContent>
