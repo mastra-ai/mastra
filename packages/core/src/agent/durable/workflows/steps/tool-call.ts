@@ -7,6 +7,9 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import type { ExportedSpan, SpanType } from '../../../../observability';
+import type { ProcessorState } from '../../../../processors';
+import { ProcessorRunner } from '../../../../processors/runner';
+import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
@@ -17,7 +20,12 @@ import type { SaveQueueManager } from '../../../save-queue';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
-import type { DurableToolCallInput, SerializableDurableOptions, AgentSuspendedEventData } from '../../types';
+import type {
+  DurableToolCallInput,
+  SerializableDurableOptions,
+  AgentSuspendedEventData,
+  RunRegistryEntry,
+} from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
@@ -98,6 +106,80 @@ async function flushMessagesBeforeSuspension({
     await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
   } catch {
     // Log but don't throw — suspension should proceed even if flush fails
+  }
+}
+
+/**
+ * Run a tool-result or tool-error chunk through the run's output processor pipeline.
+ * Returns the processed chunk (possibly modified), or `null` if a processor blocked it
+ * (in which case a tripwire chunk is emitted instead).
+ *
+ * Mirrors the regular agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
+ */
+async function processChunkThroughOutputProcessors(
+  chunk: ChunkType,
+  registryEntry: RunRegistryEntry | undefined,
+  pubsub: PubSub | undefined,
+  runId: string,
+  agentName: string,
+  logger: any,
+): Promise<ChunkType | null> {
+  if (!registryEntry?.outputProcessors?.length || !registryEntry.processorStates) {
+    return chunk;
+  }
+
+  try {
+    const runner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: registryEntry.outputProcessors,
+      logger,
+      agentName,
+      processorStates: registryEntry.processorStates,
+    });
+
+    const {
+      part: processed,
+      blocked,
+      reason,
+      tripwireOptions,
+      processorId,
+    } = await runner.processPart(
+      chunk,
+      registryEntry.processorStates as Map<string, ProcessorState>,
+      undefined, // observabilityContext
+      registryEntry.requestContext,
+      undefined, // messageList — not available in durable tool-call step
+      0,
+      pubsub
+        ? {
+            custom: async (data: { type: string }) => {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            },
+          }
+        : undefined,
+    );
+
+    if (blocked) {
+      // Emit a tripwire chunk so downstream knows about the block
+      if (pubsub) {
+        await emitChunkEvent(pubsub, runId, {
+          type: 'tripwire',
+          payload: {
+            reason: reason || 'Output processor blocked content',
+            retry: tripwireOptions?.retry,
+            metadata: tripwireOptions?.metadata,
+            processorId,
+          },
+        } as ChunkType);
+      }
+      return null;
+    }
+
+    return (processed as ChunkType) ?? null;
+  } catch (error) {
+    logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
+    // Fall through: emit the original chunk if processor fails
+    return chunk;
   }
 }
 
@@ -757,7 +839,18 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
-            await emitChunkEvent(pubsub, runId, resultChunk);
+            // Run through output processors (tripwire/blocking/redaction)
+            const processed = await processChunkThroughOutputProcessors(
+              resultChunk,
+              registryEntry,
+              pubsub,
+              runId,
+              initData.agentId,
+              logger,
+            );
+            if (processed) {
+              await emitChunkEvent(pubsub, runId, processed);
+            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
@@ -786,7 +879,18 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
-            await emitChunkEvent(pubsub, runId, errorChunk);
+            // Run through output processors (tripwire/blocking/redaction)
+            const processed = await processChunkThroughOutputProcessors(
+              errorChunk,
+              registryEntry,
+              pubsub,
+              runId,
+              initData.agentId,
+              logger,
+            );
+            if (processed) {
+              await emitChunkEvent(pubsub, runId, processed);
+            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }
