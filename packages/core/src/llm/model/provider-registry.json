@@ -2603,6 +2603,15 @@
       "docUrl": "https://docs.morphllm.com/api-reference/introduction",
       "gateway": "models.dev"
     },
+    "sakana": {
+      "url": "https://api.sakana.ai/v1",
+      "apiKeyEnvVar": "SAKANA_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Sakana AI",
+      "models": ["fugu", "fugu-ultra", "fugu-ultra-20260615"],
+      "docUrl": "https://console.sakana.ai/models",
+      "gateway": "models.dev"
+    },
     "deepinfra": {
       "apiKeyEnvVar": "DEEPINFRA_API_KEY",
       "name": "Deep Infra",
@@ -2625,6 +2634,7 @@
         "meta-llama/Llama-4-Scout-17B-16E-Instruct",
         "moonshotai/Kimi-K2.5",
         "moonshotai/Kimi-K2.6",
+        "moonshotai/Kimi-K2.7-Code",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
         "zai-org/GLM-4.6",
@@ -2812,7 +2822,8 @@
         "claude-sonnet-4-20250514",
         "claude-sonnet-4-5",
         "claude-sonnet-4-5-20250929",
-        "claude-sonnet-4-6"
+        "claude-sonnet-4-6",
+        "claude-sonnet-5"
       ],
       "docUrl": "https://docs.anthropic.com/en/docs/about-claude/models",
       "gateway": "models.dev",
@@ -4203,7 +4214,6 @@
         "openrouter/bodybuilder",
         "openrouter/free",
         "openrouter/fusion",
-        "openrouter/owl-alpha",
         "openrouter/pareto-code",
         "perceptron/perceptron-mk1",
         "perplexity/sonar",
@@ -5620,6 +5630,7 @@
         "anthropic/claude-sonnet-4-5",
         "anthropic/claude-sonnet-4-5-20250929",
         "anthropic/claude-sonnet-4-6",
+        "anthropic/claude-sonnet-5",
         "gemini/gemini-2.5-flash",
         "gemini/gemini-2.5-flash-image",
         "gemini/gemini-2.5-flash-lite",
@@ -5628,6 +5639,7 @@
         "gemini/gemini-3-pro-image",
         "gemini/gemini-3.1-flash-image",
         "gemini/gemini-3.1-flash-lite",
+        "gemini/gemini-3.1-flash-lite-image",
         "gemini/gemini-3.1-pro-preview",
         "gemini/gemini-3.1-pro-preview-customtools",
         "gemini/gemini-3.5-flash",
@@ -7818,6 +7830,7 @@
       "kimi-k2.7-code-highspeed"
     ],
     "morph": ["auto", "morph-v3-fast", "morph-v3-large"],
+    "sakana": ["fugu", "fugu-ultra", "fugu-ultra-20260615"],
     "deepinfra": [
       "MiniMaxAI/MiniMax-M2.5",
       "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
@@ -7837,6 +7850,7 @@
       "meta-llama/Llama-4-Scout-17B-16E-Instruct",
       "moonshotai/Kimi-K2.5",
       "moonshotai/Kimi-K2.6",
+      "moonshotai/Kimi-K2.7-Code",
       "openai/gpt-oss-120b",
       "openai/gpt-oss-20b",
       "zai-org/GLM-4.6",
@@ -7970,7 +7984,8 @@
       "claude-sonnet-4-20250514",
       "claude-sonnet-4-5",
       "claude-sonnet-4-5-20250929",
-      "claude-sonnet-4-6"
+      "claude-sonnet-4-6",
+      "claude-sonnet-5"
     ],
     "tencent-coding-plan": [
       "glm-5",
@@ -9071,7 +9086,6 @@
       "openrouter/bodybuilder",
       "openrouter/free",
       "openrouter/fusion",
-      "openrouter/owl-alpha",
       "openrouter/pareto-code",
       "perceptron/perceptron-mk1",
       "perplexity/sonar",
@@ -10238,6 +10252,7 @@
       "anthropic/claude-sonnet-4-5",
       "anthropic/claude-sonnet-4-5-20250929",
       "anthropic/claude-sonnet-4-6",
+      "anthropic/claude-sonnet-5",
       "gemini/gemini-2.5-flash",
       "gemini/gemini-2.5-flash-image",
       "gemini/gemini-2.5-flash-lite",
@@ -10246,6 +10261,7 @@
       "gemini/gemini-3-pro-image",
       "gemini/gemini-3.1-flash-image",
       "gemini/gemini-3.1-flash-lite",
+      "gemini/gemini-3.1-flash-lite-image",
       "gemini/gemini-3.1-pro-preview",
       "gemini/gemini-3.1-pro-preview-customtools",
       "gemini/gemini-3.5-flash",
