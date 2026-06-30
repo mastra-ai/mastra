@@ -19,6 +19,15 @@
  *
  * Anything else is sent to the workflow-builder-agent.
  */
+// Load .env from cwd so OPENAI_API_KEY (and friends) are picked up without
+// the user having to `export` them first. `loadEnvFile` is built into Node
+// 20.6+ — no dotenv dep. The try/catch makes it a no-op when no .env exists.
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env present — fall through */
+}
+
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { InMemoryStore } from '@mastra/core/storage';

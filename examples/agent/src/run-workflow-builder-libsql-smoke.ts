@@ -6,6 +6,12 @@
  * opens, to prove the workflow definition survives a process-equivalent
  * restart (same db file, no shared in-process state).
  */
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env present */
+}
+
 import { rm, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

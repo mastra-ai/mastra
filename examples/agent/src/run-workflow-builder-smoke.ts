@@ -9,6 +9,12 @@
  *   2. A fresh Mastra wired to the same storage rehydrates the workflow on
  *      `startWorkers()` and runs it identically.
  */
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env present */
+}
+
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
