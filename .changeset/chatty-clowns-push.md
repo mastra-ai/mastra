@@ -1,75 +1,20 @@
 ---
 '@mastra/rag': minor
-'@mastra/tanstack-start': patch
-'@mastra/voice-google-gemini-live': patch
-'@mastra/otel-exporter': patch
-'@mastra/otel-bridge': patch
-'@mastra/voice-openai-realtime': patch
-'@mastra/longmemeval': patch
-'@mastra/braintrust': patch
-'@mastra/mcp-docs-server': patch
-'@mastra/langsmith': patch
-'@mastra/express': patch
-'@mastra/fastify': patch
-'@mastra/langfuse': patch
-'@mastra/agent-builder': patch
-'create-mastra': patch
-'@mastra/playground-ui': patch
-'@mastra/schema-compat': patch
-'@mastra/nestjs': patch
-'@mastra/voice-xai-realtime': patch
-'@mastra/client-js': patch
-'@mastra/opencode': patch
-'@mastra/datadog': patch
-'@mastra/laminar': patch
-'@mastra/posthog': patch
-'@mastra/deployer-cloudflare': patch
-'@mastra/arthur': patch
-'@mastra/observability': patch
-'@mastra/sentry': patch
-'@mastra/hono': patch
-'@mastra/next': patch
-'@mastra/arize': patch
-'@mastra/koa': patch
-'@mastra/ai-sdk': patch
-'@mastra/voyageai': patch
-'@mastra/temporal': patch
-'@mastra/react': patch
-'@mastra/deployer-netlify': patch
-'@mastra/deployer': patch
-'@mastra/inngest': patch
-'@mastra/auth-better-auth': patch
-'@mastra/deployer-vercel': patch
-'@mastra/deployer-cloud': patch
-'@mastra/editor': patch
-'@mastra/memory': patch
-'@mastra/server': patch
-'@mastra/dynamodb': patch
-'@mastra/slack': patch
-'@mastra/evals': patch
-'@mastra/github-signals': patch
-'@mastra/mongodb': patch
-'@mastra/upstash': patch
-'@mastra/e2b': patch
-'@mastra/auth-firebase': patch
-'@mastra/auth-supabase': patch
-'@mastra/auth': patch
-'@mastra/core': patch
-'@mastra/libsql': patch
-'@mastra/qdrant': patch
-'mastra': patch
-'@mastra/mcp': patch
-'@mastra/mysql': patch
-'@mastra/redis': patch
-'@mastra/auth-google': patch
-'@mastra/auth-studio': patch
-'@mastra/auth-workos': patch
-'@mastra/auth-auth0': patch
-'@mastra/auth-clerk': patch
-'@mastra/auth-cloud': patch
-'mastracode': patch
-'@mastra/auth-okta': patch
-'@mastra/pg': patch
 ---
 
-Added MongoDBConfig to DatabaseConfig, exposing numCandidates for MongoDB Atlas Vector Search queries via the RAG tool layer
+Added MongoDBConfig to DatabaseConfig, exposing numCandidates for MongoDB Atlas Vector Search queries via the RAG tool layer.
+
+numCandidates controls how many HNSW graph candidates MongoDB Atlas Vector Search considers before returning the top-K results. Higher values improve recall at the cost of query latency. This parameter has no equivalent in other vector store backends.
+
+```ts
+const tool = createVectorQueryTool({
+  vectorStoreName: 'myMongoStore',
+  indexName: 'documents',
+  model: openai.embedding('text-embedding-3-small'),
+  databaseConfig: {
+    mongodb: {
+      numCandidates: 500,
+    },
+  },
+});
+```
