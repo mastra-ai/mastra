@@ -204,6 +204,53 @@ describe('discoverFsAgents', () => {
     }
   });
 
+  it('skips symlinked agent directories so discovery cannot escape the project tree', async () => {
+    // A real agent outside `agents/` that a symlinked entry would point at.
+    const outside = join(dir, 'outside-agent');
+    await mkdir(outside, { recursive: true });
+    await writeFile(join(outside, 'instructions.md'), 'leaked');
+    await writeAgent('real', { instructions: 'hi' });
+    await mkdir(join(dir, 'agents'), { recursive: true });
+    await symlink(outside, join(dir, 'agents', 'evil'));
+
+    const agents = await discoverFsAgents(dir);
+    expect(agents.map(a => a.name)).toEqual(['real']);
+  });
+
+  it('skips symlinked subagent directories so discovery cannot escape the project tree', async () => {
+    const outside = join(dir, 'outside-subagent');
+    await mkdir(outside, { recursive: true });
+    await writeFile(join(outside, 'instructions.md'), 'leaked');
+    await writeAgent('parent', {
+      instructions: 'hi',
+      subagents: { real: { config: `export default { description: 'd' };`, instructions: 'child' } },
+    });
+    await symlink(outside, join(dir, 'agents', 'parent', 'subagents', 'evil'));
+
+    const parent = (await discoverFsAgents(dir))[0]!;
+    expect(parent.subagents.map(s => s.name)).toEqual(['real']);
+  });
+
+  it('skips a symlinked instructions.md so its contents are not inlined', async () => {
+    const secret = join(dir, 'secret.md');
+    await writeFile(secret, 'top secret');
+    await writeAgent('weather', { config: `export default { model: 'openai/gpt-4o' };` });
+    await symlink(secret, join(dir, 'agents', 'weather', 'instructions.md'));
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.instructionsPath).toBeUndefined();
+  });
+
+  it('skips a symlinked config.ts so it is not imported into the bundle', async () => {
+    const secret = join(dir, 'secret-config.ts');
+    await writeFile(secret, `export default { model: 'openai/gpt-4o' };`);
+    await writeAgent('weather', { instructions: 'hi' });
+    await symlink(secret, join(dir, 'agents', 'weather', 'config.ts'));
+
+    const agent = (await discoverFsAgents(dir))[0]!;
+    expect(agent.configPath).toBeUndefined();
+  });
+
   it('discovers a flat markdown skill, defaulting name to the filename', async () => {
     await writeAgent('weather', {
       config: `export default { model: 'openai/gpt-4o' };`,

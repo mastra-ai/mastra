@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, stat } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import { slash } from '../utils';
@@ -69,24 +69,38 @@ const TOOL_EXTENSIONS = ['.ts', '.js'];
 const SKILL_MODULE_EXTENSIONS = ['.ts', '.js'];
 const SKILL_MD_BASENAME = 'SKILL.md';
 
+/**
+ * Presence check that does NOT follow symlinks. Returns `false` for symlinks
+ * (and broken links) so a symlinked `config.ts`/`instructions.md`/`workspace.ts`
+ * is never inlined or imported into the generated bundle.
+ */
 async function exists(path: string): Promise<boolean> {
   try {
-    await stat(path);
-    return true;
+    return !(await lstat(path)).isSymbolicLink();
   } catch {
     return false;
   }
 }
 
-async function directoryExists(path: string): Promise<string | undefined> {
+/**
+ * Returns the slash-normalized path when `path` is a real directory (not a
+ * symlink). Symlinked directories are rejected to prevent the build from
+ * following links out of the project tree during discovery.
+ */
+async function realDirectory(path: string): Promise<string | undefined> {
   try {
-    if ((await stat(path)).isDirectory()) {
+    const info = await lstat(path);
+    if (info.isDirectory() && !info.isSymbolicLink()) {
       return slash(path);
     }
   } catch {
     // not present
   }
   return undefined;
+}
+
+async function directoryExists(path: string): Promise<string | undefined> {
+  return realDirectory(path);
 }
 
 async function firstExisting(dir: string, basenames: string[]): Promise<string | undefined> {
@@ -315,7 +329,7 @@ async function discoverSubagents(
   const subagents: DiscoveredFsAgent[] = [];
   for (const name of entries.sort()) {
     const dir = join(subagentsDir, name);
-    if (!(await stat(dir)).isDirectory()) {
+    if (!(await realDirectory(dir))) {
       continue;
     }
     const child = await discoverAgentDir(dir, name, false, onWarn);
@@ -354,7 +368,7 @@ export async function discoverFsAgents(
   const discovered: DiscoveredFsAgent[] = [];
   for (const name of entries.sort()) {
     const dir = join(agentsDir, name);
-    if (!(await stat(dir)).isDirectory()) {
+    if (!(await realDirectory(dir))) {
       continue;
     }
     const agent = await discoverAgentDir(dir, name, true, onWarn);
