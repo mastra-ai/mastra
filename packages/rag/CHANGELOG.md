@@ -5,6 +5,7 @@
 ### Minor Changes
 
 - Added MongoDBConfig to DatabaseConfig, exposing numCandidates for MongoDB Atlas Vector Search queries via the RAG tool layer. ([#18393](https://github.com/mastra-ai/mastra/pull/18393))
+
   ```
 
   ```
