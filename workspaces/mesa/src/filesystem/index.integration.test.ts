@@ -168,7 +168,7 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
     if (!(await this.exists('/'))) return;
 
     await this.removeChildren('/');
-    await this.rmdir('/', { force: true });
+    await this.rmdir('/', { recursive: true, force: true });
   }
 
   getInfo(): FilesystemInfo {
@@ -263,7 +263,7 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
 
       if (entry.type === 'directory') {
         await this.removeChildren(childPath);
-        await this.rmdir(childPath, { force: true });
+        await this.rmdir(childPath, { recursive: true, force: true });
       } else {
         await this.deleteFile(childPath, { force: true });
       }
