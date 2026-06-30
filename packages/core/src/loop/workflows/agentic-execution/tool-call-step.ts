@@ -1099,6 +1099,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                         toolName: params.toolName,
                         args,
                         result,
+                        // Preserve the approval decision for an approved approval-gated tool that
+                        // ran in the background so it round-trips on recall, matching the sync path
+                        // and the "started" placeholder above.
+                        ...(approvalGrant ?? {}),
                       },
                       ...(providerMetadata ? { providerMetadata } : {}),
                     },
