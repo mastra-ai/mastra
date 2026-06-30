@@ -103,7 +103,7 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
     url: `http://localhost:${port}`,
     stop: async () => {
       await new Promise<void>(resolve => server.close(() => resolve()));
-      await Promise.allSettled([controller.getMastra()?.stopWorkers(), controller.stopHeartbeats()]);
+      await Promise.allSettled([controller.getMastra()?.stopWorkers(), controller.stopIntervals()]);
     },
   };
 }
