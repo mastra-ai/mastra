@@ -33,6 +33,7 @@ import type { PromptBlockVersion } from './prompt-blocks';
 import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
+import type { WorkflowDefinition } from './workflow-definitions';
 import type { WorkspaceVersion } from './workspaces';
 
 /**
@@ -47,6 +48,7 @@ export class InMemoryDB {
   readonly messages = new Map<string, StorageMessageType>();
   readonly resources = new Map<string, StorageResourceType>();
   readonly workflows = new Map<string, StorageWorkflowRun>();
+  readonly workflowDefinitions = new Map<string, WorkflowDefinition>();
   readonly scores = new Map<string, ScoreRowData>();
   readonly traces = new Map<string, TraceEntry>();
   readonly metricRecords: MetricRecord[] = [];
@@ -114,6 +116,7 @@ export class InMemoryDB {
     this.messages.clear();
     this.resources.clear();
     this.workflows.clear();
+    this.workflowDefinitions.clear();
     this.scores.clear();
     this.traces.clear();
     this.metricRecords.length = 0;
