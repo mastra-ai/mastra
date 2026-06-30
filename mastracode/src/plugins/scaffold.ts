@@ -127,7 +127,7 @@ export function formatScaffoldSuccess(targetDir: string): string {
 }
 
 function isBarePluginName(target: string): boolean {
-  return !path.isAbsolute(target) && !target.startsWith('.') && !target.includes('/') && !target.includes('\\\\');
+  return !path.isAbsolute(target) && !target.startsWith('.') && !target.includes('/') && !target.includes('\\');
 }
 
 function renderIndex(pluginId: string, pluginName: string): string {
