@@ -8,6 +8,7 @@ import {
   markOmMarkersAsDisconnected,
   normalizeOmCycle,
   scanOmInitialState,
+  hasInProgressBufferingMarkers,
 } from '../om-parts-converter';
 
 /**
@@ -287,13 +288,15 @@ describe('markOmMarkersAsDisconnected', () => {
   });
 
   it('does not mark buffering cycles with a later activation as disconnected', () => {
-    const [startMessage] = markOmMarkersAsDisconnected([
+    const messages = [
       assistantMessage([omPart('om-buffering-start', { cycleId: 'cycle-activated' })], 'msg-start'),
       assistantMessage([omPart('om-activation', { cycleId: 'cycle-activated' })], 'msg-activation'),
-    ]);
+    ];
+    const [startMessage] = markOmMarkersAsDisconnected(messages);
 
     expect(partsOf(startMessage)[0].data?.disconnectedAt).toBeUndefined();
     expect(partsOf(startMessage)[0].data?._state).toBeUndefined();
+    expect(hasInProgressBufferingMarkers(messages)).toBe(false);
   });
 });
 

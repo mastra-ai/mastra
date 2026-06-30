@@ -460,7 +460,8 @@ export const markOmMarkersAsDisconnected = (messages: MastraDBMessage[]): Mastra
  * Uses the record from `awaitBufferStatus` to populate token counts/observations.
  */
 export const hasInProgressBufferingMarkers = (messages: MastraDBMessage[]) => {
-  const terminalCycleIds = collectTerminalCycleIds(messages).buffering;
+  const { buffering, activatedBuffering } = collectTerminalCycleIds(messages);
+  const terminalCycleIds = new Set([...buffering, ...activatedBuffering]);
 
   for (const msg of messages) {
     const parts = msg.content?.parts;

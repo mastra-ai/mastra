@@ -87,12 +87,14 @@ const ObservationStartMarker = ({ data }: { data: DataOmObservationStartPart['da
 /**
  * Shows observation completed successfully.
  */
+const hasExtractedValue = (value: unknown) => value !== undefined && value !== null && value !== '';
+
 const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data'] }) => {
   const tokensK = (data.tokensObserved / 1000).toFixed(1);
   const compressionRatio =
     data.tokensObserved > 0 ? ((1 - data.observationTokens / data.tokensObserved) * 100).toFixed(0) : 0;
   const durationSec = (data.durationMs / 1000).toFixed(1);
-  const extractedCount = Object.keys(data.extractedValues ?? {}).length;
+  const extractedCount = Object.values(data.extractedValues ?? {}).filter(hasExtractedValue).length;
   const extractionFailureCount = data.extractionFailures?.length ?? 0;
 
   return (
@@ -169,7 +171,7 @@ const BufferingEndMarker = ({ data }: { data: DataOmBufferingEndPart['data'] }) 
   const compressionRatio =
     data.tokensBuffered > 0 ? ((1 - data.bufferedTokens / data.tokensBuffered) * 100).toFixed(0) : 0;
   const durationSec = (data.durationMs / 1000).toFixed(1);
-  const extractedCount = Object.keys(data.extractedValues ?? {}).length;
+  const extractedCount = Object.values(data.extractedValues ?? {}).filter(hasExtractedValue).length;
   const extractionFailureCount = data.extractionFailures?.length ?? 0;
 
   return (

@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import type { ThreadOMMetadata } from '@mastra/core/memory';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
@@ -60,10 +61,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       extractors?: readonly Extractor<any>[];
     };
   }> = [];
-  private priorMetadataByThread = new Map<
-    string,
-    { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
-  >();
+  private priorMetadataByThread = new Map<string, ThreadOMMetadata>();
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
     super(deps, opts);
@@ -89,18 +87,8 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     for (const thread of allThreads) {
       const omMetadata = getThreadOMMetadata(thread.metadata);
       threadMetadataMap.set(thread.id, { lastObservedAt: omMetadata?.lastObservedAt });
-      if (
-        omMetadata?.currentTask ||
-        omMetadata?.suggestedResponse ||
-        omMetadata?.threadTitle ||
-        omMetadata?.extracted
-      ) {
-        this.priorMetadataByThread.set(thread.id, {
-          currentTask: omMetadata.currentTask,
-          suggestedResponse: omMetadata.suggestedResponse,
-          threadTitle: omMetadata.threadTitle,
-          extracted: omMetadata.extracted,
-        });
+      if (omMetadata) {
+        this.priorMetadataByThread.set(thread.id, omMetadata);
       }
     }
 

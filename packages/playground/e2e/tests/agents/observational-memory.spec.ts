@@ -182,7 +182,7 @@ test.describe('Observational Memory - Behavior Tests', () => {
     });
   });
 
-  test.describe('Observation Failure Markers', () => {
+  test.describe('when an observation fails', () => {
     /**
      * BEHAVIOR: Failed observation runs render a failure marker.
      * OUTCOME: User can diagnose a failed OM cycle in the chat timeline.

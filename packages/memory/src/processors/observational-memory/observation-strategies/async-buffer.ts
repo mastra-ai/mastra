@@ -166,7 +166,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         const shouldUpdateThreadTitle = hasValidThreadTitle && newTitle !== oldTitle;
         const previousOmMetadata = getThreadOMMetadata(thread.metadata);
         const metadataUpdate = buildThreadMetadataFromExtractedValues(
-          this.observationConfig.extractors,
+          processed.extractors ?? this.observationConfig.extractors,
           processed.extractedValues,
         );
         const newMetadata = setThreadOMMetadata(thread.metadata, {

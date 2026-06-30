@@ -218,7 +218,10 @@ export function ChatProvider({
         if (cancelled) return;
         setMessages(prev => injectBufferingEnds(prev, result?.record));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        setMessages(prev => markOmMarkersAsDisconnected(prev));
+      });
 
     return () => {
       cancelled = true;

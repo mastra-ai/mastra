@@ -414,13 +414,6 @@ describe('ChatProvider', () => {
                 threadId: 'thread-1',
               },
             },
-            {
-              type: 'data-om-activation',
-              data: {
-                cycleId: 'cycle-reload',
-                operationType: 'observation',
-              },
-            },
           ],
           metadata: {},
         },
