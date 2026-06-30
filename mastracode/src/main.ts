@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
-import { hasHeadlessFlag, headlessMain } from './headless.js';
+import { hasHeadlessFlag, runMCCli } from './headless/index.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -79,7 +79,7 @@ async function tuiMain(pipedInput?: string | null) {
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that
   // status messages use showInfo() instead of console.info(), which would
-  // corrupt the terminal.  Headless mode still inits from headless.ts.
+  // corrupt the terminal.  Headless mode still inits from headless/cli.ts.
 
   setupDebugLogging();
 
@@ -212,7 +212,7 @@ function handleFatalError(error: unknown): never {
 
 async function main() {
   if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
-    return headlessMain();
+    return runMCCli();
   }
 
   if (process.argv.includes('--acp')) {
@@ -233,7 +233,7 @@ async function main() {
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
-      return headlessMain(pipedInput);
+      return runMCCli(pipedInput);
     }
   }
 
