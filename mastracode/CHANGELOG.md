@@ -1,5 +1,17 @@
 # mastracode
 
+## 0.27.0-alpha.8
+
+### Patch Changes
+
+- MastraCode now builds its code agent through the new `createCodingAgent` factory from `@mastra/core/coding-agent` instead of constructing the `Agent` inline. No user-facing behavior changes — the system prompt and agent configuration are unchanged. ([#18695](https://github.com/mastra-ai/mastra/pull/18695))
+
+- Updated dependencies [[`0ac14ce`](https://github.com/mastra-ai/mastra/commit/0ac14cea48e1b0a7857782153c78f7242fdf7e1a), [`c2f0b7f`](https://github.com/mastra-ai/mastra/commit/c2f0b7f1370f4428d165f51f0d1d9a48331cc257)]:
+  - @mastra/core@1.48.0-alpha.8
+  - @mastra/react@1.2.1-alpha.8
+  - @mastra/server@1.48.0-alpha.8
+  - @mastra/hono@1.5.3-alpha.8
+
 ## 0.27.0-alpha.7
 
 ### Minor Changes
