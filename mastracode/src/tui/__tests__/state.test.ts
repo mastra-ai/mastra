@@ -13,10 +13,15 @@ vi.mock('@earendil-works/pi-tui', () => {
     constructor(public terminal: MockProcessTerminal) {}
   }
 
+  class MockSpacer {
+    setLines() {}
+  }
+
   return {
     Container: MockContainer,
     ProcessTerminal: MockProcessTerminal,
     TUI: MockTUI,
+    Spacer: MockSpacer,
   };
 });
 
@@ -30,6 +35,15 @@ vi.mock('../components/custom-editor.js', () => ({
     ) {}
   },
 }));
+
+vi.mock('../../onboarding/settings.js', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    // Keep state initialization hermetic: don't read the host's real settings.
+    loadSettings: vi.fn(() => ({ voice: { enabled: false } })),
+  };
+});
 
 vi.mock('../../utils/project.js', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -57,7 +71,7 @@ describe('createTUIState', () => {
     const controller = createAgentController(session);
     const hookManager = {};
     const analytics = {};
-    const authStorage = {};
+    const authStorage = { getStoredApiKey: vi.fn(() => undefined) };
     const mcpManager = {};
     const workspace = {};
 

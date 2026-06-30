@@ -47,8 +47,8 @@ async function runHeadlessInProcess(terminal: { write: (text: string) => void })
     'headless-mcp-e2e',
     '--prompt',
     'Use the delayed headless MCP lookup tool and report its payload.',
-    '--output-format',
-    'text',
+    '--output',
+    'human',
     '--timeout',
     '30',
   ];
@@ -78,8 +78,8 @@ async function runHeadlessInProcess(terminal: { write: (text: string) => void })
   }) as typeof process.exit;
 
   try {
-    const { headlessMain } = await import('../../src/headless.js');
-    await headlessMain();
+    const { runMCCli } = await import('../../src/headless/index.js');
+    await runMCCli();
   } catch (error) {
     if (!(error instanceof Error) || !error.message.startsWith('MC_E2E_HEADLESS_EXIT:0')) throw error;
   } finally {

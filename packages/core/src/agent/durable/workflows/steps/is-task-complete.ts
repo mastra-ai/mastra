@@ -62,6 +62,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         agentId?: string;
         agentName?: string;
         state?: { threadId?: string; resourceId?: string };
+        requestContextEntries?: Record<string, unknown>;
       };
 
       const registryEntry = globalRunRegistry.get(state.runId);
@@ -141,7 +142,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         runId: state.runId,
         threadId: initData.state?.threadId,
         resourceId: initData.state?.resourceId,
-        customContext: undefined,
+        customContext: initData.requestContextEntries,
       };
 
       let result: IsTaskCompleteRunResult | undefined;

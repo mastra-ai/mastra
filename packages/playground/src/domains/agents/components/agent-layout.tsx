@@ -1,5 +1,6 @@
-import { PanelDrawer, PanelSeparator } from '@mastra/playground-ui';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useEffect, useRef } from 'react';
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';

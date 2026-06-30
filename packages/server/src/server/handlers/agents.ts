@@ -46,6 +46,8 @@ import {
   toolCallResponseSchema,
   sendToolApprovalBodySchema,
   sendToolApprovalResponseSchema,
+  listSuspendedRunsQuerySchema,
+  listSuspendedRunsResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -277,7 +279,7 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
 
-  source?: 'code' | 'stored';
+  source?: 'code' | 'stored' | 'fs';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
@@ -355,20 +357,15 @@ export function getSerializedProcessors(
 }
 
 /**
- * Extract skills from agent's workspace.
- * Uses agent.getWorkspace() to get the workspace and then workspace.skills.list().
+ * Extract skills from an agent (both inline and workspace skills).
+ * Uses agent.listSkills() which merges agent-level and workspace-level skills.
  */
 export async function getSerializedSkillsFromAgent(
   agent: Agent,
   requestContext?: RequestContext,
 ): Promise<SerializedSkill[]> {
   try {
-    const workspace = await agent.getWorkspace({ requestContext });
-    if (!workspace?.skills) {
-      return [];
-    }
-
-    const skillsList = await workspace.skills.list();
+    const skillsList = await agent.listSkills({ requestContext });
     return skillsList.map(skill => ({
       name: skill.name,
       description: skill.description,
@@ -2466,6 +2463,70 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   },
 });
 
+export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/suspended-runs',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  queryParamSchema: listSuspendedRunsQuerySchema,
+  responseSchema: listSuspendedRunsResponseSchema,
+  summary: 'List suspended runs',
+  description:
+    'Lists suspended agent runs from storage — runs waiting on a tool-call approval or on a tool that suspended. Works after a server restart and across instances.',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, requestContext, ...query }) => {
+    try {
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
+
+      // Honor server-enforced thread/resource scoping from the request context
+      // so clients cannot list suspended runs outside their own scope.
+      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
+
+      // Validate ownership/FGA before honoring a thread filter — without this a
+      // caller could probe another user's suspended approvals (including
+      // tool-call args) by guessing a threadId. Reject when ownership cannot be
+      // verified (no memory configured, or the thread does not exist) so a
+      // thread-scoped query is never honored unchecked.
+      if (effectiveThreadId) {
+        const memory = await agent.getMemory({ requestContext });
+        if (!memory) {
+          throw new HTTPException(403, {
+            message: 'Access denied: agent has no memory configured to validate thread ownership',
+          });
+        }
+        const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+        if (!thread) {
+          throw new HTTPException(403, { message: 'Access denied: thread not found' });
+        }
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId: effectiveThreadId,
+          thread,
+          effectiveResourceId,
+        });
+      }
+
+      return await agent.listSuspendedRuns({
+        threadId: effectiveThreadId,
+        resourceId: effectiveResourceId,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+        perPage: query.perPage,
+        page: query.page,
+      });
+    } catch (error) {
+      return handleError(error, 'error listing suspended runs');
+    }
+  },
+});
+
 export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/decline-tool-call',
@@ -3262,7 +3323,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
-  description: 'Returns details for a specific skill available to the agent via its workspace',
+  description: 'Returns details for a specific skill available to the agent (inline or workspace)',
   tags: ['Agents', 'Skills'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
@@ -3271,17 +3332,11 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent not found' });
       }
 
-      // Get the agent's workspace
-      const workspace = await agent.getWorkspace({ requestContext });
-      if (!workspace?.skills) {
-        throw new HTTPException(404, { message: 'Agent does not have skills configured' });
-      }
-
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ? decodeURIComponent(path) : skillName;
 
-      // Get the skill from the workspace
-      const skill = await workspace.skills.get(identifier);
+      // Get the skill from the agent (searches both inline and workspace skills)
+      const skill = await agent.getSkill(identifier, { requestContext });
       if (!skill) {
         throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }

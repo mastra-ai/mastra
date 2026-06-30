@@ -180,4 +180,22 @@ describe('AgentController.listAvailableModels', () => {
     const status = await controller.getCurrentModelAuthStatus(session);
     expect(status).toEqual({ hasAuth: true });
   });
+
+  it('getCurrentModelAuthStatus falls back to hasAuth false when the gateway throws an unexpected error', async () => {
+    // resolveAuth throws a non-missing-auth error (e.g. a token-exchange failure).
+    // hasAuth rethrows it, but getCurrentModelAuthStatus should catch it so the
+    // UI auth-status endpoint stays stable instead of erroring.
+    const gateway = createFakeGateway({
+      resolveAuth: () => {
+        throw new Error('token exchange failed');
+      },
+    });
+    const controller = createController(gateway, 'test-gateway/acme/sonic-fast');
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.model.set({ modelId: 'test-gateway/acme/sonic-fast' });
+
+    const status = await controller.getCurrentModelAuthStatus(session);
+    expect(status.hasAuth).toBe(false);
+  });
 });
