@@ -360,7 +360,8 @@ export class AppleContainerSandbox extends MastraSandbox {
       maxRetainedBytes: options.maxRetainedBytes,
     });
 
-    const timedOut = result.exitCode === APPLE_CONTAINER_TIMEOUT_EXIT_CODE && result.stderr.includes(APPLE_CONTAINER_TIMEOUT_MARKER);
+    const timedOut =
+      result.exitCode === APPLE_CONTAINER_TIMEOUT_EXIT_CODE && result.stderr.includes(APPLE_CONTAINER_TIMEOUT_MARKER);
     const stderr = timedOut ? stripTimeoutMarker(result.stderr) : result.stderr;
 
     return {
@@ -509,7 +510,12 @@ export class AppleContainerSandbox extends MastraSandbox {
     while (Date.now() < deadline) {
       const inspect = await this._inspectContainer();
       if (!inspect) {
-        throw new SandboxExecutionError(`${action} failed because Apple container ${this.containerId} disappeared`, 1, '', '');
+        throw new SandboxExecutionError(
+          `${action} failed because Apple container ${this.containerId} disappeared`,
+          1,
+          '',
+          '',
+        );
       }
 
       this._assertMastraOwned(inspect);
@@ -517,7 +523,12 @@ export class AppleContainerSandbox extends MastraSandbox {
 
       if (!isRunning(inspect)) {
         const state = getContainerState(inspect) ?? 'not running';
-        throw new SandboxExecutionError(`${action} failed because Apple container ${this.containerId} is ${state}`, 1, '', '');
+        throw new SandboxExecutionError(
+          `${action} failed because Apple container ${this.containerId} is ${state}`,
+          1,
+          '',
+          '',
+        );
       }
 
       lastResult = await this._runCli(['exec', this.containerId, 'sh', '-lc', 'true'], {
@@ -913,7 +924,10 @@ function compactConfig(config: Record<string, unknown>): Record<string, unknown>
 }
 
 function hashConfig(config: Record<string, unknown>): string {
-  return createHash('sha256').update(stableStringify(compactConfig(config))).digest('hex').slice(0, 16);
+  return createHash('sha256')
+    .update(stableStringify(compactConfig(config)))
+    .digest('hex')
+    .slice(0, 16);
 }
 
 function stableStringify(value: unknown): string {

@@ -228,7 +228,11 @@ describe('AppleContainerSandbox', () => {
       'sleep',
       '9999',
     ]);
-    expect(runner.run).toHaveBeenNthCalledWith(2, expect.any(Array), expect.objectContaining({ env: { NODE_ENV: 'test' } }));
+    expect(runner.run).toHaveBeenNthCalledWith(
+      2,
+      expect.any(Array),
+      expect.objectContaining({ env: { NODE_ENV: 'test' } }),
+    );
     expect(sandbox.status).toBe('running');
   });
 
@@ -256,7 +260,12 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('reconnects to an existing stopped container', async () => {
-    const runner = createRunner([inspectResult('stopped', 'existing-id'), {}, inspectResult('running', 'existing-id'), {}]);
+    const runner = createRunner([
+      inspectResult('stopped', 'existing-id'),
+      {},
+      inspectResult('running', 'existing-id'),
+      {},
+    ]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await sandbox._start();
@@ -413,15 +422,7 @@ describe('AppleContainerSandbox', () => {
     await sandbox.executeCommand('printf apple-container');
 
     expect(runner.run).toHaveBeenCalledWith(
-      [
-        'exec',
-        '--workdir',
-        '/workspace',
-        'apple-test',
-        'sh',
-        '-lc',
-        expect.stringContaining('printf apple-container'),
-      ],
+      ['exec', '--workdir', '/workspace', 'apple-test', 'sh', '-lc', expect.stringContaining('printf apple-container')],
       expect.objectContaining({ timeout: 310_000 }),
     );
   });
@@ -446,15 +447,7 @@ describe('AppleContainerSandbox', () => {
       killed: true,
     });
     expect(runner.run).toHaveBeenLastCalledWith(
-      [
-        'exec',
-        '--workdir',
-        '/workspace',
-        'apple-test',
-        'sh',
-        '-lc',
-        expect.stringContaining('timeout 0.01s sh -lc'),
-      ],
+      ['exec', '--workdir', '/workspace', 'apple-test', 'sh', '-lc', expect.stringContaining('timeout 0.01s sh -lc')],
       expect.objectContaining({ timeout: 10_010 }),
     );
   });
@@ -569,10 +562,7 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('throws when destroy fails unexpectedly', async () => {
-    const runner = createRunner([
-      inspectResult('running'),
-      { success: false, exitCode: 4, stderr: 'delete failed' },
-    ]);
+    const runner = createRunner([inspectResult('running'), { success: false, exitCode: 4, stderr: 'delete failed' }]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await expect(sandbox.destroy()).rejects.toMatchObject({
@@ -606,10 +596,7 @@ describe('AppleContainerSandbox', () => {
   });
 
   it('throws SandboxExecutionError when create fails', async () => {
-    const runner = createRunner([
-      missingContainerResult(),
-      { success: false, exitCode: 2, stderr: 'bad image' },
-    ]);
+    const runner = createRunner([missingContainerResult(), { success: false, exitCode: 2, stderr: 'bad image' }]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
 
     await expect(sandbox.start()).rejects.toMatchObject({

@@ -41,43 +41,43 @@ await workspace.destroy();
 
 ## Options
 
-| Option            | Type                         | Description                                                        |
-| ----------------- | ---------------------------- | ------------------------------------------------------------------ |
-| `id`              | `string`                     | Unique sandbox ID.                                                 |
-| `name`            | `string`                     | Apple container name. Defaults to the sandbox ID.                  |
-| `image`           | `string`                     | OCI image to run. Defaults to `node:22-slim`.                      |
-| `command`         | `string[]`                   | Container init command. Defaults to `['sleep', 'infinity']`.       |
-| `env`             | `Record<string, string>`     | Environment variables applied to the container and command execs.  |
-| `volumes`         | `Record<string, string>`     | Host-to-container bind mounts.                                     |
-| `mounts`          | `string[]`                   | Raw `--mount` specs passed to `container run`.                     |
-| `network`         | `string`                     | Apple container network attachment spec.                           |
-| `publishedPorts`  | `string[]`                   | Port publish specs passed as `--publish`.                          |
-| `publishedSockets` | `string[]`                  | Socket publish specs passed as `--publish-socket`.                 |
-| `cpus`            | `number \| string`           | Number of CPUs allocated to the container.                         |
-| `memory`          | `string`                     | Memory allocation, for example `1G`.                               |
-| `platform`        | `string`                     | OCI platform, for example `linux/arm64`.                           |
-| `arch`            | `string`                     | Image architecture when selecting multi-arch images.               |
-| `os`              | `string`                     | Operating system when selecting multi-platform images.             |
-| `rosetta`         | `boolean`                    | Enable Rosetta in the container.                                   |
-| `readonlyRootfs`  | `boolean`                    | Start the container with a read-only root filesystem.              |
-| `ssh`             | `boolean`                    | Forward the host SSH agent socket.                                 |
-| `init`            | `boolean`                    | Enable Apple's init process in the container.                      |
-| `virtualization`  | `boolean`                    | Expose virtualization capabilities to the container.               |
-| `capAdd`          | `string[]`                   | Linux capabilities to add.                                         |
-| `capDrop`         | `string[]`                   | Linux capabilities to drop.                                        |
-| `tmpfs`           | `string[]`                   | tmpfs destination paths, for example `/tmp`.                       |
-| `dns`             | `string[]`                   | DNS nameserver IPs.                                                |
-| `dnsSearch`       | `string[]`                   | DNS search domains.                                                |
-| `noDns`           | `boolean`                    | Do not configure DNS in the container.                             |
-| `labels`          | `Record<string, string>`     | Container labels. Mastra labels are always added.                  |
-| `workingDir`      | `string`                     | Working directory inside the container. Defaults to `/workspace`.  |
-| `timeout`         | `number`                     | Default command timeout in milliseconds.                           |
-| `deleteOnDestroy` | `boolean`                    | Delete the Apple container on destroy. Defaults to `true`.         |
-| `containerBinary` | `string`                     | Path or name for the Apple container CLI. Defaults to `container`. |
-| `onStart`         | `({ sandbox }) => unknown`   | Lifecycle hook called after the sandbox reaches `running`.         |
-| `onStop`          | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox stops.                    |
-| `onDestroy`       | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox is destroyed.             |
-| `instructions`    | `string \| (opts) => string` | Override or extend the default workspace sandbox instructions.     |
+| Option             | Type                         | Description                                                        |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------ |
+| `id`               | `string`                     | Unique sandbox ID.                                                 |
+| `name`             | `string`                     | Apple container name. Defaults to the sandbox ID.                  |
+| `image`            | `string`                     | OCI image to run. Defaults to `node:22-slim`.                      |
+| `command`          | `string[]`                   | Container init command. Defaults to `['sleep', 'infinity']`.       |
+| `env`              | `Record<string, string>`     | Environment variables applied to the container and command execs.  |
+| `volumes`          | `Record<string, string>`     | Host-to-container bind mounts.                                     |
+| `mounts`           | `string[]`                   | Raw `--mount` specs passed to `container run`.                     |
+| `network`          | `string`                     | Apple container network attachment spec.                           |
+| `publishedPorts`   | `string[]`                   | Port publish specs passed as `--publish`.                          |
+| `publishedSockets` | `string[]`                   | Socket publish specs passed as `--publish-socket`.                 |
+| `cpus`             | `number \| string`           | Number of CPUs allocated to the container.                         |
+| `memory`           | `string`                     | Memory allocation, for example `1G`.                               |
+| `platform`         | `string`                     | OCI platform, for example `linux/arm64`.                           |
+| `arch`             | `string`                     | Image architecture when selecting multi-arch images.               |
+| `os`               | `string`                     | Operating system when selecting multi-platform images.             |
+| `rosetta`          | `boolean`                    | Enable Rosetta in the container.                                   |
+| `readonlyRootfs`   | `boolean`                    | Start the container with a read-only root filesystem.              |
+| `ssh`              | `boolean`                    | Forward the host SSH agent socket.                                 |
+| `init`             | `boolean`                    | Enable Apple's init process in the container.                      |
+| `virtualization`   | `boolean`                    | Expose virtualization capabilities to the container.               |
+| `capAdd`           | `string[]`                   | Linux capabilities to add.                                         |
+| `capDrop`          | `string[]`                   | Linux capabilities to drop.                                        |
+| `tmpfs`            | `string[]`                   | tmpfs destination paths, for example `/tmp`.                       |
+| `dns`              | `string[]`                   | DNS nameserver IPs.                                                |
+| `dnsSearch`        | `string[]`                   | DNS search domains.                                                |
+| `noDns`            | `boolean`                    | Do not configure DNS in the container.                             |
+| `labels`           | `Record<string, string>`     | Container labels. Mastra labels are always added.                  |
+| `workingDir`       | `string`                     | Working directory inside the container. Defaults to `/workspace`.  |
+| `timeout`          | `number`                     | Default command timeout in milliseconds.                           |
+| `deleteOnDestroy`  | `boolean`                    | Delete the Apple container on destroy. Defaults to `true`.         |
+| `containerBinary`  | `string`                     | Path or name for the Apple container CLI. Defaults to `container`. |
+| `onStart`          | `({ sandbox }) => unknown`   | Lifecycle hook called after the sandbox reaches `running`.         |
+| `onStop`           | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox stops.                    |
+| `onDestroy`        | `({ sandbox }) => unknown`   | Lifecycle hook called before the sandbox is destroyed.             |
+| `instructions`     | `string \| (opts) => string` | Override or extend the default workspace sandbox instructions.     |
 
 Apple `--tmpfs` accepts container paths only, such as `/tmp`; it does not accept Docker-style option specs like `/tmp:rw,size=256m`.
 When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
