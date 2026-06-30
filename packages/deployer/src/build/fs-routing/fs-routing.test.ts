@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile, readFile, symlink, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -146,6 +146,27 @@ describe('discoverFsAgents', () => {
     if (skill.kind === 'packaged') {
       expect(skill.instructions).toContain('Do the review.');
       expect(skill.references['checklist.md']).toContain('correctness');
+    }
+  });
+
+  it('skips symlinked skill references so arbitrary files are not embedded', async () => {
+    // A secret outside the agent directory the symlink would otherwise leak.
+    const secret = join(dir, 'secret.txt');
+    await writeFile(secret, 'TOP SECRET');
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      skills: {
+        'review/SKILL.md': `---\nname: review\ndescription: Use when reviewing.\n---\n\n# Review`,
+        'review/references/ok.md': `# Ok`,
+      },
+    });
+    await symlink(secret, join(dir, 'agents', 'weather', 'skills', 'review', 'references', 'leak.md'));
+
+    const skill = (await discoverFsAgents(dir))[0]!.skills[0]!;
+    if (skill.kind === 'packaged') {
+      expect(skill.references['ok.md']).toContain('Ok');
+      expect(skill.references['leak.md']).toBeUndefined();
     }
   });
 
@@ -374,6 +395,23 @@ describe('mirrorFsAgentWorkspaces', () => {
     expect(mirrored).toEqual(['weather']);
     expect(await readFile(join(bundleDir, 'workspace', 'weather', 'README.md'), 'utf-8')).toBe('# Seed');
     expect(await readFile(join(bundleDir, 'workspace', 'weather', 'data', 'notes.txt'), 'utf-8')).toBe('note');
+  });
+
+  it('does not mirror symlinked workspace seeds (no sandbox escape)', async () => {
+    const secret = join(dir, 'secret.txt');
+    await writeFile(secret, 'TOP SECRET');
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      workspaceSeed: { 'README.md': '# Seed' },
+    });
+    await symlink(secret, join(dir, 'agents', 'weather', 'workspace', 'leak.txt'));
+    const bundleDir = join(dir, 'output');
+
+    await mirrorFsAgentWorkspaces(dir, bundleDir);
+
+    expect(await readFile(join(bundleDir, 'workspace', 'weather', 'README.md'), 'utf-8')).toBe('# Seed');
+    await expect(access(join(bundleDir, 'workspace', 'weather', 'leak.txt'))).rejects.toThrow();
   });
 
   it('mirrors nothing when no agent has a workspace/ seed dir', async () => {

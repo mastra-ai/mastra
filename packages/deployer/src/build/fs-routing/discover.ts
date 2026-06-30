@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { lstat, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import { slash } from '../utils';
@@ -150,7 +150,11 @@ async function readReferences(referencesDir: string): Promise<Record<string, str
   }
   for (const basename of entries.sort()) {
     const path = join(referencesDir, basename);
-    if ((await stat(path)).isDirectory()) {
+    // Use lstat so symlinks are detected (not followed). Skip symlinks: a
+    // symlink under `references/` could point anywhere on the build machine and
+    // silently embed arbitrary file contents into the generated bundle.
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink() || stats.isDirectory()) {
       continue;
     }
     references[basename] = await readFile(path, 'utf-8');

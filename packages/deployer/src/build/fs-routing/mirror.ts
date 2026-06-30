@@ -1,7 +1,18 @@
-import { cp, mkdir } from 'node:fs/promises';
+import { cp, lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { discoverFsAgents } from './discover';
 import type { DiscoveredFsAgent } from './discover';
+
+/**
+ * Skip symlinks when copying workspace seeds. A symlink under
+ * `agents/<name>/workspace/` could point outside the workspace and be preserved
+ * in the bundle, letting the agent read arbitrary files at runtime. We copy only
+ * regular files and directories.
+ */
+async function rejectSymlinks(source: string): Promise<boolean> {
+  const stats = await lstat(source);
+  return !stats.isSymbolicLink();
+}
 
 async function mirrorAgentSeeds(
   agent: DiscoveredFsAgent,
@@ -12,7 +23,7 @@ async function mirrorAgentSeeds(
   if (agent.workspaceSeedDir) {
     const destination = join(bundleDir, 'workspace', ...workspaceName.split('/'));
     await mkdir(destination, { recursive: true });
-    await cp(agent.workspaceSeedDir, destination, { recursive: true });
+    await cp(agent.workspaceSeedDir, destination, { recursive: true, filter: rejectSymlinks });
     mirrored.push(workspaceName);
   }
 
