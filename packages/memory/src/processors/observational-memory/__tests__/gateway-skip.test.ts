@@ -1,12 +1,11 @@
 /**
  * Tests that the ObservationalMemoryProcessor skips local processing when the
- * model's gateway handles OM server-side. Running it locally would
- * double-process messages and cause duplication.
+ * agent is using a Mastra gateway model. The gateway handles OM server-side,
+ * so running it locally would double-process messages and cause duplication.
  *
- * Detection uses a duck-type check (model has gatewayHandlesMemory === true) and
+ * Detection uses a duck-type check (model has gatewayId === 'mastra') and
  * stores the result in per-processor state — this avoids leaking flags
- * through RequestContext to child agents. The behavior is driven by the
- * gateway's capability, not by the gateway id.
+ * through RequestContext to child agents.
  */
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
@@ -36,13 +35,12 @@ function createStubMemoryProvider(): MemoryContextProvider {
 }
 
 /**
- * Create a plain object mock with the given gatewayHandlesMemory capability.
- * Detection uses duck typing ('gatewayHandlesMemory' in model), so no real class needed.
+ * Create a plain object mock with the given gatewayId.
+ * Detection uses duck typing ('gatewayId' in model), so no real class needed.
  */
-function createMockGatewayModel(gatewayHandlesMemory: boolean) {
+function createMockGatewayModel(gatewayId: string) {
   return {
-    gatewayId: 'mastra',
-    gatewayHandlesMemory,
+    gatewayId,
     modelId: 'openai/gpt-4o',
     provider: 'mastra',
     specificationVersion: 'v2' as const,
@@ -67,7 +65,7 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     processor = new ObservationalMemoryProcessor(om, createStubMemoryProvider());
   });
 
-  it('processInputStep returns messageList unchanged when the gateway handles memory', async () => {
+  it('processInputStep returns messageList unchanged when model is a Mastra gateway model', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -86,7 +84,7 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     };
 
     const getThreadContextSpy = vi.spyOn(om, 'getThreadContext');
-    const gatewayModel = createMockGatewayModel(true);
+    const gatewayModel = createMockGatewayModel('mastra');
 
     const result = await processor.processInputStep({
       messageList,
@@ -119,7 +117,7 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     const messageList = new MessageList({ threadId, resourceId });
 
     // Simulate what processInputStep would have stored in state
-    const state: Record<string, unknown> = { __gatewayHandlesMemory: true };
+    const state: Record<string, unknown> = { __isGatewayModel: true };
 
     const result = await processor.processOutputResult({
       messageList,
@@ -136,7 +134,7 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     expect(result).toBe(messageList);
   });
 
-  it('does NOT skip when the gateway does not handle memory', async () => {
+  it('does NOT skip when model is a non-mastra gateway', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
 
@@ -154,8 +152,8 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
       resourceId,
     };
 
-    // A model whose gateway does not handle memory should NOT trigger the skip
-    const nonMastraModel = createMockGatewayModel(false);
+    // A ModelRouterLanguageModel with a different gatewayId should NOT trigger the skip
+    const nonMastraModel = createMockGatewayModel('netlify');
 
     const result = await processor.processInputStep({
       messageList,

@@ -124,13 +124,6 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   readonly modelId: string;
   readonly provider: string;
   readonly gatewayId: string;
-  /**
-   * Whether the resolved gateway handles memory server-side (e.g. Observational
-   * Memory). Derived from the gateway's `handlesMemory()` capability — never from
-   * the gateway id — so local memory processing can be skipped without coupling
-   * that decision to a particular gateway's identity.
-   */
-  readonly gatewayHandlesMemory: boolean;
 
   private config: OpenAICompatibleConfig & { routerId: string };
   private gateway: MastraModelGatewayInterface;
@@ -186,7 +179,6 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     const resolved = this.#manager.resolveModelId(normalizedConfig.id);
     this.gateway = resolved.gateway;
     this.gatewayId = resolved.gatewayId;
-    this.gatewayHandlesMemory = resolved.gateway.handlesMemory?.() ?? false;
     this.provider = resolved.providerId || 'openai-compatible';
 
     if (resolved.providerId && resolved.modelId !== normalizedConfig.id) {
@@ -276,14 +268,12 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     modelId: string;
     provider: string;
     gatewayId: string;
-    gatewayHandlesMemory: boolean;
   } {
     return {
       specificationVersion: this.specificationVersion,
       modelId: this.modelId,
       provider: this.provider,
       gatewayId: this.gatewayId,
-      gatewayHandlesMemory: this.gatewayHandlesMemory,
     };
   }
 

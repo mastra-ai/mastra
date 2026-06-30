@@ -20,16 +20,6 @@ export class MastraGateway extends MastraModelGateway {
     super();
   }
 
-  /**
-   * The hosted Mastra gateway handles Observational Memory server-side, so
-   * agents routed through it skip local memory processing. This is the single
-   * source of truth for that behavior — consumers must check this capability
-   * rather than the gateway id/name.
-   */
-  override handlesMemory(): boolean {
-    return true;
-  }
-
   private getBaseUrl(): string {
     const raw = this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
     return raw.replace(/\/+$/, '').replace(/\/v1$/, '');

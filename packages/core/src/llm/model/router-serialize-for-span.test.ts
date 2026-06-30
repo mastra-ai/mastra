@@ -18,7 +18,6 @@ describe('ModelRouterLanguageModel - serializeForSpan', () => {
       modelId: 'gpt-4o',
       provider: 'openai',
       gatewayId: expect.any(String),
-      gatewayHandlesMemory: false,
     });
   });
 

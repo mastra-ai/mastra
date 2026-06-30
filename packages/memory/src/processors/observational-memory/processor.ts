@@ -54,23 +54,12 @@ function getOmObservabilityContext(
   };
 }
 
-/** Key used to store gateway-memory detection result in per-processor state. */
-const GATEWAY_STATE_KEY = '__gatewayHandlesMemory';
+/** Key used to store gateway detection result in per-processor state. */
+const GATEWAY_STATE_KEY = '__isGatewayModel';
 
-/**
- * Whether the model's gateway handles memory (e.g. Observational Memory)
- * server-side. Keys off the explicit `gatewayHandlesMemory` capability the
- * resolved model carries — NOT the gateway id — so the skip is driven by what
- * the gateway actually does, not by which gateway it is. Duck-typed to avoid
- * cross-package instanceof issues.
- */
-function gatewayHandlesMemoryRemotely(model: ProcessInputStepArgs['model']): boolean {
-  return (
-    typeof model === 'object' &&
-    model !== null &&
-    'gatewayHandlesMemory' in model &&
-    (model as any).gatewayHandlesMemory === true
-  );
+/** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
+function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
+  return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
 }
 
 function injectObservationContextMessages({
@@ -157,12 +146,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       return messageList;
     }
 
-    // When the model's gateway handles OM (observation, reflection, context
-    // injection) server-side, running it locally would double-process messages
-    // and cause history duplication. We detect this from the model's
-    // `gatewayHandlesMemory` capability directly (not requestContext) so the
-    // flag doesn't leak to child agents in delegation scenarios.
-    if (gatewayHandlesMemoryRemotely(model)) {
+    // When the agent is using a Mastra gateway model, the gateway handles OM
+    // (observation, reflection, context injection) server-side. Running it
+    // locally would double-process messages and cause history duplication.
+    // We detect this from the model directly (not requestContext) so that
+    // the flag doesn't leak to child agents in delegation scenarios.
+    if (isMastraGatewayModel(model)) {
       state[GATEWAY_STATE_KEY] = true;
       omDebug(`[OM:processInputStep:GATEWAY] gateway handles OM — skipping local processing`);
       return messageList;

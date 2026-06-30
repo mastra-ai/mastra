@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
 describe('memory gateway duck typing', () => {
-  it('does not warn when model exposes gatewayHandlesMemory without being a ModelRouterLanguageModel instance', async () => {
+  it('does not warn when model exposes a mastra gatewayId without being a ModelRouterLanguageModel instance', async () => {
     const warn = vi.fn();
 
     const duckTypedGatewayModel = {
@@ -13,7 +13,6 @@ describe('memory gateway duck typing', () => {
       supportsStructuredOutputs: true,
       supportsImageUrls: true,
       gatewayId: 'mastra',
-      gatewayHandlesMemory: true,
       async doGenerate() {
         return {
           content: [{ type: 'text' as const, text: 'ok' }],
