@@ -30,7 +30,7 @@ function isExpectedMissingAuthError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message;
     return (
-      /Missing .+ environment variable/i.test(msg) ||
+      /Missing [^ ]+ environment variable/i.test(msg) ||
       /Could not find API key/i.test(msg) ||
       /no api key/i.test(msg) ||
       /Could not find config for provider/i.test(msg) ||
