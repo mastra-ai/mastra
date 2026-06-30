@@ -421,8 +421,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     return typeof color === 'string' ? color : undefined;
   };
 
+  const voiceSettings = loadSettings().voice;
   result.voiceController = new VoiceController({
     authStorage: result.authStorage,
+    settings: voiceSettings,
     onTranscript: text => editor.insertVoiceTranscript(text),
     onPartialTranscript: text => editor.replaceVoiceTranscript(text),
     showInfo: message => showInfo(result, message),
@@ -430,7 +432,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     onListeningChange: listening => editor.setVoiceListening(listening),
   });
   editor.voiceInput = result.voiceController;
-  if (loadSettings().voice.enabled) {
+  if (voiceSettings.enabled) {
     result.voiceController.restoreEnabled();
   }
 

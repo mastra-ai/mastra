@@ -150,7 +150,7 @@ const asyncCleanup = async () => {
   await Promise.allSettled([
     mcpManager?.disconnect(),
     controller?.getMastra()?.stopWorkers(),
-    controller?.stopHeartbeats(),
+    controller?.stopIntervals(),
     closeSignalsPubSub?.(),
     analytics?.shutdown(),
   ]);

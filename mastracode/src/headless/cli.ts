@@ -317,7 +317,7 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
   await Promise.allSettled([
     mcpManager?.disconnect(),
     controller.getMastra()?.stopWorkers(),
-    controller?.stopHeartbeats(),
+    controller?.stopIntervals(),
     closeSignalsPubSub?.(),
   ]);
 

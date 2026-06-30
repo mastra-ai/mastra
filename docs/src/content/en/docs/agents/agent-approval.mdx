@@ -380,6 +380,48 @@ For automatic tool resumption to work:
 
 Both approaches work with the same tool definitions. Automatic resumption triggers only when suspended tools exist in the message history and the user sends a new message on the same thread.
 
+## Resuming after a restart
+
+The examples above hold on to `stream.runId` between suspension and approval. That works while the process stays alive, but in production the approval often arrives later — after a page refresh, a server restart, or on a different server instance behind a load balancer.
+
+Use [`listSuspendedRuns()`](/reference/agents/listSuspendedRuns) to rediscover the pending run for a conversation from storage:
+
+```typescript
+// In the request handler that receives the user's decision
+const { runs } = await agent.listSuspendedRuns({
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+})
+
+const run = runs[0]
+const toolCall = run?.toolCalls[0]
+
+if (run && toolCall) {
+  let stream
+  if (toolCall.requiresApproval) {
+    // Suspended by requireApproval — approve or decline the tool call
+    stream = await agent.approveToolCall({ runId: run.runId, toolCallId: toolCall.toolCallId })
+  } else {
+    // Suspended by suspend() — resume with the data the tool asked for
+    console.log('Tool asked:', toolCall.suspendPayload)
+    stream = await agent.resumeStream({ name: 'San Francisco' }, { runId: run.runId })
+  }
+  for await (const chunk of stream.textStream) process.stdout.write(chunk)
+}
+```
+
+Each returned run includes the suspended tool calls (`toolCallId`, `toolName`, `args`, and `requiresApproval`). Approval suspensions (`requiresApproval: true`) are answered with `approveToolCall()` / `declineToolCall()`, while `suspend()`-based suspensions carry their `suspendPayload` and expect `resumeStream()` with resume data — so you can rebuild the right UI for either flow without keeping any state in memory.
+
+`sendToolApproval()` uses the same storage-backed discovery automatically: when no active run is found in memory for the thread, it looks up the suspended run in storage before failing. If several suspended runs match the thread, pass a `toolCallId` to disambiguate.
+
+The same discovery is available over HTTP as `GET /agents/:agentId/suspended-runs` and in the client SDK as [`agent.listSuspendedRuns()`](/reference/client-js/agents#listsuspendedruns), so browser-based approval UIs can rediscover pending runs directly.
+
+:::note
+
+Suspended runs only survive restarts when your Mastra instance is configured with a persistent [storage provider](/docs/memory/storage). The default in-memory store loses snapshots when the process exits.
+
+:::
+
 ## Tool approval: Supervisor agents
 
 A [supervisor agent](/docs/agents/supervisor-agents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:

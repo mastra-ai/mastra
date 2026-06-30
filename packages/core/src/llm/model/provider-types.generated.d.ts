@@ -3198,7 +3198,6 @@ export type ProviderModelsMap = {
     'anthropic/claude-opus-4.1',
     'anthropic/claude-opus-4.5',
     'anthropic/claude-opus-4.6',
-    'anthropic/claude-opus-4.6-fast',
     'anthropic/claude-opus-4.7',
     'anthropic/claude-opus-4.7-fast',
     'anthropic/claude-opus-4.8',
@@ -4537,12 +4536,14 @@ export type ProviderModelsMap = {
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M3',
     'hf:Qwen/Qwen3.5-397B-A17B',
+    'hf:Qwen/Qwen3.6-27B',
     'hf:moonshotai/Kimi-K2.6',
     'hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
     'hf:openai/gpt-oss-120b',
     'hf:zai-org/GLM-4.7',
     'hf:zai-org/GLM-4.7-Flash',
     'hf:zai-org/GLM-5.1',
+    'hf:zai-org/GLM-5.2',
   ];
   readonly iflowcn: readonly [
     'deepseek-r1',

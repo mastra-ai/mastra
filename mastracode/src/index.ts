@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type {
-  HeartbeatHandler,
+  IntervalHandler,
   AgentControllerConfig,
   AgentControllerEvent,
   AgentControllerMode,
@@ -176,8 +176,8 @@ export interface MastraCodeConfig {
   initialState?: Partial<MastraCodeState>;
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
-  /** Override heartbeat handlers. Default: gateway-sync */
-  heartbeatHandlers?: HeartbeatHandler[];
+  /** Override interval handlers. Default: gateway-sync */
+  intervalHandlers?: IntervalHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: AgentControllerConfig<MastraCodeState>['workspace'];
   /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
@@ -622,7 +622,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
   ];
 
-  const defaultHeartbeatHandlers: HeartbeatHandler[] = [
+  const defaultIntervalHandlers: IntervalHandler[] = [
     {
       id: 'gateway-sync',
       intervalMs: 5 * 60 * 1000,
@@ -630,7 +630,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       handler: () => syncGateways(),
     },
   ];
-  const heartbeatHandlers = config?.heartbeatHandlers ?? defaultHeartbeatHandlers;
+  const intervalHandlers = config?.intervalHandlers ?? defaultIntervalHandlers;
 
   // Build lightweight provider access for resolving built-in packs at startup.
   // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
@@ -765,7 +765,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       configDir,
     },
     modes,
-    heartbeatHandlers,
+    intervalHandlers,
     modelUseCountProvider: () => loadSettings().modelUseCounts,
     modelUseCountTracker: modelId => {
       try {

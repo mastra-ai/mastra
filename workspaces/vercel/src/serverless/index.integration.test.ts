@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { VercelSandbox } from './index';
+import { VercelServerlessSandbox } from './index';
 
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 
-describe.skipIf(!VERCEL_TOKEN)('VercelSandbox Integration', () => {
-  let sandbox: VercelSandbox;
+describe.skipIf(!VERCEL_TOKEN)('VercelServerlessSandbox Integration', () => {
+  let sandbox: VercelServerlessSandbox;
 
   beforeAll(async () => {
-    sandbox = new VercelSandbox({
+    sandbox = new VercelServerlessSandbox({
       token: VERCEL_TOKEN!,
       teamId: process.env.VERCEL_TEAM_ID,
     });

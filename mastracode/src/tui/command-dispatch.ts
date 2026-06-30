@@ -185,7 +185,7 @@ export async function dispatchSlashCommand(
       handleYoloCommand(ctx);
       return true;
     case 'voice':
-      handleVoiceCommand(ctx);
+      await handleVoiceCommand(ctx, args);
       return true;
     case 'settings':
       await handleSettingsCommand(ctx);

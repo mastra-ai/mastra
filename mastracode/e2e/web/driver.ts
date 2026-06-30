@@ -216,34 +216,38 @@ export async function createDriver(opts: {
 
 function entryText(entry: TimelineEntry): string {
   switch (entry.kind) {
-    case 'user':
-      return entry.text;
-    case 'assistant': {
-      // Flatten the ordered segments to text, interleaving tool name/output in
-      // execution order — exactly how they render.
+    case 'message': {
       const parts: string[] = [];
-      for (const seg of entry.segments) {
-        if (seg.kind === 'text' || seg.kind === 'thinking') {
-          parts.push(seg.text);
-        } else {
-          const tool = entry.toolsById[seg.toolCallId];
-          if (tool) parts.push(tool.toolName, tool.output);
+      for (const part of entry.message.content.parts) {
+        if (part.type === 'text') {
+          parts.push(part.text);
+        } else if (part.type === 'reasoning') {
+          parts.push(part.reasoning);
+        } else if (part.type === 'tool-invocation') {
+          const invocation = part.toolInvocation;
+          const runtimeTool = entry.runtimeTools?.[invocation.toolCallId];
+          parts.push(
+            runtimeTool?.toolName ?? invocation.toolName,
+            runtimeTool?.output ?? '',
+            runtimeTool?.result === undefined ? '' : String(runtimeTool.result),
+            invocation.state === 'result' && invocation.result !== undefined ? String(invocation.result) : '',
+          );
         }
       }
-      return parts.join(' ');
+      return parts.filter(Boolean).join(' ');
     }
     case 'notice':
       return entry.text;
     case 'approval':
-      return `approve ${(entry as ApprovalPrompt).toolName}`;
+      return `approve ${entry.toolName}`;
     case 'suspension':
-      return `suspend ${(entry as SuspensionPrompt).toolName}`;
+      return `suspend ${entry.toolName}`;
     case 'notification':
-      return `notification ${(entry as NotificationEntry).message}`;
+      return `notification ${entry.message}`;
     case 'notification_summary':
-      return `notification_summary ${(entry as { message: string }).message}`;
+      return `notification_summary ${entry.message}`;
     case 'subagent':
-      return `subagent ${(entry as SubagentEntry).agentType} ${(entry as SubagentEntry).task}`;
+      return `subagent ${entry.agentType} ${entry.task}`;
     default:
       return '';
   }

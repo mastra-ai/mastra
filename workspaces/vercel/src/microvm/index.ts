@@ -5,7 +5,7 @@
  * Firecracker MicroVMs (Amazon Linux 2023) with a persistent in-session
  * filesystem, command execution, background processes, and exposed ports.
  *
- * This is distinct from the `VercelSandbox` provider in this package, which
+ * This is distinct from the `VercelServerlessSandbox` provider in this package, which
  * runs commands as Vercel serverless Functions and is stateless.
  *
  * @see https://vercel.com/docs/vercel-sandbox
@@ -22,14 +22,12 @@ import type {
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox } from '@vercel/sandbox';
-import { VercelMicroVMProcessManager } from './process-manager';
+import { VercelSandboxProcessManager } from './process-manager';
 
-const LOG_PREFIX = '[VercelMicroVMSandbox]';
-
-let deprecatedNameWarned = false;
+const LOG_PREFIX = '[VercelSandbox]';
 
 /** Vercel Sandbox runtimes (default `node24`). */
-export type VercelMicroVMRuntime = 'node24' | 'node22' | 'node26' | 'python3.13';
+export type VercelSandboxRuntime = 'node24' | 'node22' | 'node26' | 'python3.13';
 
 // =============================================================================
 // Options
@@ -43,7 +41,7 @@ export type VercelMicroVMRuntime = 'node24' | 'node22' | 'node26' | 'python3.13'
  * OIDC, supply `token`, `teamId`, and `projectId` together (falling back to
  * the `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, and `VERCEL_PROJECT_ID` env vars).
  */
-export interface VercelMicroVMSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
+export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance. */
   id?: string;
   /** Optional sandbox name passed to the Vercel API. Auto-generated if omitted. */
@@ -55,7 +53,7 @@ export interface VercelMicroVMSandboxOptions extends Omit<MastraSandboxOptions, 
   /** Vercel project ID. Falls back to the `VERCEL_PROJECT_ID` env var. */
   projectId?: string;
   /** Sandbox runtime. @default 'node24' */
-  runtime?: VercelMicroVMRuntime;
+  runtime?: VercelSandboxRuntime;
   /**
    * Timeout in milliseconds before the sandbox auto-terminates.
    * @default 300_000 // 5 minutes
@@ -91,24 +89,22 @@ export interface VercelMicroVMSandboxOptions extends Omit<MastraSandboxOptions, 
  * @example Basic usage
  * ```typescript
  * import { Workspace } from '@mastra/core/workspace';
- * import { VercelMicroVMSandbox } from '@mastra/vercel';
+ * import { VercelSandbox } from '@mastra/vercel';
  *
  * const workspace = new Workspace({
- *   sandbox: new VercelMicroVMSandbox({ runtime: 'node24', timeout: 600_000 }),
+ *   sandbox: new VercelSandbox({ runtime: 'node24', timeout: 600_000 }),
  * });
  *
  * const result = await workspace.sandbox.executeCommand('node', ['--version']);
  * ```
- *
- * @deprecated Will be renamed to `VercelSandbox` in a future release.
  */
-export class VercelMicroVMSandbox extends MastraSandbox {
+export class VercelSandbox extends MastraSandbox {
   readonly id: string;
-  readonly name = 'VercelMicroVMSandbox';
-  readonly provider = 'vercel-microvm';
+  readonly name = 'VercelSandbox';
+  readonly provider = 'vercel-sandbox';
   status: ProviderStatus = 'pending';
 
-  declare readonly processes: VercelMicroVMProcessManager;
+  declare readonly processes: VercelSandboxProcessManager;
 
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
@@ -117,7 +113,7 @@ export class VercelMicroVMSandbox extends MastraSandbox {
   private readonly _token?: string;
   private readonly _teamId?: string;
   private readonly _projectId?: string;
-  private readonly _runtime: VercelMicroVMRuntime;
+  private readonly _runtime: VercelSandboxRuntime;
   private readonly _timeout: number;
   private readonly _vcpus?: number;
   private readonly _ports?: number[];
@@ -125,19 +121,14 @@ export class VercelMicroVMSandbox extends MastraSandbox {
   private readonly _metadata: Record<string, unknown>;
   private readonly _instructionsOverride?: InstructionsOption;
 
-  constructor(options: VercelMicroVMSandboxOptions = {}) {
+  constructor(options: VercelSandboxOptions = {}) {
     super({
       ...options,
-      name: 'VercelMicroVMSandbox',
-      processes: new VercelMicroVMProcessManager({ env: options.env ?? {} }),
+      name: 'VercelSandbox',
+      processes: new VercelSandboxProcessManager({ env: options.env ?? {} }),
     });
 
-    if (!deprecatedNameWarned) {
-      deprecatedNameWarned = true;
-      console.warn('VercelMicroVMSandbox will be renamed to VercelSandbox in a future release.');
-    }
-
-    this.id = options.id ?? `vercel-microvm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    this.id = options.id ?? `vercel-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this._sandboxName = options.sandboxName;
     this._token = options.token ?? process.env.VERCEL_TOKEN;
     this._teamId = options.teamId ?? process.env.VERCEL_TEAM_ID;

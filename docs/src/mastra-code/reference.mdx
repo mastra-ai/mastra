@@ -70,7 +70,8 @@ const {
 | `settingsPath` | `string` | Global settings | Path to a custom `settings.json` file |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial state overrides (yolo, thinkingLevel, etc.) |
 | `idGenerator` | `() => string` | Default | Override id generation for threads/messages (useful for deterministic tests) |
-| `heartbeatHandlers` | `HeartbeatHandler[]` | gateway-sync | Override heartbeat handlers |
+| `intervalHandlers` | `IntervalHandler[]` | gateway-sync | Override interval (background task) handlers |
+| `resolveModel` | `(modelId: string, options?) => ResolvedModel` | Default resolver | Custom model resolution function |
 | `workspace` | `Workspace` | Local FS + sandbox | Override the workspace |
 | `configDir` | `string` | `.mastracode` | Override the config directory name |
 | `mcpServers` | `Record<string, McpServerConfig>` | `{}` | Programmatic MCP server configs, merged with file-based configs |
@@ -149,7 +150,7 @@ interface PermissionRules {
 }
 ```
 
-#### `HeartbeatHandler`
+#### `IntervalHandler`
 
 Background task definition.
 
