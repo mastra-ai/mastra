@@ -12,21 +12,14 @@
  */
 
 import type { AuthStorage } from '../../auth/storage.js';
-import type { RecorderInfo } from './mic-capture.js';
-import { detectRecorder, MicRecording } from './mic-capture.js';
-import { resolveOpenAIApiKey, transcribeAudio, VoiceCredentialError } from './transcribe.js';
-
-/** How often to re-transcribe the audio-so-far while recording (ms). */
-const LIVE_TRANSCRIBE_INTERVAL_MS = 1200;
-
-/**
- * Delay before the first partial transcription after recording starts. Kept
- * short so the first words appear quickly instead of waiting a full interval.
- */
-const LIVE_TRANSCRIBE_FIRST_MS = 600;
+import type { VoiceSettings } from '../../onboarding/settings.js';
+import { createSTTEngine } from './engines/index.js';
+import type { PermissionGuidance, STTEngine, STTSession } from './engines/types.js';
 
 export interface VoiceControllerOptions {
   authStorage?: AuthStorage;
+  /** Voice configuration (engine/provider/model). */
+  settings: VoiceSettings;
   /** Called with transcribed text to insert at the cursor. */
   onTranscript: (text: string) => void;
   /**
@@ -48,21 +41,12 @@ export interface VoiceControllerOptions {
 
 export type VoiceState = 'idle' | 'recording' | 'transcribing';
 
-function missingRecorderMessage(): string {
-  if (process.platform === 'darwin') {
-    return 'Voice input needs a recorder. Install sox (`brew install sox`) or ffmpeg, then run /voice again.';
-  }
-  // Linux: native recorders usually ship with the desktop audio stack.
-  return 'Voice input needs a recorder. Install one of pipewire-utils (pw-record), pulseaudio-utils (parecord), alsa-utils (arecord), or sox, then run /voice again.';
-}
-
 export class VoiceController {
   private enabled = false;
   private state: VoiceState = 'idle';
-  private recording: MicRecording | null = null;
-  private recorder: RecorderInfo | null = null;
-  private liveTimer: ReturnType<typeof setTimeout> | null = null;
-  private liveInFlight = false;
+  private session: STTSession | null = null;
+  private engine: STTEngine;
+  private settings: VoiceSettings;
   // Whether at least one live partial transcript actually streamed during the
   // current recording. Lets stop() distinguish "nothing was heard" from "live
   // text already surfaced", so the capture warning only fires when truly empty.
@@ -71,10 +55,49 @@ export class VoiceController {
 
   constructor(options: VoiceControllerOptions) {
     this.options = options;
+    this.settings = options.settings;
+    this.engine = createSTTEngine(this.settings, options.authStorage);
+  }
+
+  /**
+   * Swap the active engine/provider/model from updated settings. If voice is
+   * currently enabled it is re-validated against the new engine.
+   */
+  reconfigure(settings: VoiceSettings): void {
+    this.cancelRecording();
+    this.settings = settings;
+    this.engine = createSTTEngine(settings, this.options.authStorage);
+    if (this.enabled) {
+      const problem = this.engine.checkReady();
+      if (problem) {
+        this.enabled = false;
+        this.options.showError(problem);
+      }
+    }
   }
 
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Deeper readiness check that may do async work (e.g. compiling the native
+   * recognizer). Returns `null` when ready or a user-facing problem message.
+   * Falls back to the synchronous check when the engine has no async verify.
+   */
+  async verifyReady(): Promise<string | null> {
+    if (this.engine.verify) return this.engine.verify();
+    return this.engine.checkReady();
+  }
+
+  /**
+   * Structured, actionable permission guidance for the active engine (e.g. how
+   * to grant macOS Microphone/Speech access). Returns `null` for engines that
+   * don't expose it (cloud), so callers can skip the guided flow.
+   */
+  async permissionGuidance(): Promise<PermissionGuidance | null> {
+    if (this.engine.permissions) return this.engine.permissions();
+    return null;
   }
 
   getState(): VoiceState {
@@ -99,16 +122,11 @@ export class VoiceController {
   }
 
   enable(): boolean {
-    const recorder = detectRecorder();
-    if (!recorder) {
-      this.options.showError(missingRecorderMessage());
+    const problem = this.engine.checkReady();
+    if (problem) {
+      this.options.showError(problem);
       return false;
     }
-    if (!resolveOpenAIApiKey(this.options.authStorage)) {
-      this.options.showError(new VoiceCredentialError().message);
-      return false;
-    }
-    this.recorder = recorder;
     this.enabled = true;
     this.options.showInfo('Voice input on. Hold space to talk; release to transcribe. /voice to turn off.');
     return true;
@@ -117,155 +135,107 @@ export class VoiceController {
   /**
    * Restore the persisted enabled state at startup without emitting the
    * interactive "voice input on" message or surfacing errors. Silently stays
-   * disabled if a recorder or credentials are unavailable.
+   * disabled if the active engine is not ready.
    */
   restoreEnabled(): void {
     if (this.enabled) return;
-    const recorder = detectRecorder();
-    if (!recorder) return;
-    if (!resolveOpenAIApiKey(this.options.authStorage)) return;
-    this.recorder = recorder;
+    if (this.engine.checkReady()) return;
     this.enabled = true;
   }
 
   disable(): void {
     this.cancelRecording();
     this.enabled = false;
-    this.recorder = null;
     this.options.showInfo('Voice input off.');
   }
 
   /**
-   * Begin recording from the microphone. No-op if disabled or already active.
+   * Begin a streaming recognition session. No-op if disabled or already active.
+   * Partial results stream into the input via onPartialTranscript; the final
+   * result replaces the live text (live mode) or streams in word-by-word.
    */
   startRecording(): void {
-    if (!this.enabled || this.state !== 'idle' || !this.recorder) return;
-    try {
-      this.recording = new MicRecording(this.recorder);
-      this.state = 'recording';
-      this.liveTranscriptEmitted = false;
-      this.options.onListeningChange?.(true);
-      this.startLiveTranscription();
-    } catch {
-      this.recording = null;
-      this.state = 'idle';
-      this.options.showError('Could not start the microphone recorder.');
-    }
+    if (!this.enabled || this.state !== 'idle') return;
+    const live = !!this.options.onPartialTranscript;
+    this.liveTranscriptEmitted = false;
+    this.state = 'recording';
+    this.options.onListeningChange?.(true);
+
+    this.session = this.engine.start({
+      onPartial: text => {
+        if (this.state !== 'recording' || !text) return;
+        this.liveTranscriptEmitted = true;
+        this.options.onPartialTranscript?.(text);
+      },
+      onFinal: text => {
+        if (live) {
+          // Replace the live partial with the final, most accurate transcript.
+          if (text) this.options.onPartialTranscript!(text);
+          else if (!this.liveTranscriptEmitted) this.options.showInfo('No speech detected.');
+        } else if (text) {
+          void this.streamTranscript(text);
+        } else {
+          this.options.showInfo('No speech detected.');
+        }
+      },
+      onError: err => {
+        void this.reportSessionError(err);
+      },
+    });
   }
 
   /**
-   * Stop recording and transcribe. Inserts the transcript via onTranscript.
+   * Stop the session and let the engine emit its final transcript.
    */
   async stopRecording(): Promise<void> {
-    if (this.state !== 'recording' || !this.recording) return;
-    const recording = this.recording;
-    this.recording = null;
+    if (this.state !== 'recording') return;
+    const session = this.session;
+    this.session = null;
     this.state = 'transcribing';
-    this.stopLiveTranscription();
     this.options.onListeningChange?.(false);
-
-    const live = !!this.options.onPartialTranscript;
-
-    let audio: Buffer | null = null;
     try {
-      audio = await recording.stop();
-    } catch {
-      audio = null;
-    }
-
-    if (!audio) {
-      this.state = 'idle';
-      // In live mode the partial transcript already shows what was heard; only
-      // warn when nothing streamed in at all. If live mode produced no partials
-      // either, the user still gets the "no audio" feedback.
-      if (!live || !this.liveTranscriptEmitted) this.options.showError('No audio captured.');
-      return;
-    }
-
-    try {
-      const text = await transcribeAudio(audio, { authStorage: this.options.authStorage });
-      if (live) {
-        // Replace the live partial with the final, most accurate transcript.
-        this.options.onPartialTranscript!(text);
-      } else if (text) {
-        await this.streamTranscript(text);
-      } else {
-        this.options.showInfo('No speech detected.');
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Transcription failed.';
-      this.options.showError(message);
+      await session?.stop();
     } finally {
       this.state = 'idle';
     }
   }
 
   /**
-   * Abort any in-progress recording without transcribing.
+   * Abort any in-progress session without transcribing.
    */
   cancelRecording(): void {
-    this.stopLiveTranscription();
-    if (this.recording) {
-      this.recording.cancel();
-      this.recording = null;
+    if (this.session) {
+      this.session.cancel();
+      this.session = null;
     }
-    if (this.state === 'recording') {
+    if (this.state !== 'idle') {
       this.state = 'idle';
       this.options.onListeningChange?.(false);
     }
   }
 
   /**
-   * While recording, periodically transcribe the audio captured so far and push
-   * it through onPartialTranscript so the input shows live dictation. Each tick
-   * transcribes the full audio-so-far, which keeps the text stable and
-   * self-correcting (Whisper re-derives the whole utterance, no word-boundary
-   * artifacts). No-op when onPartialTranscript is not provided.
+   * Surface a session error. If the active engine can explain a permission
+   * problem (e.g. macOS access is blocked), append the concrete fix steps so the
+   * user knows exactly what to do instead of seeing a bare failure.
    */
-  private startLiveTranscription(): void {
-    if (!this.options.onPartialTranscript) return;
-    // Fire an early first tick so the opening words appear quickly, then settle
-    // into the steady cadence.
-    this.liveTimer = setTimeout(() => {
-      void this.runLiveTick();
-      if (this.state !== 'recording') return;
-      this.liveTimer = setInterval(() => {
-        void this.runLiveTick();
-      }, LIVE_TRANSCRIBE_INTERVAL_MS);
-    }, LIVE_TRANSCRIBE_FIRST_MS);
-  }
-
-  private stopLiveTranscription(): void {
-    if (this.liveTimer) {
-      // liveTimer may be the initial setTimeout handle or the steady
-      // setInterval handle; clearing both covers either phase.
-      clearTimeout(this.liveTimer);
-      clearInterval(this.liveTimer);
-      this.liveTimer = null;
-    }
-  }
-
-  private async runLiveTick(): Promise<void> {
-    // Skip if a previous tick's transcription is still running so we don't
-    // queue up overlapping requests on slow networks.
-    if (this.liveInFlight || this.state !== 'recording' || !this.recording) return;
-    const snapshot = this.recording.snapshot();
-    if (!snapshot) return;
-
-    this.liveInFlight = true;
+  private async reportSessionError(err: Error): Promise<void> {
+    const base = err.message || 'Transcription failed.';
     try {
-      const text = await transcribeAudio(snapshot, { authStorage: this.options.authStorage });
-      // Only apply if we're still recording — a stop() may have raced us.
-      if (this.state === 'recording' && text) {
-        this.liveTranscriptEmitted = true;
-        this.options.onPartialTranscript?.(text);
+      const guidance = await this.engine.permissions?.();
+      // Only dress the error with fix steps when access is actually blocked or
+      // unavailable. A `will-prompt` (not-yet-determined) state is NOT the reason
+      // a session failed — surfacing "macOS will prompt next time" in red after a
+      // crash is confusing, so we let the real error message through instead.
+      if (guidance && (guidance.state === 'blocked' || guidance.state === 'unsupported') && guidance.steps?.length) {
+        const steps = guidance.steps.map((step, i) => `  ${i + 1}. ${step}`).join('\n');
+        this.options.showError(`${guidance.summary}\n${steps}`);
+        return;
       }
     } catch {
-      // Ignore transient mid-recording transcription errors; the final
-      // transcription on stop() will surface any persistent failure.
-    } finally {
-      this.liveInFlight = false;
+      // Fall through to the plain error if guidance can't be produced.
     }
+    this.options.showError(base);
   }
 
   /**

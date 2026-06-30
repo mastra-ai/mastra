@@ -2129,6 +2129,12 @@ importers:
       '@mastra/tavily':
         specifier: workspace:*
         version: link:../integrations/tavily
+      '@mastra/voice-deepgram':
+        specifier: workspace:*
+        version: link:../voice/deepgram
+      '@mastra/voice-openai':
+        specifier: workspace:*
+        version: link:../voice/openai
       '@tanstack/react-query':
         specifier: ^5.90.21
         version: 5.90.21(react@19.2.6)
