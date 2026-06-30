@@ -391,11 +391,23 @@ const memory = new Memory({
 
 Thread scope requires a valid `threadId` to be provided when calling the agent. If `threadId` is missing, Observational Memory throws an error. This prevents multiple threads from silently sharing a single observation record, which can cause database deadlocks.
 
-### Resource scope (experimental)
+### Resource scope (deprecated)
 
-Observations are shared across all threads for a resource (typically a user). Enables cross-conversation memory.
+:::danger[Deprecated]
+
+Resource scope (`scope: 'resource'`) is deprecated and not recommended for production use. It has fundamental issues with context bleed between threads — every new thread comes preloaded with observations from all prior threads, causing context bloat and the agent trying to continue other threads' work.
+
+Use [thread scope with retrieval](#retrieval-mode-experimental) for cross-session continuity, or [resource-scoped working memory](/docs/memory/working-memory#resource-scoped-memory-default) for persisting small durable facts across threads.
+
+:::
+
+Resource scope shares observations across all threads for a resource (typically a user). In practice, each thread becomes a perspective on _all_ threads for that resource, which causes two problems:
+
+1. **Context bloat**: Every new thread is preloaded with observations from all prior threads, even when they aren't relevant.
+1. **Task interference**: The agent tries to continue work from other threads that it hasn't finished, rather than focusing on the current thread's task.
 
 ```typescript
+// ⚠️ Deprecated — avoid for new projects
 const memory = new Memory({
   options: {
     observationalMemory: {
@@ -406,18 +418,50 @@ const memory = new Memory({
 })
 ```
 
-Resource scope works, however it's marked as experimental for now until we prove task adherence/continuity across multiple ongoing simultaneous threads.
-As of today, you may need to tweak your system prompt to prevent one thread from continuing the work that another had already started (but hadn't finished).
-
-This is because in resource scope, each thread is a perspective on _all_ threads for the resource.
-
-For your use-case this may not be a problem, so your mileage may vary.
-
 :::warning
 
-In resource scope, unobserved messages across _all_ threads are processed together. For users with many existing threads, this can be slow. Use thread scope for existing apps.
+In resource scope, unobserved messages across _all_ threads are processed together. For users with many existing threads, this can be slow and expensive.
 
 :::
+
+#### Recommended alternatives for cross-session continuity
+
+Instead of resource scope, use one of these approaches:
+
+**Thread scope + retrieval** (recommended for most use cases): Keep observations per-thread, but enable [retrieval mode](#retrieval-mode-experimental) so the agent can pull in context from other threads on demand. The agent chooses when to look up prior conversations rather than having everything injected automatically.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      scope: 'thread',
+      retrieval: true, // agent can browse/search other threads on demand
+    },
+  },
+})
+```
+
+**Resource-scoped working memory**: Use [working memory](/docs/memory/working-memory) with `scope: 'resource'` for small durable facts (user preferences, names, goals) that should persist across all threads. Working memory with [`useStateSignals`](/docs/memory/working-memory#opt-in-to-state-signals-experimental) makes updates prompt-cacheable.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      scope: 'thread',
+    },
+    workingMemory: {
+      enabled: true,
+      scope: 'resource', // small durable facts shared across threads
+      useStateSignals: true, // prompt-cacheable updates
+      template: `# User Profile\n- Name:\n- Preferences:\n- Goals:`,
+    },
+  },
+})
+```
+
+**Combine both** for full cross-session continuity: thread-scoped OM with retrieval handles long conversation memory, while resource-scoped working memory stores structured facts.
 
 ## Token budgets
 
@@ -569,7 +613,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering isn't supported with `scope: 'resource'`. It's automatically disabled in resource scope.
+Async buffering isn't supported with `scope: 'resource'` (deprecated). It's automatically disabled in resource scope.
 
 :::
 
@@ -601,7 +645,7 @@ const memory = new Memory({
 No manual migration needed. OM reads existing messages and observes them lazily when thresholds are exceeded.
 
 - **Thread scope**: The first time a thread exceeds `observation.messageTokens`, the Observer processes the backlog.
-- **Resource scope**: All unobserved messages across all threads for a resource are processed together. For users with many existing threads, this could take significant time.
+- **Resource scope** (deprecated): All unobserved messages across all threads for a resource are processed together. For users with many existing threads, this could take significant time. Resource scope is deprecated — use thread scope with retrieval instead.
 
 ## Comparing OM with other memory features
 

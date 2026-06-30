@@ -60,7 +60,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'scope',
     type: "'resource' | 'thread'",
     description:
-      "Memory scope for observations. `'thread'` keeps observations per-thread. `'resource'` (experimental) shares observations across all threads for a resource, enabling cross-conversation memory.",
+      "Memory scope for observations. `'thread'` (default, recommended) keeps observations per-thread. `'resource'` (deprecated) shares observations across all threads for a resource — this causes context bloat and task interference in practice. Use thread scope with `retrieval: true` for cross-session continuity instead.",
     isOptional: true,
     defaultValue: "'thread'",
   },
@@ -154,7 +154,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'maxTokensPerBatch',
             type: 'number',
             description:
-              'Maximum tokens per batch when observing multiple threads in resource scope. Threads are chunked into batches of this size and processed in parallel. Lower values mean more parallelism but more API calls.',
+              'Maximum tokens per batch when observing multiple threads in resource scope (deprecated). Threads are chunked into batches of this size and processed in parallel. Lower values mean more parallelism but more API calls.',
             isOptional: true,
             defaultValue: '10000',
           },
@@ -353,12 +353,17 @@ OM persists token payload estimates so repeated counting can reuse prior token e
 
 ## Examples
 
-### Resource scope with custom thresholds (experimental)
+### Resource scope with custom thresholds (deprecated)
+
+:::danger[Deprecated]
+Resource scope is deprecated due to context bloat and task interference. Use thread scope with `retrieval: true` instead. See [recommended alternatives](/docs/memory/observational-memory#recommended-alternatives-for-cross-session-continuity).
+:::
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
+// ⚠️ Deprecated — use thread scope with retrieval instead
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
@@ -555,7 +560,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering isn't supported with `scope: 'resource'` and is automatically disabled in resource scope.
+Async buffering isn't supported with `scope: 'resource'` (deprecated) and is automatically disabled in resource scope.
 
 :::
 
@@ -808,6 +813,7 @@ const storage = new LibSQLStore({
   url: 'file:./memory.db',
 })
 
+// ⚠️ Resource scope is deprecated — use thread scope with retrieval instead
 const om = new ObservationalMemory({
   storage: storage.stores.memory,
   model: 'google/gemini-2.5-flash',
