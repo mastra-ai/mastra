@@ -196,6 +196,45 @@ describe('MacosNativeSTTEngine', () => {
     expect(cb.onFinal).toHaveBeenCalledWith('done');
   });
 
+  it('cancel writes the stop sentinel and does not kill the app immediately', async () => {
+    const child = new FakeOpenChild();
+    mocks.spawn.mockReturnValue(child);
+    const cb = callbacks();
+
+    const session = new MacosNativeSTTEngine().start(cb);
+    await flush();
+
+    session.cancel();
+    await flush();
+
+    // The stop sentinel is written so the detached app can wind down and release
+    // the mic; we must not SIGKILL the wrapper before it has seen the sentinel.
+    expect(mocks.writeFile).toHaveBeenCalledWith(expect.stringMatching(/stop$/), '', 'utf8');
+    expect(child.kill).not.toHaveBeenCalled();
+
+    // No transcript surfaces from a cancelled session.
+    appendEvent({ type: 'final', text: 'ignored' });
+    await tick();
+    expect(cb.onFinal).not.toHaveBeenCalled();
+  });
+
+  it('flushes a final line that lacks a trailing newline when the app exits', async () => {
+    const child = new FakeOpenChild();
+    mocks.spawn.mockReturnValue(child);
+    const cb = callbacks();
+
+    new MacosNativeSTTEngine().start(cb);
+    await flush();
+
+    // Recognizer wrote a complete JSON object but exited before the newline.
+    eventFile += JSON.stringify({ type: 'final', text: 'no newline' });
+    child.emit('exit', 0, null, '');
+    await tick();
+
+    expect(cb.onFinal).toHaveBeenCalledWith('no newline');
+    expect(cb.onError).not.toHaveBeenCalled();
+  });
+
   describe('verify (permission probe)', () => {
     let platformSpy: ReturnType<typeof vi.spyOn>;
     beforeEach(() => {

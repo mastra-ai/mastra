@@ -88,10 +88,14 @@ class CloudSession implements STTSession {
     let audio: Buffer | null = null;
     try {
       audio = await recording.stop();
-    } catch {
-      audio = null;
+    } catch (err) {
+      this.callbacks.onError(err instanceof Error ? err : new Error('Could not stop the microphone recorder.'));
+      return;
     }
-    if (!audio) return;
+    if (!audio) {
+      this.callbacks.onFinal('');
+      return;
+    }
 
     try {
       const text = await this.transcriber.transcribe(audio);

@@ -142,10 +142,10 @@ async function probePermissions(): Promise<ProbeResult | null> {
 function describeProbe(probe: ProbeResult): string | null {
   const settingsHint = 'System Settings › Privacy & Security';
   if (probe.mic === 'denied' || probe.mic === 'restricted') {
-    return `Microphone access is blocked. Enable your terminal under ${settingsHint} › Microphone, then restart it.`;
+    return `Microphone access is blocked. Enable MastraCode Voice under ${settingsHint} › Microphone, then restart your terminal.`;
   }
   if (probe.speech === 'denied' || probe.speech === 'restricted') {
-    return `Speech Recognition access is blocked. Enable your terminal under ${settingsHint} › Speech Recognition, then restart it.`;
+    return `Speech Recognition access is blocked. Enable MastraCode Voice under ${settingsHint} › Speech Recognition, then restart your terminal.`;
   }
   if (probe.mic === 'notDetermined' || probe.speech === 'notDetermined') {
     return 'Microphone / Speech Recognition access not granted yet — the first time you hold space to dictate, macOS will prompt; click Allow on both.';
@@ -165,10 +165,10 @@ function guidanceFromProbe(probe: ProbeResult): PermissionGuidance {
     const which = blockedMic ? 'Microphone' : 'Speech Recognition';
     return {
       state: 'blocked',
-      summary: `${which} access is turned off for your terminal, so on-device dictation can't run.`,
+      summary: `${which} access is turned off for MastraCode Voice, so on-device dictation can't run.`,
       steps: [
         `Open System Settings › Privacy & Security › ${which}.`,
-        'Turn on the switch next to your terminal app (Terminal, iTerm, etc.).',
+        'Turn on the switch next to MastraCode Voice.',
         'Fully quit and reopen the terminal so the change takes effect.',
       ],
       settingsUrl: blockedMic ? MIC_SETTINGS_URL : SPEECH_SETTINGS_URL,
@@ -206,9 +206,11 @@ class MacosNativeSession implements STTSession {
   private eventPath = '';
   private stopPath = '';
   private readOffset = 0;
+  private pendingLine = '';
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
   private sawEvent = false;
+  private cancelled = false;
   private finalResolve: (() => void) | null = null;
   private finalPromise: Promise<void>;
   private settled = false;
@@ -277,7 +279,7 @@ class MacosNativeSession implements STTSession {
     }, EVENT_POLL_INTERVAL_MS);
   }
 
-  private async poll(): Promise<void> {
+  private async poll(flush = false): Promise<void> {
     if (this.settled || this.polling) return;
     this.polling = true;
     try {
@@ -285,10 +287,21 @@ class MacosNativeSession implements STTSession {
       if (contents.length > this.readOffset) {
         const fresh = contents.slice(this.readOffset);
         this.readOffset = contents.length;
-        for (const line of fresh.split('\n')) {
+        // The recognizer may be mid-write, leaving a trailing partial line.
+        // Buffer it and only dispatch complete (newline-terminated) lines.
+        const lines = (this.pendingLine + fresh).split('\n');
+        this.pendingLine = lines.pop() ?? '';
+        for (const line of lines) {
           const trimmed = line.trim();
           if (trimmed) this.handleLine(trimmed);
         }
+      }
+      // On a final drain the recognizer has exited, so any buffered remainder
+      // is a complete line that simply lacked a trailing newline — flush it.
+      if (flush && this.pendingLine.trim()) {
+        const trimmed = this.pendingLine.trim();
+        this.pendingLine = '';
+        this.handleLine(trimmed);
       }
     } catch {
       // File may not exist yet between launch and first emit; ignore.
@@ -304,8 +317,9 @@ class MacosNativeSession implements STTSession {
    * instead of settling silently.
    */
   private onOpenExit(code: number | null, signal: NodeJS.Signals | null, stderr: string): void {
-    // Drain any events the recognizer wrote just before exiting.
-    void this.poll().then(() => {
+    // Drain any events the recognizer wrote just before exiting, flushing a
+    // final line that may lack a trailing newline.
+    void this.poll(true).then(() => {
       if (this.settled) return;
       if (!this.sawEvent) {
         const detail = stderr.trim();
@@ -317,7 +331,7 @@ class MacosNativeSession implements STTSession {
         this.fail(
           new Error(
             `macOS speech recognition stopped before it could start (${reason}). ` +
-              `If macOS didn't prompt you, enable your terminal under System Settings › Privacy & Security › ` +
+              `If macOS didn't prompt you, enable MastraCode Voice under System Settings › Privacy & Security › ` +
               `Microphone and Speech Recognition, then fully quit and reopen the terminal.`,
           ),
         );
@@ -335,6 +349,11 @@ class MacosNativeSession implements STTSession {
       return;
     }
     this.sawEvent = true;
+    // Once cancelled we only let the recognizer wind down; no transcripts surface.
+    if (this.cancelled) {
+      if (event.type === 'final' || event.type === 'error') this.settle();
+      return;
+    }
     switch (event.type) {
       case 'partial':
         if (event.text) this.callbacks.onPartial(event.text);
@@ -381,6 +400,32 @@ class MacosNativeSession implements STTSession {
     }
   }
 
+  /**
+   * Stop recording without emitting a transcript, but let the recognizer wind
+   * down gracefully so it releases the microphone. We write the stop sentinel
+   * and wait for the LaunchServices app to observe it and exit on its own (its
+   * `exit` handler settles us and removes the temp dir). A SIGKILL + forced
+   * cleanup is only a safety net if the app never acknowledges the sentinel —
+   * tearing the temp dir down immediately would delete the stop file before the
+   * detached app could poll it, leaving the mic live with no control channel.
+   */
+  private async gracefulCancel(): Promise<void> {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    await this.signalStop();
+    if (this.settled || !this.openChild) {
+      this.settle();
+      return;
+    }
+    const safetyNet = setTimeout(() => {
+      this.teardown();
+      this.settle();
+    }, FINAL_FLUSH_GRACE_MS);
+    void this.finalPromise.finally(() => clearTimeout(safetyNet));
+  }
+
   private async cleanupWorkDir(): Promise<void> {
     const dir = this.workDir;
     this.workDir = null;
@@ -421,9 +466,9 @@ class MacosNativeSession implements STTSession {
   }
 
   cancel(): void {
-    void this.signalStop();
-    this.teardown();
-    this.settle();
+    if (this.settled || this.cancelled) return;
+    this.cancelled = true;
+    void this.gracefulCancel();
   }
 }
 

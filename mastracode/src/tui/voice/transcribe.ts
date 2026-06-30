@@ -103,7 +103,6 @@ export interface TranscribeOptions {
   /** Model id within the provider. Defaults to the provider's default model. */
   model?: string;
   authStorage?: AuthStorage;
-  abortSignal?: AbortSignal;
 }
 
 /**

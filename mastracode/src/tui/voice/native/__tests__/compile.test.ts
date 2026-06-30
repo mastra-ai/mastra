@@ -127,6 +127,16 @@ describe('resolveRecognizer', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null when the native assets cannot be read', async () => {
+    mocks.stat.mockRejectedValue(new Error('ENOENT'));
+    // Asset is missing from the published bundle (or unreadable): no throw, just
+    // "native unavailable" so the caller can fall back to a cloud engine.
+    mocks.readFile.mockRejectedValue(new Error('ENOENT'));
+    const result = await resolveRecognizer('/x/macos-stt.swift', '/x/macos-stt.plist');
+    expect(result).toBeNull();
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
   it('returns null when the swiftc compile fails', async () => {
     mocks.stat.mockRejectedValue(new Error('ENOENT'));
     mocks.spawn.mockImplementation((_cmd: string, args: string[]) => {

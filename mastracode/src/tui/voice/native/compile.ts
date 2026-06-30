@@ -173,7 +173,14 @@ export async function resolveRecognizer(
   scriptPath: string = SCRIPT_PATH,
   plistPath: string = PLIST_PATH,
 ): Promise<RecognizerInvocation | null> {
-  const [source, plist] = await Promise.all([readFile(scriptPath, 'utf8'), readFile(plistPath, 'utf8')]);
+  let source: string;
+  let plist: string;
+  try {
+    [source, plist] = await Promise.all([readFile(scriptPath, 'utf8'), readFile(plistPath, 'utf8')]);
+  } catch {
+    // Native assets aren't shipped/readable — treat as "native unavailable".
+    return null;
+  }
   // `v3` busts caches built before the .app-bundle + LaunchServices approach
   // (loose binaries never triggered the TCC prompt).
   const hash = createHash('sha256').update('v3').update(source).update('\0').update(plist).digest('hex').slice(0, 16);

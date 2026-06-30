@@ -77,6 +77,9 @@ describe('transcribeAudio provider routing', () => {
   });
 
   it('throws VoiceCredentialError when the provider has no key', async () => {
+    // Force the key empty so the test is deterministic regardless of the host
+    // environment (e.g. a real DEEPGRAM_API_KEY exported on a dev machine/CI).
+    vi.stubEnv('DEEPGRAM_API_KEY', '');
     await expect(transcribeAudio(AUDIO, { provider: 'deepgram' })).rejects.toBeInstanceOf(VoiceCredentialError);
   });
 
