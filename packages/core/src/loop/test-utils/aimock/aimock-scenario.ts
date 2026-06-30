@@ -366,7 +366,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors && !isDurable ? { outputProcessors } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
-    ...(prepareStep && !isDurable ? { prepareStep } : {}),
+    ...(prepareStep ? { prepareStep } : {}),
     ...(requestContext ? { requestContext } : {}),
     ...(delegation && !isDurable ? { delegation } : {}),
     ...(onIterationComplete && !isDurable ? { onIterationComplete } : {}),

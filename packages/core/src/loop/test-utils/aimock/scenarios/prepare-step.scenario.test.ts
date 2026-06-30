@@ -70,5 +70,4 @@ describeForAllEngines(
       expect(toolNames(1)).not.toContain('tool_a');
     });
   },
-  { skip: ['durable'] },
 );

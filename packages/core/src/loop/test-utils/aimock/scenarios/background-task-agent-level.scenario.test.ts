@@ -62,5 +62,4 @@ describeForAllEngines(
       });
     });
   },
-  { skip: ['durable'] },
 );
