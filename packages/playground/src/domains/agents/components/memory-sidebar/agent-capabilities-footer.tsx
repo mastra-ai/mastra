@@ -51,6 +51,24 @@ const getCount = (value?: Record<string, unknown> | unknown[]) => {
 
 const countStatus = (count: number) => (count > 0 ? String(count) : 'Off');
 
+function getMemoryStatus(isLoading: boolean, hasMemory: boolean, memoryType?: 'local' | 'gateway'): string {
+  if (isLoading) return 'Checking';
+  if (!hasMemory) return 'Off';
+  return memoryType === 'gateway' ? 'Gateway' : 'On';
+}
+
+function getEditorStatus(isLoading: boolean, enabled: boolean, locked: boolean, versionCount: number): string {
+  if (isLoading) return 'Checking';
+  if (enabled) return versionCount > 0 ? String(versionCount) : 'Ready';
+  return locked ? 'Locked' : 'Off';
+}
+
+function getEditorDescription(enabled: boolean, locked: boolean): string {
+  if (enabled) return 'Editor is available for versioned agent overrides.';
+  if (locked) return 'This code-defined agent explicitly disables editor overrides.';
+  return 'Register MastraEditor to enable versioned agent overrides.';
+}
+
 function CapabilityIconChip({ capability }: { capability: Capability }) {
   const tone = toneClassName[capability.tone];
 
@@ -118,6 +136,7 @@ export function AgentCapabilitiesFooter({
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId);
   const { isCmsAvailable, isLoading: isCmsAvailabilityLoading } = useIsCmsAvailable();
   const editorEnabled = Boolean(!isCmsAvailabilityLoading && isCmsAvailable && agent && agent.editor !== false);
+  const editorLocked = agent?.editor === false;
   const versionsQuery = useAgentVersions({
     agentId,
     params: { orderBy: { field: 'createdAt', direction: 'DESC' } },
@@ -136,7 +155,7 @@ export function AgentCapabilitiesFooter({
     {
       id: 'memory',
       label: 'Memory',
-      status: isMemoryLoading ? 'Checking' : hasMemory ? (memoryType === 'gateway' ? 'Gateway' : 'On') : 'Off',
+      status: getMemoryStatus(isMemoryLoading, hasMemory, memoryType),
       description: hasMemory
         ? 'Conversation history and configured memory features are available for this agent.'
         : 'This agent has no memory configured, so conversations are not saved as memory-backed threads.',
@@ -148,20 +167,8 @@ export function AgentCapabilitiesFooter({
     {
       id: 'editor',
       label: 'Editor',
-      status: isEditorLoading
-        ? 'Checking'
-        : editorEnabled
-          ? versionCount > 0
-            ? String(versionCount)
-            : 'Ready'
-          : agent?.editor === false
-            ? 'Locked'
-            : 'Off',
-      description: editorEnabled
-        ? 'Editor is available for versioned agent overrides.'
-        : agent?.editor === false
-          ? 'This code-defined agent explicitly disables editor overrides.'
-          : 'Register MastraEditor to enable versioned agent overrides.',
+      status: getEditorStatus(isEditorLoading, editorEnabled, editorLocked, versionCount),
+      description: getEditorDescription(editorEnabled, editorLocked),
       docsHref: 'https://mastra.ai/docs/editor/overview',
       enabled: editorEnabled,
       tone: 'amber',
