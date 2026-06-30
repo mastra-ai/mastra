@@ -8,6 +8,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
 import { AgentMemory } from './agent-memory';
 import { MemoryDetailView } from './memory-detail-view';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
@@ -26,6 +27,7 @@ export interface MemorySidebarProps {
   onDelete: (threadId: string) => void;
   memoryType?: 'local' | 'gateway';
   hasMemory: boolean;
+  isMemoryLoading?: boolean;
 }
 
 const barColor = (percent: number): string => {
@@ -79,6 +81,7 @@ export function MemorySidebar({
   onDelete,
   memoryType,
   hasMemory,
+  isMemoryLoading = false,
 }: MemorySidebarProps) {
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
   const { isPanelOpen } = useMemoryTimeline();
@@ -86,6 +89,10 @@ export function MemorySidebar({
   const { data: memoryConfig } = useMemoryConfig(agentId);
 
   const showMemory = selectedTab === 'memory';
+  // While memory is still resolving we keep the thread/memory layout so the panel
+  // doesn't flash the empty state; the card itself only renders once memory exists.
+  const hasMemoryPanel = isMemoryLoading || hasMemory;
+  const showMemoryOverlay = hasMemoryPanel;
   const memoryCardShellRef = useRef<HTMLDivElement>(null);
   const memoryCardButtonRef = useRef<HTMLButtonElement>(null);
   const [collapsedCardSize, setCollapsedCardSize] = useState({ height: 0, offset: 0 });
@@ -114,7 +121,7 @@ export function MemorySidebar({
       : undefined;
 
   useLayoutEffect(() => {
-    if (showMemory) return;
+    if (showMemory || showMemoryDetail || !showMemoryOverlay) return;
 
     const shell = memoryCardShellRef.current;
     const button = memoryCardButtonRef.current;
@@ -141,42 +148,76 @@ export function MemorySidebar({
     const observer = new ResizeObserver(updateCollapsedSize);
     observer.observe(button);
     return () => observer.disconnect();
-  }, [lastMessages, observationPercent, observationalOn, semanticRecallOn, showMemory, workingMemoryOn]);
+  }, [
+    lastMessages,
+    observationPercent,
+    observationalOn,
+    semanticRecallOn,
+    showMemory,
+    showMemoryDetail,
+    showMemoryOverlay,
+    workingMemoryOn,
+  ]);
 
   return (
     <SidebarPanel>
-      {hasMemory ? (
+      {showMemoryDetail ? (
         <div data-testid="memory-sidebar-panel" className="h-full min-h-0 min-w-0">
-          {showMemoryDetail ? (
-            <MemoryDetailView agentId={agentId} threadId={threadId} />
-          ) : (
-            <div className="relative h-full min-h-0 min-w-0 overflow-hidden">
+          <MemoryDetailView agentId={agentId} threadId={threadId} />
+        </div>
+      ) : (
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <div
+              aria-hidden={showMemory && showMemoryOverlay}
+              inert={showMemory && showMemoryOverlay ? true : undefined}
+              data-testid="memory-sidebar-thread-layer"
+              className={cn(
+                'memory-sidebar-thread-layer absolute inset-0 flex min-h-0 flex-col overflow-hidden',
+                showMemory && showMemoryOverlay ? 'pointer-events-none opacity-0' : 'opacity-100',
+              )}
+            >
               <div
-                aria-hidden={showMemory}
-                inert={showMemory ? true : undefined}
-                data-testid="memory-sidebar-thread-layer"
-                className={cn(
-                  'memory-sidebar-thread-layer absolute inset-0 min-h-0 overflow-y-auto',
-                  showMemory ? 'pointer-events-none opacity-0' : 'opacity-100',
-                )}
-                style={{ paddingTop: collapsedCardSize.offset || undefined }}
+                className="min-h-0 flex-1 overflow-hidden"
+                style={{ paddingBottom: showMemoryOverlay ? collapsedCardSize.offset || undefined : undefined }}
               >
-                <ChatThreads
-                  resourceId={agentId}
-                  resourceType="agent"
-                  threads={threads || []}
-                  isLoading={isLoading}
-                  threadId={threadId}
-                  onDelete={onDelete}
-                  embedded
-                />
+                {hasMemoryPanel ? (
+                  <ChatThreads
+                    resourceId={agentId}
+                    resourceType="agent"
+                    threads={threads || []}
+                    isLoading={isLoading}
+                    threadId={threadId}
+                    onDelete={onDelete}
+                    embedded
+                  />
+                ) : (
+                  <EmptyState
+                    iconSlot={null}
+                    titleSlot="Memory not enabled"
+                    descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
+                    actionSlot={
+                      <Button
+                        as="a"
+                        href="https://mastra.ai/en/docs/agents/agent-memory"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        variant="outline"
+                      >
+                        View documentation
+                      </Button>
+                    }
+                  />
+                )}
               </div>
+            </div>
 
+            {showMemoryOverlay ? (
               <div
                 ref={memoryCardShellRef}
                 data-testid="memory-sidebar-overlay"
                 className={cn(
-                  'memory-sidebar-overlay absolute inset-x-0 top-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
+                  'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
                   showMemory
                     ? 'm-0 rounded-none border-transparent bg-surface3 shadow-none'
                     : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
@@ -199,9 +240,9 @@ export function MemorySidebar({
                       </Txt>
                     </span>
                     {showMemory ? (
-                      <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
-                    ) : (
                       <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
+                    ) : (
+                      <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
                     )}
                   </span>
 
@@ -270,31 +311,21 @@ export function MemorySidebar({
                 </button>
 
                 {showMemory && (
-                  <div className="memory-card-content flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border1">
+                  <div className="memory-card-content min-h-0 flex-1 overflow-y-auto border-t border-border1">
                     <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            ) : null}
+          </div>
+
+          <AgentCapabilitiesFooter
+            agentId={agentId}
+            hasMemory={hasMemory}
+            isMemoryLoading={isMemoryLoading}
+            memoryType={memoryType}
+          />
         </div>
-      ) : (
-        <EmptyState
-          iconSlot={null}
-          titleSlot="Memory not enabled"
-          descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
-          actionSlot={
-            <Button
-              as="a"
-              href="https://mastra.ai/en/docs/agents/agent-memory"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="outline"
-            >
-              View documentation
-            </Button>
-          }
-        />
       )}
     </SidebarPanel>
   );

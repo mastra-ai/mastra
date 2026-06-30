@@ -16,14 +16,22 @@ export type { ListAgentVersionsParams, CreateAgentVersionParams };
 /**
  * Hook to list versions of a stored agent
  */
-export const useAgentVersions = ({ agentId, params }: { agentId: string; params?: ListAgentVersionsParams }) => {
+export const useAgentVersions = ({
+  agentId,
+  params,
+  enabled = true,
+}: {
+  agentId: string;
+  params?: ListAgentVersionsParams;
+  enabled?: boolean;
+}) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
   return useQuery<ListAgentVersionsResponse>({
     queryKey: ['agent-versions', agentId, params, requestContext],
     queryFn: () => client.getStoredAgent(agentId).listVersions(params, requestContext),
-    enabled: !!agentId,
+    enabled: enabled && !!agentId,
   });
 };
 

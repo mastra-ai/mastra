@@ -10,6 +10,7 @@ export function AgentSidebar({
   isLoading,
   memoryType,
   hasMemory,
+  isMemoryLoading,
 }: {
   agentId: string;
   threadId: string;
@@ -17,6 +18,7 @@ export function AgentSidebar({
   isLoading: boolean;
   memoryType?: 'local' | 'gateway';
   hasMemory: boolean;
+  isMemoryLoading?: boolean;
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
@@ -37,6 +39,7 @@ export function AgentSidebar({
       onDelete={handleDelete}
       memoryType={memoryType}
       hasMemory={hasMemory}
+      isMemoryLoading={isMemoryLoading}
     />
   );
 }

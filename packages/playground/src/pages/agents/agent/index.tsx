@@ -139,7 +139,8 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                             threads={sidebarThreads}
                             isLoading={isMemoryLoading || isThreadsLoading}
                             memoryType={memory?.memoryType}
-                            hasMemory={isMemoryLoading || hasMemory}
+                            hasMemory={hasMemory}
+                            isMemoryLoading={isMemoryLoading}
                           />
                         }
                         browserOverlay={<BrowserViewPanel />}
