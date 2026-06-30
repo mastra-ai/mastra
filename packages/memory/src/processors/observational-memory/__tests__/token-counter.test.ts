@@ -963,6 +963,57 @@ describe('TokenCounter', () => {
       expect(withToolResult).not.toBe(initial);
       expect(withToolResultAgain).toBe(withToolResult);
     });
+    it('counts tokens for output-denied tool invocations without throwing', () => {
+      const counter = new TokenCounter();
+      const callOnly = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'tool-denied',
+              toolName: 'delete-file',
+              args: { path: '/tmp/test.txt' },
+            },
+          },
+        ],
+      });
+      const denied = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'call',
+              toolCallId: 'tool-denied',
+              toolName: 'delete-file',
+              args: { path: '/tmp/test.txt' },
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-denied',
+              toolCallId: 'tool-denied',
+              toolName: 'delete-file',
+              args: { path: '/tmp/test.txt' },
+              approval: {
+                id: 'tool-denied',
+                approved: false,
+                reason: 'Tool call was not approved by the user',
+              },
+            },
+          },
+        ],
+      });
+
+      expect(() => counter.countMessage(denied)).not.toThrow();
+
+      const callOnlyTokens = counter.countMessage(callOnly);
+      const deniedTokens = counter.countMessage(denied);
+      expect(deniedTokens).toBeGreaterThan(callOnlyTokens);
+    });
 
     it('prefers stored mastra.modelOutput over raw tool results for token counting', async () => {
       const counter = new TokenCounter();

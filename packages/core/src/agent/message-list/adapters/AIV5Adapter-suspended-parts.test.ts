@@ -225,6 +225,84 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     expect(approvalParts).toHaveLength(1);
   });
 
+  it('should downgrade output-denied state to output-available with approval.reason as output', () => {
+    const dbMessage: MastraDBMessage = {
+      id: 'msg-denied',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'tc-denied',
+              toolName: 'delete-file',
+              args: { path: '/tmp/test.txt' },
+              state: 'output-denied',
+              approval: {
+                id: 'tc-denied',
+                approved: false,
+                reason: 'Tool call was not approved by the user',
+              },
+            } as any,
+          },
+        ] as any,
+        metadata: {},
+      },
+    };
+
+    const uiMessage = AIV5Adapter.toUIMessage(dbMessage);
+
+    const toolParts = uiMessage.parts.filter(p => p.type.startsWith('tool-'));
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0]).toMatchObject({
+      type: 'tool-delete-file',
+      toolCallId: 'tc-denied',
+      input: { path: '/tmp/test.txt' },
+      state: 'output-available',
+      output: 'Tool call was not approved by the user',
+    });
+    // approval must not leak onto the V5 part
+    expect((toolParts[0] as any).approval).toBeUndefined();
+  });
+
+  it('should fall back to a default denial message when output-denied has no approval.reason', () => {
+    const dbMessage: MastraDBMessage = {
+      id: 'msg-denied-no-reason',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'tc-denied-2',
+              toolName: 'delete-file',
+              args: { path: '/tmp/test2.txt' },
+              state: 'output-denied',
+              approval: {
+                id: 'tc-denied-2',
+                approved: false,
+              },
+            } as any,
+          },
+        ] as any,
+        metadata: {},
+      },
+    };
+
+    const uiMessage = AIV5Adapter.toUIMessage(dbMessage);
+
+    const toolParts = uiMessage.parts.filter(p => p.type.startsWith('tool-'));
+    expect(toolParts[0]).toMatchObject({
+      type: 'tool-delete-file',
+      state: 'output-available',
+      output: 'Tool call was not approved by the user',
+    });
+  });
+
   it('should NOT produce data-tool-call-suspended parts for already-resumed tools', () => {
     // When a tool has been resumed/completed, metadata.suspendedTools is cleared,
     // so no data-tool-call-suspended parts should be synthesized

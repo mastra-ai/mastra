@@ -49,6 +49,13 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       stack: z.string().optional(),
     })
     .optional(),
+  approval: z
+    .object({
+      id: z.string(),
+      approved: z.boolean(),
+      reason: z.string().optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -329,7 +336,11 @@ export function createDurableToolCallStep() {
         if (!(resumeData as { approved: boolean }).approved) {
           return {
             ...typedInput,
-            result: 'Tool call was not approved by the user',
+            approval: {
+              id: typedInput.toolCallId,
+              approved: false,
+              reason: 'Tool call was not approved by the user',
+            },
           };
         }
       }
@@ -676,6 +687,12 @@ export function createDurableToolCallStep() {
                   ...typedInput,
                   args: cleanedArgs,
                   result: `Background task resumed. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
+                  ...(requiresApproval &&
+                  resumeData &&
+                  typeof resumeData === 'object' &&
+                  (resumeData as any).approved === true
+                    ? { approval: { id: toolCallId, approved: true as const } }
+                    : {}),
                 };
               }
             }
@@ -702,6 +719,12 @@ export function createDurableToolCallStep() {
                 ...typedInput,
                 args: cleanedArgs,
                 result: `Background task started. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
+                ...(requiresApproval &&
+                resumeData &&
+                typeof resumeData === 'object' &&
+                (resumeData as any).approved === true
+                  ? { approval: { id: toolCallId, approved: true as const } }
+                  : {}),
               };
             }
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
@@ -741,6 +764,9 @@ export function createDurableToolCallStep() {
         return {
           ...typedInput,
           result,
+          ...(requiresApproval && resumeData && typeof resumeData === 'object' && (resumeData as any).approved === true
+            ? { approval: { id: toolCallId, approved: true as const } }
+            : {}),
         };
       } catch (error) {
         const toolError = serializeError(error);

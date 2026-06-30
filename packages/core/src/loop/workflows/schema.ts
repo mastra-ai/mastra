@@ -175,4 +175,11 @@ export const toolCallInputSchema = z.object({
 export const toolCallOutputSchema = toolCallInputSchema.extend({
   result: z.any().optional(),
   error: z.any().optional(),
+  approval: z
+    .object({
+      id: z.string(),
+      approved: z.boolean(),
+      reason: z.string().optional(),
+    })
+    .optional(),
 });

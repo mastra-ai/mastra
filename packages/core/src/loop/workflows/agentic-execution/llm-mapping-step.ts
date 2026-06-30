@@ -293,7 +293,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         return withToolPayloadTransformMetadata(withToolPayloadTransformMetadata(chunk, inputTransform), transform);
       }
 
-      if (inputData?.some(toolCall => toolCall?.result === undefined && !toolCall.providerExecuted)) {
+      const isDeniedApproval = (tc: any) => tc.approval?.approved === false;
+      if (
+        inputData?.some(
+          toolCall => toolCall?.result === undefined && !toolCall.providerExecuted && !isDeniedApproval(toolCall),
+        )
+      ) {
         const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
 
         if (errorResults?.length) {
@@ -358,7 +363,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // Check for pending HITL tool calls (tools with no result and no error).
         // In mixed turns with errors and pending HITL tools,
         // the HITL suspension path should take priority over continuing the loop.
-        const hasPendingHITL = inputData.some(tc => tc.result === undefined && !tc.error && !tc.providerExecuted);
+        const hasPendingHITL = inputData.some(
+          tc => tc.result === undefined && !tc.error && !tc.providerExecuted && !isDeniedApproval(tc),
+        );
 
         if (errorResults?.length > 0 && !hasPendingHITL) {
           // Process any successful tool results from this turn before continuing.
@@ -408,6 +415,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolName: sanitizeToolName(toolCall.toolName),
                     args: toolCall.args,
                     result: toolCall.result,
+                    ...(toolCall.approval ? { approval: toolCall.approval } : {}),
                   },
                   ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
                     ? {
@@ -459,6 +467,23 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // No result yet — skip emitting a chunk. For deferred provider-executed tools
           // (e.g. Anthropic web_search), the result arrives in a later step and is handled
           // by processOutputStream's 'tool-result' case in llm-execution-step.
+          if (toolCall.approval?.approved === false) {
+            rest.messageList.updateToolInvocation({
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'output-denied' as const,
+                toolCallId: toolCall.toolCallId,
+                toolName: sanitizeToolName(toolCall.toolName),
+                args: toolCall.args,
+                approval: {
+                  id: toolCall.approval.id,
+                  approved: false,
+                  reason: toolCall.approval.reason,
+                },
+              },
+            });
+            continue;
+          }
           if (toolCall.result === undefined) continue;
 
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
@@ -501,6 +526,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolName: sanitizeToolName(toolCall.toolName),
                 args: toolCall.args,
                 result: toolCall.result,
+                ...(toolCall.approval ? { approval: toolCall.approval } : {}),
               },
               ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
                 ? {

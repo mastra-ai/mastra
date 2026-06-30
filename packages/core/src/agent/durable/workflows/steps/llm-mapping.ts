@@ -86,16 +86,33 @@ export function createDurableLLMMappingStep() {
       // 2. Add tool results to message list
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
-          const result = toolResult.error ? toolResult.error.message : toolResult.result;
+          const isDeniedApproval = toolResult.approval?.approved === false;
+          const result = toolResult.error
+            ? toolResult.error.message
+            : isDeniedApproval
+              ? (toolResult.approval?.reason ?? 'Tool call was not approved by the user')
+              : toolResult.result;
           const updated = messageList.updateToolInvocation({
             type: 'tool-invocation' as const,
-            toolInvocation: {
-              state: 'result' as const,
-              toolCallId: toolResult.toolCallId,
-              toolName: toolResult.toolName,
-              args: toolResult.args,
-              result,
-            },
+            toolInvocation: isDeniedApproval
+              ? {
+                  state: 'output-denied' as const,
+                  toolCallId: toolResult.toolCallId,
+                  toolName: toolResult.toolName,
+                  args: toolResult.args,
+                  approval: {
+                    ...toolResult.approval!,
+                    reason: toolResult.approval?.reason ?? 'Tool call was not approved by the user',
+                  },
+                }
+              : {
+                  state: 'result' as const,
+                  toolCallId: toolResult.toolCallId,
+                  toolName: toolResult.toolName,
+                  args: toolResult.args,
+                  result,
+                  ...(toolResult.approval ? { approval: toolResult.approval } : {}),
+                },
           });
 
           if (!updated) {
