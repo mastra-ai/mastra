@@ -64,6 +64,8 @@ import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../w
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import type { StoredWorkflowGraph } from '../workflows/load-from-storage';
+import { rehydrateWorkflow } from '../workflows/load-from-storage';
 import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
@@ -3844,6 +3846,81 @@ export class Mastra<
     }
   }
 
+  /**
+   * Persist a static workflow definition to storage and live-register it on
+   * this Mastra instance so it becomes immediately runnable. The same path is
+   * used by `loadStoredWorkflows()` at boot to re-materialize previously saved
+   * workflows.
+   *
+   * @example
+   * ```typescript
+   * await mastra.addStoredWorkflow({
+   *   id: 'cli-weather-v1',
+   *   inputSchema:  { type: 'object', properties: { location: { type: 'string' } }, required: ['location'] },
+   *   outputSchema: { type: 'object', properties: { report:   { type: 'string' } }, required: ['report'] },
+   *   graph: [...],
+   * });
+   *
+   * const run = await mastra.getWorkflow('cli-weather-v1').createRun();
+   * await run.start({ inputData: { location: 'Helsinki' } });
+   * ```
+   */
+  public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
+    const { workflow } = await rehydrateWorkflow(def, this);
+    this.addWorkflow(workflow as AnyWorkflow, def.id);
+
+    const store = await this.#storage?.getStore('workflowDefinitions');
+    if (store) {
+      await store.upsert({
+        id: def.id,
+        description: def.description,
+        metadata: def.metadata,
+        inputSchema: def.inputSchema,
+        outputSchema: def.outputSchema,
+        stateSchema: def.stateSchema,
+        requestContextSchema: def.requestContextSchema,
+        graph: def.graph,
+      });
+    }
+  }
+
+  /**
+   * Load any previously persisted workflow definitions from storage and
+   * live-register each one. Called by `startWorkers()` after storage init.
+   * Bad rows are logged and skipped — one corrupt definition shouldn't sink
+   * the rest.
+   * @internal
+   */
+  async #loadStoredWorkflows(): Promise<void> {
+    const store = await this.#storage?.getStore('workflowDefinitions');
+    if (!store) return;
+
+    const { definitions } = await store.list({ status: 'active' });
+    for (const def of definitions) {
+      // Skip definitions already registered (e.g. code-registered workflow
+      // with the same id) — code wins, storage is additive.
+      if ((this.#workflows as Record<string, AnyWorkflow>)[def.id]) continue;
+      try {
+        const { workflow } = await rehydrateWorkflow(
+          {
+            id: def.id,
+            description: def.description,
+            metadata: def.metadata,
+            inputSchema: def.inputSchema as Record<string, any>,
+            outputSchema: def.outputSchema as Record<string, any>,
+            stateSchema: def.stateSchema as Record<string, any> | undefined,
+            requestContextSchema: def.requestContextSchema as Record<string, any> | undefined,
+            graph: def.graph,
+          },
+          this,
+        );
+        this.addWorkflow(workflow as AnyWorkflow, def.id);
+      } catch (error) {
+        this.#logger?.error?.(`Failed to load stored workflow "${def.id}"`, { error });
+      }
+    }
+  }
+
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
     for (const step of Object.values(workflow.steps ?? {})) {
       const scorers = step.scorers;
@@ -4547,6 +4624,10 @@ export class Mastra<
     // stores (see #17905). init() is idempotent and a no-op when disabled.
     if (this.#storage) {
       await this.#storage.init();
+      // Cold-start hook: rehydrate any previously persisted static workflow
+      // definitions and register them on the live instance. Idempotent — runs
+      // once per startWorkers() call, skips ids already registered.
+      await this.#loadStoredWorkflows();
     }
 
     for (const worker of targets) {
