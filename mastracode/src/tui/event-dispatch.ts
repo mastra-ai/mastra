@@ -104,13 +104,12 @@ export async function dispatchEvent(
       break;
 
     case 'message_update': {
-      // Only open the decode window when the message carries actual streamed
-      // text — tool-result-only updates (e.g. plan approval resume) must not
-      // count toward tokens/sec. This mirrors the web UI's hasAssistantText()
-      // guard in transcriptReducer.
-      const hasAssistantText = event.message.content.some(
-        part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
-      );
+      // Only open the decode window when an assistant message carries actual
+      // streamed text — tool-result-only updates (e.g. plan approval resume) and
+      // user/system message updates must not count toward tokens/sec.
+      const hasAssistantText =
+        event.message.role === 'assistant' &&
+        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0);
       if (hasAssistantText) {
         state.agentRunLastStreamPartAt = Date.now();
         if (state.decodeStartedAt === 0) {
@@ -127,6 +126,7 @@ export async function dispatchEvent(
       break;
 
     case 'tool_start':
+      state.agentRunLastStreamPartAt = Date.now();
       handleToolStart(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -140,10 +140,12 @@ export async function dispatchEvent(
       break;
 
     case 'tool_update':
+      state.agentRunLastStreamPartAt = Date.now();
       handleToolUpdate(ectx, event.toolCallId, event.partialResult);
       break;
 
     case 'shell_output':
+      state.agentRunLastStreamPartAt = Date.now();
       handleShellOutput(ectx, event.toolCallId, event.output, event.stream);
       break;
 
@@ -167,6 +169,7 @@ export async function dispatchEvent(
       break;
 
     case 'tool_end':
+      state.agentRunLastStreamPartAt = Date.now();
       handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
       break;
 

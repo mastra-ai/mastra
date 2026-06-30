@@ -80,7 +80,10 @@ async function decodeStep(
 ): Promise<void> {
   vi.setSystemTime(opts.startMs);
   await dispatchEvent(
-    { type: 'message_update', message: { content: [{ type: 'text', text: 'streaming...' }] } } as any,
+    {
+      type: 'message_update',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'streaming...' }] },
+    } as any,
     ectx,
     state,
   );
@@ -134,7 +137,7 @@ describe('tokens/sec decode-window calculation', () => {
     vi.setSystemTime(1000); // request issued; nothing streamed yet
     vi.setSystemTime(4000);
     await dispatchEvent(
-      { type: 'message_update', message: { content: [{ type: 'text', text: 'hello' }] } } as any,
+      { type: 'message_update', message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] } } as any,
       ectx,
       state,
     );
@@ -148,13 +151,16 @@ describe('tokens/sec decode-window calculation', () => {
     expect(state.tokensPerSec).toBe(20);
   });
 
-  it('records stream activity on message updates', async () => {
+  it('records stream activity on assistant message updates', async () => {
     const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
     const ectx = createEctx();
 
     vi.setSystemTime(4000);
     await dispatchEvent(
-      { type: 'message_update', message: { content: [{ type: 'text', text: 'streaming...' }] } } as any,
+      {
+        type: 'message_update',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'streaming...' }] },
+      } as any,
       ectx,
       state,
     );
@@ -162,6 +168,41 @@ describe('tokens/sec decode-window calculation', () => {
     expect(state.agentRunLastStreamPartAt).toBe(4000);
     expect(state.decodeStartedAt).toBe(4000);
     expect(ectx.updateStatusLine).toHaveBeenCalled();
+  });
+
+  it('does not open the decode window for non-assistant text updates', async () => {
+    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const ectx = createEctx();
+
+    vi.setSystemTime(4000);
+    await dispatchEvent(
+      { type: 'message_update', message: { role: 'user', content: [{ type: 'text', text: 'user text' }] } } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.agentRunLastStreamPartAt).toBe(1000);
+    expect(state.decodeStartedAt).toBe(0);
+    expect(ectx.updateStatusLine).toHaveBeenCalled();
+  });
+
+  it('records tool and shell activity without opening the decode window', async () => {
+    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const ectx = createEctx();
+
+    vi.setSystemTime(4000);
+    await dispatchEvent(
+      { type: 'tool_update', toolCallId: 'tool-1', partialResult: { status: 'working' } } as any,
+      ectx,
+      state,
+    );
+    expect(state.agentRunLastStreamPartAt).toBe(4000);
+    expect(state.decodeStartedAt).toBe(0);
+
+    vi.setSystemTime(5000);
+    await dispatchEvent({ type: 'shell_output', toolCallId: 'tool-1', output: 'still working' } as any, ectx, state);
+    expect(state.agentRunLastStreamPartAt).toBe(5000);
+    expect(state.decodeStartedAt).toBe(0);
   });
 
   it('includes reasoning tokens in the decode rate', async () => {
