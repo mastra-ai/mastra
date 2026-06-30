@@ -1,6 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Server } from '@modelcontextprotocol/server';
 import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerToolActionsDependencies {

@@ -6,8 +6,7 @@
  *
  * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
  */
-
-import type { OAuthProtectedResourceMetadata as SDKOAuthProtectedResourceMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import type { OAuthProtectedResourceMetadata as SDKOAuthProtectedResourceMetadata } from '@modelcontextprotocol/server';
 
 // Re-export all OAuth types from MCP SDK
 export type {
@@ -21,7 +20,7 @@ export type {
   OAuthTokenRevocationRequest,
   OAuthProtectedResourceMetadata,
   AuthorizationServerMetadata,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
+} from '@modelcontextprotocol/server';
 
 // Re-export OAuth client functions from MCP SDK
 export {
@@ -38,10 +37,10 @@ export {
   parseErrorResponse,
   UnauthorizedError,
   buildDiscoveryUrls,
-} from '@modelcontextprotocol/sdk/client/auth.js';
+} from '@modelcontextprotocol/client';
 
 // Re-export OAuthClientProvider interface
-export type { OAuthClientProvider, AuthResult } from '@modelcontextprotocol/sdk/client/auth.js';
+export type { OAuthClientProvider, AuthResult } from '@modelcontextprotocol/client';
 
 /**
  * Configuration for OAuth-protected MCP server.

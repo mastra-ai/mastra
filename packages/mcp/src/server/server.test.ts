@@ -10,18 +10,17 @@ import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import type {
   Resource,
-  ResourceTemplate,
+  ResourceTemplateType,
   ListResourcesResult,
   ReadResourceResult,
   ListResourceTemplatesResult,
   Prompt,
-} from '@modelcontextprotocol/sdk/types.js';
+} from '@modelcontextprotocol/server';
+import { ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import getPort from 'get-port';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
@@ -561,7 +560,7 @@ describe('MCPServer', () => {
     it('should throw an error when reading a non-existent resource URI', async () => {
       const uri = 'weather://nonexistent';
       await expect(resourceTestInternalClient.readResource(uri)).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Resource not found: weather://nonexistent'),
       });
     });
@@ -599,7 +598,7 @@ describe('MCPServer', () => {
       'test://resource/2': { text: JSON.stringify({ data: 'Initial for R2' }) },
     };
 
-    const mockResourceTemplates: ResourceTemplate[] = [
+    const mockResourceTemplates: ResourceTemplateType[] = [
       {
         uriTemplate: 'test://template/{id}',
         name: 'Test Template',
@@ -712,7 +711,7 @@ describe('MCPServer', () => {
     it('should throw an error when reading a non-existent resource', async () => {
       const uri = 'test://resource/nonexistent';
       await expect(notificationTestInternalClient.readResource(uri)).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Resource not found: test://resource/nonexistent'),
       });
     });
@@ -887,7 +886,7 @@ describe('MCPServer', () => {
       await expect(
         promptInternalClient.getPrompt({ name: 'explain-code', args: {} }), // missing 'code'
       ).rejects.toMatchObject({
-        code: ErrorCode.InvalidParams,
+        code: ProtocolErrorCode.InvalidParams,
         message: expect.stringContaining('Missing required argument: code'),
       });
     });

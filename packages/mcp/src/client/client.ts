@@ -8,13 +8,14 @@ import { createTool } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
-import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import {
+  Client,
+  SSEClientTransport,
+  StreamableHTTPClientTransport,
+  DEFAULT_REQUEST_TIMEOUT_MSEC,
+} from '@modelcontextprotocol/client';
 import type {
+  Transport,
   EmptyResult,
   GetPromptResult,
   ListPromptsResult,
@@ -23,25 +24,8 @@ import type {
   LoggingLevel,
   ReadResourceResult,
   ClientCapabilities,
-} from '@modelcontextprotocol/sdk/types.js';
-import {
-  CallToolResultSchema,
-  ListResourcesResultSchema,
-  ReadResourceResultSchema,
-  ResourceListChangedNotificationSchema,
-  ResourceUpdatedNotificationSchema,
-  ListResourceTemplatesResultSchema,
-  ListPromptsResultSchema,
-  GetPromptResultSchema,
-  PromptListChangedNotificationSchema,
-  ToolListChangedNotificationSchema,
-  ElicitRequestSchema,
-  ProgressNotificationSchema,
-  ListRootsRequestSchema,
-  LoggingMessageNotificationSchema,
-  EmptyResultSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-
+} from '@modelcontextprotocol/client';
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
@@ -130,8 +114,7 @@ function extractToolErrorText(content: unknown): string {
 
 function getDatadogScope(): DatadogScopeLike | null {
   const testTracer = (globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL] as
-    | DatadogTracerLike
-    | undefined;
+    DatadogTracerLike | undefined;
   const tracer = testTracer ?? loadDatadogTracer();
 
   if (typeof tracer?.scope === 'function') {
@@ -345,7 +328,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private setupLogging(): void {
     if (this.enableServerLogs) {
-      this.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification: any) => {
+      this.client.setNotificationHandler('notifications/message', (notification: any) => {
         const { level, ...params } = notification.params;
         this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
       });
@@ -360,7 +343,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   private setupRootsHandler(): void {
     this.log('debug', 'Setting up roots/list request handler');
-    this.client.setRequestHandler(ListRootsRequestSchema, async () => {
+    this.client.setRequestHandler('roots/list', async () => {
       this.log('debug', `Responding to roots/list request with ${this._roots.length} roots`);
       return { roots: this._roots };
     });
@@ -795,37 +778,52 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async listResources(): Promise<ListResourcesResult> {
     this.log('debug', `Requesting resources from MCP server`);
-    return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async readResource(uri: string): Promise<ReadResourceResult> {
     this.log('debug', `Reading resource from MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/read', params: { uri } }, ReadResourceResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/read', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async subscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, EmptyResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/subscribe', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async unsubscribeResource(uri: string): Promise<EmptyResult> {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, EmptyResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/unsubscribe', params: { uri } },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   async listResourceTemplates(): Promise<ListResourceTemplatesResult> {
     this.log('debug', `Requesting resource templates from MCP server`);
-    return await this.client.request({ method: 'resources/templates/list' }, ListResourceTemplatesResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'resources/templates/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   /**
@@ -833,9 +831,12 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   async listPrompts(): Promise<ListPromptsResult> {
     this.log('debug', `Requesting prompts from MCP server`);
-    return await this.client.request({ method: 'prompts/list' }, ListPromptsResultSchema, {
-      timeout: this.timeout,
-    });
+    return await this.client.request(
+      { method: 'prompts/list' },
+      {
+        timeout: this.timeout,
+      },
+    );
   }
 
   /**
@@ -847,7 +848,6 @@ export class InternalMastraMCPClient extends MastraBase {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
       { method: 'prompts/get', params: { name, arguments: args } },
-      GetPromptResultSchema,
       { timeout: this.timeout },
     );
   }
@@ -858,7 +858,7 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   setPromptListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting prompt list changed notification handler');
-    this.client.setNotificationHandler(PromptListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/prompts/list_changed', () => {
       handler();
     });
   }
@@ -869,21 +869,21 @@ export class InternalMastraMCPClient extends MastraBase {
    */
   setToolListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting tool list changed notification handler');
-    this.client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/tools/list_changed', () => {
       handler();
     });
   }
 
   setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
     this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification: any) => {
+    this.client.setNotificationHandler('notifications/resources/updated', (notification: any) => {
       handler(notification.params);
     });
   }
 
   setResourceListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting resource list changed notification handler');
-    this.client.setNotificationHandler(ResourceListChangedNotificationSchema, () => {
+    this.client.setNotificationHandler('notifications/resources/list_changed', () => {
       handler();
     });
   }
@@ -902,7 +902,7 @@ export class InternalMastraMCPClient extends MastraBase {
       }
     }
 
-    this.client.setRequestHandler(ElicitRequestSchema, async request => {
+    this.client.setRequestHandler('elicitation/create', async request => {
       this.log('debug', `Received elicitation request: ${request.params.message}`);
       return handler(request.params);
     });
@@ -910,7 +910,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setProgressNotificationHandler(handler: ProgressHandler): void {
     this.log('debug', 'Setting progress notification handler');
-    this.client.setNotificationHandler(ProgressNotificationSchema, notification => {
+    this.client.setNotificationHandler('notifications/progress', notification => {
       handler(notification.params);
     });
   }
@@ -1035,7 +1035,6 @@ export class InternalMastraMCPClient extends MastraBase {
                     arguments: input,
                     ...(combinedMeta ? { _meta: combinedMeta } : {}),
                   },
-                  CallToolResultSchema,
                   {
                     timeout: this.timeout,
                     signal: context?.abortSignal,

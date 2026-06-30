@@ -11,8 +11,7 @@
  */
 import http from 'node:http';
 import { createTool } from '@mastra/core/tools';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { z } from 'zod/v3';
 import { MCPServer } from './server';

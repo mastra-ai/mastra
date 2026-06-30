@@ -19,29 +19,13 @@ import { createTool, isValidationError } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolType, MastraToolInvocationOptions } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { Workflow } from '@mastra/core/workflows';
+import { PromptSchema } from '@modelcontextprotocol/core';
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-  ListResourceTemplatesRequestSchema,
-  SubscribeRequestSchema,
-  UnsubscribeRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-  SetLevelRequestSchema,
-  PromptSchema,
-  McpError,
-  ErrorCode,
-} from '@modelcontextprotocol/sdk/types.js';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/node';
+import { Server, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
 import type {
+  RequestOptions,
   TextResourceContents,
   BlobResourceContents,
   Resource,
@@ -50,8 +34,10 @@ import type {
   ElicitResult,
   ElicitRequest,
   LoggingLevel,
-} from '@modelcontextprotocol/sdk/types.js';
-import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
+  jsonSchemaValidator,
+} from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+import { SSEServerTransport } from '@modelcontextprotocol/server-legacy/sse';
 import type { Context } from 'hono';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
@@ -110,7 +96,7 @@ export class MCPServer extends MCPServerBase {
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
   private sseHonoTransports: Map<string, SSETransport>;
-  private streamableHTTPTransports: Map<string, StreamableHTTPServerTransport> = new Map();
+  private streamableHTTPTransports: Map<string, NodeStreamableHTTPServerTransport> = new Map();
   // Track server instances for each HTTP session
   private httpServerInstances: Map<string, Server> = new Map();
 
@@ -774,8 +760,8 @@ export class MCPServer extends MCPServerBase {
    */
   private registerHandlersOnServer(serverInstance: Server) {
     // List tools handler
-    serverInstance.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
-      const proxiedContext = await this.createProxiedRequestContext(extra);
+    serverInstance.setRequestHandler('tools/list', async (_request, ctx) => {
+      const proxiedContext = await this.createProxiedRequestContext(ctx);
       const tools = await this.getAuthorizedConvertedToolEntries(proxiedContext);
       return {
         tools: tools.map(([, tool]) => {
@@ -811,7 +797,7 @@ export class MCPServer extends MCPServerBase {
     });
 
     // Call tool handler
-    serverInstance.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    serverInstance.setRequestHandler('tools/call', async (request, ctx) => {
       const startTime = Date.now();
       try {
         const tool = this.convertedTools[request.params.name];
@@ -865,7 +851,7 @@ export class MCPServer extends MCPServerBase {
           },
         };
 
-        const proxiedContext = await this.createProxiedRequestContext(extra);
+        const proxiedContext = await this.createProxiedRequestContext(ctx);
 
         // Session-aware log emission: sends notifications/message to the calling
         // client, honoring the minimum level it set via logging/setLevel.
@@ -875,7 +861,7 @@ export class MCPServer extends MCPServerBase {
           data?: Record<string, unknown>,
         ): Promise<void> => {
           if (!this.shouldSendLog(serverInstance, level)) return;
-          await extra.sendNotification({
+          await ctx.mcpReq.notify({
             method: 'notifications/message',
             params: {
               level,
@@ -887,7 +873,7 @@ export class MCPServer extends MCPServerBase {
 
         // Session-aware progress emission: sends notifications/progress with the
         // progressToken the caller provided. No-op when no token was sent, per spec.
-        const progressToken = extra._meta?.progressToken;
+        const progressToken = ctx.mcpReq._meta?.progressToken;
         const sessionProgress = async (params: {
           progress: number;
           total?: number;
@@ -899,7 +885,7 @@ export class MCPServer extends MCPServerBase {
             });
             return;
           }
-          await extra.sendNotification({
+          await ctx.mcpReq.notify({
             method: 'notifications/progress',
             params: {
               progressToken,
@@ -915,7 +901,7 @@ export class MCPServer extends MCPServerBase {
           // Pass MCP-specific context through the mcp property
           mcp: {
             elicitation: sessionElicitation,
-            extra,
+            extra: ctx,
             log: sessionLog,
             progress: sessionProgress,
           },
@@ -1022,7 +1008,7 @@ export class MCPServer extends MCPServerBase {
 
     // Set logging level handler. The level is tracked per server instance so
     // each HTTP session (which gets its own instance) can set its own level.
-    serverInstance.setRequestHandler(SetLevelRequestSchema, async request => {
+    serverInstance.setRequestHandler('logging/setLevel', async request => {
       this.loggingLevels.set(serverInstance, request.params.level);
       this.logger.debug('Logging level set', { level: request.params.level });
       return {};
@@ -1048,13 +1034,13 @@ export class MCPServer extends MCPServerBase {
 
     // List resources handler
     if (capturedResourceOptions.listResources) {
-      serverInstance.setRequestHandler(ListResourcesRequestSchema, async (_request, extra) => {
+      serverInstance.setRequestHandler('resources/list', async (_request, ctx) => {
         // Always re-evaluate the provider with the current request's `extra`. The result
         // must never be cached on the shared instance: dynamic providers scope resources
         // per caller (e.g. via `extra.authInfo`), so caching would leak one caller's
         // resource index to the next. See https://github.com/mastra-ai/mastra/issues/17609
         try {
-          const resources = await capturedResourceOptions.listResources!({ extra });
+          const resources = await capturedResourceOptions.listResources!({ extra: ctx });
           this.logger.debug('Fetched resources', { count: resources.length });
           return { resources };
         } catch (error) {
@@ -1066,24 +1052,24 @@ export class MCPServer extends MCPServerBase {
 
     // Read resource handler
     if (capturedResourceOptions.getResourceContent) {
-      serverInstance.setRequestHandler(ReadResourceRequestSchema, async (request, extra) => {
+      serverInstance.setRequestHandler('resources/read', async (request, ctx) => {
         const startTime = Date.now();
         const uri = request.params.uri;
         this.logger.debug('Handling ReadResource request', { uri });
 
         // Resolve the resource list for the current caller's `extra` on every request
         // rather than from a shared cache, so URI resolution respects per-caller auth.
-        const resources = await capturedResourceOptions.listResources?.({ extra });
+        const resources = await capturedResourceOptions.listResources?.({ extra: ctx });
         if (!resources) throw new Error('Failed to load resources');
         const resource = resources.find(r => r.uri === uri);
 
         if (!resource) {
           this.logger.warn('Unknown resource URI requested', { uri });
-          throw new McpError(ErrorCode.InvalidParams, `Resource not found: ${uri}`);
+          throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
         }
 
         try {
-          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri, extra });
+          const resourcesOrResourceContent = await capturedResourceOptions.getResourceContent({ uri, extra: ctx });
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
@@ -1128,13 +1114,13 @@ export class MCPServer extends MCPServerBase {
 
     // Resource templates handler
     if (capturedResourceOptions.resourceTemplates) {
-      serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async (_request, extra) => {
+      serverInstance.setRequestHandler('resources/templates/list', async (_request, ctx) => {
         // Always re-evaluate the provider with the current request's `extra`, never from a
         // shared cache. Like resource lists, dynamic template providers can scope templates
         // per caller (e.g. via `extra.authInfo`), so caching would leak across callers.
         // See https://github.com/mastra-ai/mastra/issues/17609
         try {
-          const templates = await capturedResourceOptions.resourceTemplates!({ extra });
+          const templates = await capturedResourceOptions.resourceTemplates!({ extra: ctx });
           this.logger.debug('Fetched resource templates', { count: templates.length });
           return { resourceTemplates: templates };
         } catch (error) {
@@ -1145,7 +1131,7 @@ export class MCPServer extends MCPServerBase {
     }
 
     // Subscribe/unsubscribe handlers
-    serverInstance.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
+    serverInstance.setRequestHandler('resources/subscribe', async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/subscribe request', { uri });
       let subscriptions = this.subscriptionsByInstance.get(serverInstance);
@@ -1157,7 +1143,7 @@ export class MCPServer extends MCPServerBase {
       return {};
     });
 
-    serverInstance.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
+    serverInstance.setRequestHandler('resources/unsubscribe', async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/unsubscribe request', { uri });
       this.subscriptionsByInstance.get(serverInstance)?.delete(uri);
@@ -1174,7 +1160,7 @@ export class MCPServer extends MCPServerBase {
 
     // List prompts handler
     if (capturedPromptOptions.listPrompts) {
-      serverInstance.setRequestHandler(ListPromptsRequestSchema, async (_request, extra) => {
+      serverInstance.setRequestHandler('prompts/list', async (_request, ctx) => {
         this.logger.debug('Handling ListPrompts request');
         if (this.definedPrompts) {
           return {
@@ -1182,7 +1168,7 @@ export class MCPServer extends MCPServerBase {
           };
         } else {
           try {
-            const prompts = await capturedPromptOptions.listPrompts({ extra });
+            const prompts = await capturedPromptOptions.listPrompts({ extra: ctx });
             for (const prompt of prompts) {
               PromptSchema.parse(prompt);
             }
@@ -1204,12 +1190,12 @@ export class MCPServer extends MCPServerBase {
     // Get prompt handler
     if (capturedPromptOptions.getPromptMessages) {
       serverInstance.setRequestHandler(
-        GetPromptRequestSchema,
-        async (request: { params: { name: string; arguments?: any } }, extra) => {
+        'prompts/get',
+        async (request: { params: { name: string; arguments?: any } }, ctx) => {
           const startTime = Date.now();
           const { name, arguments: args } = request.params;
           if (!this.definedPrompts) {
-            const prompts = await this.promptOptions?.listPrompts?.({ extra });
+            const prompts = await this.promptOptions?.listPrompts?.({ extra: ctx });
             if (!prompts) throw new Error('Failed to load prompts');
             this.definedPrompts = prompts;
           }
@@ -1220,14 +1206,19 @@ export class MCPServer extends MCPServerBase {
           if (prompt.arguments) {
             for (const arg of prompt.arguments) {
               if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
-                throw new McpError(ErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
+                throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Missing required argument: ${arg.name}`);
               }
             }
           }
           try {
             let messages: any[] = [];
             if (capturedPromptOptions.getPromptMessages) {
-              messages = await capturedPromptOptions.getPromptMessages({ name, version: prompt.version, args, extra });
+              messages = await capturedPromptOptions.getPromptMessages({
+                name,
+                version: prompt.version,
+                args,
+                extra: ctx,
+              });
             }
             const duration = Date.now() - startTime;
             this.logger.info('Prompt retrieved successfully', { prompt: name, duration });
@@ -1826,7 +1817,7 @@ export class MCPServer extends MCPServerBase {
     };
 
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
-    let transport: StreamableHTTPServerTransport | undefined;
+    let transport: NodeStreamableHTTPServerTransport | undefined;
 
     this.logger.debug('Session ID from headers', {
       sessionId,
@@ -1872,7 +1863,7 @@ export class MCPServer extends MCPServerBase {
           const body = await this.readJsonBody(req);
 
           // Import isInitializeRequest from the correct path
-          const { isInitializeRequest } = await import('@modelcontextprotocol/sdk/types.js');
+          const { isInitializeRequest } = await import('@modelcontextprotocol/server');
 
           if (isInitializeRequest(body)) {
             this.logger.debug('Received initialize request, creating new transport');
@@ -1884,7 +1875,7 @@ export class MCPServer extends MCPServerBase {
             // The session ID is only assigned while the transport handles the
             // initialize request, so the transport and server instance must be
             // registered in the onsessioninitialized callback.
-            transport = new StreamableHTTPServerTransport({
+            transport = new NodeStreamableHTTPServerTransport({
               ...mergedOptions,
               sessionIdGenerator: mergedOptions.sessionIdGenerator,
               onsessioninitialized: id => {
@@ -2018,7 +2009,7 @@ export class MCPServer extends MCPServerBase {
       // sessionIdGenerator: undefined disables session management entirely.
       // enableJsonResponse: true (default) buffers a single JSON-RPC response; false enables
       // request-scoped SSE streaming so notifications/progress can reach the client.
-      const tempTransport = new StreamableHTTPServerTransport({
+      const tempTransport = new NodeStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse,
       });

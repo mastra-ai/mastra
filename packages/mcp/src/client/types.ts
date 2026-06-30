@@ -1,23 +1,22 @@
 import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
-import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
-import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-// FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
-export type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
+  SSEClientTransportOptions,
+  StreamableHTTPClientTransportOptions,
   ClientCapabilities,
   ElicitRequest,
   ElicitResult,
   LoggingLevel,
   ProgressNotification,
   ToolAnnotations,
-} from '@modelcontextprotocol/sdk/types.js';
+  jsonSchemaValidator,
+} from '@modelcontextprotocol/client';
 
+// FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
+export type { FetchLike } from '@modelcontextprotocol/client';
 // Re-export so consumers of @mastra/mcp can type their requireToolApproval callbacks
 // without having to add @modelcontextprotocol/sdk as a direct dependency.
-export type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
-import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
-
+export type { ToolAnnotations } from '@modelcontextprotocol/client';
 /**
  * Extended fetch function type that receives the current request context as a third argument.
  *
@@ -53,7 +52,7 @@ export type MastraFetchLike = (
 ) => Promise<Response>;
 
 // Re-export MCP SDK LoggingLevel for convenience
-export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+export type { LoggingLevel } from '@modelcontextprotocol/client';
 
 /**
  * Log message structure for MCP client logging.

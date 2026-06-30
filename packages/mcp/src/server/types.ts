@@ -1,13 +1,14 @@
 import type { McpUiResourceMeta } from '@modelcontextprotocol/ext-apps';
-import type { RequestHandlerExtra, RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
+  RequestOptions,
   ElicitRequest,
   ElicitResult,
   Prompt,
   PromptMessage,
   Resource,
-  ResourceTemplate,
-} from '@modelcontextprotocol/sdk/types.js';
+  ResourceTemplateType,
+  ServerContext,
+} from '@modelcontextprotocol/server';
 
 /**
  * Callback function to retrieve content for a specific resource.
@@ -41,7 +42,7 @@ export type MCPServerResources = {
   /** Function to get content for a specific resource */
   getResourceContent: MCPServerResourceContentCallback;
   /** Optional function to list resource templates */
-  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplate[]>;
+  resourceTemplates?: ({ extra }: { extra: MCPRequestHandlerExtra }) => Promise<ResourceTemplateType[]>;
 };
 
 /**
@@ -116,7 +117,7 @@ export type ElicitationActions = {
 /**
  * Extra context passed to MCP request handlers.
  */
-export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
+export type MCPRequestHandlerExtra = ServerContext;
 
 /**
  * Re-exported MCP SDK types for resource handling.
@@ -125,7 +126,7 @@ export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
  * - `ResourceTemplate`: URI template for dynamic resource generation
  * - `RequestOptions`: Options for MCP requests (timeout, signal, etc.)
  */
-export type { Resource, ResourceTemplate, RequestOptions };
+export type { Resource, ResourceTemplateType as ResourceTemplate, RequestOptions };
 
 /**
  * Configuration for a single MCP App resource.

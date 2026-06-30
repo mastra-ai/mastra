@@ -7,9 +7,7 @@ import type {
   ToolExecutionOptions,
   Schema,
 } from '@internal/external-types';
-import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
-
+import type { ElicitRequest, ElicitResult, ServerContext } from '@modelcontextprotocol/server';
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
 import type { ActorSignal } from '../auth/ee';
@@ -242,7 +240,7 @@ export type MCPLoggingLevel = 'debug' | 'info' | 'notice' | 'warning' | 'error' 
 // MCP tool execution context - properties specific when tools are executed via Model Context Protocol
 export interface MCPToolExecutionContext {
   /** MCP protocol context passed by the server */
-  extra: RequestHandlerExtra<any, any>;
+  extra: ServerContext;
   /** Elicitation handler for interactive user input during tool execution */
   elicitation: {
     sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;

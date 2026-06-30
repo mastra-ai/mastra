@@ -1,6 +1,5 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Server } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v3';
 import zodToJsonSchema from 'zod-to-json-schema';
 
@@ -69,7 +68,7 @@ const stockTool = {
 };
 
 // Set up request handlers
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
+server.setRequestHandler('tools/list', async () => ({
   tools: [
     {
       name: stockTool.name,
@@ -79,7 +78,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async request => {
+server.setRequestHandler('tools/call', async request => {
   try {
     switch (request.params.name) {
       case 'getStockPrice': {

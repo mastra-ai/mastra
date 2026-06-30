@@ -15,8 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
-
-import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/sdk/client/auth.js';
+import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/client';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 import type { OAuthMiddlewareResult } from '../server/oauth-middleware.js';
