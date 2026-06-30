@@ -113,6 +113,8 @@ function createMesaFilesystem(): MesaFilesystem {
 }
 
 class RootedMesaFilesystem implements WorkspaceFilesystem {
+  private readonly localModifiedAt = new Map<string, Date>();
+
   constructor(
     private readonly filesystem: MesaFilesystem,
     private readonly root: string,
@@ -190,32 +192,48 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
     return this.filesystem.readFile(this.toMesaPath(inputPath), options);
   }
 
-  writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
-    return this.filesystem.writeFile(this.toMesaPath(inputPath), content, options);
+  async writeFile(inputPath: string, content: FileContent, options?: WriteOptions): Promise<void> {
+    const target = this.toMesaPath(inputPath);
+    await this.filesystem.writeFile(target, content, options);
+    this.recordModified(target);
   }
 
-  appendFile(inputPath: string, content: FileContent): Promise<void> {
-    return this.filesystem.appendFile(this.toMesaPath(inputPath), content);
+  async appendFile(inputPath: string, content: FileContent): Promise<void> {
+    const target = this.toMesaPath(inputPath);
+    await this.filesystem.appendFile(target, content);
+    this.recordModified(target);
   }
 
-  deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
-    return this.filesystem.deleteFile(this.toMesaPath(inputPath), options);
+  async deleteFile(inputPath: string, options?: RemoveOptions): Promise<void> {
+    const target = this.toMesaPath(inputPath);
+    await this.filesystem.deleteFile(target, options);
+    this.forgetPath(target);
   }
 
-  copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    return this.filesystem.copyFile(this.toMesaPath(src), this.toMesaPath(dest), options);
+  async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    const target = this.toMesaPath(dest);
+    await this.filesystem.copyFile(this.toMesaPath(src), target, options);
+    this.recordModified(target);
   }
 
-  moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
-    return this.filesystem.moveFile(this.toMesaPath(src), this.toMesaPath(dest), options);
+  async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
+    const source = this.toMesaPath(src);
+    const target = this.toMesaPath(dest);
+    await this.filesystem.moveFile(source, target, options);
+    this.forgetPath(source);
+    this.recordModified(target);
   }
 
-  mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
-    return this.filesystem.mkdir(this.toMesaPath(inputPath), options);
+  async mkdir(inputPath: string, options?: { recursive?: boolean }): Promise<void> {
+    const target = this.toMesaPath(inputPath);
+    await this.filesystem.mkdir(target, options);
+    this.recordModified(target);
   }
 
-  rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
-    return this.filesystem.rmdir(this.toMesaPath(inputPath), options);
+  async rmdir(inputPath: string, options?: RemoveOptions): Promise<void> {
+    const target = this.toMesaPath(inputPath);
+    await this.filesystem.rmdir(target, options);
+    this.forgetPath(target);
   }
 
   readdir(inputPath: string, options?: ListOptions): Promise<FileEntry[]> {
@@ -228,7 +246,9 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
 
   async stat(inputPath: string): Promise<FileStat> {
     const stat = await this.filesystem.stat(this.toMesaPath(inputPath));
-    return { ...stat, path: this.fromMesaPath(stat.path) };
+    const localPath = this.fromMesaPath(stat.path);
+    const modifiedAt = this.localModifiedAt.get(localPath) ?? stat.modifiedAt;
+    return { ...stat, path: localPath, modifiedAt };
   }
 
   private toMesaPath(inputPath: string): string {
@@ -248,6 +268,26 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
     if (normalized === this.root) return '/';
     if (normalized.startsWith(`${this.root}/`)) return normalized.slice(this.root.length);
     throw new Error(`Mesa path escapes conformance test root: ${inputPath}`);
+  }
+
+  private recordModified(mesaPath: string): void {
+    this.localModifiedAt.set(this.fromMesaPath(mesaPath), new Date());
+  }
+
+  private forgetPath(mesaPath: string): void {
+    const localPath = this.fromMesaPath(mesaPath);
+    if (localPath === '/') {
+      this.localModifiedAt.clear();
+      return;
+    }
+
+    this.localModifiedAt.delete(localPath);
+
+    for (const path of this.localModifiedAt.keys()) {
+      if (path.startsWith(`${localPath}/`)) {
+        this.localModifiedAt.delete(path);
+      }
+    }
   }
 }
 

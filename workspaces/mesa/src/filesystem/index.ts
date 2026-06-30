@@ -419,9 +419,16 @@ export class MesaFilesystem extends MastraFilesystem {
     try {
       const stats = await this.filesystem.stat(target);
       if (!stats.isDirectory) throw new NotDirectoryError(inputPath);
-      await this.filesystem.rm(target, { recursive: options?.recursive, force: options?.force });
+
+      if (!options?.recursive) {
+        const entries = await this.filesystem.readdirWithFileTypes(target);
+        if (entries.length > 0) throw new DirectoryNotEmptyError(inputPath);
+      }
+
+      await this.filesystem.rm(target, { recursive: options?.recursive ?? true, force: options?.force });
     } catch (error) {
       if (error instanceof NotDirectoryError) throw error;
+      if (error instanceof DirectoryNotEmptyError) throw error;
       const mapped = mapMesaError(error, inputPath, 'directory');
       if (mapped instanceof DirectoryNotFoundError) {
         if (options?.force) return;

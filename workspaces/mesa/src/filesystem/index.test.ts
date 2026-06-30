@@ -1,4 +1,5 @@
 import {
+  DirectoryNotEmptyError,
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
@@ -358,6 +359,28 @@ describe('MesaFilesystem', () => {
       await fs.rmdir('/acme/docs/old', { recursive: true, force: true });
 
       expect(mesaFs.rm).toHaveBeenCalledWith('/acme/docs/old', { recursive: true, force: true });
+    });
+
+    it('removes empty directories without requiring recursive=true from callers', async () => {
+      const { fs, mesaFs } = createFs();
+      mesaFs.stat.mockResolvedValueOnce(createStat({ isFile: false, isDirectory: true, size: 0 }));
+      mesaFs.readdirWithFileTypes.mockResolvedValueOnce([]);
+
+      await fs.rmdir('/acme/docs/empty');
+
+      expect(mesaFs.readdirWithFileTypes).toHaveBeenCalledWith('/acme/docs/empty');
+      expect(mesaFs.rm).toHaveBeenCalledWith('/acme/docs/empty', { recursive: true, force: undefined });
+    });
+
+    it('rejects non-empty directory removal without recursive=true', async () => {
+      const { fs, mesaFs } = createFs();
+      mesaFs.stat.mockResolvedValueOnce(createStat({ isFile: false, isDirectory: true, size: 0 }));
+      mesaFs.readdirWithFileTypes.mockResolvedValueOnce([
+        { name: 'file.txt', isFile: true, isDirectory: false, isSymbolicLink: false },
+      ]);
+
+      await expect(fs.rmdir('/acme/docs/not-empty')).rejects.toBeInstanceOf(DirectoryNotEmptyError);
+      expect(mesaFs.rm).not.toHaveBeenCalled();
     });
 
     it('lists direct children and filters extensions', async () => {
