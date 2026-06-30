@@ -398,7 +398,7 @@ async function startMastraCodeApp(
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
-        result.controller.stopHeartbeats(),
+        result.controller.stopIntervals(),
         closeSignalsPubSub?.(),
       ]);
     },

@@ -1,5 +1,7 @@
 import type { PlanResume, AgentControllerOMProgress } from '@mastra/client-js';
-import { memo, useEffect, useState } from 'react';
+import { MessageFactory } from '@mastra/react';
+import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
+import { memo, useEffect, useMemo, useState } from 'react';
 
 import { highlightCode, languageForPath } from './highlight';
 import { BellIcon, BrainIcon, ChevronIcon, CopyIcon, FolderIcon, LogoMark, TargetIcon, ToolIcon } from './icons';
@@ -8,8 +10,8 @@ import { useToast } from './toast';
 
 import type {
   ApprovalPrompt,
-  AssistantEntry,
   GoalSnapshot,
+  MessageEntry,
   NoticeEntry,
   NotificationEntry,
   NotificationSummaryEntry,
@@ -17,7 +19,6 @@ import type {
   SuspensionPrompt,
   TimelineEntry,
   ToolCall,
-  UserEntry,
   OMPhase,
 } from './transcript';
 
@@ -141,13 +142,26 @@ interface EditArgs {
   content?: string;
 }
 
+function hasProperty<K extends string>(value: object, key: K): value is object & Record<K, unknown> {
+  return key in value;
+}
+
+function stringProperty(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== 'object' || !hasProperty(value, key)) return undefined;
+  return typeof value[key] === 'string' ? value[key] : undefined;
+}
+
 /** Detect edit-style tools whose args are better shown as a diff/code block. */
 function editArgs(toolName: string, args: unknown): EditArgs | undefined {
-  if (!args || typeof args !== 'object') return undefined;
-  const a = args as EditArgs;
-  const isReplace = /string_replace|str_replace/i.test(toolName) && typeof a.new_string === 'string';
-  const isWrite = /write_file|create_file/i.test(toolName) && typeof a.content === 'string';
-  return isReplace || isWrite ? a : undefined;
+  const edit = {
+    path: stringProperty(args, 'path'),
+    old_string: stringProperty(args, 'old_string'),
+    new_string: stringProperty(args, 'new_string'),
+    content: stringProperty(args, 'content'),
+  };
+  const isReplace = /string_replace|str_replace/i.test(toolName) && edit.new_string !== undefined;
+  const isWrite = /write_file|create_file/i.test(toolName) && edit.content !== undefined;
+  return isReplace || isWrite ? edit : undefined;
 }
 
 function ToolCard({ tool, forceExpanded }: { tool: ToolCall; forceExpanded?: boolean }) {
@@ -277,6 +291,36 @@ interface SuspendPayloadShape {
   title?: string;
 }
 
+function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
+  const planValue = payload && typeof payload === 'object' && hasProperty(payload, 'plan') ? payload.plan : undefined;
+  const plan =
+    planValue && typeof planValue === 'object'
+      ? {
+          title: stringProperty(planValue, 'title'),
+          summary: stringProperty(planValue, 'summary'),
+        }
+      : undefined;
+
+  const optionsValue =
+    payload && typeof payload === 'object' && hasProperty(payload, 'options') ? payload.options : undefined;
+  const options = Array.isArray(optionsValue)
+    ? optionsValue.flatMap(option => {
+        const label = stringProperty(option, 'label');
+        if (!label) return [];
+        return [{ label, description: stringProperty(option, 'description') }];
+      })
+    : undefined;
+
+  return {
+    question: stringProperty(payload, 'question'),
+    options,
+    requestedPath: stringProperty(payload, 'requestedPath') ?? stringProperty(payload, 'path'),
+    reason: stringProperty(payload, 'reason'),
+    title: stringProperty(payload, 'title'),
+    plan,
+  };
+}
+
 function SuspensionCard({
   prompt,
   onRespond,
@@ -284,7 +328,7 @@ function SuspensionCard({
   prompt: SuspensionPrompt;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
-  const payload = (prompt.suspendPayload ?? {}) as SuspendPayloadShape;
+  const payload = suspensionPayloadShape(prompt.suspendPayload);
 
   if (prompt.toolName === 'submit_plan') {
     return (
@@ -465,10 +509,8 @@ export const Transcript = memo(function Transcript({
     <>
       {entries.map(entry => {
         switch (entry.kind) {
-          case 'user':
-            return <UserBubble key={entry.id} entry={entry} />;
-          case 'assistant':
-            return <AssistantBubble key={entry.id} entry={entry} />;
+          case 'message':
+            return <MessageBubble key={entry.id} entry={entry} />;
           case 'notice':
             return <Notice key={entry.id} entry={entry} />;
           case 'approval':
@@ -489,78 +531,159 @@ export const Transcript = memo(function Transcript({
   );
 });
 
-function UserBubble({ entry }: { entry: UserEntry }) {
-  return (
-    <div className="msg msg-user">
-      <div className="msg-head">
-        <span className={`msg-role ${entry.steer ? 'role-steer' : ''}`}>{entry.steer ? 'Steer' : 'You'}</span>
-      </div>
-      <div className="bubble bubble-user">
-        <div className="text">{entry.text}</div>
-      </div>
-    </div>
-  );
-}
-
-function AssistantBubble({ entry }: { entry: AssistantEntry }) {
+function MessageBubble({ entry }: { entry: MessageEntry }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
+  const parts = entry.message.content.parts ?? [];
+  const toolCount = parts.reduce((n, part) => (part.type === 'tool-invocation' ? n + 1 : n), 0);
+  const hasRenderablePart = parts.some(
+    part =>
+      (part.type === 'text' && part.text.trim().length > 0) ||
+      (part.type === 'reasoning' && part.reasoning.trim().length > 0) ||
+      part.type === 'tool-invocation' ||
+      part.type === 'file',
+  );
 
-  const toolCount = entry.segments.reduce((n, s) => (s.kind === 'tool' ? n + 1 : n), 0);
-  const hasText = entry.segments.some(s => s.kind === 'text' && s.text.trim().length > 0);
-  if (!hasText && toolCount === 0) return null;
-
-  // The streaming cursor trails the final text segment while the model is still
-  // generating (so it sits at the live insertion point, not after a tool card).
-  const lastTextIdx = (() => {
-    for (let i = entry.segments.length - 1; i >= 0; i--) {
-      if (entry.segments[i].kind === 'text') return i;
+  const lastTextPart = (() => {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (parts[i].type === 'text') return parts[i];
     }
-    return -1;
+    return undefined;
   })();
 
-  return (
-    <div className="msg msg-assistant">
-      <div className="msg-head">
-        <span className="msg-avatar">
-          <LogoMark size={14} />
-        </span>
-        <span className="msg-role">Agent</span>
-        {toolCount > 1 && (
-          <button
-            type="button"
-            className="tool-group-toggle"
-            onClick={() => setAllExpanded(v => (v === true ? false : true))}
-            aria-pressed={allExpanded === true}
-          >
-            {allExpanded ? 'Collapse all' : `Expand all (${toolCount})`}
-          </button>
-        )}
-      </div>
-      <div className="bubble bubble-assistant">
-        {entry.segments.map((seg, i) => {
-          if (seg.kind === 'text') {
-            return (
-              <div className="prose" key={`t-${i}`}>
-                <Markdown>{seg.text}</Markdown>
-                {entry.streaming && i === lastTextIdx && <span className="streaming-cursor" />}
-              </div>
-            );
-          }
-          if (seg.kind === 'thinking') {
-            return (
-              <div className="thinking-block" key={`k-${i}`}>
-                <Markdown>{seg.text}</Markdown>
-              </div>
-            );
-          }
-          const tool = entry.toolsById[seg.toolCallId];
-          if (!tool) return null;
-          return <ToolCard key={`tool-${seg.toolCallId}`} tool={tool} forceExpanded={allExpanded} />;
-        })}
-      </div>
-    </div>
+  const roles = useMemo<MessageRoleRenderers>(
+    () => ({
+      User: ({ children }) => (
+        <div className="msg msg-user">
+          <div className="msg-head">
+            <span className={`msg-role ${entry.steer ? 'role-steer' : ''}`}>{entry.steer ? 'Steer' : 'You'}</span>
+          </div>
+          <div className="bubble bubble-user">{children}</div>
+        </div>
+      ),
+      Assistant: ({ children }) => (
+        <div className="msg msg-assistant">
+          <div className="msg-head">
+            <span className="msg-avatar">
+              <LogoMark size={14} />
+            </span>
+            <span className="msg-role">Agent</span>
+            {toolCount > 1 && (
+              <button
+                type="button"
+                className="tool-group-toggle"
+                onClick={() => setAllExpanded(v => (v === true ? false : true))}
+                aria-pressed={allExpanded === true}
+              >
+                {allExpanded ? 'Collapse all' : `Expand all (${toolCount})`}
+              </button>
+            )}
+          </div>
+          <div className="bubble bubble-assistant">{children}</div>
+        </div>
+      ),
+      System: ({ children }) => (
+        <div className="msg msg-assistant">
+          <div className="msg-head">
+            <span className="msg-role">System</span>
+          </div>
+          <div className="bubble bubble-assistant">{children}</div>
+        </div>
+      ),
+      Signal: ({ children }) => (
+        <div className="msg msg-assistant">
+          <div className="msg-head">
+            <span className="msg-role">Signal</span>
+          </div>
+          <div className="bubble bubble-assistant">{children}</div>
+        </div>
+      ),
+    }),
+    [allExpanded, entry.steer, toolCount],
   );
+
+  const renderers = useMemo(
+    () => ({
+      Text: (part: TextPart) =>
+        entry.message.role === 'user' ? (
+          <div className="text">{part.text}</div>
+        ) : (
+          <div className="prose">
+            <Markdown>{part.text}</Markdown>
+            {entry.streaming && part === lastTextPart && <span className="streaming-cursor" />}
+          </div>
+        ),
+      Reasoning: (part: ReasoningPart) => (
+        <div className="thinking-block">
+          <Markdown>{part.reasoning}</Markdown>
+        </div>
+      ),
+      ToolInvocation: (part: ToolInvocationPart) => {
+        const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
+        const tool = toolFromInvocationPart(part, runtime);
+        return <ToolCard tool={tool} forceExpanded={allExpanded} />;
+      },
+      File: (part: FilePart) => <pre className="result-block">{stringify(part)}</pre>,
+    }),
+    [allExpanded, entry.message.role, entry.runtimeTools, entry.streaming, lastTextPart],
+  );
+
+  const status = statusMetadata(entry);
+  if (status) return <StatusMetadataCard status={status} />;
+  if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
+
+  return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
+}
+
+function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {
+  const invocation = part.toolInvocation;
+  const failed = invocation.state === 'output-error' || invocation.state === 'output-denied';
+  const persistedResult = 'result' in invocation ? invocation.result : undefined;
+  return {
+    toolCallId: invocation.toolCallId,
+    toolName: invocation.toolName,
+    argsText: runtime?.argsText ?? '',
+    args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
+    status: runtime?.status ?? (failed ? 'error' : invocation.state === 'result' ? 'done' : 'running'),
+    result: runtime?.result ?? persistedResult ?? invocation.errorText,
+    output: runtime?.output ?? '',
+  };
+}
+
+interface StatusMetadata {
+  id: string;
+  text: string;
+  level: 'info' | 'error';
+}
+
+function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
+  const harnessContent = entry.message.content.metadata?.harnessContent;
+  if (!Array.isArray(harnessContent)) return undefined;
+
+  const statusPart = harnessContent.find(
+    part =>
+      typeof part === 'object' &&
+      part !== null &&
+      'type' in part &&
+      typeof part.type === 'string' &&
+      (part.type === 'notification_summary' || part.type.startsWith('om_') || part.type === 'harness-error'),
+  );
+  if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
+
+  const text = 'text' in statusPart && typeof statusPart.text === 'string' ? statusPart.text : messageText(entry);
+  return {
+    id: `${entry.id}-${String(statusPart.type)}`,
+    text,
+    level: statusPart.type === 'harness-error' ? 'error' : 'info',
+  };
+}
+
+function messageText(entry: MessageEntry): string {
+  return entry.message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
+}
+
+function StatusMetadataCard({ status }: { status: StatusMetadata }) {
+  return <div className={`notice ${status.level === 'error' ? 'error' : ''}`}>{status.text}</div>;
 }
 
 function Notice({ entry }: { entry: NoticeEntry }) {

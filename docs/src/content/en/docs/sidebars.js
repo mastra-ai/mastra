@@ -217,6 +217,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/heartbeats',
+          label: 'Heartbeats',
+          customProps: {
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {

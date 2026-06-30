@@ -84,6 +84,12 @@ export interface ShellPassthroughSettings {
   family?: ShellPassthroughSettingsFamily | string;
 }
 
+/** Voice (hold-space dictation) configuration persisted in global settings. */
+export interface VoiceSettings {
+  /** Whether hold-space voice input is enabled. */
+  enabled: boolean;
+}
+
 /** Stagehand environment type. */
 export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
 
@@ -224,6 +230,8 @@ export interface GlobalSettings {
   browser: BrowserSettings;
   // Direct TUI `!` shell passthrough configuration
   shellPassthrough: ShellPassthroughSettings;
+  // Hold-space voice input configuration
+  voice: VoiceSettings;
   // Signal routing configuration
   signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
@@ -306,6 +314,7 @@ const DEFAULTS: GlobalSettings = {
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
+  voice: { enabled: false },
   signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   observability: { resources: {}, localTracing: false },
 };
@@ -522,6 +531,13 @@ function parseShellPassthroughSettings(rawShellPassthrough: unknown): ShellPasst
   };
 }
 
+function parseVoiceSettings(rawVoice: unknown): VoiceSettings {
+  const raw = rawVoice && typeof rawVoice === 'object' ? (rawVoice as Record<string, unknown>) : {};
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.voice.enabled,
+  };
+}
+
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
@@ -588,6 +604,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+        voice: parseVoiceSettings(raw.voice),
         signals: parseSignalSettings(raw.signals),
         observability: parseObservabilitySettings(raw.observability),
       };
@@ -710,6 +727,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+      voice: parseVoiceSettings(raw.voice),
       signals: parseSignalSettings(raw.signals),
       observability: parseObservabilitySettings(raw.observability),
     };

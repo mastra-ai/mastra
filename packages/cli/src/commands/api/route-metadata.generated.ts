@@ -257,6 +257,28 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /agents/:agentId/suspended-runs": {
+    "method": "GET",
+    "path": "/agents/:agentId/suspended-runs",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "fromDate",
+      "page",
+      "perPage",
+      "resourceId",
+      "threadId",
+      "toDate"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runs"
+    }
+  },
   "POST /agents/:agentId/approve-tool-call-generate": {
     "method": "POST",
     "path": "/agents/:agentId/approve-tool-call-generate",
@@ -5628,6 +5650,148 @@ export const API_ROUTE_METADATA = {
     "path": "/schedules/:scheduleId/resume",
     "pathParams": [
       "scheduleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /heartbeats": {
+    "method": "GET",
+    "path": "/heartbeats",
+    "pathParams": [],
+    "queryParams": [
+      "agentId",
+      "name",
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "heartbeats"
+    }
+  },
+  "GET /heartbeats/:heartbeatId": {
+    "method": "GET",
+    "path": "/heartbeats/:heartbeatId",
+    "pathParams": [
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /heartbeats": {
+    "method": "POST",
+    "path": "/heartbeats",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "agentId",
+      "attributes",
+      "cron",
+      "id",
+      "ifActive",
+      "ifIdle",
+      "metadata",
+      "name",
+      "prompt",
+      "providerOptions",
+      "resourceId",
+      "signalType",
+      "tagName",
+      "threadId",
+      "timezone"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /heartbeats/:heartbeatId": {
+    "method": "PATCH",
+    "path": "/heartbeats/:heartbeatId",
+    "pathParams": [
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "attributes",
+      "cron",
+      "ifActive",
+      "ifIdle",
+      "metadata",
+      "name",
+      "prompt",
+      "providerOptions",
+      "signalType",
+      "tagName",
+      "timezone"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /heartbeats/:heartbeatId": {
+    "method": "DELETE",
+    "path": "/heartbeats/:heartbeatId",
+    "pathParams": [
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /heartbeats/:heartbeatId/pause": {
+    "method": "POST",
+    "path": "/heartbeats/:heartbeatId/pause",
+    "pathParams": [
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /heartbeats/:heartbeatId/resume": {
+    "method": "POST",
+    "path": "/heartbeats/:heartbeatId/resume",
+    "pathParams": [
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /heartbeats/:heartbeatId/run": {
+    "method": "POST",
+    "path": "/heartbeats/:heartbeatId/run",
+    "pathParams": [
+      "heartbeatId"
     ],
     "queryParams": [],
     "bodyParams": [],

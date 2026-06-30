@@ -1,5 +1,39 @@
 # @internal/playground
 
+## 1.16.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+  - @mastra/client-js@1.29.0-alpha.5
+  - @mastra/react@1.2.1-alpha.5
+  - @mastra/playground-ui@38.0.0-alpha.5
+
+## 1.16.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`ee7b47a`](https://github.com/mastra-ai/mastra/commit/ee7b47a0331ad78e2297f75617cca56e37095b69), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+  - @mastra/playground-ui@37.1.0-alpha.4
+  - @mastra/client-js@1.28.1-alpha.4
+  - @mastra/react@1.2.1-alpha.4
+
+## 1.16.1-alpha.3
+
+### Patch Changes
+
+- Fixed Studio Metrics tab not rendering for PostgresStoreVNext users. The dashboard now appears when the observability store is Postgres v-next, with an advisory banner recommending time-range filters for best performance. ([#18598](https://github.com/mastra-ai/mastra/pull/18598))
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`c9530b7`](https://github.com/mastra-ai/mastra/commit/c9530b760fa04d835967e24288247284889880b2), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/schema-compat@1.3.2-alpha.0
+  - @mastra/ai-sdk@1.6.1-alpha.0
+  - @mastra/client-js@1.28.1-alpha.3
+  - @mastra/react@1.2.1-alpha.3
+  - @mastra/playground-ui@37.0.1-alpha.3
+
 ## 1.16.1-alpha.2
 
 ### Patch Changes

@@ -122,7 +122,7 @@ async function main(): Promise<never> {
 
   // Cleanup
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), controller?.stopHeartbeats()]);
+  await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
 
   process.exit(exitCode);
 }

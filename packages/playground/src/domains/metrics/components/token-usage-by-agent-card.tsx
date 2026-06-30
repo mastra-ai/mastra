@@ -1,10 +1,8 @@
 import { EntityType } from '@mastra/core/observability';
-import {
-  OpenInTracesButton,
-  TokenUsageByAgentCardView,
-  useDrilldown,
-  useTokenUsageByAgentMetrics,
-} from '@mastra/playground-ui';
+import { OpenInTracesButton } from '@mastra/playground-ui/domains/metrics/components/card-action-buttons';
+import { TokenUsageByAgentCardView } from '@mastra/playground-ui/domains/metrics/components/token-usage-by-agent-card-view';
+import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
+import { useTokenUsageByAgentMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-token-usage-by-agent-metrics';
 import { useLinkComponent } from '@/lib/framework';
 
 export function TokenUsageByAgentCard() {

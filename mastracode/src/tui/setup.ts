@@ -358,6 +358,10 @@ export function setupAutocomplete(state: TUIState): void {
       name: 'yolo',
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
+    {
+      name: 'voice',
+      description: 'Toggle push-to-talk voice input (hold space to talk)',
+    },
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },

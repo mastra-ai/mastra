@@ -29,7 +29,7 @@ The AgentController gives you the runtime pieces to ship interactive agent appli
 - **Let users pick the right model for each step.** Per-mode [model management](/reference/agent-controller/agent-controller-class) switches models at runtime and tracks usage, which powers copilot UIs where users trade speed for capability.
 - **Delegate focused work to child agents.** [Subagents](/docs/agent-controller/subagents) run subtasks with constrained tools and can fork the parent conversation, so a research mode can spin off web search or code review without polluting the main thread.
 - **Drive a live UI from agent activity.** The [event system](/docs/agent-controller/session) emits typed events and coalesced display snapshots, so your TUI or web app reflects message updates, mode changes, and pending approvals in real time.
-- **Run long-lived autonomous agents.** Structured task lists, heartbeat handlers, and observational memory keep background task runners on track and let them learn across threads.
+- **Run long-lived autonomous agents.** Structured task lists, interval handlers, and observational memory keep background task runners on track and let them learn across threads.
 
 ## When to use the AgentController
 
