@@ -10,20 +10,14 @@ export function SignalCrumb() {
 
 /**
  * Root "Signals" breadcrumb that links back to the overview while preserving the
- * current entity context (`entityType`/`entityId`) from the URL, so navigating
- * up keeps the selected entity instead of resetting the overview.
+ * current entity context (`entityId`) from the URL, so navigating up keeps the
+ * selected agent instead of resetting the overview.
  */
 export function SignalsRootCrumb() {
   const [searchParams] = useSearchParams();
 
-  const preserved = new URLSearchParams();
-  const entityType = searchParams.get('entityType');
   const entityId = searchParams.get('entityId');
-  if (entityType) preserved.set('entityType', entityType);
-  if (entityId) preserved.set('entityId', entityId);
-
-  const query = preserved.toString();
-  const to = query ? `/signals?${query}` : '/signals';
+  const to = entityId ? `/signals?entityId=${encodeURIComponent(entityId)}` : '/signals';
 
   return <Link to={to}>Signals</Link>;
 }

@@ -4,6 +4,7 @@ import { Button } from '../../../ds/components/Button';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { ScatterPlotChart } from '../../../ds/components/ScatterPlotChart';
 import { Searchbar } from '../../../ds/components/Searchbar';
+import { Skeleton } from '../../../ds/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import { cn } from '../../../lib/utils';
 import { TopicTraceDetailsPanel, TopicsLayout } from '../../topics';
@@ -96,15 +97,27 @@ export function SignalClusterSidebar({
   );
 }
 
+function SignalTraceListSkeleton({ rows = 8 }: { rows?: number }) {
+  return (
+    <div className="space-y-1 px-2 py-1" aria-label="Loading traces" aria-busy="true">
+      {Array.from({ length: rows }).map((_, index) => (
+        <Skeleton key={index} className="h-9 w-full rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
 export function SignalTraceListTab({
   examples,
   selectedTraceId,
   onTraceSelect,
+  loading = false,
   pageSize = 25,
 }: {
   examples: EntityLearningTopicExample[];
   selectedTraceId: string | null;
   onTraceSelect: (traceId: string) => void;
+  loading?: boolean;
   pageSize?: number;
 }) {
   const [search, setSearch] = useState('');
@@ -137,7 +150,9 @@ export function SignalTraceListTab({
           </DataList.TopCells>
         </DataList.Top>
 
-        {visible.length === 0 ? (
+        {loading ? (
+          <SignalTraceListSkeleton />
+        ) : visible.length === 0 ? (
           <DataList.NoMatch message="No traces match this subtopic." />
         ) : (
           visible.map(example => (
@@ -153,7 +168,7 @@ export function SignalTraceListTab({
         )}
       </DataList>
 
-      {hasMore ? (
+      {hasMore && !loading ? (
         <Button variant="outline" size="sm" onClick={() => setPage(currentPage => currentPage + 1)}>
           Load more traces ({visible.length} of {filtered.length})
         </Button>
@@ -207,6 +222,7 @@ export function SignalChartTab({ topics, points, selectedTopicIds, onTopicToggle
 interface SignalClusterTabsProps {
   topics: EntityLearningTopic[];
   examples: EntityLearningTopicExample[];
+  examplesLoading: boolean;
   points: EntityLearningPoint[];
   selectedTopicId: string;
   selectedTraceId: string | null;
@@ -221,6 +237,7 @@ interface SignalClusterTabsProps {
 export function SignalClusterTabs({
   topics,
   examples,
+  examplesLoading,
   points,
   selectedTopicId,
   selectedTraceId,
@@ -246,7 +263,12 @@ export function SignalClusterTabs({
         <div className="flex h-full min-w-0 gap-6">
           <SignalClusterSidebar topics={topics} selectedTopicIds={[selectedTopicId]} onTopicSelect={onTopicSelect} />
           <div className="min-w-0 flex-1 overflow-hidden py-4">
-            <SignalTraceListTab examples={examples} selectedTraceId={selectedTraceId} onTraceSelect={onTraceSelect} />
+            <SignalTraceListTab
+              examples={examples}
+              loading={examplesLoading}
+              selectedTraceId={selectedTraceId}
+              onTraceSelect={onTraceSelect}
+            />
           </div>
         </div>
       </TabContent>
@@ -297,12 +319,19 @@ export function SignalDetailsPage({
   const selectedTopic = topics.find(topic => topic.topicId === selectedTopicId) ?? topics[0];
   const chartTopicIds = selectedChartTopicIds ?? topics.map(topic => topic.topicId);
 
-  const { data: examplesData } = useEntityTopicExamples(
+  const {
+    data: examplesData,
+    isLoading: examplesLoading,
+    isFetching: examplesFetching,
+  } = useEntityTopicExamples(
     resolvedEntity?.entityId,
     selectedTopic?.topicId,
     runId && signalId ? { signalName: signalId, runId } : undefined,
   );
   const examples: EntityLearningTopicExample[] = examplesData?.examples ?? [];
+  // Show the skeleton on the first load and while switching topics refetches,
+  // so the trace list never flashes the empty-state copy between datasets.
+  const examplesPending = examplesLoading || (examplesFetching && examplesData === undefined);
 
   const { data: pointsData } = useEntityPoints(
     resolvedEntity?.entityId,
@@ -355,6 +384,7 @@ export function SignalDetailsPage({
           <SignalClusterTabs
             topics={topics}
             examples={examples}
+            examplesLoading={examplesPending}
             points={points}
             selectedTopicId={selectedTopic.topicId}
             selectedTraceId={selectedTraceId}

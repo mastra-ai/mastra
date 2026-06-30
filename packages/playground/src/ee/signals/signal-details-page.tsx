@@ -7,12 +7,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 function useSelectedEntity() {
   const [searchParams] = useSearchParams();
-  const entityType = searchParams.get('entityType');
   const entityId = searchParams.get('entityId');
-  const entity = entityType && entityId ? { entityType, entityId } : null;
-  const entityQuery = entity
-    ? `?entityType=${encodeURIComponent(entityType!)}&entityId=${encodeURIComponent(entityId!)}`
-    : '';
+  const entity = entityId ? { entityType: 'agent', entityId } : null;
+  const entityQuery = entityId ? `?entityId=${encodeURIComponent(entityId)}` : '';
 
   return { entity, entityQuery };
 }

@@ -190,6 +190,28 @@ describe('SignalDetailsPage', () => {
     });
   });
 
+  describe('when the topic examples are still loading', () => {
+    it('shows a skeleton trace list instead of the empty-state copy', async () => {
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
+        http.get(`${ROOT}/entities/:entityId/points`, () => HttpResponse.json(pointsResponse)),
+        // Topics resolve but the selected topic's examples never settle.
+        http.get(`${ROOT}/entities/:entityId/topics/:topicId/examples`, () => new Promise(() => {})),
+      );
+
+      renderSignalDetailsPage();
+
+      // Topics rendered, so we are past the page-level loading gate.
+      await screen.findByText('Frustrated escalations');
+
+      // Skeleton placeholder is shown for the in-flight trace list.
+      expect(screen.getByLabelText('Loading traces')).not.toBeNull();
+      // The empty-state copy must not flash while examples are loading.
+      expect(screen.queryByText('No traces match this subtopic.')).toBeNull();
+    });
+  });
+
   describe('when the entity request fails', () => {
     it('shows the error layout instead of the cluster UI', async () => {
       server.use(http.get(`${ROOT}/entities`, () => new HttpResponse(null, { status: 500 })));

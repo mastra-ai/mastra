@@ -80,14 +80,13 @@ describe('SignalsOverviewPage', () => {
       expect(await screen.findByText('Select an entity to inspect its signals and clusters.')).not.toBeNull();
     });
 
-    it('keeps the entity filter pinned at the top regardless of selection', async () => {
+    it('keeps the agent filter pinned at the top regardless of selection', async () => {
       server.use(http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)));
 
       renderOverview(null);
 
-      // The filter bar (both selects) is present even before an entity is picked.
-      expect(await screen.findByLabelText('Entity type')).not.toBeNull();
-      expect(screen.getByLabelText('Entity')).not.toBeNull();
+      // The agent picker is present even before an agent is picked.
+      expect(await screen.findByLabelText('Agent')).not.toBeNull();
     });
   });
 

@@ -7,12 +7,8 @@ export function SignalsOverviewPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const entityType = searchParams.get('entityType');
   const entityId = searchParams.get('entityId');
-  const selectedEntity = useMemo(
-    () => (entityType && entityId ? { entityType, entityId } : null),
-    [entityType, entityId],
-  );
+  const selectedEntity = useMemo(() => (entityId ? { entityType: 'agent', entityId } : null), [entityId]);
 
   const handleEntityChange = useCallback<SignalsOverviewPageProps['onEntityChange']>(
     selected => {
@@ -20,10 +16,8 @@ export function SignalsOverviewPage() {
         prev => {
           const next = new URLSearchParams(prev);
           if (selected) {
-            next.set('entityType', selected.entityType);
             next.set('entityId', selected.entityId);
           } else {
-            next.delete('entityType');
             next.delete('entityId');
           }
           return next;
@@ -38,7 +32,6 @@ export function SignalsOverviewPage() {
     (signalName, topicId) => {
       const params = new URLSearchParams();
       if (selectedEntity) {
-        params.set('entityType', selectedEntity.entityType);
         params.set('entityId', selectedEntity.entityId);
       }
       if (topicId) {

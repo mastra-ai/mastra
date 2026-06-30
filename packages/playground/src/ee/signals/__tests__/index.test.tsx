@@ -174,29 +174,27 @@ describe('Signals page wrappers', () => {
     it('navigates to the signal route preserving the entity query params', async () => {
       useEntityLearningHandlers();
 
-      renderSignalsPage('/signals?entityType=agent&entityId=entity_support');
+      renderSignalsPage('/signals?entityId=entity_support');
 
       const seeDetails = await screen.findByRole('button', { name: /See details/ });
       fireEvent.click(seeDetails);
 
       await waitFor(() =>
-        expect(screen.getByTestId('location').textContent).toBe(
-          '/signals/sentiment?entityType=agent&entityId=entity_support',
-        ),
+        expect(screen.getByTestId('location').textContent).toBe('/signals/sentiment?entityId=entity_support'),
       );
     }, 15000);
 
     it('navigates to the signal route with the clicked cluster topic id', async () => {
       useEntityLearningHandlers();
 
-      renderSignalsPage('/signals?entityType=agent&entityId=entity_support');
+      renderSignalsPage('/signals?entityId=entity_support');
 
       const card = (await screen.findAllByRole('button', { name: /Frustrated escalations/ }))[0];
       fireEvent.click(card);
 
       await waitFor(() =>
         expect(screen.getByTestId('location').textContent).toBe(
-          '/signals/sentiment?entityType=agent&entityId=entity_support&topicId=89',
+          '/signals/sentiment?entityId=entity_support&topicId=89',
         ),
       );
     }, 15000);
@@ -206,7 +204,7 @@ describe('Signals page wrappers', () => {
     it('passes the route signal param to the reusable details page', async () => {
       useEntityLearningHandlers();
 
-      renderSignalsPage('/signals/sentiment?entityType=agent&entityId=entity_support');
+      renderSignalsPage('/signals/sentiment?entityId=entity_support');
 
       expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
     });
@@ -217,7 +215,7 @@ describe('Signals page wrappers', () => {
       useEntityLearningHandlers();
       useTraceDetailHandlers();
 
-      renderSignalsPage('/signals/sentiment/traces/trace-1?entityType=agent&entityId=entity_support');
+      renderSignalsPage('/signals/sentiment/traces/trace-1?entityId=entity_support');
 
       expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
 
@@ -225,9 +223,7 @@ describe('Signals page wrappers', () => {
       fireEvent.click(closeButton);
 
       await waitFor(() =>
-        expect(screen.getByTestId('location').textContent).toBe(
-          '/signals/sentiment?entityType=agent&entityId=entity_support',
-        ),
+        expect(screen.getByTestId('location').textContent).toBe('/signals/sentiment?entityId=entity_support'),
       );
     }, 15000);
   });
@@ -249,7 +245,7 @@ describe('Signals page wrappers', () => {
   describe('when rendering the Signals root breadcrumb', () => {
     it('links back to /signals preserving the current entity query params', () => {
       render(
-        <MemoryRouter initialEntries={['/signals/sentiment?entityType=agent&entityId=entity_support']}>
+        <MemoryRouter initialEntries={['/signals/sentiment?entityId=entity_support']}>
           <Routes>
             <Route path="/signals/:signalId" element={<SignalsRootCrumb />} />
           </Routes>
@@ -257,7 +253,7 @@ describe('Signals page wrappers', () => {
       );
 
       const link = screen.getByRole('link', { name: 'Signals' });
-      expect(link.getAttribute('href')).toBe('/signals?entityType=agent&entityId=entity_support');
+      expect(link.getAttribute('href')).toBe('/signals?entityId=entity_support');
     });
 
     it('links to /signals without a query string when no entity params are present', () => {
