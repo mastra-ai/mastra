@@ -348,7 +348,6 @@ function formatTextActivityLines(text: string, maxWidth: number): string[] {
   return text
     .trim()
     .split('\n')
-    .slice(-8)
     .map(line => theme.fg('muted', line.length > maxWidth ? `${line.slice(0, maxWidth - 1)}…` : line));
 }
 

@@ -239,13 +239,13 @@ describe('PluginManager', () => {
     const manager = new PluginManager({ projectRoot, homeDir });
     await manager.reload();
 
-    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     const branchCall = execaMock.mock.calls.find(call => call[1][0] === 'branch');
     expect(branchCall?.[1][1]).toMatch(/^mastracode\/plugin-backup\/.*-abc12345$/);
     expect(branchCall?.[1][2]).toBe('HEAD');
     expect(execaMock).toHaveBeenCalledWith('git', ['reset', '--hard', 'origin/main'], { cwd: checkoutDir });
-    expect(manager.getPluginTools().github_tool?.description).toBe('first');
+    expect(manager.getPluginTools().github_tool?.description).toBe('second');
   });
 
   it('commits dirty GitHub plugin checkout changes on the backup branch before reset', async () => {
@@ -284,7 +284,7 @@ describe('PluginManager', () => {
     const manager = new PluginManager({ projectRoot, homeDir });
     await manager.reload();
 
-    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(execaMock.mock.calls.map(call => call[1][0])).toEqual([
       'rev-parse',

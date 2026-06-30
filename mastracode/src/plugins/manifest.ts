@@ -41,11 +41,12 @@ export function savePluginManifest(rootDir: string, manifest: PluginManifest): v
 
 export function upsertPluginManifestEntry(rootDir: string, entry: PluginManifestEntry): void {
   const manifest = loadPluginManifest(rootDir) ?? { plugins: [] };
-  const existingIndex = manifest.plugins.findIndex(plugin => plugin.id === entry.id);
+  const validatedEntry = validateManifestEntry(entry, manifest.plugins.length);
+  const existingIndex = manifest.plugins.findIndex(plugin => plugin.id === validatedEntry.id);
   if (existingIndex >= 0) {
-    manifest.plugins[existingIndex] = entry;
+    manifest.plugins[existingIndex] = validateManifestEntry(validatedEntry, existingIndex);
   } else {
-    manifest.plugins.push(entry);
+    manifest.plugins.push(validatedEntry);
   }
   savePluginManifest(rootDir, manifest);
 }

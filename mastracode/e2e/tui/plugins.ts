@@ -20,6 +20,13 @@ let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
 
+function resetPluginScenarioState(): void {
+  currentTui = undefined;
+  hotReloadPluginDir = undefined;
+  githubPollSourceDir = undefined;
+  githubPollManager = undefined;
+}
+
 function writeLocalPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
   const pluginDir = join(projectDir, 'fixtures', 'plugins', 'local-plugin');
   const pluginSrcDir = join(pluginDir, 'src');
@@ -162,8 +169,10 @@ function writePluginPackageLink(pluginDir: string): void {
   mkdirSync(nodeModulesDir, { recursive: true });
   try {
     symlinkSync(MASTRACODE_PACKAGE_DIR, join(nodeModulesDir, 'mastracode'), 'dir');
-  } catch {
-    // The link may already exist if a scenario reuses the same prepared directory.
+  } catch (error) {
+    if (!error || typeof error !== 'object' || (error as { code?: string }).code !== 'EEXIST') {
+      throw error;
+    }
   }
 }
 
@@ -271,6 +280,7 @@ export const pluginsLocalToolScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'plugins-local-tool.json',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     const pluginDir = writeLocalPlugin({ projectDir });
     writePluginRegistry(projectDir, pluginDir);
   },
@@ -310,6 +320,7 @@ export const pluginsStreamingToolOutputScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'plugins-streaming-tool-output.json',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     const pluginDir = writeStreamingPlugin({ projectDir });
     writePluginRegistry(projectDir, pluginDir);
   },
@@ -348,6 +359,7 @@ export const pluginsScaffoldInstallToolScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'plugins-scaffold-install-tool.json',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     scaffoldPlugin('scaffolded-e2e-plugin', {
       projectRoot: projectDir,
       id: 'e2e.scaffolded-plugin',
@@ -401,6 +413,7 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'plugins-local-hot-reload.json',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     hotReloadPluginDir = writeHotReloadPlugin({ projectDir }, 'version-one');
     writePluginRegistry(projectDir, hotReloadPluginDir);
   },
@@ -446,6 +459,7 @@ export const pluginsGithubPollUpdateScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'plugins-github-poll-update.json',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     githubPollSourceDir = prepareGithubPollPlugin(projectDir);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
@@ -493,6 +507,7 @@ export const pluginsBlockedConfigScenario: McE2eScenario = {
   description: 'Blocks an installed plugin through plugins.json disabledPlugins.',
   testName: 'shows configured plugin blocks and hides blocked tools',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     const pluginDir = writeLocalPlugin({ projectDir });
     writePluginRegistry(projectDir, pluginDir, true, [PLUGIN_ID]);
   },
@@ -530,6 +545,7 @@ export const pluginsAssetsLoadingScenario: McE2eScenario = {
   useOpenAIModel: true,
   aimockFixture: 'plugins-assets-loading.json',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     const pluginDir = writeAssetPlugin({ projectDir });
     writePluginRegistry(projectDir, pluginDir);
   },
@@ -590,6 +606,7 @@ export const pluginsCommandUiScenario: McE2eScenario = {
   description: 'Shows installed plugins and plugin details in the /plugins TUI command.',
   testName: 'renders plugin list and detail screens',
   prepare({ projectDir }) {
+    resetPluginScenarioState();
     const pluginDir = writeLocalPlugin({ projectDir });
     writePluginRegistry(projectDir, pluginDir);
   },

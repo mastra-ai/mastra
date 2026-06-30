@@ -6,7 +6,7 @@ import { execa } from 'execa';
 import type { MastraCodePluginConfigValue } from '../plugin.js';
 import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from './install.js';
 import type { InstallPluginOptions } from './install.js';
-import { collectActivePluginTools, loadPlugins, resolvePluginEntryPath } from './loader.js';
+import { collectActivePluginTools, isInsideDirectory, loadPlugins, resolvePluginEntryPath } from './loader.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
@@ -161,10 +161,17 @@ export class PluginManager {
   private updateLocalEntryWatchers(plugins: LoadedPlugin[]): void {
     const nextEntries = new Set<string>();
     for (const plugin of plugins) {
-      if (plugin.source !== 'local' || plugin.status === 'inactive' || plugin.status === 'blocked') continue;
-      const entryPath = resolvePluginEntryPath(plugin, this.options);
+      if (plugin.source !== 'local' || plugin.status !== 'active') continue;
+      let entryPath: string;
+      let entryVersion: string;
+      try {
+        entryPath = resolvePluginEntryPath(plugin, this.options);
+        entryVersion = getEntryVersion(entryPath);
+      } catch {
+        continue;
+      }
       nextEntries.add(entryPath);
-      this.localEntryVersions.set(entryPath, getEntryVersion(entryPath));
+      this.localEntryVersions.set(entryPath, entryVersion);
       if (this.watchedLocalEntries.has(entryPath)) continue;
 
       const watcher = fs.watchFile(entryPath, { interval: 500 }, (current, previous) => {
@@ -217,9 +224,9 @@ export class PluginManager {
       seen.add(checkoutPath);
 
       const before = await this.readGitHead(checkoutPath);
-      await this.refreshGithubCheckout(plugin, checkoutPath, before);
+      const checkoutChanged = await this.refreshGithubCheckout(plugin, checkoutPath, before);
       const after = await this.readGitHead(checkoutPath);
-      if (before !== after) changed = true;
+      if (checkoutChanged || before !== after) changed = true;
     }
 
     if (changed) {
@@ -228,10 +235,14 @@ export class PluginManager {
     return changed;
   }
 
-  private async refreshGithubCheckout(plugin: LoadedPlugin, checkoutPath: string, currentHead: string): Promise<void> {
+  private async refreshGithubCheckout(
+    plugin: LoadedPlugin,
+    checkoutPath: string,
+    currentHead: string,
+  ): Promise<boolean> {
     await execa('git', ['fetch', 'origin'], { cwd: checkoutPath });
     const upstream = await this.resolveGitUpstream(checkoutPath, plugin.ref);
-    if (!upstream) return;
+    if (!upstream) return false;
     const [localOnly, remoteOnly] = await this.readGitAheadBehind(checkoutPath, upstream);
     const hasLocalChanges = await this.hasGitWorkingTreeChanges(checkoutPath);
 
@@ -241,7 +252,10 @@ export class PluginManager {
 
     if (remoteOnly > 0 || localOnly > 0 || hasLocalChanges) {
       await execa('git', ['reset', '--hard', upstream], { cwd: checkoutPath });
+      return true;
     }
+
+    return false;
   }
 
   private async backupGitCheckout(
@@ -404,8 +418,13 @@ export class PluginManager {
 
     savePluginRegistry(paths.registryPath, removePluginRecord(registry, pluginId));
     if (record.source === 'github') {
-      const checkoutPath = path.isAbsolute(record.path) ? record.path : path.join(paths.root, record.path);
-      fs.rmSync(checkoutPath, { recursive: true, force: true });
+      const checkoutPath = path.resolve(
+        path.isAbsolute(record.path) ? record.path : path.join(paths.root, record.path),
+      );
+      const githubSourcesPath = path.resolve(paths.sourcesPath, 'github');
+      if (isInsideDirectory(checkoutPath, githubSourcesPath)) {
+        fs.rmSync(checkoutPath, { recursive: true, force: true });
+      }
     }
     await this.reload();
   }

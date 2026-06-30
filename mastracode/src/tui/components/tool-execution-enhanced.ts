@@ -871,7 +871,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       .map(line => line.trimEnd())
       .filter(Boolean);
 
-    return (this.isPartial ? lines : lines.slice(0, 2)).join('\n');
+    return (this.isPartial ? lines : lines.slice(0, this.quietPreviewLineLimit)).join('\n');
   }
 
   private formatCompactJsonResult(output: string): string {

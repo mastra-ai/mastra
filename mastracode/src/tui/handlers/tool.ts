@@ -136,8 +136,6 @@ function handleSubagentProgress(
       break;
     case 'finish':
       component.finish(progress.isError ?? false, progress.durationMs ?? 0, progress.result);
-      state.pendingSubagents.delete(toolCallId);
-      pluginSubagentToolCallIds.delete(toolCallId);
       break;
   }
 

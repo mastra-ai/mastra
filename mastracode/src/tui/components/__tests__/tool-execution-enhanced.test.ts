@@ -50,7 +50,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'mastra_expert',
       { question: 'How does tool streaming work?' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
       ui,
     );
 

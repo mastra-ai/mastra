@@ -203,7 +203,11 @@ function pluginMain(args: string[]): void {
 function readFlag(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
   if (index === -1) return undefined;
-  return args[index + 1];
+  const value = args[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
 }
 
 function handleFatalError(error: unknown): never {

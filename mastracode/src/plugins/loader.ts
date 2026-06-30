@@ -100,11 +100,27 @@ export async function loadPluginFromEntry(entryPath: string): Promise<MastraCode
 }
 
 export function resolvePluginRoot(record: ScopedInstalledPluginRecord, options: PluginPathOptions): string {
-  return path.isAbsolute(record.path) ? record.path : path.join(getPluginRoot(record.scope, options), record.path);
+  const scopeRoot = path.resolve(getPluginRoot(record.scope, options));
+  const pluginRoot = path.resolve(path.isAbsolute(record.path) ? record.path : path.join(scopeRoot, record.path));
+  if (record.source === 'github' && !isInsideDirectory(pluginRoot, scopeRoot)) {
+    throw new Error(`Plugin path for "${record.id}" must be inside the ${record.scope} plugin directory`);
+  }
+  return pluginRoot;
 }
 
 export function resolvePluginEntryPath(record: ScopedInstalledPluginRecord, options: PluginPathOptions): string {
-  return path.resolve(resolvePluginRoot(record, options), record.entry);
+  const pluginRoot = resolvePluginRoot(record, options);
+  const entryPath = path.resolve(pluginRoot, record.entry);
+  if (!isInsideDirectory(entryPath, pluginRoot)) {
+    throw new Error(`Plugin entry for "${record.id}" must be inside the plugin directory`);
+  }
+  return entryPath;
+}
+
+export function isInsideDirectory(targetPath: string, root: string): boolean {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(root);
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
 function resolveExistingAssetDirs(pluginRoot: string, dirname: 'skills' | 'commands'): string[] {
@@ -191,9 +207,9 @@ function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): {
 }
 
 function isToolEntryObject(entry: MastraCodePluginToolEntries[string]): entry is MastraCodePluginToolEntries[string] {
-  return (
-    !!entry && typeof entry === 'object' && 'tool' in entry && typeof (entry as { tool?: unknown }).tool === 'object'
-  );
+  if (!entry || typeof entry !== 'object' || !('tool' in entry)) return false;
+  const tool = (entry as { tool?: unknown }).tool;
+  return !!tool && typeof tool === 'object' && !Array.isArray(tool);
 }
 
 function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSchema | undefined {

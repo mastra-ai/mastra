@@ -40,7 +40,7 @@ describe('plugin loader', () => {
   it('loads enabled registry records and marks disabled records inactive', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');
-    const pluginDir = path.join(tempDir, 'plugin');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
     writePlugin(
       path.join(pluginDir, 'src/index.ts'),
       `export const plugin = {
@@ -62,7 +62,7 @@ describe('plugin loader', () => {
           enabled: false,
           source: 'local',
           specifier: '../disabled',
-          path: path.join(tempDir, 'disabled'),
+          path: path.join(projectRoot, '.mastracode', 'plugins', 'disabled'),
           entry: 'src/index.ts',
         },
       },
@@ -85,7 +85,7 @@ describe('plugin loader', () => {
   it('passes configured plugin option values into tools functions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');
-    const pluginDir = path.join(tempDir, 'plugin');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
     writePlugin(
       path.join(pluginDir, 'src/index.ts'),
       `export default {
@@ -128,7 +128,7 @@ describe('plugin loader', () => {
   it('normalizes first-class tool render entries and discovers bundled assets and instructions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');
-    const pluginDir = path.join(tempDir, 'plugin');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
     fs.mkdirSync(path.join(pluginDir, 'skills', 'helper'), { recursive: true });
     fs.writeFileSync(path.join(pluginDir, 'skills', 'helper', 'SKILL.md'), '# Helper');
     fs.mkdirSync(path.join(pluginDir, 'commands'), { recursive: true });
@@ -180,7 +180,7 @@ describe('plugin loader', () => {
           enabled: true,
           source: 'local',
           specifier: '../broken',
-          path: path.join(tempDir, 'broken'),
+          path: path.join(tempDir, 'project', '.mastracode', 'plugins', 'broken'),
           entry: 'index.ts',
         },
       },

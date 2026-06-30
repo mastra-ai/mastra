@@ -94,6 +94,11 @@ function showPluginsList(ctx: SlashCommandContext): void {
   showModalOverlay(ctx.state.ui, modal, { maxHeight: '80%' });
 }
 
+function reportPluginMutationError(ctx: SlashCommandContext, action: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  ctx.showError(`${action} failed: ${message}`);
+}
+
 function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void {
   const container = new Box(4, 2, text => theme.bg('overlayBg', text));
   container.addChild(new Text(theme.bold(theme.fg('accent', plugin.name ?? plugin.id)), 0, 0));
@@ -137,17 +142,23 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
       return;
     }
     if (item.value === 'toggle') {
-      void ctx.pluginManager.setEnabled(plugin.id, plugin.scope, !plugin.enabled).then(() => {
-        ctx.state.ui.hideOverlay();
-        showPluginsList(ctx);
-      });
+      void ctx.pluginManager
+        .setEnabled(plugin.id, plugin.scope, !plugin.enabled)
+        .then(() => {
+          ctx.state.ui.hideOverlay();
+          showPluginsList(ctx);
+        })
+        .catch(error => reportPluginMutationError(ctx, actionLabel, error));
       return;
     }
     if (item.value === 'uninstall') {
-      void ctx.pluginManager.uninstall(plugin.id, plugin.scope).then(() => {
-        ctx.state.ui.hideOverlay();
-        showPluginsList(ctx);
-      });
+      void ctx.pluginManager
+        .uninstall(plugin.id, plugin.scope)
+        .then(() => {
+          ctx.state.ui.hideOverlay();
+          showPluginsList(ctx);
+        })
+        .catch(error => reportPluginMutationError(ctx, 'Uninstall', error));
     }
   };
   actions.onCancel = () => {
@@ -187,8 +198,12 @@ async function configurePluginFlow(ctx: SlashCommandContext, plugin: LoadedPlugi
     await configurePluginFlow(ctx, plugin);
     return;
   }
-  await ctx.pluginManager.setConfigValue(plugin.id, plugin.scope, key, value);
-  ctx.showInfo(`Updated plugin setting ${key}.`);
+  try {
+    await ctx.pluginManager.setConfigValue(plugin.id, plugin.scope, key, value);
+    ctx.showInfo(`Updated plugin setting ${key}.`);
+  } catch (error) {
+    reportPluginMutationError(ctx, `Update setting ${key}`, error);
+  }
 }
 
 function formatConfigDescription(
@@ -216,12 +231,14 @@ async function askPluginConfigValue(
     const answer = await askModalQuestion(ctx.state.ui, {
       question: formatConfigValueQuestion(key, option),
       options: [
+        { label: 'Use default', description: 'Clear this setting and use the plugin default' },
         { label: 'On', description: 'true' },
         { label: 'Off', description: 'false' },
       ],
       allowCustomResponse: false,
     });
     if (!answer) return undefined;
+    if (answer === 'Use default') return '';
     return answer === 'On';
   }
 
