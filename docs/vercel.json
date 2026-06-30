@@ -71,6 +71,36 @@
       "permanent": true
     },
     {
+      "source": "/docs/getting-started",
+      "destination": "/guides/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools/overview",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools/overview/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-providers",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-providers/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/examples/agents/ai-sdk-v5-integration",
       "destination": "/guides/getting-started/next-js",
       "permanent": true
