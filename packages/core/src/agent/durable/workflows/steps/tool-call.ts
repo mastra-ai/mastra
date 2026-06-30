@@ -123,6 +123,7 @@ async function processChunkThroughOutputProcessors(
   runId: string,
   agentName: string,
   logger: any,
+  messageList?: MessageList,
 ): Promise<ChunkType | null> {
   if (!registryEntry?.outputProcessors?.length || !registryEntry.processorStates) {
     return chunk;
@@ -148,7 +149,7 @@ async function processChunkThroughOutputProcessors(
       registryEntry.processorStates as Map<string, ProcessorState>,
       undefined, // observabilityContext
       registryEntry.requestContext,
-      undefined, // messageList — not available in durable tool-call step
+      messageList,
       0,
       pubsub
         ? {
@@ -847,6 +848,7 @@ export function createDurableToolCallStep() {
               runId,
               initData.agentId,
               logger,
+              messageList,
             );
             if (processed) {
               await emitChunkEvent(pubsub, runId, processed);
@@ -887,6 +889,7 @@ export function createDurableToolCallStep() {
               runId,
               initData.agentId,
               logger,
+              messageList,
             );
             if (processed) {
               await emitChunkEvent(pubsub, runId, processed);

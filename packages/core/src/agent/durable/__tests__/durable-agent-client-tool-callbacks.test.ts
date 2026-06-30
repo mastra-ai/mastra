@@ -98,8 +98,10 @@ describe('DurableAgent client-tool callbacks (Bug 10)', () => {
     pubsub = new EventEmitterPubSub();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await _mastra?.close?.();
+    pubsub?.removeAllListeners?.();
   });
 
   it('invokes onInputStart when tool-call-input-streaming-start chunk arrives', async () => {

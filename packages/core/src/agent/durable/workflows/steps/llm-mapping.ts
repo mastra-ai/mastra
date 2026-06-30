@@ -152,8 +152,13 @@ export function createDurableLLMMappingStep() {
         for (const toolResult of toolResults) {
           const result = toolResult.error ? toolResult.error.message : toolResult.result;
 
-          // Compute toModelOutput for successful tool results (Bug 9 parity)
-          let providerMetadata: Record<string, unknown> | undefined;
+          // Compute toModelOutput for successful tool results (Bug 9 parity).
+          // Start from the existing providerMetadata so it's preserved even when
+          // toModelOutput is absent or fails — otherwise provider-executed tools
+          // or tools without a mapper lose their metadata.
+          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
+            | Record<string, unknown>
+            | undefined;
           if (!toolResult.error && toolResult.result != null && !toolResult.providerExecuted) {
             const tool = registryTools?.[toolResult.toolName] as
               | { toModelOutput?: (output: unknown) => unknown }
