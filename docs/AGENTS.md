@@ -27,4 +27,8 @@ pnpm test:smoke # Smoke tests only desktop
 pnpm test:og # OG image meta tag tests only desktop
 pnpm test:navigation # Navigation tests desktop + tablet + mobile
 
+Linting
+pnpm validate # Check frontmatter values and if all sidebars are valid
+pnpm lint:prose # Check prose with Vale and Remark
+
 Tests live in tests/ helpers in tests/helpers/ and playwright.config.ts starts pnpm serve
