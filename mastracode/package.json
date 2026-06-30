@@ -107,6 +107,8 @@
     "@mastra/server": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
+    "@mastra/voice-deepgram": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
     "@octokit/auth-app": "^8.0.0",
     "@octokit/rest": "^22.0.1",
     "@tanstack/react-query": "^5.90.21",

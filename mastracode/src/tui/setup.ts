@@ -360,7 +360,7 @@ export function setupAutocomplete(state: TUIState): void {
     },
     {
       name: 'voice',
-      description: 'Toggle push-to-talk voice input (hold space to talk)',
+      description: 'Manage push-to-talk voice input (engine, provider, model)',
     },
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
