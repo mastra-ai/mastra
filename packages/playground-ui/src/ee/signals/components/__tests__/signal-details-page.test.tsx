@@ -44,11 +44,13 @@ const SUPPORT_ENTITY: SelectedEntity = { entityType: 'agent', entityId: 'entity_
 function renderSignalDetailsPage({
   entity = SUPPORT_ENTITY as SelectedEntity | null,
   selectedTraceId = 'trace-1' as string | null,
+  initialTopicId = null as string | null,
   tracePanel = (<aside aria-label="Trace details">Trace panel</aside>) as ReactNode,
   onTraceSelect = () => {},
 }: {
   entity?: SelectedEntity | null;
   selectedTraceId?: string | null;
+  initialTopicId?: string | null;
   tracePanel?: ReactNode;
   onTraceSelect?: (signalId: string, traceId: string) => void;
 } = {}) {
@@ -61,6 +63,7 @@ function renderSignalDetailsPage({
           signalId="sentiment"
           entity={entity}
           selectedTraceId={selectedTraceId}
+          initialTopicId={initialTopicId}
           tracePanel={tracePanel}
           onTraceSelect={onTraceSelect}
         />
@@ -135,6 +138,21 @@ describe('SignalDetailsPage', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Chart' }));
 
       expect(screen.getByLabelText('Chart cluster filters')).not.toBeNull();
+    });
+  });
+
+  describe('when an initial topic id is provided', () => {
+    it('selects that topic by default in the trace list sidebar', async () => {
+      useLiveDataHandlers();
+
+      renderSignalDetailsPage({ initialTopicId: '90' });
+
+      // The non-default topic ("Satisfied resolutions" = topic 90) is selected.
+      const selected = await screen.findByRole('button', { name: /Satisfied resolutions/, pressed: true });
+      expect(selected).not.toBeNull();
+
+      // The default first topic ("Frustrated escalations" = topic 89) is not selected.
+      expect(screen.getByRole('button', { name: /Frustrated escalations/, pressed: false })).not.toBeNull();
     });
   });
 

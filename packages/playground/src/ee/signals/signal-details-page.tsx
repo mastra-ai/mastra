@@ -20,7 +20,9 @@ function useSelectedEntity() {
 function SignalDetailsRouteContent({ selectedTraceId }: { selectedTraceId: string | null }) {
   const navigate = useNavigate();
   const { signalId } = useParams();
+  const [searchParams] = useSearchParams();
   const { entity, entityQuery } = useSelectedEntity();
+  const initialTopicId = searchParams.get('topicId');
 
   const handleTraceSelect = (nextSignalId: string, traceId: string) => {
     void navigate(`/signals/${nextSignalId}/traces/${traceId}${entityQuery}`);
@@ -31,6 +33,7 @@ function SignalDetailsRouteContent({ selectedTraceId }: { selectedTraceId: strin
       signalId={signalId}
       entity={entity}
       selectedTraceId={selectedTraceId}
+      initialTopicId={initialTopicId}
       onTraceSelect={handleTraceSelect}
     />
   );

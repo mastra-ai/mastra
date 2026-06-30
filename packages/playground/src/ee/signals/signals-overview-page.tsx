@@ -35,11 +35,17 @@ export function SignalsOverviewPage() {
   );
 
   const handleSignalSelect = useCallback<SignalsOverviewPageProps['onSignalSelect']>(
-    signalName => {
-      const query = selectedEntity
-        ? `?entityType=${encodeURIComponent(selectedEntity.entityType)}&entityId=${encodeURIComponent(selectedEntity.entityId)}`
-        : '';
-      void navigate(`/signals/${signalName}${query}`, { viewTransition: true });
+    (signalName, topicId) => {
+      const params = new URLSearchParams();
+      if (selectedEntity) {
+        params.set('entityType', selectedEntity.entityType);
+        params.set('entityId', selectedEntity.entityId);
+      }
+      if (topicId) {
+        params.set('topicId', topicId);
+      }
+      const query = params.toString();
+      void navigate(`/signals/${signalName}${query ? `?${query}` : ''}`, { viewTransition: true });
     },
     [navigate, selectedEntity],
   );

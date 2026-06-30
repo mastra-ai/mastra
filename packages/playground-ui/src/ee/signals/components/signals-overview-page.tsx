@@ -14,15 +14,28 @@ import { SignalsEntityFilter } from './signals-entity-filter';
 
 interface SignalClusterCardProps {
   topic: EntityLearningTopic;
+  onSelect: (topicId: string) => void;
 }
 
-export function SignalClusterCard({ topic }: SignalClusterCardProps) {
+export function SignalClusterCard({ topic, onSelect }: SignalClusterCardProps) {
   const coveragePct = Math.round(topic.coverage * 100);
   const itemLabel = topic.itemCount === 1 ? 'item' : 'items';
   const clusterColor = stringToColor(topic.name);
 
   return (
-    <article className="rounded-2xl border border-border1/70 bg-surface2 p-5 shadow-sm">
+    <article
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(topic.topicId)}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(topic.topicId);
+        }
+      }}
+      className="group cursor-pointer rounded-2xl border border-border1/70 bg-surface2 p-5 shadow-sm transition-colors hover:border-[var(--cluster-color)] focus-visible:border-[var(--cluster-color)] focus-visible:outline-none"
+      style={{ ['--cluster-color' as string]: clusterColor }}
+    >
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex min-w-0 items-start gap-2">
           <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: clusterColor }} />
@@ -102,9 +115,10 @@ interface SignalSectionProps {
   catalog: SignalCatalogEntry;
   signalName: string;
   onSeeDetails: (signalName: string) => void;
+  onSelectCluster: (signalName: string, topicId: string) => void;
 }
 
-export function SignalSection({ entity, catalog, signalName, onSeeDetails }: SignalSectionProps) {
+export function SignalSection({ entity, catalog, signalName, onSeeDetails, onSelectCluster }: SignalSectionProps) {
   const { data, isLoading, isError } = useEntityTopics(entity.entityId, signalName, entity.latestRunId);
   const topics = data?.topics ?? [];
 
@@ -114,7 +128,9 @@ export function SignalSection({ entity, catalog, signalName, onSeeDetails }: Sig
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <h2 className="text-ui-2xl font-semibold text-neutral6">{catalog.name}</h2>
-            {!isLoading && !isError ? (
+            {isLoading ? (
+              <Skeleton className="h-badge-default w-20 rounded-full" aria-hidden="true" />
+            ) : !isError ? (
               <Badge variant="default">
                 {topics.length} {topics.length === 1 ? 'cluster' : 'clusters'}
               </Badge>
@@ -144,7 +160,11 @@ export function SignalSection({ entity, catalog, signalName, onSeeDetails }: Sig
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
           {topics.map(topic => (
-            <SignalClusterCard key={topic.topicId} topic={topic} />
+            <SignalClusterCard
+              key={topic.topicId}
+              topic={topic}
+              onSelect={topicId => onSelectCluster(signalName, topicId)}
+            />
           ))}
         </div>
       )}
@@ -155,7 +175,7 @@ export function SignalSection({ entity, catalog, signalName, onSeeDetails }: Sig
 export interface SignalsOverviewPageProps {
   selectedEntity: SelectedEntity | null;
   onEntityChange: (selected: SelectedEntity | null) => void;
-  onSignalSelect: (signalName: string) => void;
+  onSignalSelect: (signalName: string, topicId?: string) => void;
 }
 
 export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSelect }: SignalsOverviewPageProps) {
@@ -216,6 +236,7 @@ export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSe
                   signalName={signalName}
                   catalog={getSignalCatalogEntry(signalName)}
                   onSeeDetails={onSignalSelect}
+                  onSelectCluster={onSignalSelect}
                 />
               ))}
             </div>

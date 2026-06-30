@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
@@ -30,11 +30,14 @@ vi.mock('react-resizable-panels', () => ({
   usePanelRef: () => ({ current: null }),
 }));
 
-function renderOverview(selectedEntity: SelectedEntity | null) {
+function renderOverview(
+  selectedEntity: SelectedEntity | null,
+  onSignalSelect: (signalName: string, topicId?: string) => void = () => {},
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SignalsOverviewPage selectedEntity={selectedEntity} onEntityChange={() => {}} onSignalSelect={() => {}} />
+      <SignalsOverviewPage selectedEntity={selectedEntity} onEntityChange={() => {}} onSignalSelect={onSignalSelect} />
     </QueryClientProvider>,
   );
 }
@@ -104,6 +107,21 @@ describe('SignalsOverviewPage', () => {
       // Clusters (topics) are rendered as cards.
       expect(await screen.findAllByRole('heading', { name: 'Frustrated escalations' })).not.toHaveLength(0);
       expect(screen.getAllByRole('heading', { name: 'Satisfied resolutions' }).length).toBeGreaterThan(0);
+    });
+
+    it('calls onSignalSelect with the signal name and topic id when a cluster card is clicked', async () => {
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
+      );
+
+      const onSignalSelect = vi.fn();
+      renderOverview({ entityType: 'agent', entityId: 'entity_support' }, onSignalSelect);
+
+      const card = (await screen.findAllByRole('button', { name: /Frustrated escalations/ }))[0];
+      fireEvent.click(card);
+
+      expect(onSignalSelect).toHaveBeenCalledWith('sentiment', '89');
     });
   });
 

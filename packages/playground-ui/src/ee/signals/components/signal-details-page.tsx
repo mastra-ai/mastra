@@ -266,6 +266,7 @@ export interface SignalDetailsPageProps {
   signalId?: string;
   entity: SelectedEntity | null;
   selectedTraceId: string | null;
+  initialTopicId?: string | null;
   tracePanel?: ReactNode;
   onTraceSelect: (signalId: string, traceId: string) => void;
 }
@@ -274,6 +275,7 @@ export function SignalDetailsPage({
   signalId,
   entity,
   selectedTraceId,
+  initialTopicId,
   tracePanel,
   onTraceSelect,
 }: SignalDetailsPageProps) {
@@ -288,7 +290,7 @@ export function SignalDetailsPage({
   } = useEntityTopics(resolvedEntity?.entityId, signalId, runId);
   const topics: EntityLearningTopic[] = topicsData?.topics ?? [];
 
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(initialTopicId ?? null);
   const [selectedChartTopicIds, setSelectedChartTopicIds] = useState<string[] | null>(null);
   const [activeTab, setActiveTab] = useState<SignalTab>('trace-list');
 

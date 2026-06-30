@@ -35,11 +35,14 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// Signals reads from the platform Entity-Learning API, so it is gated on the
-// presence of the server-injected `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`.
+// Signals reads from the platform Entity-Learning API, which requires the
+// observability endpoint plus the organization and project ids to build every
+// request. It is gated on the presence of all three server-injected values.
 const isSignalsEnabled =
   typeof window !== 'undefined' &&
-  Boolean((window as unknown as Record<string, unknown>).MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT);
+  Boolean((window as unknown as Record<string, unknown>).MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT) &&
+  Boolean((window as unknown as Record<string, unknown>).MASTRA_ORGANIZATION_ID) &&
+  Boolean((window as unknown as Record<string, unknown>).MASTRA_PLATFORM_PROJECT_ID);
 
 const signalsNavItem: NavItem = {
   name: 'Signals',

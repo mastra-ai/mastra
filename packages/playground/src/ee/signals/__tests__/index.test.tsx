@@ -8,7 +8,7 @@ import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from '..';
-import { SignalCrumb } from '../signal-crumb';
+import { SignalCrumb, SignalsRootCrumb } from '../signal-crumb';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -185,6 +185,21 @@ describe('Signals page wrappers', () => {
         ),
       );
     }, 15000);
+
+    it('navigates to the signal route with the clicked cluster topic id', async () => {
+      useEntityLearningHandlers();
+
+      renderSignalsPage('/signals?entityType=agent&entityId=entity_support');
+
+      const card = (await screen.findAllByRole('button', { name: /Frustrated escalations/ }))[0];
+      fireEvent.click(card);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toBe(
+          '/signals/sentiment?entityType=agent&entityId=entity_support&topicId=89',
+        ),
+      );
+    }, 15000);
   });
 
   describe('when the details route renders for the selected entity', () => {
@@ -228,6 +243,34 @@ describe('Signals page wrappers', () => {
       );
 
       expect(screen.getByText('Tasks')).not.toBeNull();
+    });
+  });
+
+  describe('when rendering the Signals root breadcrumb', () => {
+    it('links back to /signals preserving the current entity query params', () => {
+      render(
+        <MemoryRouter initialEntries={['/signals/sentiment?entityType=agent&entityId=entity_support']}>
+          <Routes>
+            <Route path="/signals/:signalId" element={<SignalsRootCrumb />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Signals' });
+      expect(link.getAttribute('href')).toBe('/signals?entityType=agent&entityId=entity_support');
+    });
+
+    it('links to /signals without a query string when no entity params are present', () => {
+      render(
+        <MemoryRouter initialEntries={['/signals/sentiment']}>
+          <Routes>
+            <Route path="/signals/:signalId" element={<SignalsRootCrumb />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Signals' });
+      expect(link.getAttribute('href')).toBe('/signals');
     });
   });
 });
