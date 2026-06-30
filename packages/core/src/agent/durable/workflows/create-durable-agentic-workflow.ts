@@ -317,10 +317,26 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // loop which calls rotateResponseMessageId() between iterations. The
         // mutated state.messageId flows into the next singleIterationWorkflow
         // input via map-to-llm-input.
+        //
+        // We also mark the current MessageList's last assistant message as a
+        // response boundary so MessageMerger won't collapse the next
+        // iteration's assistant content into it. Without this, persisted
+        // memory keeps a single assistant message and the rotated id is never
+        // observable to consumers.
         if (!isFinal) {
           const nextMessageId =
             (mastra as Mastra | undefined)?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
           state.messageId = nextMessageId;
+
+          try {
+            const boundaryList = new MessageList();
+            boundaryList.deserialize(state.messageListState);
+            boundaryList.markResponseMessageBoundary();
+            state.messageListState = boundaryList.serialize();
+          } catch {
+            // Boundary marking is best-effort; if deserialization fails the
+            // next iteration will still run with the un-marked state.
+          }
         }
 
         // Emit an iteration-complete event for observability. This fires after
