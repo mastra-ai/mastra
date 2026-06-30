@@ -198,6 +198,16 @@ export interface ObservationConfig {
   instruction?: string;
 
   /**
+   * Manage working memory through Observational Memory extraction.
+   * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
+   * disable main-agent working memory management and add the WorkingMemoryExtractor.
+   * Set `workingMemory.agentManaged: true` to keep main-agent tools/instructions enabled.
+   *
+   * @default false
+   */
+  manageWorkingMemory?: boolean;
+
+  /**
    * Additional values to extract from observer output. Built-in OM fields are registered automatically.
    * @experimental Extractors are experimental and may change in a future release.
    */

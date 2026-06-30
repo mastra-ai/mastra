@@ -448,9 +448,35 @@ const memory = new Memory({
 - Schema-backed extractors add a follow-up structured output request.
 - Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector output.
 - Dynamic extractor functions receive runtime context, including `source`, `threadId`, `resourceId`, `mainAgent`, `memory`, and `requestContext` when available.
+- `WorkingMemoryExtractor` uses the normal extractor pipeline to update working memory through the active `Memory` instance. It uses structured extraction when working memory has a JSON schema and skips OM metadata persistence, so the working memory payload isn't duplicated under OM extracted metadata.
+- `observationalMemory.observation.manageWorkingMemory` adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true` when working memory is enabled.
 - Extraction failures are reported in OM marker data and do not discard other successful extracted values.
 
 ## Examples
+
+### Working memory updates
+
+Use `observationalMemory.observation.manageWorkingMemory` when OM should update working memory.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+    observationalMemory: {
+      enabled: true,
+      observation: {
+        manageWorkingMemory: true,
+      },
+    },
+  },
+})
+```
+
+Set `workingMemory.agentManaged: true` if the main agent should still receive working memory tool and instruction injection.
 
 ### Resource scope with custom thresholds (experimental)
 
