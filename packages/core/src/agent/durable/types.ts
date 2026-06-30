@@ -543,8 +543,16 @@ export interface RunRegistryEntry {
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
-  /** Resolved input processors (non-serializable) */
+  /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Uncombined input processors for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest` in the
+   * `ProcessorRunner`; this field stores individual processors so the runner
+   * can invoke each processor's `processLLMRequest` method. When absent the
+   * durable `llm-execution` step falls back to `inputProcessors`.
+   */
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
   /** Resolved output processors (non-serializable) */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors (non-serializable) */

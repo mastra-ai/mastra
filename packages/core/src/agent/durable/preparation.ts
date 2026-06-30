@@ -317,11 +317,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Resolve input processors now that the memory context is in place.
   const processorStates = new Map<string, ProcessorState>();
   let inputProcessors: InputProcessorOrWorkflow[] = [];
+  let llmRequestInputProcessors: InputProcessorOrWorkflow[] = [];
   let outputProcessors: OutputProcessorOrWorkflow[] = [];
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
 
   try {
     inputProcessors = await typedAgent.listInputProcessors(requestContext);
+    // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
+    // processors are skipped by ProcessorRunner.runProcessLLMRequest.
+    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
     outputProcessors = await typedAgent.listOutputProcessors(requestContext);
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
@@ -582,6 +586,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     workspace,
     requestContext,
     inputProcessors,
+    llmRequestInputProcessors,
     outputProcessors,
     errorProcessors,
     processorStates,

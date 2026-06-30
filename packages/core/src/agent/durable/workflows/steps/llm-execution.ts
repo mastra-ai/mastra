@@ -7,16 +7,19 @@ import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
+import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import { ChunkFrom } from '../../../../stream/types';
 import type { CoreTool } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import type { MastraDBMessage } from '../../../message-list';
+import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
@@ -316,9 +319,76 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
                 ? messageList.get.all.aiV6.llmPrompt
                 : messageList.get.all.aiV5.llmPrompt;
-            const inputMessages = (await llmPromptForModel({
+            let inputMessages = (await llmPromptForModel({
               supportedUrls: resolvedSupportedUrls,
             })) as LanguageModelV2Prompt;
+
+            // Run `processLLMRequest` for any input processors that implement it.
+            // This hook lets processors rewrite the outbound prompt transiently
+            // without persisting changes back to the message list, or short-circuit
+            // the call entirely by returning a cached response.
+            // Mirrors loop/workflows/agentic-execution/llm-execution-step.ts.
+            //
+            // Use `llmRequestInputProcessors` (uncombined) because combined
+            // (workflow-wrapped) processors are skipped by
+            // `ProcessorRunner.runProcessLLMRequest`. Fall back to
+            // `inputProcessors` for backward compatibility.
+            let cachedResponse: CachedLLMStepResponse | undefined;
+            const allInputProcessors = registryEntry?.llmRequestInputProcessors ?? registryEntry?.inputProcessors ?? [];
+            if (allInputProcessors.length > 0) {
+              const requestStepWriter = pubsub
+                ? {
+                    custom: async (data: { type: string }) => {
+                      await emitChunkEvent(pubsub, runId, data as any);
+                    },
+                  }
+                : undefined;
+              const requestRunner = new ProcessorRunner({
+                inputProcessors: allInputProcessors,
+                outputProcessors: [],
+                logger: logger as any,
+                agentName: typedInput.agentName ?? typedInput.agentId,
+                processorStates: registryEntry?.processorStates,
+              });
+              try {
+                const requestStepResult = await requestRunner.runProcessLLMRequest({
+                  prompt: inputMessages,
+                  model: currentModel,
+                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                  steps: (inputData as any).accumulatedSteps ?? [],
+                  retryCount: (inputData as any).processorRetryCount ?? 0,
+                  requestContext,
+                  tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                  writer: requestStepWriter,
+                  abortSignal: executionAbortSignal,
+                });
+                inputMessages = requestStepResult.prompt;
+                cachedResponse = requestStepResult.response;
+              } catch (error) {
+                if (error instanceof TripWire) {
+                  logger?.warn?.('Streaming request processor tripwire triggered', {
+                    reason: error.message,
+                    processorId: error.processorId,
+                    retry: (error as any).options?.retry,
+                  });
+                  // On TripWire during processLLMRequest, emit a tripwire chunk
+                  // and bail the LLM step so the loop can retry or stop.
+                  if (pubsub) {
+                    await emitChunkEvent(pubsub, runId, {
+                      type: 'tripwire',
+                      payload: {
+                        processorId: error.processorId,
+                        reason: error.message,
+                        retry: (error as any).options?.retry,
+                      },
+                    } as any);
+                  }
+                  throw error;
+                }
+                logger?.error?.('Error in processLLMRequest processors:', error);
+                throw error;
+              }
+            }
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
@@ -356,38 +426,67 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             });
             modelSpanTracker?.startInference?.();
 
-            // 10. Execute LLM call
-            const modelResult = execute({
-              runId,
-              model: currentModel,
-              providerOptions: currentProviderOptions,
-              inputMessages,
-              tools: currentTools,
-              toolChoice: currentToolChoice,
-              activeTools: currentActiveTools,
-              options: { abortSignal: executionAbortSignal },
-              modelSettings: {
-                ...currentModelSettings,
-                maxRetries: 0,
-              },
-              includeRawChunks: execOptions.includeRawChunks,
-              methodType: 'stream',
-              structuredOutput: structuredOutput as any,
-              onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
-                warnings = w || [];
-                request = r || {};
-                rawResponse = rr || {};
-                modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
+            // 10. Execute LLM call (or replay cached response)
+            let modelResult: ReturnType<typeof execute>;
+            if (cachedResponse) {
+              // Short-circuit: replay cached chunks instead of calling the model.
+              // Output processors are skipped on cache hit because the cached
+              // chunks already reflect their effects from the original call.
+              warnings = cachedResponse.warnings ?? [];
+              request = cachedResponse.request ?? {};
+              rawResponse = cachedResponse.rawResponse;
+              modelSpanTracker?.updateStep?.({
+                request: request || {},
+                inputMessages,
+                warnings: warnings || [],
+                messageId: currentMessageId,
+              });
+              const replayChunks = cachedResponse.chunks;
+              modelResult = new ReadableStream({
+                start(ctrl) {
+                  for (const chunk of replayChunks) {
+                    ctrl.enqueue({
+                      ...chunk,
+                      runId,
+                      from: ChunkFrom.AGENT,
+                    });
+                  }
+                  ctrl.close();
+                },
+              }) as unknown as ReturnType<typeof execute>;
+            } else {
+              modelResult = execute({
+                runId,
+                model: currentModel,
+                providerOptions: currentProviderOptions,
+                inputMessages,
+                tools: currentTools,
+                toolChoice: currentToolChoice,
+                activeTools: currentActiveTools,
+                options: { abortSignal: executionAbortSignal },
+                modelSettings: {
+                  ...currentModelSettings,
+                  maxRetries: 0,
+                },
+                includeRawChunks: execOptions.includeRawChunks,
+                methodType: 'stream',
+                structuredOutput: structuredOutput as any,
+                onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
+                  warnings = w || [];
+                  request = r || {};
+                  rawResponse = rr || {};
+                  modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
 
-                if (pubsub) {
-                  void emitStepStartEvent(pubsub, runId, {
-                    stepId: DurableStepIds.LLM_EXECUTION,
-                    request,
-                    warnings,
-                  });
-                }
-              },
-            });
+                  if (pubsub) {
+                    void emitStepStartEvent(pubsub, runId, {
+                      stepId: DurableStepIds.LLM_EXECUTION,
+                      request,
+                      warnings,
+                    });
+                  }
+                },
+              });
+            }
 
             // 10. Create output stream to process chunks
             // Note: We cast through any to handle the web/node ReadableStream type mismatch
