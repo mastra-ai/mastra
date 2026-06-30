@@ -595,6 +595,9 @@ export function createDurableToolCallStep() {
                         toolName: params.toolName,
                         args: cleanedArgs,
                         result,
+                        // Preserve the approval decision for an approved approval-gated tool that
+                        // ran in the background so it round-trips on recall, matching the sync path.
+                        ...(approvalGrant ?? {}),
                       },
                     },
                     {
@@ -730,6 +733,7 @@ export function createDurableToolCallStep() {
                 ...typedInput,
                 args: cleanedArgs,
                 result: `Background task started. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
+                ...(approvalGrant ?? {}),
               };
             }
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
