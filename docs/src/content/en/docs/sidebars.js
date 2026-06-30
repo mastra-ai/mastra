@@ -105,17 +105,20 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/file-based-agents',
-          label: 'File-based Agents',
-        },
-        {
-          type: 'doc',
           id: 'agents/skills',
           label: 'Skills',
         },
         {
           type: 'html',
           value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
+        },
+        {
+          type: 'doc',
+          id: 'agents/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
