@@ -88,6 +88,42 @@ export const mastra = new Mastra({
 })
 ```
 
+## Discovery is a build-time feature
+
+File-based agents are discovered and assembled by the Mastra **bundler** — the step that runs under `mastra dev` and `mastra build`. Discovery, tool dependency analysis, skill inlining, and [workspace seed mirroring](#seed-files) all happen at build time, which is also what keeps the deployed bundle tree-shakeable and self-contained.
+
+This has an important consequence:
+
+:::warning
+
+File-based agents are only registered when your app runs through the Mastra CLI (`mastra dev`, `mastra build`, and the server it produces). If you `import` your `mastra` instance directly — from your own server, a custom server adapter, a framework route (for example Next.js), a script, or a test — the `agents/<name>/` directories are **not** discovered, and those agents will be missing from the instance.
+
+:::
+
+In other words, the `new Mastra({ agents })` you export only ever contains the agents you registered in code. The bundler injects the file-based ones on top of that when it builds your app; a plain module import skips that step entirely.
+
+### What to do when you import `mastra` directly
+
+If you consume Mastra as a library — importing the instance into your own process instead of serving it with the CLI — register those agents in code instead of (or in addition to) using the file convention:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+
+const weather = new Agent({
+  id: 'weather',
+  name: 'weather',
+  instructions: 'You are a helpful weather assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+export const mastra = new Mastra({
+  agents: { weather },
+})
+```
+
+Code registration works everywhere a module import works, with no build step required. Use the file convention for the CLI-driven workflow, and code registration when you embed the `mastra` instance in another application. The two styles can still be mixed: agents you register in code are always present, and the bundler adds the file-based ones when you run through the CLI.
+
 ## Skills
 
 Add skills to a file-based agent by placing them under `agents/<name>/skills/`. Three layouts are supported, and they are inlined into the bundle at build time so the deployed agent does not read them from disk at runtime.

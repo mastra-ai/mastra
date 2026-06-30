@@ -32,3 +32,5 @@ export default agentConfig({
 ```
 
 Code-registered agents win on name collisions, and a `config.ts` that exports `new Agent()` is used as-is, so existing projects are unaffected.
+
+File-based agents are discovered by the bundler and are only registered when the app runs through the Mastra CLI (`mastra dev` / `mastra build`). If you import the `mastra` instance directly as a library (your own server, a server adapter, a framework route, or a test), the `agents/<name>/` directories are not discovered — register those agents in code instead.
