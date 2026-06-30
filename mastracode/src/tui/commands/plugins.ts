@@ -306,8 +306,12 @@ async function installPluginFlow(ctx: SlashCommandContext): Promise<void> {
   });
   if (scopeAnswer !== 'project' && scopeAnswer !== 'global') return;
 
+  const installWarning =
+    source === 'GitHub URL'
+      ? 'Plugins run code inside Mastra Code and can access your workspace. GitHub plugins also auto-update from their repository, so only install plugins from sources you trust. Continue?'
+      : 'Plugins run code inside Mastra Code and can access your workspace. Continue?';
   const confirmed = await askModalQuestion(ctx.state.ui, {
-    question: 'Plugins run code inside Mastra Code and can access your workspace. Continue?',
+    question: installWarning,
     options: [{ label: 'Install' }, { label: 'Cancel' }],
   });
   if (confirmed !== 'Install') return;

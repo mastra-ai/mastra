@@ -430,6 +430,11 @@ describe('handlePluginsCommand', () => {
     list.onSelect({ value: '__install__' });
     await new Promise(resolve => setImmediate(resolve));
 
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(4, ctx.state.ui, {
+      question:
+        'Plugins run code inside Mastra Code and can access your workspace. GitHub plugins also auto-update from their repository, so only install plugins from sources you trust. Continue?',
+      options: [{ label: 'Install' }, { label: 'Cancel' }],
+    });
     expect(pluginManager.installGithub).toHaveBeenNthCalledWith(1, 'https://github.com/acme/foo', 'global');
     expect(pluginManager.installGithub).toHaveBeenNthCalledWith(2, 'https://github.com/acme/foo', 'global', {
       entry: 'plugin.ts',
