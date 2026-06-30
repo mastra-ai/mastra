@@ -140,7 +140,7 @@ export function AgentCapabilitiesFooter({
       description: hasMemory
         ? 'Conversation history and configured memory features are available for this agent.'
         : 'This agent has no memory configured, so conversations are not saved as memory-backed threads.',
-      docsHref: 'https://mastra.ai/en/docs/agents/agent-memory',
+      docsHref: 'https://mastra.ai/docs/memory/overview',
       enabled: hasMemory,
       tone: 'purple',
       icon: <MemoryIcon />,

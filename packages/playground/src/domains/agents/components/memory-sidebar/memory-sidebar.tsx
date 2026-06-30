@@ -199,7 +199,7 @@ export function MemorySidebar({
                     actionSlot={
                       <Button
                         as="a"
-                        href="https://mastra.ai/en/docs/agents/agent-memory"
+                        href="https://mastra.ai/docs/memory/overview"
                         target="_blank"
                         rel="noopener noreferrer"
                         variant="outline"

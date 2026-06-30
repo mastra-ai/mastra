@@ -265,7 +265,7 @@ describe('MemorySidebar', () => {
 
     // An outline CTA links to the Agent Memory docs.
     const cta = screen.getByRole('link', { name: /documentation/i });
-    expect(cta.getAttribute('href')).toBe('https://mastra.ai/en/docs/agents/agent-memory');
+    expect(cta.getAttribute('href')).toBe('https://mastra.ai/docs/memory/overview');
   });
 
   it('shows the live memory content, without the static config, when the Memory card is clicked', async () => {
