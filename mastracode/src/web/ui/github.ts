@@ -184,7 +184,9 @@ async function readSSE(
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    // Normalize CRLF/CR to LF so frame and line splitting work regardless of
+    // how the server terminates SSE lines (the spec allows \r\n, \r, or \n).
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n|\r/g, '\n');
     let sep: number;
     while ((sep = buffer.indexOf('\n\n')) !== -1) {
       const frame = buffer.slice(0, sep);

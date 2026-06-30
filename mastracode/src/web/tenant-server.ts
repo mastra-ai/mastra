@@ -195,10 +195,9 @@ export class TenantDispatcher {
   /** Remove an entry from the cache and stop its workers (fire-and-forget). */
   private evict(key: string, entry: CacheEntry): void {
     this.apps.delete(key);
-    void entry.app.then(
-      app => app.stop(),
-      () => undefined,
-    );
+    // Both the build (`entry.app`) and the subsequent `stop()` can reject;
+    // swallow either so eviction never produces an unhandled rejection.
+    void entry.app.then(app => app.stop()).catch(() => undefined);
   }
 
   /**

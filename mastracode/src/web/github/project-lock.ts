@@ -64,13 +64,19 @@ export function withProjectLock<T>(key: string, fn: () => Promise<T>, poolOverri
   const prev = inProcessLocks.get(key) ?? Promise.resolve();
   const run = () => withDbAdvisoryLock(key, fn, poolOverride);
   const next = prev.then(run, run);
-  inProcessLocks.set(
-    key,
-    next.then(
-      () => undefined,
-      () => undefined,
-    ),
+  const tail = next.then(
+    () => undefined,
+    () => undefined,
   );
+  inProcessLocks.set(key, tail);
+  // Drop the entry once this operation settles, but only if no later caller has
+  // chained onto it in the meantime — otherwise we'd evict a live waiter's tail.
+  // This keeps the map from growing unbounded across many distinct project keys.
+  void tail.then(() => {
+    if (inProcessLocks.get(key) === tail) {
+      inProcessLocks.delete(key);
+    }
+  });
   return next;
 }
 

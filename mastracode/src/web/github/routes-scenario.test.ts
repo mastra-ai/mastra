@@ -53,7 +53,7 @@ vi.mock('./db', () => {
       },
     }),
     update: (table: any) => ({
-      set: (vals: any) => ({ where: async () => updateRows(table, vals) }),
+      set: (vals: any) => ({ where: async (cond: any) => updateRows(table, vals, cond) }),
     }),
   });
   return { getAppDb: () => makeDb() };
@@ -210,8 +210,10 @@ function insertIfAbsent(table: any, vals: any, opts: any): any | undefined {
   if (existing) return undefined;
   return insertRow(table, vals);
 }
-function updateRows(table: any, vals: any): void {
-  for (const row of tables[tableKind(table)]) Object.assign(row, vals);
+function updateRows(table: any, vals: any, cond?: any): void {
+  for (const row of tables[tableKind(table)]) {
+    if (matches(table, row, cond)) Object.assign(row, vals);
+  }
 }
 
 import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';

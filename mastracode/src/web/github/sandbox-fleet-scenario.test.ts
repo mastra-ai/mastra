@@ -71,10 +71,17 @@ vi.mock('./db', () => ({
           return row;
         };
         const chain: any = {
-          onConflictDoNothing: () => {
-            const row = push();
-            const p: any = Promise.resolve([row]);
-            p.returning = async () => [row];
+          onConflictDoNothing: (opts?: any) => {
+            // Honor the conflict target: if a row already matches on the target
+            // columns, insert nothing (mirrors Postgres ON CONFLICT DO NOTHING).
+            const targets: string[] = (opts?.target ?? [])
+              .map((col: any) => (col?.name ? dbNameToJsKey(col.name) : undefined))
+              .filter(Boolean);
+            const existing = targets.length ? tables[kind].find(r => targets.every(t => r[t] === vals[t])) : undefined;
+            const row = existing ? undefined : push();
+            const result = row ? [row] : [];
+            const p: any = Promise.resolve(result);
+            p.returning = async () => result;
             return p;
           },
           returning: async () => [push()],
