@@ -310,7 +310,15 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           }
         }
 
-        const isFinal = !shouldContinue || !underMaxSteps || stopWhenMatched;
+        // Check if a delegation hook called ctx.bail() during this iteration.
+        // The flag was set by the mapping step and propagated via iteration state.
+        const delegationBailed = !!(state as any).delegationBailed;
+        if (delegationBailed) {
+          // Reset the flag so it doesn't carry forward
+          (state as any).delegationBailed = false;
+        }
+
+        const isFinal = !shouldContinue || !underMaxSteps || stopWhenMatched || delegationBailed;
 
         // Rotate messageId for the next iteration. Each iteration's assistant
         // response is a distinct message, mirroring the non-durable agentic

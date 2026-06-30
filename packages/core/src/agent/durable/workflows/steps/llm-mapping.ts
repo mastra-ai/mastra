@@ -128,6 +128,16 @@ export function createDurableLLMMappingStep() {
       const allToolsNotFound = allToolsErrored && toolResults.every(r => r.error?.name === 'ToolNotFoundError');
       const isContinued = llmOutput.stepResult.isContinued && (!allToolsErrored || allToolsNotFound);
 
+      // Check if any delegation hook called ctx.bail(). The bail flag is
+      // communicated via requestContext because Zod output validation strips
+      // unknown fields from the tool result. We read it here and propagate
+      // it on the serializable output so the dowhile predicate can stop.
+      let delegationBailed = false;
+      if (requestContext?.get('__mastra_delegationBailed')) {
+        delegationBailed = true;
+        requestContext.set('__mastra_delegationBailed', false);
+      }
+
       // 4. Build the output
       const output: DurableAgenticExecutionOutput = {
         messageListState: messageList.serialize(),
@@ -153,6 +163,7 @@ export function createDurableLLMMappingStep() {
         },
         processorRetryCount: llmOutput.processorRetryCount,
         processorRetryFeedback: llmOutput.processorRetryFeedback,
+        delegationBailed,
       };
 
       // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so
