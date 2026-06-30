@@ -18,7 +18,14 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentInstructions, AgentMethodType, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
+import type {
+  AgentInstructions,
+  AgentMethodType,
+  AgentModelManagerConfig,
+  GoalConfig,
+  ToolsetsInput,
+  ToolsInput,
+} from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
@@ -98,6 +105,8 @@ interface DurablePreparationAgent {
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
+  __getGoalConfig(): GoalConfig | undefined;
+  __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
 }
 
 /**
