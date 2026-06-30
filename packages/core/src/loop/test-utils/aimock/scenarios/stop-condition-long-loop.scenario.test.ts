@@ -110,5 +110,4 @@ describeForAllEngines(
       expect(requests).toHaveLength(stopAfter);
     });
   },
-  { skip: ['durable'] },
 );

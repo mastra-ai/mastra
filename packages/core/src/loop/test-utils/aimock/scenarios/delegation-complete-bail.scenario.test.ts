@@ -160,5 +160,4 @@ describeForAllEngines(
       expect(requests.length).toBe(3);
     });
   },
-  { skip: ['durable'] },
 );

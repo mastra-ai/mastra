@@ -357,7 +357,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   const isDurable = engine === 'durable';
 
   const streamOptions = {
-    ...(stopWhen && !isDurable ? { stopWhen } : {}),
+    ...(stopWhen ? { stopWhen } : {}),
     ...(maxSteps ? { maxSteps } : {}),
     // Durable needs maxSteps as a fallback when stopWhen was the only bound
     ...(!maxSteps && stopWhen && isDurable ? { maxSteps: 10 } : {}),
@@ -368,8 +368,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     ...(prepareStep && !isDurable ? { prepareStep } : {}),
     ...(requestContext ? { requestContext } : {}),
-    ...(delegation && !isDurable ? { delegation } : {}),
-    ...(onIterationComplete && !isDurable ? { onIterationComplete } : {}),
+    ...(delegation ? { delegation } : {}),
+    ...(onIterationComplete ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
     ...(onError ? { onError } : {}),
