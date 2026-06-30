@@ -35,7 +35,7 @@ Use this structure from the start and fill it in as each step/branch gathers con
 **Assessment:** <concise assessment comment or `Pending.`>
 **Linked PR:** <none|#<number>|multiple: #<numbers>|pending>
 **CODEOWNER:** [not available]
-**Recommended next step:** <draft maintainer comment|author pre-review|maintainer triage context|PR critique|compare PRs|gh-debug-issue|end triage|pending>
+**Recommended next step:** <draft maintainer comment|author pre-review|maintainer notes|PR critique|compare PRs|gh-debug-issue|end triage|pending>
 
 ### Issue summary
 
@@ -78,11 +78,11 @@ Use this structure from the start and fill it in as each step/branch gathers con
 
 <concise author-facing PR review comment if action is needed from the PR author, otherwise `Not needed.`>
 
-#### Maintainer triage context comment
+#### Maintainer notes comment
 
-<maintainer/codeowner-facing triage context if useful, otherwise `Not needed.`>
+<maintainer/codeowner-facing notes if useful, otherwise `Not needed.`>
 
-When PR critique finds something the PR author should address, prepare a separate author pre-review comment before the maintainer triage context. The author pre-review comment must:
+When PR critique finds something the PR author should address, prepare a separate author pre-review comment before the maintainer notes. The author pre-review comment must:
 
 - tag the PR author when known
 - be concise and action-oriented
@@ -90,17 +90,17 @@ When PR critique finds something the PR author should address, prepare a separat
 - include only the minimum issue context needed to explain why it matters
 - avoid broad triage metadata unless it helps the author act
 
-For maintainer triage context comments, write review notes for a human maintainer/codeowner. Make the comment readable at a glance:
+For maintainer notes comments, write concise review notes for a human maintainer/codeowner. Make the comment readable at a glance:
 
-- start with a clear title that includes the severity emoji and label, for example `## 🟠 High: PR triage context` or `## 🟡 Medium: Maintainer review notes`
-- use short headed sections or bold labels such as `Scope`, `Context`, `Evidence checked`, `Needs verification`, and `Recommended action`
-- keep paragraphs short; prefer bullets for observations and verification prompts
-- include why the PR appears relevant
-- include what evidence was checked
-- include what still needs human verification
-- include the recommended maintainer action
+- start with a clear title that includes the severity emoji and label, for example `## 🟠 High: Maintainer notes` or `## 🟡 Medium: Maintainer notes`
+- use short headed sections or bold labels such as `Scope`, `Context`, `Evidence checked`, and `Observations`
+- keep paragraphs short; prefer bullets for observations
+- state why the PR appears relevant
+- state what evidence was checked during triage
+- state the review observations declaratively; do not frame them as author requests, optional follow-ups, or deferred verification
+- keep author actions only in the author pre-review comment
 
-Do not present triage context as final approval or rejection. Make observations and verification prompts a human can run with.
+Do not present maintainer notes as final approval or rejection. Make explicit, declarative observations a human maintainer can review.
 ```
 
 ## Inputs
@@ -191,6 +191,8 @@ git log -p --max-count=3 -- <relevant-file-or-directory>
 
 - [ ] Base severity on observed user impact, affected area, evidence strength, recent-change context, and whether an active PR already addresses it.
 
+- [ ] Complete the evidence checks needed for maintainer notes during triage; do not leave a deferred-verification section for maintainers.
+
 Severity values:
 
 - `🔴 critical` — security issue, data loss/corruption, production outage, or core path broken for many users.
@@ -254,21 +256,21 @@ Use when exactly one relevant linked PR exists.
 
 - [ ] Run the actual `goal/critique-pr` command for the linked PR and pass on the full issue triage context.
 
+- [ ] Do not manually emulate `goal/critique-pr`; its output is part of this branch.
+
 - [ ] Gather branch output:
   - severity + assessment
   - issue scope / affected area
   - issue assessment summary
   - PR relevance summary
-  - PR critique summary
-  - human verification checklist
-  - recommended maintainer action
+  - PR critique summary from `goal/critique-pr`
   - author pre-review comment, if the PR author needs to change or verify something
-  - maintainer triage context comment that starts with a titled heading containing the severity emoji/label and uses readable sections for scope, context, evidence checked, human verification notes, and recommended action
+  - maintainer notes comment that starts with a titled heading containing the severity emoji/label and uses readable sections for scope, context, evidence checked, and declarative observations
   - `CODEOWNER tagging: Skipped: CODEOWNER unavailable`
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
   - `Post author pre-review comment`
-  - `Post maintainer triage context comment`
+  - `Post maintainer notes comment`
   - `Post both PR comments`
   - `End triage`
 
@@ -277,6 +279,8 @@ Use when exactly one relevant linked PR exists.
 Use when multiple relevant linked PRs exist.
 
 - [ ] Run the actual `goal/critique-pr` command for each linked PR and pass on the full issue triage context.
+
+- [ ] Do not manually emulate `goal/critique-pr`; its output is part of this branch.
 
 - [ ] Compare the PRs.
 
@@ -288,18 +292,16 @@ Use when multiple relevant linked PRs exist.
   - severity + assessment
   - issue scope / affected area
   - issue assessment summary
-  - critique summary for each PR
+  - critique summary for each PR from `goal/critique-pr`
   - comparison and recommended path
   - note if one PR should be closed or superseded
-  - human verification checklist
-  - recommended maintainer action
   - author pre-review comment(s), if any PR author needs to change or verify something
-  - maintainer triage context comment(s) that start with titled headings containing the severity emoji/label and use readable sections for scope, context, evidence checked, human verification notes, and recommended action
+  - maintainer notes comment(s) that start with titled headings containing the severity emoji/label and use readable sections for scope, context, evidence checked, and declarative observations
   - `CODEOWNER tagging: Skipped: CODEOWNER unavailable`
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
   - `Post author pre-review comment(s)`
-  - `Post maintainer triage context comment(s)`
+  - `Post maintainer notes comment(s)`
   - `Post all PR comments`
   - `End triage`
 
