@@ -21,7 +21,7 @@ import { createCodingAgent } from '@mastra/core/coding-agent'
 const agent = createCodingAgent({
   id: 'my-coding-agent',
   name: 'My Coding Agent',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: 'You are a helpful coding assistant.',
   tools: {},
 })
@@ -128,7 +128,7 @@ To opt out — for example when the workspace is injected at the [`AgentControll
 const agent = createCodingAgent({
   id: 'my-coding-agent',
   name: 'My Coding Agent',
-  model: 'openai/gpt-5',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: 'You are a helpful coding assistant.',
   tools: {},
   workspace: undefined, // opt out of the default workspace
