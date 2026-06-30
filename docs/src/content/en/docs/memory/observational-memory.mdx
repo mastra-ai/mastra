@@ -250,7 +250,7 @@ new Extractor({
 
 ### Working memory updates
 
-Use `observationalMemory.observation.manageWorkingMemory` when working memory should be managed automatically by the Observer. The main agent no longer needs to remember to call the working memory tool while it is handling the user request.
+Use `observationalMemory.observation.manageWorkingMemory` to let the Observer manage working memory automatically. The main agent no longer needs to call the working memory tool while it handles the user request, so working memory updates don't depend on the agent remembering to make them.
 
 This also keeps working memory prompt-cache friendly. Working memory normally lives in the system prompt, so updates can invalidate the prompt cache. OM-managed working memory defaults `workingMemory.useStateSignals` to `true`, which moves working memory into state signals instead.
 
