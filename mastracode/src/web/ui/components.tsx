@@ -314,7 +314,7 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
   return {
     question: stringProperty(payload, 'question'),
     options,
-    requestedPath: stringProperty(payload, 'requestedPath'),
+    requestedPath: stringProperty(payload, 'requestedPath') ?? stringProperty(payload, 'path'),
     reason: stringProperty(payload, 'reason'),
     title: stringProperty(payload, 'title'),
     plan,
