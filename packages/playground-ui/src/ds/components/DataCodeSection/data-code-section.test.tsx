@@ -70,10 +70,35 @@ describe('DataCodeSection search navigation', () => {
     const input = openSearch();
     fireEvent.change(input, { target: { value: 'alpha' } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next match' }));
+    const next = screen.getByRole('button', { name: 'Next match' });
+    const prev = screen.getByRole('button', { name: 'Previous match' });
+    // Buttons must not submit a surrounding form.
+    expect(next.getAttribute('type')).toBe('button');
+    expect(prev.getAttribute('type')).toBe('button');
+
+    fireEvent.click(next);
     expect(screen.getByText('2/3')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Previous match' }));
+    fireEvent.click(prev);
     expect(screen.getByText('1/3')).toBeTruthy();
+  });
+
+  it('resyncs the counter when the document text changes while a search is active', () => {
+    const { rerender } = render(
+      <TooltipProvider>
+        <DataCodeSection title="Input" codeStr={CODE} />
+      </TooltipProvider>,
+    );
+    const input = openSearch();
+    fireEvent.change(input, { target: { value: 'alpha' } });
+    expect(screen.getByText('1/3')).toBeTruthy();
+
+    // Selecting a different span swaps codeStr; the counter must reflect the new document.
+    rerender(
+      <TooltipProvider>
+        <DataCodeSection title="Input" codeStr="alpha beta gamma" />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText('1/1')).toBeTruthy();
   });
 
   it('shows "0/0" and disables navigation when nothing matches', () => {

@@ -9,7 +9,7 @@ import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { findMatchRanges, getNextMatchIndex } from './search-matches';
 import type { MatchRange } from './search-matches';
 import { Button } from '@/ds/components/Button';
@@ -78,6 +78,17 @@ function searchHighlightExtension(): Extension {
 
 // -- Search navigation hook ---------------------------------------------------
 
+// Pushes the given match ranges (and which one is active) into a CodeMirror view and scrolls the
+// active match into view. Shared by live searches and by re-highlighting a freshly mounted editor.
+function dispatchMatchHighlights(view: EditorView, ranges: MatchRange[], activeIndex: number) {
+  view.dispatch({
+    effects: setSearchMatches.of({ ranges, activeIndex }),
+    ...(ranges.length > 0
+      ? { selection: { anchor: ranges[activeIndex].from, head: ranges[activeIndex].to }, scrollIntoView: true }
+      : {}),
+  });
+}
+
 interface CodeSearchControls {
   query: string;
   matchCount: number;
@@ -87,6 +98,7 @@ interface CodeSearchControls {
   onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onNext: () => void;
   onPrev: () => void;
+  onCreateEditor: (view: EditorView) => void;
 }
 
 // Drives one search field together with its CodeMirror editor: finds matches, highlights them all,
@@ -100,13 +112,7 @@ function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, te
   const applyMatches = useCallback(
     (ranges: MatchRange[], index: number) => {
       const view = editorRef.current?.view;
-      if (!view) return;
-      view.dispatch({
-        effects: setSearchMatches.of({ ranges, activeIndex: index }),
-        ...(ranges.length > 0
-          ? { selection: { anchor: ranges[index].from, head: ranges[index].to }, scrollIntoView: true }
-          : {}),
-      });
+      if (view) dispatchMatchHighlights(view, ranges, index);
     },
     [editorRef],
   );
@@ -121,6 +127,14 @@ function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, te
     },
     [text, applyMatches],
   );
+
+  // Re-run the active query whenever the document text changes (e.g. a different span is selected)
+  // so the counter and highlights describe the current document instead of the previous one.
+  useEffect(() => {
+    if (query) runSearch(query);
+    // Only resync on document changes; query edits are handled by the input/reset handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
 
   const goToMatch = useCallback(
     (direction: 1 | -1) => {
@@ -146,6 +160,16 @@ function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, te
   const onNext = useCallback(() => goToMatch(1), [goToMatch]);
   const onPrev = useCallback(() => goToMatch(-1), [goToMatch]);
 
+  // Re-apply the current highlights when a CodeMirror instance (re)mounts — e.g. after toggling the
+  // multiline view or reopening the expanded dialog — since a fresh editor starts with no decorations.
+  const onCreateEditor = useCallback(
+    (view: EditorView) => {
+      const index = activeIndex < matches.length ? activeIndex : 0;
+      dispatchMatchHighlights(view, matches, index);
+    },
+    [matches, activeIndex],
+  );
+
   return {
     query,
     matchCount: matches.length,
@@ -155,6 +179,7 @@ function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, te
     onKeyDown,
     onNext,
     onPrev,
+    onCreateEditor,
   };
 }
 
@@ -326,6 +351,7 @@ export function DataCodeSection({
             theme={theme}
             value={codeStr}
             editable={false}
+            onCreateEditor={search.onCreateEditor}
           />
         )}
       </div>
@@ -394,6 +420,7 @@ export function DataCodeSection({
                 theme={theme}
                 value={codeStr}
                 editable={false}
+                onCreateEditor={expandedSearch.onCreateEditor}
               />
             )}
           </div>

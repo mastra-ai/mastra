@@ -41,6 +41,12 @@ describe('findMatchRanges', () => {
   it('returns an empty array when there is no match', () => {
     expect(findMatchRanges('hello world', 'xyz')).toEqual([]);
   });
+
+  it('keeps offsets anchored to the original text for characters that change length when lowercased', () => {
+    // 'İ' (U+0130) lowercases to two code units ('i' + combining dot), so a lowercase-and-compare
+    // approach would report 'foo' one position too far. The match must stay at its real offset.
+    expect(findMatchRanges('İ foo', 'foo')).toEqual([{ from: 2, to: 5 }]);
+  });
 });
 
 describe('getNextMatchIndex', () => {

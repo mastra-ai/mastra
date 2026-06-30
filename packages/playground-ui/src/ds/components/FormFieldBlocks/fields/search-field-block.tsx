@@ -147,6 +147,7 @@ export function SearchFieldBlock({
                   {matchCount === 0 ? '0/0' : `${currentMatch ?? 0}/${matchCount}`}
                 </span>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Previous match"
@@ -157,6 +158,7 @@ export function SearchFieldBlock({
                   <ChevronUpIcon />
                 </Button>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Next match"
@@ -170,6 +172,7 @@ export function SearchFieldBlock({
             )}
             {onReset && (value || isMinimized === false) && (
               <Button
+                type="button"
                 variant="ghost"
                 size={buttonSize || 'lg'}
                 aria-label="Clear search"
