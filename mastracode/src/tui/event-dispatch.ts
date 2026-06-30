@@ -1,7 +1,8 @@
 /**
- * Event dispatcher: maps HarnessEvent types to extracted handler functions.
+ * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
-import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
+import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getCurrentGitBranchAsync } from '../utils/project.js';
@@ -45,7 +46,7 @@ import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
 /**
- * Dispatch a HarnessEvent to the appropriate handler.
+ * Dispatch a AgentControllerEvent to the appropriate handler.
  */
 function trackInteractivePrompt(
   ectx: EventHandlerContext,
@@ -55,13 +56,25 @@ function trackInteractivePrompt(
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
-export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerContext, state: TUIState): Promise<void> {
+export async function dispatchEvent(
+  event: AgentControllerEvent,
+  ectx: EventHandlerContext,
+  state: TUIState,
+): Promise<void> {
   switch (event.type) {
     case 'agent_start':
+      // Reset tokens/sec at the start of a new turn (not at the end) so the
+      // last turn's reading stays visible while idle — short single-step turns
+      // would otherwise zero it before it could be read.
+      state.tokensPerSec = 0;
+      state.decodeStartedAt = 0;
       handleAgentStart(ectx);
       break;
 
     case 'agent_end':
+      // Keep tokensPerSec as the last turn's reading; only clear the in-flight
+      // decode window so a stale start can't bleed into the next turn.
+      state.decodeStartedAt = 0;
       if (event.reason === 'aborted') {
         handleAgentAborted(ectx);
       } else if (event.reason === 'error') {
@@ -76,6 +89,16 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'message_update':
+      // Only open the decode window when the message carries actual streamed
+      // text — tool-result-only updates (e.g. plan approval resume) must not
+      // count toward tokens/sec. This mirrors the web UI's hasAssistantText()
+      // guard in transcriptReducer.
+      if (
+        state.decodeStartedAt === 0 &&
+        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0)
+      ) {
+        state.decodeStartedAt = Date.now();
+      }
       handleMessageUpdate(ectx, event.message);
       break;
 
@@ -90,8 +113,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     case 'tool_approval_required':
       trackInteractivePrompt(ectx, 'tool_approval_required', {
         toolName: event.toolName,
-        threadId: state.harness.getCurrentThreadId(),
-        resourceId: state.harness.getResourceId(),
+        threadId: state.session.thread.getId(),
+        resourceId: state.session.identity.getResourceId(),
       });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
       break;
@@ -108,8 +131,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
         trackInteractivePrompt(ectx, event.toolName, {
           toolName: event.toolName,
-          threadId: state.harness.getCurrentThreadId(),
-          resourceId: state.harness.getResourceId(),
+          threadId: state.session.thread.getId(),
+          resourceId: state.session.identity.getResourceId(),
         });
       }
       handleToolInputStart(ectx, event.toolCallId, event.toolName);
@@ -147,14 +170,15 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
-      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
       }
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
-      await state.harness.loadOMProgress();
+      await state.controller.loadOMProgress(state.session);
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
         if (freshBranch) {
@@ -163,8 +187,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         }
       });
       // Update current thread title for status line display
-      const threads = await state.harness.listThreads();
-      const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
+      const threads = await state.session.thread.list();
+      const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
@@ -200,12 +224,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
       }
       // Sync inherited resource-level settings
-      const tState = state.harness.getState() as any;
+      const tState = state.session.state.get() as any;
       if (typeof tState?.escapeAsCancel === 'boolean') {
         state.editor.escapeEnabled = tState.escapeAsCancel;
       }
       // Clear per-thread ephemeral state so new threads start clean.
-      await state.harness.setState({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
@@ -213,13 +238,34 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
     }
 
-    case 'usage_update':
-      // Token accumulation handled by Harness display state
+    case 'usage_update': {
+      // Token accumulation handled by AgentController display state.
+      // usage_update fires at step-finish and carries the completion (and any
+      // reasoning) tokens generated during this step. Measure tokens/sec over the
+      // decode window only — from this step's first content delta
+      // (state.decodeStartedAt) to now — which excludes TTFT and inter-step
+      // tool/scheduling time. Smooth with an exponential moving average (α=0.3).
+      const now = Date.now();
+      const stepTokens = (event.usage.completionTokens ?? 0) + (event.usage.reasoningTokens ?? 0);
+      if (state.decodeStartedAt > 0 && stepTokens > 0) {
+        const decodeSec = (now - state.decodeStartedAt) / 1000;
+        if (decodeSec > 0) {
+          const instantaneous = stepTokens / decodeSec;
+          const alpha = 0.3;
+          const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
+          state.tokensPerSec = Math.round(ema);
+        }
+      }
+      // Re-arm: the next step's decode window opens on its first content delta.
+      state.decodeStartedAt = 0;
+      ectx.updateStatusLine();
+      state.ui.requestRender();
       break;
+    }
 
     // Observational Memory events
     case 'om_status':
-      // All state updates handled by Harness applyDisplayStateUpdate
+      // All state updates handled by AgentController applyDisplayStateUpdate
       break;
 
     case 'om_observation_start':
@@ -268,7 +314,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'om_activation': {
-      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+      const activationEvent = event as Extract<AgentControllerEvent, { type: 'om_activation' }> & {
         triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
         lastActivityAt?: number;
         ttlExpiredMs?: number;
@@ -360,14 +406,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           state.taskToolInsertIndex = -1;
         }
 
-        // When every task is completed the pinned list hides itself (the agent
-        // narrates completion), so we don't leave a redundant completed-task
-        // receipt in the transcript that reads like a second live list. We only
-        // render an inline receipt when the list is explicitly cleared.
-        const previousTasks = state.harness.getDisplayState().previousTasks;
-        if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
-          // Tasks were cleared
+        const previousTasks = state.session.displayState.get().previousTasks;
+        if (tasks?.length > 0 && tasks.every(task => task.status === 'completed')) {
+          ectx.renderCompletedTasksInline(tasks, insertIndex);
+        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           ectx.renderClearedTasksInline(previousTasks, insertIndex);
+        } else if (tasks?.length > 0) {
+          ectx.renderTaskDeltaInline(previousTasks, tasks, insertIndex);
         }
 
         state.ui.requestRender();
@@ -383,7 +428,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     case 'tool_suspended': {
       // Interactive built-in tools pause via the native tool-suspension primitive.
       // Route the suspension to the matching prompt UI using the suspend payload;
-      // the UI resumes the tool by calling harness.respondToToolSuspension({ toolCallId }).
+      // the UI resumes the tool by calling controller.session.respondToToolSuspension({ toolCallId }).
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
         await handleSandboxAccessRequest(
@@ -401,16 +446,16 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           payload.selectionMode as AskUserSelectionMode | undefined,
         );
       } else if (event.toolName === 'submit_plan') {
-        await handlePlanApproval(ectx, event.toolCallId, String(payload.title ?? ''), String(payload.plan ?? ''));
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.path ?? ''));
       }
       break;
     }
 
     case 'display_state_changed':
-      // The Harness emits this after every event with the updated display state.
+      // The AgentController emits this after every event with the updated display state.
       // Use it as the single trigger for status-line re-renders since all the
       // fields it reads (isRunning, omProgress, buffering flags) are now
-      // maintained by the Harness.
+      // maintained by the AgentController.
       ectx.updateStatusLine();
       break;
   }

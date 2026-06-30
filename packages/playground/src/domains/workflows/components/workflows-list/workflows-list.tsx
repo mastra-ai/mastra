@@ -1,5 +1,9 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, truncateString } from '@mastra/playground-ui';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
+import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -33,7 +37,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
   }
 
   return (
-    <EntityList columns="auto 1fr auto" variant="striped">
+    <EntityList columns="auto 1fr auto">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -48,7 +52,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
         const stepsCount = Object.keys(wf.steps ?? {}).length;
 
         return (
-          <EntityList.RowLink key={wf.id} to={paths.workflowLink(wf.id)} LinkComponent={Link}>
+          <EntityList.RowLink key={`workflow-${wf.id}`} to={paths.workflowLink(wf.id)} LinkComponent={Link}>
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>

@@ -44,9 +44,26 @@ import {
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
-import { makeCoreTool } from '../../../utils';
+import { createMastraProxy, makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import {
+  AGENT_BACKGROUND_CONFIG_KEY,
+  BACKGROUND_TASK_MANAGER_KEY,
+  DRAIN_PENDING_SIGNALS_KEY,
+  GENERATE_ID_KEY,
+  INITIAL_SIGNAL_ECHOES_KEY,
+  MEMORY_KEY,
+  RESOURCE_ID_KEY,
+  STEP_ACTIVE_TOOLS_KEY,
+  STEP_TOOLS_KEY,
+  STEP_WORKSPACE_KEY,
+  THREAD_ID_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+  TRANSPORT_REF_KEY,
+} from '../../run-scope-keys';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -843,6 +860,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   workspace,
   outputWriter,
   mastra,
+  rotateResponseMessageId: rotateLoopResponseMessageId,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
   const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
@@ -855,6 +873,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
+      // Resolve run-scoped state from either the Mastra-managed RunScope or
+      // the legacy `_internal` bag (back-compat for tests).
+      const scopeCtx: RunScopeContext = { mastra, runId, _internal };
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -916,7 +937,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
-          const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
+          const initialSignalEchoes =
+            readScoped(scopeCtx, INITIAL_SIGNAL_ECHOES_KEY, 'initialSignalEchoes')?.splice(0) ?? [];
           for (const initialSignal of initialSignalEchoes) {
             safeEnqueue(controller, initialSignal.toDataPart());
           }
@@ -927,9 +949,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // request — fold them into it. Signals sent to an already-active run
             // use the default scope and are drained later by `signalDrainStep`
             // so each becomes its own turn.
-            const preRunSignals = _internal?.drainPendingSignals?.(runId, 'pre-run') ?? [];
+            const preRunSignals =
+              readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId, 'pre-run') ?? [];
             if (preRunSignals.length > 0) {
-              currentMessageId = _internal?.generateId?.() ?? generateId();
+              currentMessageId = rotateLoopResponseMessageId();
             }
             for (const preRunSignal of preRunSignals) {
               const signalForTranscript = messageList.addSignal(preRunSignal);
@@ -959,7 +982,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             workspace,
           };
           const rotateResponseMessageId = () => {
-            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
             currentStep.messageId = currentMessageId;
             return currentMessageId;
           };
@@ -997,9 +1020,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 stepNumber: inputData.output?.steps?.length || 0,
                 ...createObservabilityContext(stepTracingContext),
                 requestContext,
-                memory: _internal?.memory,
-                resourceId: _internal?.resourceId,
-                threadId: _internal?.threadId,
+                memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
+                resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+                threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,
@@ -1072,9 +1095,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       {
                         name,
                         runId,
-                        threadId: _internal?.threadId,
-                        resourceId: _internal?.resourceId,
+                        threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+                        resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
                         logger,
+                        mastra: mastra
+                          ? createMastraProxy({ mastra, logger: logger || new ConsoleLogger({ level: 'error' }) })
+                          : undefined,
+                        memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
                         agentName: agentId,
                         requestContext: requestContext || new RequestContext(),
                         outputWriter,
@@ -1115,10 +1142,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
-          // Store activeTools on _internal so toolCallStep can enforce them
-          if (_internal) {
-            _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
-          }
+          // Publish activeTools to the run scope so toolCallStep can enforce them.
+          writeScoped(
+            scopeCtx,
+            STEP_ACTIVE_TOOLS_KEY,
+            'stepActiveTools',
+            currentStep.activeTools as string[] | undefined,
+          );
 
           if (toolCallForeachOptions) {
             updateToolCallForeachConcurrency(toolCallForeachOptions, {
@@ -1152,7 +1182,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
             supportedUrls: resolvedSupportedUrls,
           };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          const llmPromptForModel =
+            currentStep.model?.specificationVersion === 'v3' || currentStep.model?.specificationVersion === 'v4'
+              ? messageList.get.all.aiV6.llmPrompt
+              : messageList.get.all.aiV5.llmPrompt;
+          let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
           if (autoResumeSuspendedTools) {
             const messages = messageList.get.all.db();
@@ -1218,8 +1252,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
-          if (_internal?.backgroundTaskManager && currentStep.tools) {
-            const bgPrompt = generateBackgroundTaskSystemPrompt(currentStep.tools, _internal?.agentBackgroundConfig);
+          if (readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager') && currentStep.tools) {
+            const bgPrompt = generateBackgroundTaskSystemPrompt(
+              currentStep.tools,
+              readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
+            );
             inputMessages = inputMessages.map((message, index) => {
               if (message.role === 'system' && index === 0) {
                 message.content = message.content + `\n\n${bgPrompt}`;
@@ -1355,8 +1392,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
                   headers: (() => {
                     const memoryHeaders: Record<string, string> = {};
-                    if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
-                    if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
+                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                    const rid = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
+                    if (tid) memoryHeaders['x-thread-id'] = tid;
+                    if (rid) memoryHeaders['x-resource-id'] = rid;
                     const merged = {
                       ...memoryHeaders,
                       ...modelHeaders,
@@ -1365,7 +1404,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     return Object.keys(merged).length > 0 ? merged : undefined;
                   })(),
                   methodType,
-                  generateId: _internal?.generateId,
+                  generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
                   onResult: ({
                     warnings: warningsFromStream,
                     request: requestFromStream,
@@ -1449,9 +1488,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 rawResponse,
               },
               logger,
-              transportRef: _internal?.transportRef,
+              transportRef: readScoped(scopeCtx, TRANSPORT_REF_KEY, 'transportRef'),
               transportResolver,
-              toolPayloadTransform: _internal?.toolPayloadTransform,
+              toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
               mastra,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             });
@@ -1621,7 +1660,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 abortSignal: options?.abortSignal,
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {
-                  currentMessageId = _internal?.generateId?.() ?? generateId();
+                  currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
                   // Keep the active output stream in sync so bail/retry paths
                   // below report the rotated id instead of the stale one, and so
                   // any subsequent chunks the stream writes itself use the new id.
@@ -1681,11 +1720,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageList.enrichLastStepStart(executedStepModel);
       }
 
-      // Store modified tools and workspace in _internal so toolCallStep can access them
-      // without going through workflow serialization (which would lose execute functions)
-      if (_internal) {
-        _internal.stepTools = stepTools;
-        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
+      // Publish modified tools/workspace to the run scope so toolCallStep can read them
+      // without going through workflow serialization (which would lose execute functions).
+      writeScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools', stepTools);
+      const existingWorkspace = stepWorkspace ?? readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
+      if (existingWorkspace !== undefined) {
+        writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', existingWorkspace);
       }
 
       if (callBail) {
@@ -1758,7 +1798,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           abortSignal: options?.abortSignal,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
-            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
             // Keep the active output stream in sync so the retry payload and
             // any downstream chunks use the rotated id.
             outputStream.messageId = currentMessageId;
@@ -1895,6 +1935,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList,
             stepNumber,
             finishReason: immediateFinishReason,
+            providerMetadata: outputStream._getImmediateProviderMetadata(),
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
             usage: outputStream._getImmediateUsage(),

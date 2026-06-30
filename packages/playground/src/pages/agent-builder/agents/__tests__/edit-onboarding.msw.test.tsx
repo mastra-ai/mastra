@@ -1,6 +1,4 @@
-// @vitest-environment jsdom
-import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -18,15 +16,13 @@ import {
 import { useDebouncedRunning } from '@/domains/agent-builder/hooks/use-debounced-running';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
+vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
 
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 // Stub heavy chat panels so we can focus on layout.
 vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
@@ -45,12 +41,6 @@ vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
 
 vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
   StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-// Drive the starter message so the wizard begins in the 'ready' step.
-const useStarterUserMessageMock = vi.fn<() => string | undefined>(() => 'hello');
-vi.mock('@/domains/agent-builder/hooks/use-starter-user-message', () => ({
-  useStarterUserMessage: () => useStarterUserMessageMock(),
 }));
 
 const BASE_URL = 'http://localhost:4111';
@@ -82,10 +72,21 @@ const noopPaths = {
   experimentLink: () => '',
 } as never;
 
-function renderPage() {
+// The wizard begins in the 'ready' step when a starter prompt is forwarded via
+// router location state (read by the real `useStarterUserMessage` hook).
+function renderPage(starterMessage: string | null = 'hello') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+
+  const initialEntries = [
+    starterMessage === null
+      ? { pathname: '/agent-builder/agents/agent-onboarding/edit', state: null }
+      : {
+          pathname: '/agent-builder/agents/agent-onboarding/edit',
+          state: { userMessage: starterMessage },
+        },
+  ];
 
   // Build a fresh element each call so view.rerender(makeTree()) produces a new
   // element identity (forcing React to re-read the useStreamRunning mock) while
@@ -95,7 +96,7 @@ function renderPage() {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={['/agent-builder/agents/agent-onboarding/edit']}>
+            <MemoryRouter initialEntries={initialEntries}>
               <Routes>
                 <Route path="/agent-builder/agents/:id/edit" element={<AgentBuilderAgentEdit />} />
                 <Route path="/agent-builder/agents/:id/view" element={<div data-testid="view-page" />} />
@@ -199,6 +200,8 @@ const baseHandlers = (agent: typeof emptyAgent) => [
   ),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
+  // Empty provider list short-circuits the integration tool fan-out.
+  http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json({ providers: [] })),
   // All agent features off: the onboarding wizard resolves its minimal tree.
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(buildBuilderSettings())),
 ];
@@ -221,7 +224,6 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
   afterEach(() => {
     cleanup();
     useStreamRunningMock.mockReturnValue(false);
-    useStarterUserMessageMock.mockReturnValue('hello');
   });
 
   it('ready entry while the builder is still composing (no mandatory fields yet): stays centered (chat only, no review panel)', async () => {
@@ -343,10 +345,9 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
 
   it('non-initial step: renders the split layout with chat and profile side by side', async () => {
     // No starter message → wizard starts at 'end', not the onboarding entry.
-    useStarterUserMessageMock.mockReturnValue(undefined);
     server.use(...baseHandlers(populatedAgent));
 
-    renderPage();
+    renderPage(null);
 
     await waitFor(() => {
       expect(screen.queryByTestId('agent-builder-panel-chat')).not.toBeNull();
@@ -503,10 +504,9 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
 
   it('on the end step: the chat column is hidden on mobile via "hidden lg:block" classes', async () => {
     // No starter message → wizard starts at 'end'.
-    useStarterUserMessageMock.mockReturnValue(undefined);
     server.use(...baseHandlers(populatedAgent));
 
-    renderPage();
+    renderPage(null);
 
     const chatPanel = await screen.findByTestId('agent-builder-panel-chat');
     expect(chatPanel.classList.contains('hidden')).toBe(true);
@@ -527,10 +527,9 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
 
   it('on the end step: hero actions (Delete + Add to library) are wrapped in a mobile-hidden container', async () => {
     // No starter message → wizard starts at 'end' (the step where hero actions render).
-    useStarterUserMessageMock.mockReturnValue(undefined);
     server.use(...baseHandlers(populatedAgent));
 
-    renderPage();
+    renderPage(null);
 
     const heroActionsWrapper = await screen.findByTestId('agent-builder-hero-actions-desktop');
     expect(heroActionsWrapper.classList.contains('hidden')).toBe(true);

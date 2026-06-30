@@ -5,10 +5,13 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
-import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
-import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
+import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/core/agent-controller';
+import { parseSubagentMeta } from '@mastra/core/agent-controller';
+import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
+import { assignTaskIds } from '@mastra/core/signals';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
-import chalk from 'chalk';
+import { readPlanFile, resolvePlanPath } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -16,6 +19,7 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { JudgeDisplayComponent } from './components/judge-display.js';
 import { NotificationSummaryComponent } from './components/notification-summary.js';
 import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
@@ -26,12 +30,13 @@ import { SlashCommandComponent } from './components/slash-command.js';
 import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { formatTaskProgressLine } from './components/task-progress.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
-import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
+import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
@@ -46,7 +51,7 @@ function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
 }
 
-type MessageWithAttributes = HarnessMessage & {
+type MessageWithAttributes = AgentControllerMessage & {
   attributes?: Record<string, string | number | boolean | null | undefined>;
 };
 
@@ -60,7 +65,7 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  const color = state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = state.session.mode.resolve().metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -91,11 +96,62 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   const label = count === 1 ? 'Task' : 'Tasks';
   container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
   for (const task of clearedTasks) {
-    const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
-    const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
   }
   insertTaskHistoryComponent(state, container, insertIndex);
+}
+
+export function renderCompletedTasksInline(
+  state: TUIState,
+  completedTasks: TaskItemSnapshot[],
+  insertIndex = -1,
+): void {
+  const container = new TaskHistoryComponent();
+  const count = completedTasks.length;
+  container.addChild(
+    new Text(`${theme.fg('accent', 'Tasks')} ${theme.fg('dim', `[${count}/${count} completed]`)}`, BOX_INDENT, 0),
+  );
+  for (const task of completedTasks) {
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
+  }
+  insertTaskHistoryComponent(state, container, insertIndex);
+}
+
+function getTaskKey(task: TaskItemSnapshot): string {
+  return task.id || task.content;
+}
+
+export function renderTaskDeltaInline(
+  state: TUIState,
+  previousTasks: TaskItemSnapshot[],
+  nextTasks: TaskItemSnapshot[],
+  insertIndex = -1,
+): boolean {
+  const previousByKey = new Map(previousTasks.map(task => [getTaskKey(task), task]));
+  const addedTasks = nextTasks.filter(task => !previousByKey.has(getTaskKey(task)));
+  const inProgressTasks = nextTasks.filter(task => {
+    const previous = previousByKey.get(getTaskKey(task));
+    return task.status === 'in_progress' && previous?.status !== 'in_progress';
+  });
+  const completedTasks = nextTasks.filter(task => {
+    const previous = previousByKey.get(getTaskKey(task));
+    return task.status === 'completed' && previous?.status !== 'completed';
+  });
+
+  if (addedTasks.length === 0 && inProgressTasks.length === 0 && completedTasks.length === 0) return false;
+
+  const changedTaskKeys = new Set([...addedTasks, ...inProgressTasks, ...completedTasks].map(getTaskKey));
+  const changedTasks = nextTasks.filter(task => changedTaskKeys.has(getTaskKey(task)));
+
+  const container = new TaskHistoryComponent();
+  container.addChild(new Text(theme.fg('accent', 'Tasks'), BOX_INDENT, 0));
+
+  for (const task of changedTasks) {
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
+  }
+
+  insertTaskHistoryComponent(state, container, insertIndex);
+  return true;
 }
 
 function renderTaskTransitionFromHistory(
@@ -104,8 +160,7 @@ function renderTaskTransitionFromHistory(
   nextTasks: TaskItemSnapshot[],
 ): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
   if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
-    // A fully-completed list hides its pinned view and leaves no inline receipt
-    // (matches the live path); the transcript already narrates completion.
+    renderCompletedTasksInline(state, nextTasks);
     return { tasks: nextTasks, replacedWithInline: true };
   }
 
@@ -117,6 +172,7 @@ function renderTaskTransitionFromHistory(
     return { tasks: [], replacedWithInline: false };
   }
 
+  renderTaskDeltaInline(state, previousTasks, nextTasks);
   return { tasks: nextTasks, replacedWithInline: true };
 }
 
@@ -200,7 +256,12 @@ export function addPendingUserMessage(
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
-  state.pendingSignalMessageComponentsById.set(messageId, { component, text, isInterjection: options?.isInterjection });
+  state.pendingSignalMessageComponentsById.set(messageId, {
+    component,
+    text,
+    images,
+    isInterjection: options?.isInterjection,
+  });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
@@ -210,7 +271,7 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+  if (state.streamingComponent && state.session.displayState.get().isRunning) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
@@ -222,8 +283,10 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
+  const imageCount = pending.images?.length ?? 0;
+  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   const label = getPendingUserMessageLabel(pending.isInterjection);
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+  const confirmed = new UserMessageComponent(prefix + text, getMarkdownTheme(), {
     ...(label ? { label } : {}),
   });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
@@ -243,6 +306,15 @@ export function removePendingUserMessage(state: TUIState, messageId: string): vo
   if (!pending) return;
   state.chatContainer.removeChild(pending.component as never);
   state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+}
+
+export function removeUserMessage(state: TUIState, messageId: string): void {
+  const component = state.messageComponentsById.get(messageId);
+  if (!component) return;
+  state.chatContainer.removeChild(component as never);
+  state.messageComponentsById.delete(messageId);
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 
@@ -282,18 +354,36 @@ function unescapeSkillBoundary(text: string): string {
   return text.replaceAll('&lt;/skill&gt;', '</skill>');
 }
 
-export function addUserMessage(state: TUIState, message: HarnessMessage, options?: { label?: string }): void {
+export function addUserMessage(state: TUIState, message: AgentControllerMessage, options?: { label?: string }): void {
   if (state.messageComponentsById.has(message.id)) {
     return;
   }
 
   const reminderPart = message.content.find(
-    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> =>
+    (content): content is Extract<AgentControllerMessageContent, { type: 'system_reminder' }> =>
       content.type === 'system_reminder',
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const goalMetadata = reminderPart as typeof reminderPart & {
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
+    };
+
+    if (reminderPart.reminderType === 'goal-judge' && goalMetadata.goalEvaluation) {
+      const judgeComponent = new JudgeDisplayComponent(
+        null,
+        goalMetadata.goalEvaluation.iteration,
+        goalMetadata.goalEvaluation.maxRuns,
+      );
+      judgeComponent.setEvaluation(goalMetadata.goalEvaluation);
+      addChildBeforeMessageOrFollowUps(state, judgeComponent, reminderPart.precedesMessageId);
+      state.messageComponentsById.set(message.id, judgeComponent);
+      state.ui.requestRender();
+      return;
+    }
+
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
@@ -417,6 +507,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     .join('\n');
 
   const imageCount = message.content.filter(c => c.type === 'image').length;
+  const fileCount = message.content.filter(c => c.type === 'file').length;
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -519,7 +610,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const attachmentLabels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
@@ -528,7 +623,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     state.messageComponentsById.set(message.id, userComponent);
 
-    if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+    if (state.streamingComponent && state.session.displayState.get().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
       reconcileChatBoundarySpacers(state.chatContainer);
@@ -616,9 +711,9 @@ function applyTaskToolResult(
 // renderExistingMessages
 // =============================================================================
 
-const STARTUP_MESSAGE_WINDOW_SIZE = 40;
+const STARTUP_MESSAGE_WINDOW_SIZE = 200;
 
-function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
+function getLatestMessageTimestamp(messages: AgentControllerMessage[]): number | undefined {
   let latest: number | undefined;
   for (const message of messages) {
     const time = new Date(message.createdAt).getTime();
@@ -629,11 +724,11 @@ function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefin
 }
 
 /**
- * Re-render all existing messages from the harness thread into the chat container.
+ * Re-render all existing messages from the controller thread into the chat container.
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   state.chatContainer.clear();
@@ -658,7 +753,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     } else if (message.role === 'assistant') {
       // Render content in order - interleaving text and tool calls
       // Accumulate text/thinking until we hit a tool call, then render both
-      let accumulatedContent: HarnessMessageContent[] = [];
+      let accumulatedContent: AgentControllerMessageContent[] = [];
 
       for (const content of message.content) {
         if (content.type === 'text' || content.type === 'thinking') {
@@ -666,7 +761,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         } else if (content.type === 'tool_call') {
           // Render accumulated text first if any
           if (accumulatedContent.length > 0) {
-            const textMessage: HarnessMessage = {
+            const textMessage: AgentControllerMessage = {
               ...message,
               content: accumulatedContent,
             };
@@ -698,10 +793,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
             const resultText = meta?.text ?? rawResult;
-            const currentModelId =
-              typeof (state.harness as { getFullModelId?: () => string }).getFullModelId === 'function'
-                ? (state.harness as { getFullModelId: () => string }).getFullModelId()
-                : undefined;
+            const currentModelId = state.session.model.get() || undefined;
             const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
@@ -799,36 +891,62 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // If this was submit_plan, show the plan with approval status
           if (content.name === 'submit_plan' && toolResult?.type === 'tool_result') {
-            const args = content.args as { title?: string; plan?: string } | undefined;
+            const args = content.args as { path?: string } | undefined;
             // Result could be a string or an object with content property
             let resultText = '';
+            let submittedPlan: { title?: string; path?: string; plan?: string } | undefined;
             if (typeof toolResult.result === 'string') {
               resultText = toolResult.result;
-            } else if (
-              typeof toolResult.result === 'object' &&
-              toolResult.result !== null &&
-              'content' in toolResult.result &&
-              typeof (toolResult.result as any).content === 'string'
-            ) {
-              resultText = (toolResult.result as any).content;
+            } else if (typeof toolResult.result === 'object' && toolResult.result !== null) {
+              if ('content' in toolResult.result && typeof (toolResult.result as any).content === 'string') {
+                resultText = (toolResult.result as any).content;
+              }
+              if (
+                'submittedPlan' in toolResult.result &&
+                typeof (toolResult.result as any).submittedPlan === 'object'
+              ) {
+                submittedPlan = (toolResult.result as any).submittedPlan;
+              }
             }
-            const isApproved = resultText.toLowerCase().includes('approved');
-            // Extract feedback if rejected with feedback
+            // The approved result starts with "Plan approved." while rejected
+            // results start with "Plan was not approved" — a naive `includes`
+            // would match both since "not approved" still contains "approved".
+            const isApproved = resultText.startsWith('Plan approved');
+            // Extract feedback if rejected with inline feedback
             let feedback: string | undefined;
-            if (!isApproved && resultText.includes('Feedback:')) {
-              const feedbackMatch = resultText.match(/Feedback:\s*(.+)/);
-              feedback = feedbackMatch?.[1];
+            if (!isApproved && resultText.includes('not approved')) {
+              const feedbackMatch = resultText.match(/User feedback:\s*(.+?)(?:\n|$)/);
+              // Use extracted feedback or a generic marker so PlanResultComponent
+              // renders "Changes requested" (it checks truthiness of feedback).
+              feedback = feedbackMatch?.[1] || 'Revision requested';
             }
 
-            if (args?.title && args?.plan) {
+            const submittedPath = submittedPlan?.path || args?.path;
+            if (submittedPath) {
+              // Prefer the submitted plan snapshot persisted in the tool result.
+              // Older history entries may not have it, so fall back to reading the
+              // submitted file from disk.
+              const sessionState = state.session.state.get() as any;
+              const projectPath = sessionState?.projectPath as string | undefined;
+              const recoverAbsPath = !submittedPlan?.plan
+                ? resolvePlanPath(projectPath ?? process.cwd(), submittedPath)
+                : undefined;
+              const recovered = recoverAbsPath ? await readPlanFile(recoverAbsPath) : undefined;
+              const planBody = submittedPlan?.plan ?? recovered?.plan ?? '';
+              const planTitle = submittedPlan?.title || recovered?.title || 'Implementation Plan';
               const planResult = new PlanResultComponent({
-                title: args.title,
-                plan: args.plan,
+                title: planTitle,
+                plan: planBody,
+                planFilename: submittedPath,
                 isApproved,
                 feedback,
               });
               state.chatContainer.addChild(planResult);
               replacedWithInline = true;
+              // Restore previousPlanSnapshot (keyed by submitted path) so that if the
+              // agent resubmits after a restart, the diff can be computed against
+              // the last submitted plan body, not whatever the mutable file now contains.
+              state.previousPlanSnapshot = { path: submittedPath, plan: planBody };
             }
           }
 
@@ -852,7 +970,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // Render accumulated text first if any
           if (accumulatedContent.length > 0) {
-            const textMessage: HarnessMessage = {
+            const textMessage: AgentControllerMessage = {
               ...message,
               content: accumulatedContent,
             };
@@ -899,7 +1017,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
       // Render any remaining text after the last tool call
       if (accumulatedContent.length > 0) {
-        const textMessage: HarnessMessage = {
+        const textMessage: AgentControllerMessage = {
           ...message,
           content: accumulatedContent,
         };
@@ -916,22 +1034,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     if (state.taskProgress) {
       state.taskProgress.updateTasks(previousTasksAcc);
     }
-    const currentTasks =
-      typeof state.harness.getState === 'function'
-        ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
-        : undefined;
+    const currentTasks = (state.session.state.get() as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
     if (!areTasksEqual(currentTasks, previousTasksAcc)) {
       try {
-        await state.harness.setState({ tasks: previousTasksAcc });
+        await state.session.state.set({ tasks: previousTasksAcc });
       } catch {
-        // Custom harness state schemas may not accept TUI replayed task state.
+        // Custom controller state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.
       }
     }
-    const harnessWithReplayTasks = state.harness as typeof state.harness & {
-      restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
-    };
-    harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
+    state.session.displayState.restoreTasks(previousTasksAcc);
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);

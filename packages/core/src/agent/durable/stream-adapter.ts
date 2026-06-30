@@ -14,6 +14,8 @@ import type {
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
+  AgentAbortEventData,
+  AgentIterationCompleteEventData,
 } from './types';
 
 /**
@@ -30,7 +32,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   model: {
     modelId: string | undefined;
     provider: string | undefined;
-    version: 'v2' | 'v3';
+    version: 'v2' | 'v3' | 'v4';
   };
   /** Thread ID for memory */
   threadId?: string;
@@ -52,8 +54,19 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /** Callback when execution is aborted via abortSignal */
+  onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
+  /** Callback fired after each agentic-loop iteration */
+  onIterationComplete?: (data: AgentIterationCompleteEventData) => void | Promise<void>;
   /** Optional logger for structured logging */
   logger?: IMastraLogger;
+  /**
+   * If true, close the underlying ReadableStream when a SUSPENDED event is
+   * received. Used by `generate()` / `resumeGenerate()` so that
+   * `getFullOutput()` resolves on suspend instead of hanging. Streaming
+   * callers leave this `false` so the stream stays open for a later resume.
+   */
+  closeOnSuspend?: boolean;
 }
 
 /**
@@ -91,7 +104,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onFinish,
     onError,
     onSuspended,
+    onAbort,
+    onIterationComplete,
     logger,
+    closeOnSuspend = false,
   } = options;
 
   // Helper to log errors (uses logger if available, falls back to console)
@@ -209,7 +225,34 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
           await onSuspended?.(data);
-          // Don't close the stream on suspend - it can be resumed
+          // By default we leave the stream open on suspend so a later resume
+          // can keep streaming chunks. `generate()`/`resumeGenerate()` opt
+          // into closing here so `getFullOutput()` can resolve.
+          if (closeOnSuspend) {
+            safeClose(controller);
+          }
+          break;
+        }
+
+        case AgentStreamEventTypes.ABORT: {
+          const data = streamEvent.data as AgentAbortEventData;
+          try {
+            await onAbort?.(data);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onAbort callback error:`, callbackError);
+          }
+          // Abort closes the stream — the run will not continue.
+          safeClose(controller);
+          break;
+        }
+
+        case AgentStreamEventTypes.ITERATION_COMPLETE: {
+          const data = streamEvent.data as AgentIterationCompleteEventData;
+          try {
+            await onIterationComplete?.(data);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onIterationComplete callback error:`, callbackError);
+          }
           break;
         }
 
@@ -377,6 +420,32 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
 export async function emitSuspendedEvent(pubsub: PubSub, runId: string, data: AgentSuspendedEventData): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.SUSPENDED,
+    runId,
+    data,
+  });
+}
+
+/**
+ * Helper to emit an abort event to pubsub
+ */
+export async function emitAbortEvent(pubsub: PubSub, runId: string, data: AgentAbortEventData): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ABORT,
+    runId,
+    data,
+  });
+}
+
+/**
+ * Helper to emit an iteration-complete event to pubsub
+ */
+export async function emitIterationCompleteEvent(
+  pubsub: PubSub,
+  runId: string,
+  data: AgentIterationCompleteEventData,
+): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ITERATION_COMPLETE,
     runId,
     data,
   });

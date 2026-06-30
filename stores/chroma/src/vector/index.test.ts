@@ -558,6 +558,56 @@ describe('ChromaVector Integration Tests', () => {
       expect(pages).toHaveLength(Math.ceil(batchSize / pageSize));
     }, 30000);
   });
+
+  describe('score semantics (similarity, not raw distance)', () => {
+    const cosineIndex = 'score-cosine';
+    const euclideanIndex = 'score-euclidean';
+
+    afterEach(async () => {
+      for (const indexName of [cosineIndex, euclideanIndex]) {
+        try {
+          await vectorDB.deleteIndex({ indexName });
+        } catch {
+          continue;
+        }
+      }
+    });
+
+    it('returns a higher score for the closer vector on a cosine index', async () => {
+      await vectorDB.createIndex({ indexName: cosineIndex, dimension: 2, metric: 'cosine' });
+      await vectorDB.upsert({
+        indexName: cosineIndex,
+        vectors: [
+          [1, 0],
+          [0, 1],
+        ],
+        ids: ['exact', 'far'],
+      });
+
+      const results = await vectorDB.query({ indexName: cosineIndex, queryVector: [1, 0], topK: 2 });
+      const byId = Object.fromEntries(results.map(r => [r.id, r.score]));
+      expect(byId.exact).toBeGreaterThan(byId.far);
+      expect(byId.exact).toBeCloseTo(1, 5);
+    }, 15000);
+
+    it('maps euclidean distance into a descending, non-negative score', async () => {
+      await vectorDB.createIndex({ indexName: euclideanIndex, dimension: 2, metric: 'euclidean' });
+      await vectorDB.upsert({
+        indexName: euclideanIndex,
+        vectors: [
+          [0, 0],
+          [3, 4],
+        ],
+        ids: ['near', 'far'],
+      });
+
+      const results = await vectorDB.query({ indexName: euclideanIndex, queryVector: [0, 0], topK: 2 });
+      const byId = Object.fromEntries(results.map(r => [r.id, r.score]));
+      expect(byId.near).toBeGreaterThan(byId.far);
+      expect(byId.far).toBeGreaterThan(0);
+      expect(byId.near).toBeCloseTo(1, 5);
+    }, 15000);
+  });
 });
 
 // Shared vector store test suite

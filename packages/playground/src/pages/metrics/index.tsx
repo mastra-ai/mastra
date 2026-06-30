@@ -1,35 +1,32 @@
-import type { DatePreset, DateRange, PropertyFilterToken } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { DateRangeSelector } from '@mastra/playground-ui/domains/metrics/components/date-range-selector';
+import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
+import { MetricsProvider, isValidPreset, useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
+import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import {
-  Notice,
-  Button,
-  DateRangeSelector,
-  EmptyState,
-  ErrorState,
-  MetricsFlexGrid,
-  MetricsProvider,
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  PropertyFilterCreator,
-  SessionExpired,
   applyMetricsPropertyFilterTokens,
   clearSavedMetricsFilters,
   createMetricsPropertyFilterFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  isValidPreset,
   loadMetricsFiltersFromStorage,
   saveMetricsFiltersToStorage,
-  toast,
-  useAgentRunsKpiMetrics,
-  useMetrics,
-  useEntityNames,
-  useEnvironments,
-  useServiceNames,
-  useTags,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/domains/metrics/metrics-filters';
+import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
+import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
+import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
+import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -54,6 +51,7 @@ const ANALYTICS_OBSERVABILITY_TYPES = new Set([
   'ObservabilityStorageDuckDB',
   'ObservabilityInMemory',
   'ObservabilitySpanner',
+  'ObservabilityStoragePostgresVNext',
 ]);
 
 const PERIOD_PARAM = 'period';
@@ -318,7 +316,7 @@ function MetricsContent() {
           <EmptyState
             iconSlot={<CircleSlashIcon />}
             titleSlot="Metrics are not available with your current storage"
-            descriptionSlot="Metrics require ClickHouse, DuckDB, Spanner, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+            descriptionSlot="Metrics require ClickHouse, DuckDB, Postgres v-next, Spanner, or in-memory storage for observability. Other relational databases (LibSQL, MSSQL) and document stores (MongoDB) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
             actionSlot={
               <Button
                 variant="ghost"
@@ -338,7 +336,7 @@ function MetricsContent() {
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>
                 This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse, DuckDB, or Spanner.
+                persistent metrics, switch the observability storage to ClickHouse, DuckDB, Postgres v-next, or Spanner.
               </Notice.Message>
             </Notice>
           )}

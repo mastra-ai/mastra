@@ -215,6 +215,8 @@ When both are available, Claude Max OAuth takes priority.
 
 For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
 
+For **Amazon Bedrock**, mastracode authenticates with AWS SigV4 through the standard AWS credential chain — environment variables (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`), a shared `~/.aws` profile (`AWS_PROFILE`, including SSO), or a container/instance role all work, the same resolution order as the AWS CLI. Set `AWS_REGION` (defaults to `us-east-1`) to choose a region. Select Bedrock models with the `amazon-bedrock/<modelId>` form, where `<modelId>` is any Bedrock model ID surfaced via `/models`. To use Bedrock API-key auth instead of SigV4, set `AWS_BEARER_TOKEN_BEDROCK`.
+
 Credentials are stored alongside the database in `auth.json`.
 
 ### Custom providers and models
@@ -254,6 +256,115 @@ To save plans to a project-local directory instead, set the `MASTRA_PLANS_DIR` e
 
 ```bash
 export MASTRA_PLANS_DIR=.mastracode/plans
+```
+
+### Web UI: optional auth & GitHub projects
+
+The web UI (`mastracode web`) supports optional WorkOS authentication and a GitHub App
+integration. Both are off by default — when their environment variables are absent the web UI
+behaves exactly as before.
+
+**WorkOS auth** — when `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are set, every route requires a
+signed-in user (hosted login + encrypted session):
+
+```bash
+export WORKOS_API_KEY=...
+export WORKOS_CLIENT_ID=...
+export WORKOS_REDIRECT_URI=https://your-host/auth/callback   # optional
+export WORKOS_COOKIE_PASSWORD=...                            # optional (recommended in prod)
+```
+
+On first authenticated use, a user with no WorkOS organization is automatically given a personal
+org (the org is created and the user added as a member), so org-scoped features work without
+hand-creating an org in the WorkOS dashboard. The WorkOS API key must be allowed to create
+organizations and memberships; if it isn't, bootstrap fails soft (logged) and the user keeps the
+`organization_required` response.
+
+**GitHub projects** — when the GitHub App variables are set _and_ WorkOS auth is enabled,
+signed-in users can install the GitHub App, pick repositories, and turn each repo into a project.
+The tenant boundary is the **WorkOS organization**: the GitHub App installation and the connected
+project (repo) are owned by the org, while each user inside the org gets their own isolated
+sandbox, worktrees, branches, and PRs against that repo. The **same repo can be connected
+independently by different orgs** without ever seeing each other's projects, sandboxes, or state.
+Personal accounts are bootstrapped into a personal org on first use (see above), so they can
+connect GitHub projects too; users always get isolated agent state regardless. Repo and project
+metadata persist in a separate application Postgres (`APP_DATABASE_URL`):
+
+```bash
+export GITHUB_APP_ID=...
+export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+export GITHUB_APP_CLIENT_ID=...
+export GITHUB_APP_CLIENT_SECRET=...
+export GITHUB_APP_SLUG=your-app-slug
+export APP_DATABASE_URL=postgres://user:pass@host:5432/db
+export GITHUB_APP_REDIRECT_URI=https://your-host/auth/github/callback  # optional
+```
+
+GitHub-backed projects are cloned into an isolated cloud sandbox on open, which requires a
+sandbox provider. Railway is the first supported backend:
+
+```bash
+export RAILWAY_API_TOKEN=...
+export RAILWAY_ENVIRONMENT_ID=...
+export MASTRACODE_SANDBOX_PROVIDER=railway                  # optional (default when a token is set)
+export MASTRACODE_SANDBOX_WORKDIR=/workspace                # optional (path inside the sandbox)
+export MASTRACODE_SANDBOX_IDLE_MINUTES=30                   # optional (idle teardown window; default 30)
+```
+
+The sandbox template must have `git` and `gh` (the GitHub CLI) installed and outbound network
+access to `github.com`. `gh` is only required to open pull requests; clone/open work without it.
+Idle sandboxes are stopped by the provider after `MASTRACODE_SANDBOX_IDLE_MINUTES`; the next open
+detects the stopped VM and re-provisions automatically.
+Without a sandbox provider, users can still connect GitHub and pick repos, but opening a repo
+project shows a clear "sandbox not configured" error.
+
+### Per-(org,user) storage isolation
+
+When WorkOS web auth is enabled, the tenant boundary is the **(organization, user)** pair: each
+user in each org operates against their own dedicated libSQL database for all agent state (threads,
+messages, memory, observational memory, recall vectors) — no tenant can read another tenant's data
+at the storage layer. Two users in the same org are isolated, and the same user across two orgs is
+also isolated. The database location is derived server-side from a hash of `(orgId, userId)` (no
+client-supplied paths); users without an org fall back to a user-only key.
+
+```bash
+# Local files (default): one isolated DB dir per tenant under this root
+export MASTRACODE_TENANT_DB_ROOT=~/.mastracode/web/tenants    # optional
+
+# Or remote libSQL/Turso per tenant ({id} = hashed (orgId, userId))
+export MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io        # optional
+export MASTRACODE_TENANT_VECTOR_URL_TEMPLATE=libsql://{id}-vec-org.turso.io # optional
+export MASTRACODE_TENANT_DB_AUTH_TOKEN=...                                  # optional
+export MASTRACODE_TENANT_VECTOR_AUTH_TOKEN=...                              # optional
+```
+
+When web auth is disabled the server uses a single shared store, exactly as before.
+
+### Multi-replica deployment
+
+The web server keeps each tenant's Mastra stack in an in-memory cache and serializes per-user git
+write operations. For hosted, multi-replica deployments a few settings make this safe and bounded:
+
+```bash
+# Replica-stable state signing — REQUIRED across replicas. Without an explicit
+# GITHUB_APP_WEBHOOK_SECRET (or WORKOS_COOKIE_PASSWORD) the OAuth/install state
+# is signed with a per-process random key and callbacks fail on other replicas.
+export GITHUB_APP_WEBHOOK_SECRET=...
+
+# Cross-replica serialization of per-(project,user) git writes via Postgres
+# advisory locks (default on, requires APP_DATABASE_URL). Set 0 for local dev.
+export MASTRACODE_DISTRIBUTED_LOCK=1
+
+# Persist/share tenant DBs across replicas — fail/warn at startup if no remote
+# tenant DB template is set (local-file DBs don't survive restarts or sharing).
+export MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1
+
+# Bound in-memory tenant caches as the team grows.
+export MASTRACODE_TENANT_IDLE_MINUTES=30    # idle eviction window (0 disables)
+export MASTRACODE_TENANT_MAX_APPS=100       # LRU cap on cached stacks (0 disables)
+
+# Per-replica cap on concurrently live sandboxes (0 / unset = unlimited).
+export MASTRACODE_MAX_SANDBOXES=50
 ```
 
 ## Architecture

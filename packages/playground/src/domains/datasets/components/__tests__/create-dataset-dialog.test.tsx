@@ -1,15 +1,17 @@
-// @vitest-environment jsdom
+import type { GetWorkflowResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ComponentProps } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CreateDatasetDialog } from '../create-dataset-dialog';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+
+const emptyWorkflows: Record<string, GetWorkflowResponse> = {};
 
 const renderDialog = (props: Partial<ComponentProps<typeof CreateDatasetDialog>> = {}) => {
   const queryClient = new QueryClient({
@@ -23,6 +25,10 @@ const renderDialog = (props: Partial<ComponentProps<typeof CreateDatasetDialog>>
     </MastraReactProvider>,
   );
 };
+
+beforeEach(() => {
+  server.use(http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json(emptyWorkflows)));
+});
 
 afterEach(() => cleanup());
 

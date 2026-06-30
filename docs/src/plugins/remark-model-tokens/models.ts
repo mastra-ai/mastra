@@ -31,4 +31,12 @@ export const MODEL_TOKENS: Record<string, string> = {
 
   // Alibaba
   __GATEWAY_ALIBABA_MODEL__: 'alibaba/qwen-max',
+
+  // Amazon Bedrock
+  __GATEWAY_BEDROCK_MODEL_OPUS__: 'amazon-bedrock/us.anthropic.claude-opus-4-6-v1',
+  __GATEWAY_BEDROCK_MODEL_SONNET__: 'amazon-bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  __BEDROCK_MODEL_OPUS_BARE__: 'us.anthropic.claude-opus-4-6-v1',
+  __BEDROCK_MODEL_SONNET_BARE__: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+  __BEDROCK_MODEL_LLAMA_SCOUT_BARE__: 'us.meta.llama4-scout-17b-instruct-v1:0',
+  __BEDROCK_MODEL_HAIKU_BARE__: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
 }

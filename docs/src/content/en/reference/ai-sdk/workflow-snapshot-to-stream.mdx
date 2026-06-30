@@ -1,0 +1,71 @@
+---
+title: "Reference: workflowSnapshotToStream() | AI SDK"
+description: API reference for workflowSnapshotToStream(), a function to convert a persisted workflow run into an AI SDK-compatible stream.
+packages:
+  - "@mastra/ai-sdk"
+  - "@mastra/core"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# workflowSnapshotToStream()
+
+Converts a `WorkflowState` object (as returned by `workflow.getWorkflowRunById()`) into a `ReadableStream` of AI SDK UIMessage data parts. The stream contains the same `WorkflowDataPart` and `WorkflowStepDataPart` chunks that the live [`workflowRoute()`](/reference/ai-sdk/workflow-route) produces.
+
+Use this when you want to display a completed or suspended workflow run using the same UI components that render live workflow streams.
+
+## Usage example
+
+Next.js App Router endpoint that replays a past workflow run as a stream:
+
+```typescript title="app/api/workflow-replay/route.ts"
+import { workflowSnapshotToStream } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const runId = searchParams.get('runId')!
+
+  const workflowRun = await mastra.getWorkflow('myWorkflow').getWorkflowRunById(runId)
+
+  if (!workflowRun) {
+    return new Response('Not found', { status: 404 })
+  }
+
+  const stream = workflowSnapshotToStream(workflowRun)
+  return createUIMessageStreamResponse({ stream })
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'workflowRun',
+    type: 'WorkflowState',
+    description:
+      'The workflow run state object, as returned by `getWorkflowRunById()` or the workflow runs API. Contains `runId`, `workflowName`, `status`, and `steps`.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Returns
+
+`ReadableStream` — A stream of AI SDK UIMessage data parts containing:
+
+- A `start` marker
+- A `WorkflowDataPart` with the overall workflow status and all step summaries
+- A `WorkflowStepDataPart` for each step with its full output
+- A `finish` marker
+
+Pass this stream to [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response) or `createUIMessageStream()` from the AI SDK.
+
+## Related
+
+- [`workflowRoute()`](/reference/ai-sdk/workflow-route): Stream live workflow runs
+- [`handleWorkflowStream()`](/reference/ai-sdk/handle-workflow-stream): Framework-agnostic handler for live workflow streaming
+- [`toAISdkStream()`](/reference/ai-sdk/to-ai-sdk-stream): Convert live Mastra streams to AI SDK format
+- [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages): Convert stored agent messages to AI SDK format

@@ -915,6 +915,92 @@ describe('Corrupted JSON recovery', () => {
   });
 });
 
+describe('Partial gateway sync should not corrupt registry', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // @ts-expect-error - accessing private property for testing
+    GatewayRegistry['instance'] = undefined;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should not write partial results to disk when a gateway fetch fails', async () => {
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock ModelsDevGateway.fetchProviders to fail (simulating models.dev API being down)
+    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockRejectedValue(
+      new Error('Failed to fetch from models.dev: Service Unavailable'),
+    );
+
+    // Mock NetlifyGateway.fetchProviders to succeed (only Netlify returns data)
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
+      netlify: {
+        name: 'Netlify',
+        url: 'https://netlify.example.com',
+        apiKeyEnvVar: 'NETLIFY_API_KEY',
+        models: ['netlify-model-1'],
+        gateway: 'netlify',
+      },
+    } as Record<string, ProviderConfig>);
+
+    // Track files that would be written via atomic rename
+    const renamedFiles: { src: string; dest: string }[] = [];
+    vi.spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
+      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
+    });
+
+    await registry.syncGateways(true);
+
+    // No registry files should have been written since models.dev failed
+    const registryWrites = renamedFiles.filter(
+      f => f.dest.includes('provider-registry.json') || f.dest.includes('provider-types.generated'),
+    );
+    expect(registryWrites).toHaveLength(0);
+  });
+
+  it('should write results when all gateways succeed', async () => {
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+
+    // Mock both gateways to succeed
+    vi.spyOn(ModelsDevGateway.prototype, 'fetchProviders').mockResolvedValue({
+      openai: {
+        name: 'OpenAI',
+        url: 'https://api.openai.com/v1',
+        apiKeyEnvVar: 'OPENAI_API_KEY',
+        models: ['gpt-4o'],
+        gateway: 'models.dev',
+      },
+    } as Record<string, ProviderConfig>);
+
+    vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({
+      netlify: {
+        name: 'Netlify',
+        url: 'https://netlify.example.com',
+        apiKeyEnvVar: 'NETLIFY_API_KEY',
+        models: ['netlify-model-1'],
+        gateway: 'netlify',
+      },
+    } as Record<string, ProviderConfig>);
+
+    const renamedFiles: { src: string; dest: string }[] = [];
+    vi.spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    vi.spyOn(fs.promises, 'rename').mockImplementation(async (src: any, dest: any) => {
+      renamedFiles.push({ src: src.toString(), dest: dest.toString() });
+    });
+
+    await registry.syncGateways(true);
+
+    // Registry files SHOULD be written since all gateways succeeded
+    const registryWrites = renamedFiles.filter(
+      f => f.dest.includes('provider-registry.json') || f.dest.includes('provider-types.generated'),
+    );
+    expect(registryWrites.length).toBeGreaterThan(0);
+  });
+});
+
 describe('Issue #10434: Concurrent write corruption', () => {
   // Store original fs functions to use in tests (avoid mock interference)
   const originalWriteFile = fs.promises.writeFile.bind(fs.promises);

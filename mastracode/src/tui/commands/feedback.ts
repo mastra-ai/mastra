@@ -30,21 +30,23 @@ export async function handleFeedbackCommand(ctx: SlashCommandContext, args: stri
   }
 
   // Resolve trace context.
-  // getCurrentTraceId() returns the actual observability traceId (OTel 32-hex-char ID)
-  // captured from the stream response. getCurrentRunId() returns the agent's runId (UUID).
+  // session.run.getTraceId() returns the actual observability traceId (OTel 32-hex-char ID)
+  // captured from the stream response. session.getCurrentRunId() returns the agent's runId (UUID).
   // We pass both so the cloud endpoint can correlate feedback to the correct trace.
-  const traceId = ctx.harness.getCurrentTraceId() ?? undefined;
-  const runId = ctx.harness.getCurrentRunId() ?? undefined;
-  const threadId = ctx.harness.getCurrentThreadId() ?? undefined;
+  const traceId = ctx.state.session.run.getTraceId() ?? undefined;
+  const runId = ctx.state.session.getCurrentRunId() ?? undefined;
+  const threadId = ctx.state.session.thread.getId() ?? undefined;
 
-  if (!traceId && !runId && !threadId) {
+  // Feedback correlates to an actual run/trace. A bound thread alone is not
+  // enough — every session has a thread, but there may be no run to rate yet.
+  if (!traceId && !runId) {
     ctx.showError('No active session to attach feedback to.');
     return;
   }
 
   // Get observability from the Mastra instance so feedback flows through the
   // event bus to all exporters (cloud, DuckDB, etc.).
-  const mastra = ctx.harness.getMastra();
+  const mastra = ctx.controller.getMastra();
   const observability = mastra?.observability;
   if (!observability?.addFeedback) {
     ctx.showError('Observability not configured — cannot save feedback.');

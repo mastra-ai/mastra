@@ -1,4 +1,4 @@
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -13,19 +13,20 @@ let cachedMemory: Memory | null = null;
 let cachedMemoryKey: string | null = null;
 
 /**
- * Read harness state from requestContext.
+ * Read controller state from requestContext.
  * Used by both the memory factory and the OM model functions.
  */
-function getHarnessState(requestContext: RequestContext): MastraCodeState | undefined {
-  return (requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined)?.getState?.();
+function getAgentControllerState(requestContext: RequestContext): MastraCodeState | undefined {
+  const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  return ctx?.getState() as MastraCodeState | undefined;
 }
 
 /**
  * Observer model function — reads the current observer model ID from
- * harness state via requestContext (now propagated by OM's agent.generate).
+ * controller state via requestContext (now propagated by OM's agent.generate).
  */
 function getObserverModel({ requestContext }: { requestContext: RequestContext }) {
-  const state = getHarnessState(requestContext);
+  const state = getAgentControllerState(requestContext);
   return resolveModel(state?.observerModelId ?? DEFAULT_OM_MODEL_ID, {
     remapForCodexOAuth: true,
     requestContext,
@@ -34,10 +35,10 @@ function getObserverModel({ requestContext }: { requestContext: RequestContext }
 
 /**
  * Reflector model function — reads the current reflector model ID from
- * harness state via requestContext (now propagated by OM's agent.generate).
+ * controller state via requestContext (now propagated by OM's agent.generate).
  */
 function getReflectorModel({ requestContext }: { requestContext: RequestContext }) {
-  const state = getHarnessState(requestContext);
+  const state = getAgentControllerState(requestContext);
   return resolveModel(state?.reflectorModelId ?? DEFAULT_OM_MODEL_ID, {
     remapForCodexOAuth: true,
     requestContext,
@@ -73,12 +74,12 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
 
 /**
  * Dynamic memory factory function.
- * Reads OM thresholds from harness state via requestContext.
+ * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
 export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
-    const state = getHarnessState(requestContext);
+    const state = getAgentControllerState(requestContext);
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;

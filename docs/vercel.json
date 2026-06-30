@@ -607,7 +607,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/docs/build-with-ai/mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
       "permanent": true
     },
     {
@@ -753,6 +753,86 @@
     {
       "source": "/docs/agents/response-caching",
       "destination": "/docs/agents/processors#response-caching",
+      "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/skills",
+      "destination": "/docs/getting-started/build-with-ai#mastra-skills",
+      "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming",
+      "destination": "/guides/concepts/streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/overview",
+      "destination": "/guides/concepts/streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/events",
+      "destination": "/guides/concepts/streaming#event-types",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/tool-streaming",
+      "destination": "/docs/agents/using-tools#streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/workflow-streaming",
+      "destination": "/docs/workflows/overview#inspecting-workflow-stream-payloads",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/background-task-streaming",
+      "destination": "/docs/agents/background-tasks#subscribe-to-all-task-events",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/modes",
+      "destination": "/docs/agent-controller/modes",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/overview",
+      "destination": "/docs/agent-controller/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/session",
+      "destination": "/docs/agent-controller/session",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/subagents",
+      "destination": "/docs/agent-controller/subagents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/threads-and-state",
+      "destination": "/docs/agent-controller/threads-and-state",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/tool-approvals",
+      "destination": "/docs/agent-controller/tool-approvals",
+      "permanent": true
+    },
+    {
+      "source": "/reference/harness/harness-class",
+      "destination": "/reference/agent-controller/agent-controller-class",
+      "permanent": true
+    },
+    {
+      "source": "/reference/harness/session",
+      "destination": "/reference/agent-controller/session",
       "permanent": true
     }
   ]

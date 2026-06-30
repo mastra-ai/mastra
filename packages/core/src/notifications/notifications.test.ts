@@ -220,7 +220,11 @@ describe('notification inbox', () => {
       resourceId: 'resource-1',
       agentId: 'agent-1',
     });
-    const sendSignal = vi.fn(signal => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn(signal => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+      persisted: Promise.resolve(),
+    }));
     const tool = createNotificationInboxTool({ storage });
 
     await expect(tool.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } } as any)).resolves.toMatchObject(
@@ -380,7 +384,7 @@ describe('notification inbox', () => {
     const sent: any[] = [];
     const sendSignal = vi.fn((signal, target) => {
       sent.push({ signal, target });
-      return { accepted: true, runId: 'run-1', signal };
+      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }), signal };
     });
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     await storage.createNotification({
@@ -421,7 +425,10 @@ describe('notification inbox', () => {
   it('records delivery failure when a notification signal is rejected', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: false, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('signal routing failed: no model configured')),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     await storage.createNotification({
       id: 'n1',
@@ -439,12 +446,14 @@ describe('notification inbox', () => {
 
     expect(result.delivered).toEqual([]);
     expect(result.signals).toEqual([]);
-    expect(result.failed).toMatchObject([{ record: { id: 'n1' }, error: 'Notification n1 signal was rejected' }]);
+    expect(result.failed).toMatchObject([
+      { record: { id: 'n1' }, error: 'signal routing failed: no model configured' },
+    ]);
     const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
     expect(stored).toMatchObject({
       status: 'pending',
       deliveryAttempts: 1,
-      lastDeliveryError: 'Notification n1 signal was rejected',
+      lastDeliveryError: 'signal routing failed: no model configured',
     });
     expect(stored?.deliveredSignalId).toBeUndefined();
   });
@@ -452,7 +461,10 @@ describe('notification inbox', () => {
   it('groups due summary notifications by agent, resource, and thread', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     for (const id of ['n1', 'n2']) {
       await storage.createNotification({
@@ -494,7 +506,10 @@ describe('notification inbox', () => {
   it('records summary delivery failure when a notification summary signal is rejected', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: false, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('signal routing failed: no model configured')),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
     await storage.createNotification({
       id: 'n1',
@@ -513,14 +528,14 @@ describe('notification inbox', () => {
     expect(result.delivered).toEqual([]);
     expect(result.signals).toEqual([]);
     expect(result.failed).toMatchObject([
-      { record: { id: 'n1' }, error: 'Notification summary for thread thread-1 was rejected' },
+      { record: { id: 'n1' }, error: 'signal routing failed: no model configured' },
     ]);
     const stored = await storage.getNotification({ threadId: 'thread-1', id: 'n1' });
     expect(stored).toMatchObject({
       status: 'pending',
       summaryAt: now,
       deliveryAttempts: 1,
-      lastDeliveryError: 'Notification summary for thread thread-1 was rejected',
+      lastDeliveryError: 'signal routing failed: no model configured',
     });
     expect(stored?.summarySignalId).toBeUndefined();
   });
@@ -528,7 +543,10 @@ describe('notification inbox', () => {
   it('summarizes high-priority active notifications before full idle delivery', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
     const getPubSub = vi.fn();
     const mastra = { getAgentById: vi.fn(async () => ({ id: 'agent-1', getPubSub, sendSignal })) } as any;
     await storage.createNotification({
@@ -574,7 +592,10 @@ describe('notification inbox', () => {
   it('skips high-priority full delivery after it has already been read', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({ accepted: true, runId: 'run-1', signal }));
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
     const mastra = { getAgentById: vi.fn(async () => ({ id: 'agent-1', sendSignal })) } as any;
     await storage.createNotification({
       id: 'n1',
@@ -601,8 +622,7 @@ describe('notification inbox', () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
     const sendSignal = vi.fn((signal, _target) => ({
-      accepted: true,
-      runId: 'run-1',
+      accepted: Promise.resolve({ action: 'persist' }),
       signal,
       persisted: Promise.resolve(),
     }));

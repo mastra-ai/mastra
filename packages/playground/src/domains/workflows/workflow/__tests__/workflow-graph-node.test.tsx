@@ -1,17 +1,22 @@
-// @vitest-environment jsdom
+import type { GetWorkflowResponse } from '@mastra/client-js';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
+import type * as React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-context';
+import { WorkflowRunContext } from '../../context/workflow-run-context';
+import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
+import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
 import { WorkflowGraphNode } from '../workflow-graph-node';
 import { resolveWorkflowGraphStep, WORKFLOW_STEP_NODE_TYPE } from '../workflow-step-node-utils';
 import type { WorkflowStepNode, WorkflowStepNodeData } from '../workflow-step-node-utils';
 
 afterEach(() => cleanup());
 
-const renderNode = (data: WorkflowStepNodeData) => {
+type RunContextValue = React.ComponentProps<typeof WorkflowRunContext.Provider>['value'];
+
+const renderNode = (data: WorkflowStepNodeData, contextValue?: RunContextValue) => {
   const props = {
     id: data.label,
     type: WORKFLOW_STEP_NODE_TYPE,
@@ -26,12 +31,23 @@ const renderNode = (data: WorkflowStepNodeData) => {
 
   return render(
     <ReactFlowProvider>
-      <WorkflowStepDetailProvider>
-        <WorkflowGraphNode {...props} stepsFlow={{}} />
-      </WorkflowStepDetailProvider>
+      <WorkflowRunContext.Provider value={(contextValue ?? {}) as RunContextValue}>
+        <WorkflowSelectedStepProvider>
+          <WorkflowStepDetailProvider>
+            <WorkflowGraphNode {...props} stepsFlow={{}} />
+          </WorkflowStepDetailProvider>
+        </WorkflowSelectedStepProvider>
+      </WorkflowRunContext.Provider>
     </ReactFlowProvider>,
   );
 };
+
+function stepGraph(...stepIds: string[]): GetWorkflowResponse['stepGraph'] {
+  return stepIds.map(stepId => ({
+    type: 'step',
+    step: { id: stepId, description: '' },
+  })) as GetWorkflowResponse['stepGraph'];
+}
 
 describe('WorkflowGraphNode', () => {
   it('renders map steps through the unified default node surface', async () => {
@@ -52,6 +68,42 @@ describe('WorkflowGraphNode', () => {
     expect(screen.queryByText('MAP')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Step actions' }));
     expect(await screen.findByText('Map config')).not.toBeNull();
+  });
+
+  it('marks the step a paused run is waiting on as the active step', () => {
+    // step-a already succeeded, so the paused run is waiting on step-b. The waiting
+    // step must be visibly marked so the user can always tell which step is active,
+    // even when the viewport fails to recenter on it.
+    renderNode(
+      {
+        label: 'step-b',
+        stepId: 'step-b',
+        workflowStep: resolveWorkflowGraphStep({ type: 'step', step: { id: 'step-b', description: '' } }),
+      },
+      {
+        workflow: { name: 'Wf', stepGraph: stepGraph('step-a', 'step-b') },
+        result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
+      } as unknown as RunContextValue,
+    );
+
+    expect(screen.getByTestId('workflow-default-node').getAttribute('data-workflow-step-waiting')).toBe('true');
+  });
+
+  it('does not mark a non-waiting step as the active step', () => {
+    // The run is waiting on step-b, so step-a (already succeeded) must not be marked.
+    renderNode(
+      {
+        label: 'step-a',
+        stepId: 'step-a',
+        workflowStep: resolveWorkflowGraphStep({ type: 'step', step: { id: 'step-a', description: '' } }),
+      },
+      {
+        workflow: { name: 'Wf', stepGraph: stepGraph('step-a', 'step-b') },
+        result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
+      } as unknown as RunContextValue,
+    );
+
+    expect(screen.getByTestId('workflow-default-node').getAttribute('data-workflow-step-waiting')).toBeNull();
   });
 
   it('renders conditions through the unified condition node surface', () => {
