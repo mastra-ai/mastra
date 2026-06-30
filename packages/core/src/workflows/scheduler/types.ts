@@ -1,3 +1,5 @@
+import type { ScheduleTarget } from '../../storage/domains/schedules/base';
+
 /**
  * Declarative schedule configuration for a workflow. When set on a workflow,
  * the scheduler will publish a `workflow.start` event on the cron schedule.
@@ -60,9 +62,9 @@ export type WorkflowScheduleInput<TInput = unknown, TState = unknown, TRequestCo
   | WorkflowScheduleConfig<TInput, TState, TRequestContext>[];
 
 /**
- * Configuration for the `WorkflowScheduler` component owned by Mastra.
+ * Configuration for the `Scheduler` component owned by Mastra.
  */
-export type WorkflowSchedulerConfig = {
+export type SchedulerConfig = {
   /**
    * Explicitly enable the scheduler even when no declarative schedules
    * are present. Useful when schedules are managed imperatively.
@@ -81,14 +83,17 @@ export type WorkflowSchedulerConfig = {
    */
   onError?: (err: unknown, context: { scheduleId: string }) => void;
   /**
-   * Predicate used to check whether a workflow id is currently registered
-   * with the host Mastra instance. When provided, the scheduler refuses to
-   * fire schedules whose target workflow is unknown and deletes the row
-   * after a small number of consecutive misses (see `missesBeforeDelete`).
+   * Predicate used to check whether a schedule's target is currently
+   * registered with the host Mastra instance. For workflow targets the
+   * predicate should resolve the workflow id; for heartbeat targets it
+   * should resolve the agent id. When provided, the scheduler refuses to
+   * fire schedules whose target is unknown and deletes the row after a
+   * small number of consecutive misses (see `missesBeforeDelete`).
    *
-   * Wired up by `SchedulerWorker` from `mastra.getWorkflowById(...)`.
+   * Wired up by `SchedulerWorker` from `mastra.getWorkflowById(...)` and
+   * `mastra.getAgentById(...)`.
    */
-  isWorkflowRegistered?: (workflowId: string) => boolean;
+  isTargetReady?: (target: ScheduleTarget) => boolean;
   /**
    * Number of consecutive ticks a schedule's target workflow may be missing
    * before the scheduler deletes the row. Defaults to 3 (≈30s with the
@@ -98,3 +103,10 @@ export type WorkflowSchedulerConfig = {
    */
   missesBeforeDelete?: number;
 };
+
+/**
+ * @deprecated Renamed to {@link SchedulerConfig}. The scheduler now drives both
+ * workflow and heartbeat schedules, so the `Workflow`-prefixed name is no longer
+ * accurate. This alias will be removed in a future major release.
+ */
+export type WorkflowSchedulerConfig = SchedulerConfig;

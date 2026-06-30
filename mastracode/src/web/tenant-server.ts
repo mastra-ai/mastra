@@ -87,7 +87,7 @@ const defaultBuildTenantApp: TenantAppBuilder = async (storage, { baseConfig, co
   return {
     fetch: (request, ...rest) => app.fetch(request as Request, ...(rest as [])),
     stop: async () => {
-      await Promise.allSettled([result.controller.getMastra()?.stopWorkers(), result.controller.stopHeartbeats()]);
+      await Promise.allSettled([result.controller.getMastra()?.stopWorkers(), result.controller.stopIntervals()]);
     },
   };
 };

@@ -7,7 +7,7 @@
  */
 
 import { Agent } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, globalRunRegistry } from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
@@ -453,5 +453,170 @@ describe('createInngestAgent with Mastra auto-registration', () => {
     // Verify workflow is registered (only once)
     const workflow = mastra.getWorkflow(InngestDurableStepIds.AGENTIC_LOOP);
     expect(workflow).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Parity surface tests
+//
+// These tests exercise the InngestAgent execution surface that was added to
+// match DurableAgent: the widened InngestAgentStreamOptions, the abort path,
+// untilIdle on resume(), and the generate()/resumeGenerate() wrappers.
+//
+// We deliberately avoid spinning up a real Inngest dev server. `inngest.send`
+// is stubbed to a no-op so stream()/resume() can complete their non-durable
+// preparation phase (preparation, run-registry registration, stream
+// subscription) and we can assert the observable side effects on
+// globalRunRegistry and on the returned result. The durable workflow itself
+// is covered by the integration suite.
+// ---------------------------------------------------------------------------
+describe('InngestAgent parity surface', () => {
+  const inngest = new Inngest({
+    id: 'parity-tests',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  // Replace inngest.send with a no-op so stream()/resume() don't attempt
+  // a real network roundtrip; the only thing under test here is the
+  // non-durable preparation/registry path on the agent itself.
+  function stubInngestSend(target: Inngest = inngest) {
+    return vi.spyOn(target as any, 'send').mockResolvedValue(undefined as any);
+  }
+
+  function makeAgent(id: string) {
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+  }
+
+  // The agent's CachingPubSub wraps an InngestPubSub. Without a real Inngest
+  // dev server, terminal stream events (finish/error/abort) try to publish
+  // over inngest realtime and produce unhandled fetch rejections. Swap the
+  // inner with an in-process broker so the surface tests stay self-contained.
+  function makeIsolatedAgent(id: string) {
+    const durableAgent = createInngestAgent({ agent: makeAgent(id), inngest });
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+    return durableAgent;
+  }
+
+  it('threads widened execution options through prepare() into workflow input', async () => {
+    // Slice 1: prove the widened option surface actually flows to
+    // prepareForDurableExecution. We use prepare() instead of stream() because
+    // it returns workflowInput synchronously without needing to mock the
+    // workflow trigger, and prepare() shares the preparation path with
+    // stream() / generate().
+    const durableAgent = createInngestAgent({ agent: makeAgent('parity-prepare'), inngest });
+
+    const result = await durableAgent.prepare([{ role: 'user', content: 'hi' }], {
+      maxSteps: 7,
+      disableBackgroundTasks: true,
+      actor: { id: 'actor-1', type: 'user' } as any,
+      system: 'extra system message',
+      tracingOptions: { metadata: { feature: 'parity' } } as any,
+    });
+
+    const opts = result.workflowInput.options;
+    expect(opts.maxSteps).toBe(7);
+    expect(opts.disableBackgroundTasks).toBe(true);
+    expect(opts.actor).toEqual({ id: 'actor-1', type: 'user' });
+    expect(opts.systemMessage).toBe('extra system message');
+    expect(opts.tracingOptions).toEqual({ metadata: { feature: 'parity' } });
+  });
+
+  it('exposes result.abort and flips the registry abortSignal', async () => {
+    // Slice 2: stream() must own an AbortController, expose it via
+    // result.abort, and surface its signal on the run-registry entry so the
+    // durable LLM step (when co-located) can short-circuit.
+    const durableAgent = makeIsolatedAgent('parity-abort');
+    const sendSpy = stubInngestSend();
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      expect(typeof result.abort).toBe('function');
+      const entry = globalRunRegistry.get(result.runId);
+      expect(entry?.abortSignal).toBeInstanceOf(AbortSignal);
+      expect(entry?.abortSignal?.aborted).toBe(false);
+
+      result.abort('user-cancelled');
+
+      expect(entry?.abortSignal?.aborted).toBe(true);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('forwards an external abortSignal onto the internal controller', async () => {
+    // External signal must be wired through so either source (caller's
+    // signal or result.abort) flips the registry-tracked AbortSignal that
+    // workflow steps observe.
+    const durableAgent = makeIsolatedAgent('parity-abort-external');
+    const sendSpy = stubInngestSend();
+
+    const external = new AbortController();
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      abortSignal: external.signal,
+    });
+    try {
+      const entry = globalRunRegistry.get(result.runId);
+      expect(entry?.abortSignal?.aborted).toBe(false);
+
+      external.abort(new Error('external-cancel'));
+
+      // The forwarded controller is flipped synchronously by the abort
+      // event listener installed in stream().
+      expect(entry?.abortSignal?.aborted).toBe(true);
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('tracks the workflow trigger promise on globalRunRegistry.workflowExecution', async () => {
+    // generate()/resumeGenerate() rely on awaiting workflowExecution after a
+    // suspend to make sure the snapshot has landed before they return. This
+    // covers the registration side of that contract.
+    const durableAgent = makeIsolatedAgent('parity-workflow-exec');
+    const sendSpy = stubInngestSend();
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+    try {
+      // The `ready.then(() => triggerWorkflow(...))` chain attaches the
+      // workflowExecution promise on the next microtask after `ready` settles.
+      // Poll the registry until the promise lands instead of sleeping a fixed
+      // amount of time, so this stays deterministic across machine speeds.
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(result.runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(result.runId);
+      }
+      expect(entry?.workflowExecution).toBeInstanceOf(Promise);
+      // The promise should settle once inngest.send resolves (stubbed to
+      // undefined). Awaiting it shouldn't throw.
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+      expect(sendSpy).toHaveBeenCalled();
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('exposes generate() and resumeGenerate() with durable signatures', () => {
+    // Slice 5 surface check. The Proxy used to forward both methods to the
+    // underlying Agent; after parity work generate() must be the durable
+    // implementation defined on the InngestAgent factory, and
+    // resumeGenerate() must exist as well (regardless of test environment
+    // limitations).
+    const durableAgent = createInngestAgent({ agent: makeAgent('parity-generate-surface'), inngest });
+    expect(typeof durableAgent.generate).toBe('function');
+    expect(typeof durableAgent.resumeGenerate).toBe('function');
+    // The Proxy forwarded the underlying Agent's generate signature; the
+    // durable replacement is the function defined on the inngestAgent object
+    // itself, so it should NOT be the agent's bound generate.
+    expect(durableAgent.generate).not.toBe((durableAgent.agent as any).generate);
   });
 });

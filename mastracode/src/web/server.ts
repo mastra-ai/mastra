@@ -176,7 +176,7 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
       await new Promise<void>(resolve => server.close(() => resolve()));
       await Promise.allSettled([
         controller.getMastra()?.stopWorkers(),
-        controller.stopHeartbeats(),
+        controller.stopIntervals(),
         tenantDispatcher?.stopAll(),
       ]);
     },

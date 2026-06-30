@@ -649,7 +649,7 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   await Promise.allSettled([
     mcpManager?.disconnect(),
     controller.getMastra()?.stopWorkers(),
-    controller?.stopHeartbeats(),
+    controller?.stopIntervals(),
     closeSignalsPubSub?.(),
   ]);
 

@@ -1,5 +1,133 @@
 # @mastra/client-js
 
+## 1.29.0-alpha.5
+
+### Minor Changes
+
+- **Added** heartbeats: schedule an agent to run on a recurring cron, either inside an existing conversation thread or on its own. ([#18184](https://github.com/mastra-ai/mastra/pull/18184))
+
+  A heartbeat fires a prompt to an agent on a schedule. When it has a thread, the run is delivered into that thread as a normal agent signal, so anything watching the thread sees it like any other message; without a thread, the agent just runs in isolation. Each heartbeat has its own id and an optional `name`, so one agent or thread can have several heartbeats with different schedules and prompts. The id is generated for you, or you can pass your own `id` to `create` for a stable handle (it's normalized to `hb_<slug>`). Heartbeats are persisted, so they keep firing across process restarts with no extra setup.
+
+  ```ts
+  const hb = await mastra.heartbeats.create({
+    agentId: 'chef',
+    name: 'morning-checkin',
+    threadId,
+    resourceId,
+    cron: '*/5 * * * *',
+    prompt: 'Check in on the user',
+    ifActive: { behavior: 'discard' }, // skip if the user is mid-conversation
+    ifIdle: { behavior: 'wake' }, // wake the agent if the thread is idle
+  });
+
+  // Threadless: run the agent on a cron with no conversation.
+  await mastra.heartbeats.create({
+    agentId: 'chef',
+    cron: '0 * * * *',
+    prompt: 'Run the hourly summary',
+  });
+
+  await mastra.heartbeats.list({ agentId: 'chef' });
+  await mastra.heartbeats.get(hb.id);
+  await mastra.heartbeats.update(hb.id, { prompt: 'check in gently' });
+  await mastra.heartbeats.pause(hb.id);
+  await mastra.heartbeats.resume(hb.id);
+  await mastra.heartbeats.run(hb.id); // fire once now
+  await mastra.heartbeats.delete(hb.id);
+  ```
+
+  The same CRUD is available over HTTP through `@mastra/server` (under `/api/heartbeats`) and as top-level methods on the `@mastra/client-js` client (`client.createHeartbeat`, `client.getHeartbeat`, `client.listHeartbeats`, etc.).
+
+  **Lifecycle hooks**
+
+  React to heartbeat runs via `heartbeat` on the `Mastra` constructor. It's a single hook bundle that runs for every agent's heartbeats; each hook receives the firing `agentId` so you can branch on it. `prepare` resolves fire-time parameters (for example, creating a fresh thread per fire), and `onFinish` / `onError` / `onAbort` mirror `agent.stream`.
+
+  ```ts
+  new Mastra({
+    // ...
+    heartbeat: {
+      // Return overrides, `null` to skip this fire, or `undefined` to use defaults.
+      prepare: async ({ agentId, heartbeat }) => {
+        if (agentId === 'chef' && heartbeat.name === 'daily-digest') {
+          return { threadId: await createDailyThread(), resourceId: 'slack:U095PUH0FKL' };
+        }
+      },
+      onFinish: ({ agentId, outcome, result, heartbeat }) => {
+        metrics.record({ agentId, heartbeat: heartbeat.name, outcome });
+      },
+      onError: ({ agentId, error, phase, heartbeat }) => {
+        alerts.send(`heartbeat ${agentId}/${heartbeat.name} failed in ${phase}: ${error.message}`);
+      },
+    },
+  });
+  ```
+
+  **Signal shaping**
+
+  A heartbeat fire surfaces to the agent as a signal. By default it uses the `notification` type and renders as `<heartbeat>…</heartbeat>`; override `signalType` and `tagName` to change either. `ifActive` and `ifIdle` mirror the `agent.sendSignal` options shape (`{ behavior, attributes }`, plus `streamOptions` on `ifIdle`) and stay JSON-serializable so they persist with the schedule. `ifIdle.streamOptions` currently accepts `requestContext`, which is rehydrated onto the woken run. Top-level `attributes` are rendered on the signal tag, and top-level `providerOptions` are merged into the signal payload on every fire.
+
+  ```ts
+  await mastra.heartbeats.create({
+    agentId: 'chef',
+    threadId,
+    resourceId,
+    cron: '*/5 * * * *',
+    prompt: 'Check in on the user',
+    tagName: 'check-in', // renders as <check-in>…</check-in>
+    attributes: { source: 'cron' },
+    providerOptions: { openai: { store: false } },
+    ifIdle: {
+      behavior: 'wake',
+      streamOptions: { requestContext: { locale: 'en-US' } },
+    },
+  });
+  ```
+
+- Added storage-backed discovery of suspended agent runs, so human-in-the-loop approval UIs can recover a pending run after a page refresh or server restart. ([#17898](https://github.com/mastra-ai/mastra/pull/17898))
+
+  `agent.listSuspendedRuns()` lists runs waiting on a tool-call approval or on a tool that called `suspend()`. Unlike the in-memory `getActiveThreadRunId()`, it reads from storage, so it works after a restart and across multiple server instances:
+
+  ```ts
+  const { runs, total } = await agent.listSuspendedRuns({ threadId, resourceId });
+  if (runs[0]) {
+    // runs[0].toolCalls -> [{ toolCallId, toolName, args, requiresApproval }]
+    await agent.approveToolCall({ runId: runs[0].runId, toolCallId: runs[0].toolCalls[0].toolCallId });
+  }
+  ```
+
+  Supports `threadId`/`resourceId`/date filters and pagination, mirroring `listWorkflowRuns()`. The same surface is exposed over HTTP as `GET /agents/:agentId/suspended-runs` and on the client SDK as `agent.listSuspendedRuns()`; server-enforced request-context values take precedence over client query parameters, so clients cannot list runs outside their scope.
+
+  `sendToolApproval()` now falls back to this storage-backed discovery when no active run is found in memory for the thread, so approvals keep working after a restart. If several suspended runs match, it throws an error asking for a `toolCallId` to disambiguate.
+
+  **Why:** approval UIs previously had no public way to recover a suspended run after a refresh or restart, forcing apps to parse internal workflow snapshots.
+
+### Patch Changes
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+
+## 1.28.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+
+## 1.28.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/schema-compat@1.3.2-alpha.0
+
+## 1.28.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+
 ## 1.28.1-alpha.1
 
 ### Patch Changes

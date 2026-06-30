@@ -1,4 +1,3 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,18 +11,9 @@ import AgentBuilderAgentEdit from '../edit';
 import { authEnabledNoRbacCapabilities, currentUser } from './fixtures/auth';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-
-// toast/store are allowed presentational seams. The gating hooks
-// (useCurrentUser, useBuilderAgentAccess, useBuilderAgentFeatures) run for real
-// against the MSW auth/settings handlers below.
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
+vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },

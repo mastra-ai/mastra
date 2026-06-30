@@ -12,7 +12,7 @@ vi.mock('../index.js', () => ({
       mastra: { __storage: config.storage },
       controller: {
         getMastra: () => ({ stopWorkers: vi.fn(async () => {}) }),
-        stopHeartbeats: vi.fn(async () => {}),
+        stopIntervals: vi.fn(async () => {}),
       },
     };
   }),

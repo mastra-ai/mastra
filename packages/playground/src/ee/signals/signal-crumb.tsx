@@ -1,4 +1,4 @@
-import { getSignalName } from '@mastra/playground-ui';
+import { getSignalName } from '@mastra/playground-ui/ee/signals/components/signal-details-utils';
 import { useParams } from 'react-router';
 
 export function SignalCrumb() {

@@ -17,13 +17,15 @@ const scenario: WebScenario = {
 
     // After message_end the streaming flag should be false.
     const state = driver.state();
-    const assistantEntries = state.entries.filter(e => e.kind === 'assistant');
+    const assistantEntries = state.entries.filter(e => e.kind === 'message' && e.message.role === 'assistant');
     const last = assistantEntries[assistantEntries.length - 1];
-    if (!last || last.kind !== 'assistant') throw new Error('No assistant entry found');
-    if (last.streaming) throw new Error('Expected streaming=false after message_end, got true');
-    const assistantText = last.segments
-      .filter(s => s.kind === 'text')
-      .map(s => (s.kind === 'text' ? s.text : ''))
+    if (!last || last.kind !== 'message') throw new Error('No assistant entry found');
+    if (last.streaming !== false) {
+      throw new Error(`Expected streaming=false after message_end, got ${String(last.streaming)}`);
+    }
+    const assistantText = last.message.content.parts
+      .filter(part => part.type === 'text')
+      .map(part => (part.type === 'text' ? part.text : ''))
       .join('');
     if (!assistantText.includes('Streaming test response')) {
       throw new Error(`Unexpected text: ${assistantText}`);

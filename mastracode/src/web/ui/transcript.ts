@@ -1,4 +1,3 @@
-import { agentControllerMessageText } from '@mastra/client-js';
 import type {
   AgentControllerEvent,
   KnownAgentControllerEvent,
@@ -6,6 +5,9 @@ import type {
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
+
+import { toMastraDBMessage } from './agent-controller-message-accumulator';
 
 /**
  * Transcript model + reducer.
@@ -38,26 +40,14 @@ export interface ToolCall {
  * status/result, which arrives on separate tool_* events) lives in the entry's
  * `toolsById` map and is resolved at render time.
  */
-export type AssistantSegment =
-  | { kind: 'text'; text: string }
-  | { kind: 'thinking'; text: string }
-  | { kind: 'tool'; toolCallId: string };
-
-export interface AssistantEntry {
-  kind: 'assistant';
+export interface MessageEntry {
+  kind: 'message';
   id: string;
-  /** Ordered text / thinking / tool segments, in execution order. */
-  segments: AssistantSegment[];
-  /** Live tool state keyed by tool-call id, referenced by tool segments. */
-  toolsById: Record<string, ToolCall>;
+  message: MastraDBMessage;
+  /** Live tool state from tool_* events, overlaid by toolCallId without changing persisted message parts. */
+  runtimeTools?: Record<string, ToolCall>;
   /** True while the model is still generating tokens for this message. */
-  streaming: boolean;
-}
-
-export interface UserEntry {
-  kind: 'user';
-  id: string;
-  text: string;
+  streaming?: boolean;
   /** A steer (interjection) vs a normal message. */
   steer?: boolean;
 }
@@ -123,8 +113,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | UserEntry
-  | AssistantEntry
+  | MessageEntry
   | NoticeEntry
   | PromptEntry
   | NotificationEntry
@@ -248,7 +237,14 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         pending: true,
         entries: [
           ...state.entries,
-          { kind: 'user', id: `local-${Date.now()}-${noticeSeq++}`, text: action.text, steer: action.steer },
+          toMessageEntry(
+            toMastraDBMessage({
+              id: `local-${Date.now()}-${noticeSeq++}`,
+              role: 'user',
+              content: [{ type: 'text', text: action.text }],
+            }),
+            { steer: action.steer },
+          ),
         ],
       };
     case 'localNotice':
@@ -530,88 +526,60 @@ function hydrate(
   omProgress?: AgentControllerOMProgress,
   usage?: UsageSnapshot,
 ): TranscriptState {
-  const entries: TimelineEntry[] = [];
-  for (const message of messages) {
-    if (message.role === 'user') {
-      entries.push({ kind: 'user', id: message.id, text: agentControllerMessageText(message) });
-    } else if (message.role === 'assistant') {
-      const { segments, toolsById } = buildSegments(message);
-      entries.push({ kind: 'assistant', id: message.id, segments, toolsById, streaming: false });
-    }
-    // 'system' messages aren't shown in the transcript.
-  }
+  const entries = messages.map(message => toMessageEntry(toMastraDBMessage(message), { streaming: false }));
   return { ...initialTranscript, entries, modeId, modelId, threadId, omProgress, usage };
 }
 
-/**
- * Walk a message's content parts in order and produce ordered segments plus the
- * tool state they reference. `prevTools` carries forward live tool runtime
- * (streamed argsText / shell output / status) captured from tool_* events,
- * which the persisted content parts don't include.
- *
- * This mirrors the TUI's `AssistantMessageComponent`, which renders each
- * content part where it appears instead of concatenating text and grouping
- * tools.
- */
-function buildSegments(
-  message: AgentControllerMessage,
-  prevTools: Record<string, ToolCall> = {},
-): { segments: AssistantSegment[]; toolsById: Record<string, ToolCall> } {
-  const segments: AssistantSegment[] = [];
-  const toolsById: Record<string, ToolCall> = {};
-  let toolSeq = 0;
-  for (const part of message.content) {
-    if (part.type === 'text' && typeof part.text === 'string') {
-      if (part.text.length > 0) segments.push({ kind: 'text', text: part.text });
-    } else if (part.type === 'thinking' && typeof part.thinking === 'string') {
-      if (part.thinking.trim().length > 0) segments.push({ kind: 'thinking', text: part.thinking });
-    } else if (part.type === 'tool_call') {
-      const toolCallId = part.id ?? `${message.id}-tool-${toolSeq++}`;
-      const result = message.content.find(c => c.type === 'tool_result' && c.id === part.id);
-      const prev = prevTools[toolCallId];
-      toolsById[toolCallId] = {
-        toolCallId,
-        toolName: part.name ?? prev?.toolName ?? 'tool',
-        // Keep streamed args text; fall back to nothing.
-        argsText: prev?.argsText ?? '',
-        args: part.args ?? prev?.args,
-        // A present tool_result means the call resolved; otherwise keep the
-        // live status (running) seeded from tool_* events.
-        status: result ? (result.isError ? 'error' : 'done') : (prev?.status ?? 'running'),
-        result: result?.result ?? prev?.result,
-        output: prev?.output ?? '',
-      };
-      segments.push({ kind: 'tool', toolCallId });
-    }
-    // 'tool_result' parts are folded into their tool_call above.
-  }
-  return { segments, toolsById };
+function toMessageEntry(
+  message: MastraDBMessage,
+  options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
+): MessageEntry {
+  return {
+    kind: 'message',
+    id: message.id,
+    message,
+    runtimeTools: options.runtimeTools,
+    streaming: options.streaming,
+    steer: options.steer,
+  };
 }
 
 function upsertAssistant(state: TranscriptState, message: AgentControllerMessage, streaming: boolean): TranscriptState {
   if (message.role !== 'assistant') return state;
   const entries = [...state.entries];
-  const idx = entries.findIndex(e => e.kind === 'assistant' && e.id === message.id);
-  const prev = idx !== -1 ? (entries[idx] as AssistantEntry) : undefined;
-  const { segments, toolsById } = buildSegments(message, prev?.toolsById);
-
-  // Preserve any tools (and their segments) that arrived via tool_* events but
-  // aren't yet reflected in the streamed content — keeps a tool visible the
-  // instant it starts, before the next message_update lands.
-  if (prev) {
-    for (const seg of prev.segments) {
-      if (seg.kind === 'tool' && !toolsById[seg.toolCallId]) {
-        segments.push(seg);
-        const carried = prev.toolsById[seg.toolCallId];
-        if (carried) toolsById[seg.toolCallId] = carried;
-      }
+  let idx = entries.findIndex(e => e.kind === 'message' && e.message.role === 'assistant' && e.id === message.id);
+  if (idx === -1) {
+    const latestIdx = latestAssistantIndex(entries);
+    const latest = latestIdx === -1 ? undefined : entries[latestIdx];
+    if (latest?.kind === 'message' && latest.message.role === 'assistant' && latest.id.startsWith('assistant-tools-')) {
+      idx = latestIdx;
     }
   }
+  const prev = idx !== -1 ? entries[idx] : undefined;
+  const prevEntry = prev?.kind === 'message' ? prev : undefined;
+  const nextMessage = preserveRuntimeToolParts(toMastraDBMessage(message), prevEntry?.message);
+  const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
-  const entry: AssistantEntry = { kind: 'assistant', id: message.id, segments, toolsById, streaming };
   if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
   return { ...state, entries };
+}
+
+function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBMessage): MastraDBMessage {
+  if (!previous) return message;
+
+  const parts = [...message.content.parts];
+  const existingToolIds = new Set(parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)));
+
+  for (const part of previous.content.parts) {
+    const toolCallId = toolCallIdForPart(part);
+    if (toolCallId && !existingToolIds.has(toolCallId)) {
+      parts.push(part);
+      existingToolIds.add(toolCallId);
+    }
+  }
+
+  return { ...message, content: { ...message.content, parts } };
 }
 
 /** True when the most recent assistant entry has any visible text. */
@@ -619,14 +587,17 @@ function hasAssistantText(state: TranscriptState): boolean {
   const idx = latestAssistantIndex(state.entries);
   if (idx === -1) return false;
   const entry = state.entries[idx];
-  if (entry.kind !== 'assistant') return false;
-  return entry.segments.some(s => s.kind === 'text' && s.text.trim().length > 0);
+  if (entry.kind !== 'message') return false;
+  return entry.message.content.parts.some(
+    part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
+  );
 }
 
 /** Find the latest assistant entry, creating one if none exists. */
 function latestAssistantIndex(entries: TimelineEntry[]): number {
   for (let i = entries.length - 1; i >= 0; i--) {
-    if (entries[i].kind === 'assistant') return i;
+    const entry = entries[i];
+    if (entry.kind === 'message' && entry.message.role === 'assistant') return i;
   }
   return -1;
 }
@@ -640,36 +611,88 @@ function withTool(
   const entries = [...state.entries];
   let idx = latestAssistantIndex(entries);
   if (idx === -1) {
-    entries.push({
-      kind: 'assistant',
+    const message = toMastraDBMessage({
       id: `assistant-tools-${Date.now()}`,
-      segments: [],
-      toolsById: {},
-      streaming: false,
+      role: 'assistant',
+      content: [],
     });
+    entries.push(toMessageEntry(message, { streaming: false }));
     idx = entries.length - 1;
   }
-  const assistant = entries[idx] as AssistantEntry;
-  const toolsById = { ...assistant.toolsById };
-  const existing = toolsById[toolCallId] ?? {
-    toolCallId,
-    toolName: seed?.toolName ?? 'tool',
+
+  const entry = entries[idx];
+  if (entry.kind !== 'message') return state;
+
+  const parts = [...entry.message.content.parts];
+  const runtimeTools = { ...(entry.runtimeTools ?? {}) };
+  const existing =
+    runtimeTools[toolCallId] ?? toolCallFromPart(parts.find(part => toolCallIdForPart(part) === toolCallId));
+  const tool = update(
+    existing ?? {
+      toolCallId,
+      toolName: seed?.toolName ?? 'tool',
+      argsText: '',
+      args: seed?.args,
+      status: 'running',
+      output: '',
+    },
+  );
+  runtimeTools[toolCallId] = tool;
+
+  const partIndex = parts.findIndex(part => toolCallIdForPart(part) === toolCallId);
+  if (partIndex === -1) parts.push(toolPart(tool));
+  else parts[partIndex] = toolPart(tool);
+
+  entries[idx] = {
+    ...entry,
+    runtimeTools,
+    message: { ...entry.message, content: { ...entry.message.content, parts } },
+  };
+  return { ...state, entries };
+}
+
+function toolCallIdForPart(part: MastraMessagePart): string | undefined {
+  if (part.type !== 'tool-invocation') return undefined;
+  return part.toolInvocation.toolCallId;
+}
+
+function toolCallFromPart(part: MastraMessagePart | undefined): ToolCall | undefined {
+  if (!part || part.type !== 'tool-invocation') return undefined;
+  const invocation = part.toolInvocation;
+  return {
+    toolCallId: invocation.toolCallId,
+    toolName: invocation.toolName,
     argsText: '',
-    args: seed?.args,
-    status: 'running' as const,
+    args: 'args' in invocation ? invocation.args : undefined,
+    status: invocation.state === 'result' ? 'done' : 'running',
+    result: 'result' in invocation ? invocation.result : undefined,
     output: '',
   };
-  toolsById[toolCallId] = update(existing);
+}
 
-  // Ensure a tool segment exists in execution order. A tool's first event can
-  // arrive before the message_update that would place it from content, so we
-  // append the segment here to keep it inline at the point it started.
-  const segments = assistant.segments.some(s => s.kind === 'tool' && s.toolCallId === toolCallId)
-    ? assistant.segments
-    : [...assistant.segments, { kind: 'tool' as const, toolCallId }];
+function toolPart(tool: ToolCall): MastraMessagePart {
+  if (tool.status === 'running') {
+    return {
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'call',
+        toolCallId: tool.toolCallId,
+        toolName: tool.toolName,
+        args: tool.args,
+      },
+    };
+  }
 
-  entries[idx] = { ...assistant, segments, toolsById };
-  return { ...state, entries };
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: tool.toolCallId,
+      toolName: tool.toolName,
+      args: tool.args,
+      result: tool.result,
+    },
+  };
 }
 
 function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptState {

@@ -118,7 +118,7 @@ export abstract class ObservationStrategy {
         });
       }
 
-      return { observed: true, usage: output.usage };
+      return { observed: true, usage: output.usage, providerMetadata: output.providerMetadata };
     } catch (error) {
       await this.emitFailedMarkers(cycleId, error);
 
