@@ -33,7 +33,7 @@ Use this structure from the start and fill it in as each step/branch gathers con
 **Severity:** <🔴 critical|🟠 high|🟡 medium|🟢 low|pending>
 **Scope:** <affected package/API/feature or `Pending.`>
 **Assessment:** <concise assessment comment or `Pending.`>
-**Linked PR:** <none|#<number>|multiple: #<numbers>|pending>
+**Linked PR:** <closing/fixing #<number>|multiple: #<numbers>|none|pending>
 **CODEOWNER:** [not available]
 **Recommended next step:** <draft maintainer comment|author pre-review|maintainer notes|PR critique|compare PRs|gh-debug-issue|end triage|pending>
 
@@ -49,7 +49,7 @@ Use this structure from the start and fill it in as each step/branch gathers con
 
 #### Linked PR context
 
-- <concise PR context or `Pending.`>
+- <closing/fixing PR context; mention-only/cross-referenced PRs only if useful for debugging, or `Pending.`>
 
 #### Repo context
 
@@ -120,7 +120,8 @@ Do not present maintainer notes as final approval or rejection. Make explicit, d
 - [ ] Fetch issue context: title, body, state, activity/comments, and linked PR references.
 
 ```bash
-gh issue view <ISSUE> --comments --json number,title,state,author,assignees,createdAt,updatedAt,body,comments,url
+ISSUE=<issue-number>
+gh issue view "$ISSUE" --comments --json number,title,state,author,assignees,createdAt,updatedAt,body,comments,url
 ```
 
 - [ ] If `state != OPEN` → stop immediately.
@@ -132,9 +133,28 @@ gh issue view <ISSUE> --comments --json number,title,state,author,assignees,crea
 
 - [ ] If `state == OPEN` → proceed.
 
-- [ ] Identify linked PRs from issue body/comments/timeline references/explicit PR links.
+- [ ] Identify linked PRs with this priority: closing/fixing PRs drive branch routing; mention-only or cross-referenced PRs are supporting context only.
 
-- [ ] For each linked PR, fetch PR context:
+```bash
+OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+OWNER=${OWNER_REPO%/*}
+REPO=${OWNER_REPO#*/}
+gh api graphql \
+  -f owner="$OWNER" \
+  -f repo="$REPO" \
+  -F number="$ISSUE" \
+  -f query='query($owner:String!, $repo:String!, $number:Int!) { repository(owner:$owner, name:$repo) { issue(number:$number) { closedByPullRequestsReferences(first:20) { nodes { number title state url } } } } }' \
+  --jq '.data.repository.issue.closedByPullRequestsReferences.nodes'
+
+gh search prs "$ISSUE" --repo "$OWNER_REPO" --json number,title,state,url --limit 20
+
+gh api repos/{owner}/{repo}/issues/"$ISSUE"/timeline --paginate \
+  --jq '.[] | select(.event == "cross-referenced" and .source.issue.pull_request) | {number: .source.issue.number, state: .source.issue.state, title: .source.issue.title, url: .source.issue.html_url}'
+```
+
+- [ ] Deduplicate PRs by number before choosing a branch.
+
+- [ ] For each closing/fixing PR, fetch PR context:
 
 ```bash
 gh pr view <PR> --comments --json number,title,state,author,labels,assignees,reviewRequests,reviews,mergeStateStatus,statusCheckRollup,body,comments,url
@@ -250,7 +270,7 @@ Use when the issue is spam, unrelated, invalid, unsupported, or clearly non-acti
 
 ### Branch B: One linked PR
 
-Use when exactly one relevant linked PR exists.
+Use when exactly one PR clearly closes or fixes the issue.
 
 - [ ] Run the actual `goal/critique-pr` command for the linked PR and pass on the full issue triage context.
 
@@ -274,7 +294,7 @@ Use when exactly one relevant linked PR exists.
 
 ### Branch C: Multiple linked PRs
 
-Use when multiple relevant linked PRs exist.
+Use when multiple PRs clearly close or fix the issue.
 
 - [ ] Run the actual `goal/critique-pr` command for each linked PR and pass on the full issue triage context.
 
@@ -305,7 +325,7 @@ Use when multiple relevant linked PRs exist.
 
 ### Branch D: No linked PR
 
-Use when no relevant linked PR exists.
+Use when no PR clearly closes or fixes the issue.
 
 - [ ] Run the actual `goal/gh-debug-issue` command for the issue and pass on the full issue triage context.
 
