@@ -90,14 +90,15 @@ When PR critique finds something the PR author should address, prepare a separat
 - include only the minimum issue context needed to explain why it matters
 - avoid broad triage metadata unless it helps the author act
 
-For maintainer triage context comments, write review notes for a human maintainer/codeowner. Include concise context that makes review easier:
+For maintainer triage context comments, write review notes for a human maintainer/codeowner. Make the comment readable at a glance:
 
-- issue severity
-- issue scope/affected area
-- why the PR appears relevant
-- what evidence was checked
-- what still needs human verification
-- recommended maintainer action
+- start with a clear title that includes the severity emoji and label, for example `## 🟠 High: PR triage context` or `## 🟡 Medium: Maintainer review notes`
+- use short headed sections or bold labels such as `Scope`, `Context`, `Evidence checked`, `Needs verification`, and `Recommended action`
+- keep paragraphs short; prefer bullets for observations and verification prompts
+- include why the PR appears relevant
+- include what evidence was checked
+- include what still needs human verification
+- include the recommended maintainer action
 
 Ignore Vercel CI failures when preparing triage or PR critique comments unless the issue itself is specifically about Vercel/deployment behavior or the failure is directly relevant to the reported bug.
 
@@ -269,7 +270,7 @@ Use when exactly one relevant linked PR exists.
   - human verification checklist
   - recommended maintainer action
   - author pre-review comment, if the PR author needs to change or verify something
-  - maintainer triage context comment that includes severity, scope, context, evidence checked, and human verification notes
+  - maintainer triage context comment that starts with a titled heading containing the severity emoji/label and uses readable sections for scope, context, evidence checked, human verification notes, and recommended action
   - `CODEOWNER tagging: Skipped: CODEOWNER unavailable`
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
@@ -302,7 +303,7 @@ Use when multiple relevant linked PRs exist.
   - human verification checklist
   - recommended maintainer action
   - author pre-review comment(s), if any PR author needs to change or verify something
-  - maintainer triage context comment(s) that include severity, scope, context, evidence checked, and human verification notes
+  - maintainer triage context comment(s) that start with titled headings containing the severity emoji/label and use readable sections for scope, context, evidence checked, human verification notes, and recommended action
   - `CODEOWNER tagging: Skipped: CODEOWNER unavailable`
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
