@@ -101,20 +101,27 @@ async function resolveThread<TState extends Record<string, unknown>>(
 /**
  * A simple back-pressured async queue. Events are pushed in; consumers pull via
  * the async iterator. `close()` ends iteration after draining buffered events.
+ *
+ * Events are only buffered once an iterator has been attached. The result-only
+ * path (`await run.result` without `for await (...)`) never iterates, so its
+ * events are dropped instead of accumulating an unbounded log for the lifetime
+ * of the run — the aggregated {@link RunMCResult} is built separately.
  */
 class EventQueue<T> {
   #buffer: T[] = [];
   #resolvers: Array<(r: IteratorResult<T>) => void> = [];
   #closed = false;
+  #iterated = false;
 
   push(value: T): void {
     if (this.#closed) return;
     const resolve = this.#resolvers.shift();
     if (resolve) {
       resolve({ value, done: false });
-    } else {
+    } else if (this.#iterated) {
       this.#buffer.push(value);
     }
+    // No iterator attached yet → drop the event (result-only path).
   }
 
   close(): void {
@@ -126,6 +133,7 @@ class EventQueue<T> {
   }
 
   [Symbol.asyncIterator](): AsyncIterator<T> {
+    this.#iterated = true;
     return {
       next: (): Promise<IteratorResult<T>> => {
         if (this.#buffer.length > 0) {
@@ -250,7 +258,13 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       if (settled) return;
 
       if (event.type === 'tool_approval_required') {
-        const decision = policy.onToolApproval(event);
+        let decision: 'approve' | 'deny';
+        try {
+          decision = policy.onToolApproval(event);
+        } catch (err) {
+          fail(`Resolution policy failed: ${(err as Error).message}`);
+          return;
+        }
         session.respondToToolApproval({
           decision: decision === 'approve' ? 'approve' : 'decline',
           toolCallId: event.toolCallId,
@@ -260,7 +274,13 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       }
 
       if (event.type === 'tool_suspended') {
-        const outcome = policy.onSuspension(event);
+        let outcome: ReturnType<ResolutionPolicy['onSuspension']>;
+        try {
+          outcome = policy.onSuspension(event);
+        } catch (err) {
+          fail(`Resolution policy failed: ${(err as Error).message}`);
+          return;
+        }
         if ('abort' in outcome) {
           queue.push(event);
           abort();

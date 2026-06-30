@@ -43,11 +43,6 @@ export interface HeadlessArgs {
   permissionMode?: PermissionMode;
 }
 
-/** Returns true if argv contains --prompt or -p, indicating headless mode. */
-export function hasHeadlessFlag(argv: string[]): boolean {
-  return argv.some(a => a === '--prompt' || a === '-p');
-}
-
 const headlessOptions = {
   prompt: { type: 'string', short: 'p' },
   continue: { type: 'boolean', short: 'c', default: false },
@@ -65,6 +60,28 @@ const headlessOptions = {
   settings: { type: 'string' },
   help: { type: 'boolean', short: 'h', default: false },
 } as const;
+
+/**
+ * Returns true if `argv` selects headless mode. This must agree with what
+ * {@link parseHeadlessArgs} (and `runMCCli`) accept as a prompt: `--prompt`/`-p`
+ * or a bare positional prompt (e.g. `mastracode "Fix the bug"`). Note that a
+ * prompt piped via stdin without a flag is handled separately by the caller.
+ */
+export function hasHeadlessFlag(argv: string[]): boolean {
+  if (argv.some(a => a === '--prompt' || a === '-p')) return true;
+  try {
+    const { values, positionals } = parseArgs({
+      args: argv.slice(2),
+      options: headlessOptions,
+      strict: false,
+      allowPositionals: true,
+    });
+    // A positional prompt only counts when not asking for help.
+    return positionals.length > 0 && !values.help;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Parse CLI arguments for headless mode. Output is controlled by a single
@@ -269,57 +286,66 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
 
   setupDebugLogging();
 
-  const humanState = createHumanFormatState();
-  const run = runMC({
-    controller,
-    session,
-    prompt,
-    model: args.model,
-    mode: args.mode,
-    modeDefaults: effectiveDefaults,
-    thinkingLevel: args.thinkingLevel,
-    thread: { id: args.thread, continueLatest: args.continue_, clone: args.cloneThread },
-    resourceId: args.resourceId,
-    title: args.title,
-    timeoutMs: args.timeout ? args.timeout * 1000 : undefined,
-    maxTurns: args.maxTurns,
-    policy: args.permissionMode ? permissionModeToPolicy(args.permissionMode) : undefined,
-  });
+  // Default to a non-zero exit so an unexpected throw before the run resolves
+  // still surfaces as a failure to the caller / CI.
+  let exitCode = 1;
+  try {
+    const humanState = createHumanFormatState();
+    const run = runMC({
+      controller,
+      session,
+      prompt,
+      model: args.model,
+      mode: args.mode,
+      modeDefaults: effectiveDefaults,
+      thinkingLevel: args.thinkingLevel,
+      thread: { id: args.thread, continueLatest: args.continue_, clone: args.cloneThread },
+      resourceId: args.resourceId,
+      title: args.title,
+      timeoutMs: args.timeout ? args.timeout * 1000 : undefined,
+      maxTurns: args.maxTurns,
+      policy: args.permissionMode ? permissionModeToPolicy(args.permissionMode) : undefined,
+    });
 
-  // Stream live events for human + jsonl modes. (json mode prints only the final object.)
-  for await (const event of run) {
-    if (args.output === 'human') {
-      const out = formatHuman(event, humanState);
-      if (out.stdout) process.stdout.write(out.stdout);
-      if (out.stderr) process.stderr.write(out.stderr);
-    } else if (args.output === 'jsonl') {
-      process.stdout.write(JSON.stringify(formatJsonl(event)) + '\n');
+    // Stream live events for human + jsonl modes. (json mode prints only the final object.)
+    for await (const event of run) {
+      if (args.output === 'human') {
+        const out = formatHuman(event, humanState);
+        if (out.stdout) process.stdout.write(out.stdout);
+        if (out.stderr) process.stderr.write(out.stderr);
+      } else if (args.output === 'jsonl') {
+        process.stdout.write(JSON.stringify(formatJsonl(event)) + '\n');
+      }
     }
+
+    const result = await run.result;
+    exitCode = result.exitCode;
+
+    if (args.output === 'json') {
+      process.stdout.write(renderJsonResult(result));
+    } else if (args.output === 'jsonl') {
+      process.stdout.write(JSON.stringify({ type: 'result', ...result }) + '\n');
+    }
+
+    if (result.status === 'timeout') {
+      process.stderr.write(`\nTimeout elapsed. Aborted.\n`);
+    } else if (result.error && args.output === 'human') {
+      process.stderr.write(`Error: ${result.error.message}\n`);
+    }
+  } catch (err) {
+    process.stderr.write(`Error: ${(err as Error).message ?? err}\n`);
+    exitCode = 1;
+  } finally {
+    // --- Teardown (always runs, even on a thrown error) ---
+    releaseAllThreadLocks();
+    const closeSignalsPubSub = (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+    await Promise.allSettled([
+      mcpManager?.disconnect(),
+      controller.getMastra()?.stopWorkers(),
+      controller?.stopIntervals(),
+      closeSignalsPubSub?.(),
+    ]);
   }
 
-  const result = await run.result;
-
-  if (args.output === 'json') {
-    process.stdout.write(renderJsonResult(result));
-  } else if (args.output === 'jsonl') {
-    process.stdout.write(JSON.stringify({ type: 'result', ...result }) + '\n');
-  }
-
-  if (result.status === 'timeout') {
-    process.stderr.write(`\nTimeout elapsed. Aborted.\n`);
-  } else if (result.error && args.output === 'human') {
-    process.stderr.write(`Error: ${result.error.message}\n`);
-  }
-
-  // --- Teardown ---
-  releaseAllThreadLocks();
-  const closeSignalsPubSub = (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-  await Promise.allSettled([
-    mcpManager?.disconnect(),
-    controller.getMastra()?.stopWorkers(),
-    controller?.stopIntervals(),
-    closeSignalsPubSub?.(),
-  ]);
-
-  process.exit(result.exitCode);
+  process.exit(exitCode);
 }

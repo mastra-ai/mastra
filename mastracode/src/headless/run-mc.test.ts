@@ -271,11 +271,14 @@ describe('runMC', () => {
 
   it('does not call process.exit', async () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
-    const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('ok') }) });
+    try {
+      const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('ok') }) });
 
-    await runMC({ controller, session, prompt: 'hi' }).result;
+      await runMC({ controller, session, prompt: 'hi' }).result;
 
-    expect(exitSpy).not.toHaveBeenCalled();
-    exitSpy.mockRestore();
+      expect(exitSpy).not.toHaveBeenCalled();
+    } finally {
+      exitSpy.mockRestore();
+    }
   });
 });

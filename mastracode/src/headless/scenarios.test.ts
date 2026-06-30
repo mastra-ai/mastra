@@ -253,19 +253,22 @@ describe('headless scenarios', () => {
     // A CI job sets a timeout; a slow run must surface as a clean exit code 2
     // rather than a thrown error or a process exit.
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
-    const { controller, session } = await makeHarness({
-      doStream: async () => {
-        await new Promise(r => setTimeout(r, 1000));
-        return { stream: textStream('too late') };
-      },
-    });
+    try {
+      const { controller, session } = await makeHarness({
+        doStream: async () => {
+          await new Promise(r => setTimeout(r, 1000));
+          return { stream: textStream('too late') };
+        },
+      });
 
-    const result = await runMC({ controller, session, prompt: 'Slow task', timeoutMs: 50 }).result;
+      const result = await runMC({ controller, session, prompt: 'Slow task', timeoutMs: 50 }).result;
 
-    expect(result.status).toBe('timeout');
-    expect(result.exitCode).toBe(2);
-    expect(exitSpy).not.toHaveBeenCalled();
-    exitSpy.mockRestore();
+      expect(result.status).toBe('timeout');
+      expect(result.exitCode).toBe(2);
+      expect(exitSpy).not.toHaveBeenCalled();
+    } finally {
+      exitSpy.mockRestore();
+    }
   });
 
   it('collects events and the final result on the same run handle', async () => {

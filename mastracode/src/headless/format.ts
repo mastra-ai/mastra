@@ -50,9 +50,17 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
       }
       return {};
     }
-    case 'message_end':
+    case 'message_end': {
+      // Emit any text the message_update stream didn't already cover (e.g. a run
+      // that only delivered the final text on message_end), then terminate the line.
+      const fullText = event.message.content
+        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+        .map(p => p.text)
+        .join('');
+      const delta = fullText.length > state.lastTextLength ? fullText.slice(state.lastTextLength) : '';
       state.lastTextLength = 0;
-      return { stdout: '\n' };
+      return { stdout: delta + '\n' };
+    }
     case 'tool_start':
       return { stderr: `[tool] ${event.toolName}\n` };
     case 'tool_end':
@@ -72,12 +80,23 @@ export function formatHuman(event: AgentControllerEvent, state: HumanFormatState
   }
 }
 
+/** Convert an `Error` instance into a JSON-serializable plain object. */
+function serializeError(err: Error): { name: string; message: string; stack?: string } {
+  return { name: err.name, message: err.message, stack: err.stack };
+}
+
 /**
  * JSONL (stream-json) formatter — returns a plain object to be `JSON.stringify`'d
- * as one line per event by the sink.
+ * as one line per event by the sink. `Error` instances are normalized so their
+ * `name`/`message`/`stack` survive serialization (`JSON.stringify` turns a raw
+ * `Error` into `{}`).
  */
 export function formatJsonl(event: AgentControllerEvent): Record<string, unknown> {
-  return { ...event };
+  const out: Record<string, unknown> = { ...event };
+  if ('error' in event && event.error instanceof Error) {
+    out.error = serializeError(event.error);
+  }
+  return out;
 }
 
 /** Render the final result for `--output text`: assistant text, newline-terminated. */
@@ -89,6 +108,7 @@ export function renderTextResult(result: RunMCResult): string {
 export function renderJsonResult(result: RunMCResult): string {
   return (
     JSON.stringify({
+      status: result.status,
       text: result.text,
       finishReason: result.finishReason,
       usage: result.usage,
@@ -96,6 +116,7 @@ export function renderJsonResult(result: RunMCResult): string {
       toolResults: result.toolResults,
       error: result.error,
       threadId: result.threadId,
+      exitCode: result.exitCode,
     }) + '\n'
   );
 }
