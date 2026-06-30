@@ -4,13 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApiConfig } from '../../shared/api/config';
 import { fetchAuthState, redirectToLogin } from './auth';
 import type { WebAuthState } from './auth';
-import { BranchPanel } from './BranchPanel';
-import type { BranchBinding } from './BranchPanel';
 import { CommandPalette } from './CommandPalette';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import type { SlashCommand } from './commands';
 import { GoalPanel, StatusLine, Transcript } from './components';
-import { ensureRepoMaterialized, fetchGithubStatus } from './github';
+import { createWorktree, ensureRepoMaterialized, fetchGithubStatus } from './github';
 import type { GithubStatus } from './github';
 import { GithubConnectModal } from './GithubConnectModal';
 import {
@@ -32,8 +30,12 @@ import {
   loadActiveProjectId,
   saveActiveProjectId,
   updateProject,
+  projectWorktrees,
+  selectedWorktree,
+  selectWorktree,
+  upsertWorktree,
 } from './projects';
-import type { Project } from './projects';
+import type { Project, Worktree } from './projects';
 import { ProjectsModal } from './ProjectsModal';
 import { SettingsPanel } from './SettingsPanel';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
@@ -104,16 +106,30 @@ export default function App() {
     saveActiveProjectId(activeProjectId);
   }, [activeProjectId]);
 
+  // The selected workspace (git worktree) for a GitHub project. One resourceId
+  // is shared across a repo's worktrees (and with the TUI), so threads are
+  // partitioned per worktree by the `projectPath` tag, not by resourceId.
+  const activeWorktree = activeProject?.source === 'github' ? selectedWorktree(activeProject) : undefined;
+
   // resourceId is the server-resolved (TUI-compatible) id, so a project opened
   // in the terminal and here share the same session. Stays disabled until the
   // active project's resourceId is known.
   const resourceId = activeProject?.resourceId ?? DEFAULT_RESOURCE_ID;
-  const sessionEnabled = !!activeProject?.resourceId;
+
+  // Thread-scoping tag: the worktree path for GitHub projects (so each
+  // workspace keeps its own threads), or the filesystem path for local ones.
+  const sessionProjectPath = activeWorktree?.worktreePath ?? activeProject?.path;
+
+  // Stay disabled until the session can be created with a stable scoping tag.
+  // For GitHub projects the worktree path (projectPath) is the thread tag, so
+  // we must wait for it to resolve — otherwise the auto-created thread is
+  // stamped with an empty tag and never shows up in the worktree's list.
+  const sessionEnabled = !!activeProject?.resourceId && (activeProject.source !== 'github' || !!sessionProjectPath);
 
   const session = useAgentControllerSession({
     agentControllerId: 'code',
     resourceId,
-    projectPath: activeProject?.path,
+    projectPath: sessionProjectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -329,12 +345,21 @@ export default function App() {
         };
         // Persist the sandbox binding on the project so a re-opened project
         // (e.g. after a reload, before the ref is repopulated) still has the
-        // sandbox id/workdir available for the workspace to reattach.
+        // sandbox id/workdir available for the workspace to reattach. Seed the
+        // repo-root worktree so the worktree tree always has a base entry.
+        const rootBranch = project.gitBranch ?? 'main';
+        const rootWorktree: Worktree = {
+          branch: rootBranch,
+          worktreePath: result.sandboxWorkdir,
+          baseBranch: rootBranch,
+        };
+        const existingWorktrees = project.worktrees?.filter(w => w.worktreePath !== result.sandboxWorkdir) ?? [];
         const filled: Project = {
           ...project,
           resourceId: result.resourceId,
           sandboxId: result.sandboxId,
           sandboxWorkdir: result.sandboxWorkdir,
+          worktrees: [rootWorktree, ...existingWorktrees],
         };
         updateProject(filled);
         setProjects(loadProjects());
@@ -378,36 +403,61 @@ export default function App() {
         githubBindingRef.current && githubBindingRef.current.githubProjectId === activeProject.githubProjectId
           ? githubBindingRef.current
           : null;
+      const worktree = selectedWorktree(activeProject);
       return {
-        projectPath: '',
+        // projectPath doubles as the per-worktree thread-scoping tag, so it must
+        // be the selected worktree path (matching the session prop), not empty.
+        projectPath: worktree?.worktreePath ?? '',
         githubProjectId: activeProject.githubProjectId,
         sandboxId: binding?.sandboxId ?? activeProject.sandboxId,
         sandboxWorkdir: binding?.sandboxWorkdir ?? activeProject.sandboxWorkdir,
-        // Bind the agent's workspace to the active worktree when one exists, so
-        // file edits + commands run against the feature branch, not the repo root.
-        worktreePath: activeProject.activeWorktreePath,
-        branch: activeProject.activeBranch,
+        // Bind the agent's workspace to the selected worktree so file edits +
+        // commands run against that branch's checkout, not the repo root.
+        worktreePath: worktree?.worktreePath,
+        branch: worktree?.branch,
       };
     }
     return { projectPath: activeProject?.path ?? '' };
   }, [activeProject]);
 
-  // Persist a freshly created worktree onto the active GitHub project and push
-  // it into session state so the workspace rebinds to the worktree path.
-  const handleWorktreeReady = useCallback(
-    (binding: BranchBinding) => {
+  // Switch the active workspace to an existing worktree: persist the selection
+  // and rebind the session (which re-tags threads via projectPath and points
+  // the workspace at the worktree checkout).
+  const handleSelectWorktree = useCallback(
+    (worktreePath: string) => {
       if (!activeProject || activeProject.source !== 'github') return;
-      const updated: Project = {
-        ...activeProject,
-        activeBranch: binding.branch,
-        activeWorktreePath: binding.worktreePath,
+      const updated = selectWorktree(activeProject, worktreePath);
+      setProjects(loadProjects());
+      const worktree = updated.worktrees?.find(w => w.worktreePath === worktreePath);
+      void session.setState({
+        projectPath: worktreePath,
+        worktreePath,
+        branch: worktree?.branch,
+      });
+    },
+    [activeProject, session],
+  );
+
+  // Create a new worktree (feature branch) in the sandbox, append it to the
+  // project's worktree list, then select it as the active workspace.
+  const handleCreateWorktree = useCallback(
+    async (branch: string, baseBranch?: string) => {
+      if (!activeProject || activeProject.source !== 'github' || !activeProject.githubProjectId) return;
+      const result = await createWorktree(activeProject.githubProjectId, branch, baseBranch);
+      const worktree: Worktree = {
+        branch: result.branch,
+        worktreePath: result.worktreePath,
+        baseBranch: result.baseBranch,
       };
-      updateProject(updated);
+      const withWorktree = upsertWorktree(activeProject, worktree);
+      const selected = selectWorktree(withWorktree, worktree.worktreePath);
       setProjects(loadProjects());
       void session.setState({
-        worktreePath: binding.worktreePath,
-        branch: binding.branch,
+        projectPath: worktree.worktreePath,
+        worktreePath: worktree.worktreePath,
+        branch: worktree.branch,
       });
+      return selected;
     },
     [activeProject, session],
   );
@@ -711,6 +761,21 @@ export default function App() {
           void session.cloneThread(id);
           toast('Thread cloned', 'success');
         }}
+        worktrees={activeProject?.source === 'github' ? projectWorktrees(activeProject) : undefined}
+        selectedWorktreePath={activeWorktree?.worktreePath}
+        onSelectWorktree={path => {
+          handleSelectWorktree(path);
+          closeSidebar();
+        }}
+        onCreateWorktree={async (branch, baseBranch) => {
+          try {
+            await handleCreateWorktree(branch, baseBranch);
+            toast(`Worktree ${branch} ready`, 'success');
+            closeSidebar();
+          } catch (e) {
+            toast(e instanceof Error ? e.message : String(e), 'error');
+          }
+        }}
         account={
           authState.authEnabled && authState.authenticated ? { user: authState.user, onSignOut: signOut } : undefined
         }
@@ -785,17 +850,6 @@ export default function App() {
               />
             )}
 
-            {activeProject.source === 'github' && activeProject.githubProjectId && (
-              <BranchPanel
-                githubProjectId={activeProject.githubProjectId}
-                sandboxEnabled={githubStatus.sandboxEnabled ?? false}
-                activeBranch={activeProject.activeBranch}
-                activeWorktreePath={activeProject.activeWorktreePath}
-                onWorktreeReady={handleWorktreeReady}
-                onNotice={toast}
-              />
-            )}
-
             {(status === 'reconnecting' || status === 'error') && (
               <div className={`conn-banner ${status}`} role="status" aria-live="polite">
                 <span className="conn-dot" />
@@ -828,7 +882,7 @@ export default function App() {
                     )}
                     <div className="banner-row">
                       <dt>Workspace</dt>
-                      <dd>{activeProject.path}</dd>
+                      <dd>{sessionProjectPath || activeProject.path || '—'}</dd>
                     </div>
                   </dl>
                   <p className="banner-ready">Ready for new conversation</p>

@@ -15,6 +15,20 @@
 const STORAGE_KEY = 'mastracode-projects';
 const ACTIVE_KEY = 'mastracode-active-project';
 
+/**
+ * A workspace (git worktree) inside a GitHub project's sandbox. Each worktree
+ * is a distinct branch checked out at its own path. A repo's worktrees share
+ * one session resourceId (and that id is shared with the TUI); their threads
+ * are partitioned per workspace by the `projectPath` tag (the worktree path).
+ * The project root is itself the first worktree (the default branch);
+ * additional ones are created via "New workspace".
+ */
+export interface Worktree {
+  branch: string;
+  worktreePath: string;
+  baseBranch: string;
+}
+
 export interface Project {
   /** Stable local id (localStorage key). Not used for the session. */
   id: string;
@@ -36,9 +50,25 @@ export interface Project {
   sandboxId?: string;
   sandboxWorkdir?: string;
   /**
+   * Workspaces (git worktrees) for a GitHub project. The first entry is the
+   * repo root on its default branch; additional entries are feature-branch
+   * worktrees created via "New workspace". Each carries its own resourceId so
+   * its threads are isolated. Absent/empty for local projects.
+   */
+  worktrees?: Worktree[];
+  /**
+   * Currently selected worktree for a GitHub project (by worktreePath). The
+   * session binds to this worktree's path + resourceId. Falls back to the repo
+   * root when unset.
+   */
+  selectedWorktreePath?: string;
+  /**
    * Active feature branch + worktree for a GitHub project, persisted after a
    * worktree is created so a re-opened project rebinds the same worktree
    * workspace (the agent edits the worktree path, not the repo root).
+   *
+   * @deprecated Superseded by `worktrees` + `selectedWorktreePath`; retained so
+   * projects persisted by older builds keep working until migrated on open.
    */
   activeBranch?: string;
   activeWorktreePath?: string;
@@ -141,6 +171,59 @@ export function addGithubProject(project: Project): Project {
 export function updateProject(project: Project): void {
   const projects = loadProjects().map(p => (p.id === project.id ? project : p));
   saveProjects(projects);
+}
+
+/**
+ * The worktree list for a project, normalizing legacy projects: a GitHub
+ * project always has at least the repo-root worktree (its default branch), and
+ * a pre-`worktrees` project with an `activeBranch` gets that folded in.
+ */
+export function projectWorktrees(project: Project): Worktree[] {
+  if (project.source !== 'github') return [];
+  if (project.worktrees && project.worktrees.length > 0) return project.worktrees;
+
+  // Migrate legacy shape: synthesize the root worktree, plus the previously
+  // persisted active feature worktree if one existed.
+  const rootBranch = project.gitBranch ?? 'main';
+  const rootPath = project.sandboxWorkdir ?? '';
+  const list: Worktree[] = [{ branch: rootBranch, worktreePath: rootPath, baseBranch: rootBranch }];
+  if (project.activeBranch && project.activeWorktreePath && project.activeBranch !== rootBranch) {
+    list.push({
+      branch: project.activeBranch,
+      worktreePath: project.activeWorktreePath,
+      baseBranch: rootBranch,
+    });
+  }
+  return list;
+}
+
+/** The currently selected worktree for a project, or the repo root by default. */
+export function selectedWorktree(project: Project): Worktree | undefined {
+  const list = projectWorktrees(project);
+  if (list.length === 0) return undefined;
+  const match = project.selectedWorktreePath
+    ? list.find(w => w.worktreePath === project.selectedWorktreePath)
+    : undefined;
+  return match ?? list[0];
+}
+
+/**
+ * Append (or update) a worktree on a project and persist. De-duped by branch.
+ * Returns the updated project. Does NOT change the selection.
+ */
+export function upsertWorktree(project: Project, worktree: Worktree): Project {
+  const existing = projectWorktrees(project);
+  const without = existing.filter(w => w.branch !== worktree.branch);
+  const updated: Project = { ...project, worktrees: [...without, worktree] };
+  updateProject(updated);
+  return updated;
+}
+
+/** Persist the selected worktree for a project and return the updated project. */
+export function selectWorktree(project: Project, worktreePath: string): Project {
+  const updated: Project = { ...project, selectedWorktreePath: worktreePath };
+  updateProject(updated);
+  return updated;
 }
 
 /**
