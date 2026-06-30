@@ -46,13 +46,19 @@ describe('web scenario: sse-reconnect', () => {
       // Send first message and wait for response
       await session.sendMessage('before disconnect');
 
-      // Flatten transcript entries to text (assistant entries hold ordered
-      // segments rather than a single text field).
+      // Flatten transcript entries to text. Message entries hold ordered
+      // content parts; extract text/reasoning parts in order.
       const flatten = () =>
         transcript.entries
           .map(e => {
-            if (e.kind === 'assistant') {
-              return e.segments.map(s => (s.kind === 'text' || s.kind === 'thinking' ? s.text : '')).join('');
+            if (e.kind === 'message') {
+              return e.message.content.parts
+                .map(part => {
+                  if (part.type === 'text') return part.text;
+                  if (part.type === 'reasoning') return part.reasoning;
+                  return '';
+                })
+                .join('');
             }
             if (e.kind === 'notice') return e.text;
             return '';
