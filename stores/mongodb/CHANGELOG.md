@@ -1,5 +1,18 @@
 # @mastra/mongodb
 
+## 1.11.1-alpha.0
+
+### Patch Changes
+
+- Made MongoDB store writes safe against partial failures, preventing orphaned records when an operation fails partway through. ([#18393](https://github.com/mastra-ai/mastra/pull/18393))
+
+  **Atomic multi-collection writes.** Creates, deletes, and updates across the agents, mcp-clients, mcp-servers, prompt-blocks, scorer-definitions, skills, workspaces, schedules, and datasets domains now run in a transaction on replica sets, so a failed write leaves no half-written state. On standalone servers (which can't run transactions) these degrade to sequential best-effort, matching the previous behavior.
+
+  **Scalable cascade deletes.** Deleting a thread (with its messages) or a dataset (with its items) is deliberately _not_ wrapped in a transaction, because those children are unbounded and a transactional delete is capped by MongoDB's 60-second transaction limit — a large thread or dataset would abort and become permanently undeletable. Instead the children are removed first and the parent record last, so a failure mid-delete leaves the parent in place and re-running the delete safely finishes the job.
+
+- Updated dependencies [[`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c)]:
+  - @mastra/core@1.48.0-alpha.7
+
 ## 1.11.0
 
 ### Minor Changes

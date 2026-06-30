@@ -1,5 +1,94 @@
 # mastracode
 
+## 0.27.0-alpha.7
+
+### Minor Changes
+
+- Reworked headless mode into a real programmatic API. You can now run MastraCode from Node/CI code with `runMC({ controller, session, prompt })`, which returns a handle that streams live events as an async-iterable and resolves to a typed result with status, text, usage, tool calls, and an exit code — it never calls `process.exit` or writes to global streams. The CLI is now a thin adapter over the same runner. ([#18680](https://github.com/mastra-ai/mastra/pull/18680))
+
+  ```ts
+  import { createMastraCode, runMC } from 'mastracode';
+
+  const { controller, session } = await createMastraCode({ settingsPath });
+
+  const run = runMC({ controller, session, prompt: 'Fix the failing test' });
+  for await (const event of run) {
+    // optional: react to live progress events
+  }
+  const result = await run.result;
+  process.exitCode = result.exitCode; // 0 success, 1 error/aborted/max-turns, 2 timeout
+  ```
+
+  Approvals and suspensions are resolved by a pluggable policy (default keeps the previous auto-approve behavior); a built-in `denyPolicy` plus `permissionModeToPolicy` are exported, and a new `--permission-mode {auto|deny}` flag selects between them. A new `--max-turns` flag (and `maxTurns` option) caps assistant turns and reports a `max_turns` status with exit code 1 when the cap is hit mid-task.
+
+  Breaking changes / migration:
+  - Output flags consolidated: the `--format` and `--output-format` flags are replaced by a single `--output` flag with values `human`, `json`, or `jsonl`.
+    - Before: `mastracode --prompt "..." --output-format json`
+    - After: `mastracode --prompt "..." --output json`
+  - Programmatic entry point changed from the old `runHeadless`/`headlessMain` to `runMC` (pure runner) and `runMCCli` (CLI adapter). `runMC` takes an already-built `controller` + `session` from `createMastraCode` and returns a result object instead of only an exit code.
+
+- Turned MastraCode Web into a multi-org cloud coding service. When WorkOS auth and a GitHub App are configured, a team can sign in, connect their repos, and run coding agents that branch, commit, push, and open pull requests — all from isolated cloud sandboxes. When the relevant environment variables are absent, the server and UI behave exactly as before (local-path projects, single shared store, no auth UI), so this is fully opt-in. ([#18567](https://github.com/mastra-ai/mastra/pull/18567))
+
+  **Authentication (WorkOS AuthKit).** Setting `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` protects every route: unauthenticated visitors are redirected to the WorkOS hosted login, signed-in users get an encrypted session, expired sessions bounce back to login, and the sidebar shows the signed-in email with a Sign out button. Users with no WorkOS organization get a personal org bootstrapped on first authenticated use (idempotent, with recovery from partial creations), so personal accounts can use org-scoped features without hand-creating an org.
+
+  **Org-owned GitHub projects.** With the GitHub App env vars set (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, `APP_DATABASE_URL`), users install/connect the app, pick repos they can access, and turn each into a project. The installation and connected repos belong to the WorkOS organization; the same repo can be connected independently by different orgs with no cross-visibility. Each repo is materialized into an isolated cloud sandbox on open — cloned (or pulled) inside the sandbox with a short-lived installation token that never reaches the browser and is scrubbed from the remote afterward.
+
+  **Cloud coding-agent write-back.** From a connected repo, each user gets their own sandbox, git worktrees, and feature branches. The agent runs against the selected worktree (file edits and commands bind to its path) and can commit, push, and open pull requests via the in-sandbox `gh` CLI, authenticated with short-lived per-operation installation tokens. The sidebar shows a nested project → worktree → conversations tree with a "+ New worktree" affordance; conversations scope per worktree.
+
+  **Sandbox providers.** A provider is selected automatically: Railway when `RAILWAY_API_TOKEN` is set, otherwise a local provider that runs git directly on the host (single-user local dev only — no tenant isolation). `MASTRACODE_SANDBOX_PROVIDER` overrides explicitly. Idle sandboxes are torn down and re-provisioned on the next open; a per-replica live-sandbox cap (`MASTRACODE_MAX_SANDBOXES`) and a per-user teardown route bound resource use.
+
+  **Per-(org,user) state isolation.** Agent state (threads, messages, memory, recall vectors) is isolated by the `(organization, user)` pair, each backed by a dedicated libSQL database whose location is derived server-side from a hash of `(orgId, userId)` — never a client-supplied path. By default each tenant gets local libSQL files under `MASTRACODE_TENANT_DB_ROOT`; for hosted deployments, point each tenant at a remote libSQL/Turso database via `MASTRACODE_TENANT_DB_URL_TEMPLATE` (plus optional vector template and auth tokens).
+
+  **Sandbox isolation hardening.** Commands run in the local sandbox receive only a sanitized allow-list of environment variables (PATH/HOME/locale/git config), so server secrets such as `GITHUB_APP_PRIVATE_KEY`, `WORKOS_API_KEY`, and `APP_DATABASE_URL` are never exposed to code running against an untrusted checkout. Sandbox filesystem write operations (write/append/copy/move/mkdir) now verify the destination's real path — including a symlinked parent directory — stays within the workspace root, preventing a malicious repo's symlink from redirecting writes outside the sandbox.
+
+  **Multi-replica deployment hardening.** Per-(project,user) git writes are serialized across replicas with Postgres advisory locks (`MASTRACODE_DISTRIBUTED_LOCK`, on by default; requires `APP_DATABASE_URL`). OAuth/install state signing requires a replica-stable secret in multi-replica setups, in-memory tenant stacks are evicted by idle timeout and an LRU cap (`MASTRACODE_TENANT_IDLE_MINUTES`, `MASTRACODE_TENANT_MAX_APPS`), and `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1` fails startup when no shared remote tenant DB is configured.
+
+  ```bash
+  # Auth + GitHub App (opt-in)
+  WORKOS_API_KEY=sk_xxxxxxxx
+  WORKOS_CLIENT_ID=client_xxxxxxxx
+  GITHUB_APP_ID=123456
+  GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+  GITHUB_APP_CLIENT_ID=Iv1.xxxxxxxx
+  GITHUB_APP_CLIENT_SECRET=xxxxxxxx
+  GITHUB_APP_SLUG=your-app-slug
+  APP_DATABASE_URL=postgres://user:pass@host:5432/mastracode_web
+
+  # Multi-replica hosted deployment
+  GITHUB_APP_WEBHOOK_SECRET=...                      # replica-stable state signing
+  MASTRACODE_DISTRIBUTED_LOCK=1                       # cross-replica git write locks
+  MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1              # require shared remote tenant DBs
+  MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io
+  MASTRACODE_TENANT_IDLE_MINUTES=30
+  MASTRACODE_TENANT_MAX_APPS=100
+  MASTRACODE_MAX_SANDBOXES=50
+  ```
+
+  Still deferred: collaboration within a project (multiple users sharing one worktree/sandbox/branch), org admin/roles and membership management, and org-level project deletion.
+
+- Auto-provision a per-tenant Turso database in deployed MastraCode Web environments. ([#18690](https://github.com/mastra-ai/mastra/pull/18690))
+
+  Previously, hosting per-`(org, user)` agent state on Turso required each tenant's database to already exist at the URL produced by `MASTRACODE_TENANT_DB_URL_TEMPLATE`. There was no way to create those databases on demand, so the only zero-setup option was server-local libSQL files — which are ephemeral and not shared across replicas.
+
+  Setting `MASTRACODE_TURSO_PLATFORM_TOKEN` and `MASTRACODE_TURSO_ORG` now enables a third tenant-storage mode: the first time a tenant is seen, its own Turso database is created via the Turso Platform API (idempotent — an "already exists" race recovers the hostname via `databases.get`), a scoped auth token is minted, and the stable database-name/hostname mapping is persisted in the app Postgres (`tenant_databases` table, requires `APP_DATABASE_URL`). All replicas converge on the same database and cold starts never re-create it. Only the durable mapping is stored; the auth token is minted fresh per resolution, so no long-lived credential is persisted.
+
+  Resolution priority is: explicit `MASTRACODE_TENANT_DB_URL_TEMPLATE` → Turso auto-provisioning → local libSQL files. Turso provisioning also satisfies `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1`. The `@tursodatabase/api` client is loaded dynamically, so deployments that don't use Turso never pull it in at runtime.
+
+  ```bash
+  MASTRACODE_TURSO_PLATFORM_TOKEN=...    # Turso Platform API token
+  MASTRACODE_TURSO_ORG=my-org            # org that owns provisioned databases
+  MASTRACODE_TURSO_GROUP=default         # optional group (default "default")
+  APP_DATABASE_URL=postgres://...        # required for the mapping table
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c)]:
+  - @mastra/core@1.48.0-alpha.7
+  - @mastra/server@1.48.0-alpha.7
+  - @mastra/hono@1.5.3-alpha.7
+  - @mastra/react@1.2.1-alpha.7
+
 ## 0.27.0-alpha.6
 
 ### Patch Changes
