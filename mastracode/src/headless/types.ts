@@ -40,7 +40,7 @@ export interface ResolutionPolicy {
 
 /** Thread selection / mutation options resolved up front by `runMC`. */
 export interface RunMCThreadOptions {
-  /** Resume a specific thread by exact id or by title. */
+  /** Resume a specific thread by its exact id. */
   id?: string;
   /** Resume the most recently updated thread instead of creating a new one. */
   continueLatest?: boolean;

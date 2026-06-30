@@ -189,7 +189,7 @@ Usage: mastracode --prompt <text> [options]
 Headless (non-interactive) mode options:
   --prompt, -p <text>           The task to execute (required, or pipe via stdin)
   --continue, -c                Resume the most recent thread instead of creating a new one
-  --thread, -t <id|title>       Resume a specific thread by ID or title
+  --thread, -t <id>             Resume a specific thread by ID
   --title <title>               Set or rename the thread title
   --clone-thread                Clone the current thread before running (work on a copy)
   --resource-id <id>            Set the resource ID for thread scoping

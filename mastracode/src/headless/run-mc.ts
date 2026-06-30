@@ -80,22 +80,17 @@ function aggregate(event: AgentControllerEvent, acc: MutableResult): void {
   }
 }
 
-/** Resolve a thread by ID or title. Tries exact ID match first, then title. */
+/** Resolve a thread by its exact ID. Titles are not unique, so we don't match on them. */
 async function resolveThread<TState extends Record<string, unknown>>(
   session: Session<TState>,
-  threadIdOrTitle: string,
-): Promise<{ threadId: string; matchType: 'id' | 'title' } | { error: string }> {
+  threadId: string,
+): Promise<{ threadId: string } | { error: string }> {
   const threads = await session.thread.list();
 
-  const byId = threads.find(t => t.id === threadIdOrTitle);
-  if (byId) return { threadId: byId.id, matchType: 'id' };
+  const byId = threads.find(t => t.id === threadId);
+  if (byId) return { threadId: byId.id };
 
-  const byTitle = threads
-    .filter(t => t.title === threadIdOrTitle)
-    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-  if (byTitle.length > 0) return { threadId: byTitle[0]!.id, matchType: 'title' };
-
-  return { error: `No thread found matching "${threadIdOrTitle}"` };
+  return { error: `No thread found with ID "${threadId}"` };
 }
 
 /**
