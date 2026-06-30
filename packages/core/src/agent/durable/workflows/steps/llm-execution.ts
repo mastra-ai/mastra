@@ -5,7 +5,14 @@ import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import type { Mastra } from '../../../../mastra';
-import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
+import type {
+  SpanType,
+  AIModelGenerationSpan,
+  ExportedSpan,
+  IModelSpanTracker,
+  AnySpan,
+} from '../../../../observability';
+import { EntityType } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
@@ -14,6 +21,7 @@ import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
+import { inferProviderExecuted } from '../../../../tools/provider-tool-utils';
 import type { CoreTool } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
@@ -404,6 +412,115 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let usage: any = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
             let responseMetadata: any = {};
 
+            // ── Client-tool observability + onInputStart / onInputDelta ──
+            // Mirrors the regular agent's injectClientToolObservability / endClientToolObservabilitySpan
+            // helpers. Creates CLIENT_TOOL_CALL spans for tools executed on the client side and
+            // invokes the tool-level onInputStart / onInputDelta callbacks as chunks arrive.
+            const clientToolArgsTextByToolCallId = new Map<string, string[]>();
+            const clientToolObservabilityByToolCallId = new Map<
+              string,
+              { carrier: unknown; span: AnySpan; ended: boolean }
+            >();
+
+            const resolveToolDef = (toolName: string): CoreTool | undefined => {
+              const directTool = (currentTools as unknown as Record<string, CoreTool> | undefined)?.[toolName];
+              if (directTool) return directTool;
+              return registryEntry?.tools?.[toolName];
+            };
+
+            const endClientToolObservabilitySpan = (toolCallId: string, args?: unknown): void => {
+              const entry = clientToolObservabilityByToolCallId.get(toolCallId);
+              if (!entry || entry.ended) {
+                clientToolArgsTextByToolCallId.delete(toolCallId);
+                return;
+              }
+              entry.span.end(args !== undefined ? { metadata: { args } } : undefined);
+              entry.ended = true;
+              clientToolArgsTextByToolCallId.delete(toolCallId);
+            };
+
+            const parseClientToolArgsFromDeltas = (toolCallId: string): unknown | undefined => {
+              const deltas = clientToolArgsTextByToolCallId.get(toolCallId);
+              if (!deltas?.length) return undefined;
+              const input = deltas.join('');
+              if (!input) return undefined;
+              try {
+                return JSON.parse(input);
+              } catch {
+                return undefined;
+              }
+            };
+
+            const injectClientToolObservability = ({
+              toolCallId,
+              toolName,
+              args,
+              providerExecuted,
+              payload,
+            }: {
+              toolCallId: string;
+              toolName: string;
+              args?: unknown;
+              providerExecuted?: boolean;
+              payload: Record<string, unknown> & { observability?: unknown };
+            }): { toolDef: CoreTool | undefined } => {
+              const toolDef = resolveToolDef(toolName);
+              const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
+              const isClientTool =
+                !inferredProviderExecuted && !(toolDef as { execute?: unknown } | undefined)?.execute;
+
+              if (!isClientTool || !mastra || !tracingContext?.currentSpan) {
+                return { toolDef };
+              }
+
+              const existingCarrier = clientToolObservabilityByToolCallId.get(toolCallId);
+              if (existingCarrier) {
+                payload.observability = existingCarrier.carrier;
+                if (args !== undefined) {
+                  endClientToolObservabilitySpan(toolCallId, args);
+                }
+                return { toolDef };
+              }
+
+              const proxy = (mastra as Mastra).observability?.getClientObservabilityProxy?.();
+              if (!proxy) return { toolDef };
+
+              try {
+                const parentSpan =
+                  tracingContext.currentSpan.type === ('agent_run' as string)
+                    ? tracingContext.currentSpan
+                    : ((tracingContext.currentSpan as any).findParent?.('agent_run') ?? tracingContext.currentSpan);
+                const clientToolSpan = (parentSpan as any).createChildSpan?.({
+                  type: 'client_tool_call',
+                  name: `client_tool: '${toolName}'`,
+                  entityType: EntityType.TOOL,
+                  entityId: toolName,
+                  entityName: toolName,
+                  attributes: {
+                    toolDescription: (toolDef as { description?: string } | undefined)?.description,
+                    toolType: 'client-tool',
+                  },
+                  ...(args !== undefined ? { input: args } : {}),
+                });
+                if (clientToolSpan) {
+                  const carrier = proxy.inject(clientToolSpan);
+                  const entry = { carrier, span: clientToolSpan as AnySpan, ended: false };
+                  clientToolObservabilityByToolCallId.set(toolCallId, entry);
+                  payload.observability = carrier;
+                  if (args !== undefined) {
+                    endClientToolObservabilitySpan(toolCallId, args);
+                  }
+                }
+              } catch (err) {
+                logger?.warn?.('[ClientObservabilityProxy] failed to create CLIENT_TOOL_CALL span', {
+                  error: err instanceof Error ? err.message : String(err),
+                  toolName,
+                });
+              }
+
+              return { toolDef };
+            };
+
             // 8. Start MODEL_STEP span at the beginning of LLM execution
             modelSpanTracker?.startStep();
 
@@ -555,6 +672,39 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       })
                     : rawChunk;
 
+                // ── Client-tool observability injection ──
+                // For tool-call streaming chunks, inject CLIENT_TOOL_CALL spans
+                // and collect deltas so the span can be ended with parsed args.
+                let toolInputStartToolDef: CoreTool | undefined;
+                if (rawChunk.type === 'tool-call-input-streaming-start') {
+                  ({ toolDef: toolInputStartToolDef } = injectClientToolObservability({
+                    toolCallId: rawChunk.payload.toolCallId,
+                    toolName: rawChunk.payload.toolName,
+                    providerExecuted: rawChunk.payload.providerExecuted,
+                    payload: rawChunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
+                  }));
+                } else if (rawChunk.type === 'tool-call-delta') {
+                  const toolCallId = rawChunk.payload.toolCallId;
+                  if (toolCallId && rawChunk.payload.argsTextDelta) {
+                    const deltas = clientToolArgsTextByToolCallId.get(toolCallId) ?? [];
+                    deltas.push(rawChunk.payload.argsTextDelta);
+                    clientToolArgsTextByToolCallId.set(toolCallId, deltas);
+                  }
+                } else if (rawChunk.type === 'tool-call-input-streaming-end') {
+                  const parsedArgs = parseClientToolArgsFromDeltas(rawChunk.payload.toolCallId);
+                  if (parsedArgs !== undefined) {
+                    endClientToolObservabilitySpan(rawChunk.payload.toolCallId, parsedArgs);
+                  }
+                } else if (rawChunk.type === 'tool-call') {
+                  injectClientToolObservability({
+                    toolCallId: rawChunk.payload.toolCallId,
+                    toolName: rawChunk.payload.toolName,
+                    args: rawChunk.payload.args,
+                    providerExecuted: rawChunk.payload.providerExecuted,
+                    payload: rawChunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
+                  });
+                }
+
                 // Forward every chunk to the client ('finish' was rewritten to 'step-finish' above).
                 if (pubsub) {
                   await emitChunkEvent(pubsub, runId, clientChunk);
@@ -567,6 +717,39 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   case 'text-delta': {
                     const payload = rawChunk.payload as TextDeltaPayload;
                     textDeltas.push(payload.text);
+                    break;
+                  }
+
+                  case 'tool-call-input-streaming-start': {
+                    const tool = toolInputStartToolDef || resolveToolDef(rawChunk.payload.toolName);
+                    if (tool && 'onInputStart' in tool) {
+                      try {
+                        await (tool as any).onInputStart?.({
+                          toolCallId: rawChunk.payload.toolCallId,
+                          messages: messageList.get.input.aiV5.model(),
+                          abortSignal: executionAbortSignal,
+                        });
+                      } catch (error) {
+                        logger?.error?.('Error calling onInputStart', error);
+                      }
+                    }
+                    break;
+                  }
+
+                  case 'tool-call-delta': {
+                    const tool = rawChunk.payload.toolName ? resolveToolDef(rawChunk.payload.toolName) : undefined;
+                    if (tool && 'onInputDelta' in tool) {
+                      try {
+                        await (tool as any).onInputDelta?.({
+                          inputTextDelta: rawChunk.payload.argsTextDelta,
+                          toolCallId: rawChunk.payload.toolCallId,
+                          messages: messageList.get.input.aiV5.model(),
+                          abortSignal: executionAbortSignal,
+                        });
+                      } catch (error) {
+                        logger?.error?.('Error calling onInputDelta', error);
+                      }
+                    }
                     break;
                   }
 
