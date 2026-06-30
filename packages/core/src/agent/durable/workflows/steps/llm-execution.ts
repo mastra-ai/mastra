@@ -5,6 +5,7 @@ import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
+import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
@@ -361,6 +362,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               toolChoice: currentToolChoice,
               activeTools: currentActiveTools,
               options: { abortSignal: executionAbortSignal },
+              headers: mergeLlmCallHeaders({
+                memoryHeaders: buildMemoryHeaders({
+                  threadId: typedInput.state?.threadId,
+                  resourceId: typedInput.state?.resourceId,
+                }),
+                callTimeHeaders: currentModelSettings.headers as Record<string, string> | undefined,
+              }),
               modelSettings: {
                 ...currentModelSettings,
                 maxRetries: 0,

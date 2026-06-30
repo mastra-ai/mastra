@@ -65,6 +65,7 @@ import {
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
+import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -1376,21 +1377,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   },
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
-                  // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
-                  // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
-                  headers: (() => {
-                    const memoryHeaders: Record<string, string> = {};
-                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                    const rid = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
-                    if (tid) memoryHeaders['x-thread-id'] = tid;
-                    if (rid) memoryHeaders['x-resource-id'] = rid;
-                    const merged = {
-                      ...memoryHeaders,
-                      ...modelHeaders,
-                      ...currentStep.modelSettings?.headers,
-                    };
-                    return Object.keys(merged).length > 0 ? merged : undefined;
-                  })(),
+                  headers: mergeLlmCallHeaders({
+                    memoryHeaders: buildMemoryHeaders({
+                      threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+                      resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+                    }),
+                    modelConfigHeaders: modelHeaders,
+                    callTimeHeaders: currentStep.modelSettings?.headers as Record<string, string> | undefined,
+                  }),
                   methodType,
                   generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
                   onResult: ({
