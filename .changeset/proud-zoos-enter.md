@@ -31,6 +31,8 @@ export default agentConfig({
 });
 ```
 
-Code-registered agents win on name collisions, and a `config.ts` that exports `new Agent()` is used as-is, so existing projects are unaffected.
+A file-based agent can also declare **subagents** under `agents/<name>/subagents/<childId>/`, using the same directory layout as an agent (`config.ts`, `instructions.md`, `tools/`, `skills/`, `workspace.ts` / `workspace/`). Each subagent is assembled independently and wired into the parent's `agents` map, so the loop exposes it as a delegation tool named after the directory. A subagent's `config.ts` must set a non-empty `description` (build error otherwise), subagents inherit nothing from the parent, and they are one level deep (a nested `subagents/` directory is ignored with a warning). A subagent id colliding with a parent tool key or another subagent id is a build error; an id also present in `config.agents` keeps the `config.agents` entry with a warning.
+
+Code-registered agents win on name collisions, and a `config.ts` that exports `new Agent()` is used as-is (its sibling `instructions.md`, `tools/`, and `subagents/` are ignored with a warning), so existing projects are unaffected.
 
 File-based agents are discovered by the bundler and are only registered when the app runs through the Mastra CLI (`mastra dev` / `mastra build`). If you import the `mastra` instance directly as a library (your own server, a server adapter, a framework route, or a test), the `agents/<name>/` directories are not discovered — register those agents in code instead.

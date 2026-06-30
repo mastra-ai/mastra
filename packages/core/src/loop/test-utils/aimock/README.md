@@ -162,9 +162,11 @@ engine:
   `fsRouted: true` for that variant.
 
 Because `'fs'` is part of `ALL_ENGINE_VARIANTS`, every scenario using `describeForAllEngines` covers the
-file-routing path automatically. Scenarios whose inputs the file-routing model cannot represent —
-dynamic-function `instructions`, `sharedAgent`, or `agents`/`workflows`/`goal` config — opt out with
-`{ skip: ['fs'] }` (alongside any engines they already skip).
+file-routing path automatically. The `'fs'` variant threads `agents` (subagents), `goal`, `workspace`, and
+`workflows` config straight through `assembleAgentFromFsEntry`, so supervisor / agents-as-tools and goal
+scenarios run on `'fs'` too. Scenarios whose inputs the file-routing model cannot represent —
+dynamic-function `instructions`, `sharedAgent`, `workflows`-as-tool, or durable resume/suspension — opt out
+with `{ skip: ['fs'] }` (alongside any engines they already skip).
 
 ### Error-state scenarios
 

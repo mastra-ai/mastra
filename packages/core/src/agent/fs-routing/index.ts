@@ -71,6 +71,14 @@ export interface FsAgentEntry {
    * Callers (the deployer codegen layer) pass a per-agent directory here.
    */
   defaultWorkspaceBasePath?: string;
+  /**
+   * Declared subagents discovered under `agents/<name>/subagents/<childId>/`.
+   * Each entry is assembled into its own `Agent` and wired into the parent's
+   * `agents` map under its directory name, becoming a model-visible delegation
+   * tool. Subagents are one level deep — entries here carry no further
+   * `subagents` of their own.
+   */
+  subagents?: FsAgentEntry[];
 }
 
 /**
@@ -98,7 +106,16 @@ export interface FsAgentEntry {
  * `new Agent(...)` without the loader trying to re-wrap the latter.
  */
 export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn?: (message: string) => void }): Agent {
-  const { name, config = {}, instructionsMd, tools = [], skills = [], workspace, defaultWorkspaceBasePath } = entry;
+  const {
+    name,
+    config = {},
+    instructionsMd,
+    tools = [],
+    skills = [],
+    workspace,
+    defaultWorkspaceBasePath,
+    subagents = [],
+  } = entry;
   const onWarn = options?.onWarn ?? (() => {});
 
   // A code-defined agent (`export default new Agent({...})`) is used verbatim.
@@ -121,6 +138,11 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
         `Agent "${name}": config.ts exports a new Agent(), so agents/${name}/workspace.ts is ignored. Set the workspace in the Agent config instead.`,
       );
     }
+    if (subagents.length > 0) {
+      onWarn(
+        `Agent "${name}": config.ts exports a new Agent(), so discovered subagents under agents/${name}/subagents/ are ignored. Set 'agents' in the Agent config instead.`,
+      );
+    }
     return config;
   }
 
@@ -139,6 +161,7 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
   const mergedTools = mergeTools(name, tools, config.tools, onWarn);
   const mergedSkills = mergeSkills(name, skills, config.skills, onWarn);
   const mergedWorkspace = mergeWorkspace(name, workspace, config.workspace, defaultWorkspaceBasePath, onWarn);
+  const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, options);
 
   const assembled = {
     ...config,
@@ -148,6 +171,7 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
     ...(mergedTools !== undefined ? { tools: mergedTools } : {}),
     ...(mergedSkills !== undefined ? { skills: mergedSkills } : {}),
     ...(mergedWorkspace !== undefined ? { workspace: mergedWorkspace } : {}),
+    ...(mergedAgents !== undefined ? { agents: mergedAgents } : {}),
   } as AgentConfig;
 
   return new Agent(assembled);
@@ -247,6 +271,96 @@ function mergeSkills(
 
   const merged: SkillInput[] = [...fromFs, ...fromConfig];
   return merged.length > 0 ? merged : undefined;
+}
+
+/**
+ * Assemble discovered subagents and merge them into the parent's `agents` map.
+ *
+ * Each discovered subagent is assembled independently via
+ * `assembleAgentFromFsEntry` (one level deep — its own `subagents` are not
+ * threaded further). Rules:
+ * - Each subagent's `config.ts` must resolve a non-empty `description`;
+ *   otherwise a dir-scoped build error is thrown.
+ * - A subagent id that collides with a resolved tool key on the same parent, or
+ *   a duplicate subagent id, is a build error.
+ * - `config.agents` takes precedence: a dynamic (function) `config.agents` wins
+ *   wholesale and discovered subagents are ignored with a warning; a static
+ *   `config.agents` wins per-key on id collision with a warning.
+ */
+function mergeSubAgents(
+  name: string,
+  fsSubAgents: FsAgentEntry[],
+  configAgents: FsAgentConfig['agents'],
+  mergedTools: ToolsInput | undefined,
+  options?: { onWarn?: (message: string) => void },
+): FsAgentConfig['agents'] | undefined {
+  const onWarn = options?.onWarn ?? (() => {});
+
+  // Dynamic config.agents (a function) can't be statically merged; it wins
+  // wholesale and discovered subagents are ignored with a warning.
+  if (typeof configAgents === 'function') {
+    if (fsSubAgents.length > 0) {
+      onWarn(
+        `Agent "${name}": config.agents is a function, so discovered subagents under agents/${name}/subagents/ are ignored.`,
+      );
+    }
+    return configAgents;
+  }
+
+  const fromConfig = (configAgents ?? {}) as Record<string, Agent>;
+  const configKeys = new Set(Object.keys(fromConfig));
+  const toolKeys = new Set(Object.keys(mergedTools ?? {}));
+
+  const fromFs: Record<string, Agent> = {};
+  for (const childEntry of fsSubAgents) {
+    const childId = childEntry.name;
+
+    if (childId in fromFs) {
+      throw new MastraError({
+        id: 'AGENT_FS_ROUTING_SUBAGENT_NAME_COLLISION',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: name, subagentName: childId },
+        text: `Agent "${name}": duplicate subagent "${childId}" under agents/${name}/subagents/.`,
+      });
+    }
+
+    if (toolKeys.has(childId)) {
+      throw new MastraError({
+        id: 'AGENT_FS_ROUTING_SUBAGENT_NAME_COLLISION',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: name, subagentName: childId },
+        text: `Agent "${name}": subagent "${childId}" collides with a tool of the same name. Rename agents/${name}/subagents/${childId}/ or the tool.`,
+      });
+    }
+
+    // One level deep: a subagent's own `subagents` are not threaded further.
+    const child = assembleAgentFromFsEntry({ ...childEntry, subagents: undefined }, options);
+
+    const description = child.getDescription();
+    if (!description || description.trim() === '') {
+      throw new MastraError({
+        id: 'AGENT_FS_ROUTING_SUBAGENT_DESCRIPTION_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: { agentName: name, subagentName: childId },
+        text: `Agent "${name}": subagent "${childId}" requires a non-empty 'description'. Set one in agents/${name}/subagents/${childId}/config.ts.`,
+      });
+    }
+
+    if (configKeys.has(childId)) {
+      onWarn(
+        `Agent "${name}": subagent "${childId}" defined in both config.agents and subagents/; config.agents wins.`,
+      );
+      continue;
+    }
+
+    fromFs[childId] = child;
+  }
+
+  const merged = { ...fromFs, ...fromConfig };
+  return Object.keys(merged).length > 0 ? (merged as FsAgentConfig['agents']) : undefined;
 }
 
 /**

@@ -151,5 +151,5 @@ describeForAllEngines(
       expect(nonSupervisorRequests).toHaveLength(0);
     });
   },
-  { skip: ['durable', 'fs'] },
+  { skip: ['durable'] },
 );

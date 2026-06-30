@@ -29,6 +29,12 @@ export interface DiscoveredFsAgent {
   tools: { key: string; path: string }[];
   /** Skills discovered under `skills/`, in stable (sorted) order. */
   skills: DiscoveredFsSkill[];
+  /**
+   * Declared subagents discovered under `subagents/`, in stable (sorted) order.
+   * Subagents are one level deep only: a discovered subagent never carries its
+   * own `subagents` (nested `subagents/` directories are ignored with a warning).
+   */
+  subagents: DiscoveredFsAgent[];
 }
 
 /**
@@ -217,13 +223,107 @@ async function discoverSkills(skillsDir: string): Promise<DiscoveredFsSkill[]> {
 }
 
 /**
+ * Discover a single agent directory: its `config`/`instructions`/`workspace`
+ * files plus `tools/`, `skills/`, and (when `allowSubagents`) one level of
+ * declared `subagents/`. Returns `undefined` when `dir` is not an agent
+ * directory (no `config.(ts|js)` and no `instructions.md`).
+ *
+ * `allowSubagents` is `true` for top-level agents and `false` when discovering a
+ * subagent, so nested `subagents/` directories are never recursed into.
+ */
+async function discoverAgentDir(
+  dir: string,
+  name: string,
+  allowSubagents: boolean,
+  onWarn?: (message: string) => void,
+): Promise<DiscoveredFsAgent | undefined> {
+  const configPath = await firstExisting(dir, CONFIG_BASENAMES);
+  const instructionsPath = (await exists(join(dir, INSTRUCTIONS_BASENAME)))
+    ? slash(join(dir, INSTRUCTIONS_BASENAME))
+    : undefined;
+
+  // Not an agent directory unless it has a config or instructions file.
+  if (!configPath && !instructionsPath) {
+    return undefined;
+  }
+
+  const workspacePath = await firstExisting(dir, WORKSPACE_BASENAMES);
+  const workspaceSeedDir = await directoryExists(join(dir, 'workspace'));
+  const tools = await discoverTools(join(dir, 'tools'));
+  const skills = await discoverSkills(join(dir, 'skills'));
+  const subagents = await discoverSubagents(dir, allowSubagents, onWarn);
+
+  return {
+    name,
+    dir: slash(dir),
+    configPath,
+    instructionsPath,
+    workspacePath,
+    workspaceSeedDir,
+    tools,
+    skills,
+    subagents,
+  };
+}
+
+/**
+ * Discover declared subagents under `<dir>/subagents/*`. Subagents are one level
+ * deep only: each discovered subagent is scanned with `allowSubagents: false`,
+ * so a nested `subagents/` directory inside a subagent is ignored with a warning.
+ * When `allowSubagents` is `false` (we are already inside a subagent) the whole
+ * `subagents/` directory is skipped and a warning is emitted if present.
+ */
+async function discoverSubagents(
+  parentDir: string,
+  allowSubagents: boolean,
+  onWarn?: (message: string) => void,
+): Promise<DiscoveredFsAgent[]> {
+  const subagentsDir = join(parentDir, 'subagents');
+  if (!(await exists(subagentsDir))) {
+    return [];
+  }
+
+  if (!allowSubagents) {
+    onWarn?.(
+      `Ignoring nested subagents in "${slash(subagentsDir)}": subagents are one level deep only, so a subagent cannot declare its own subagents.`,
+    );
+    return [];
+  }
+
+  let entries: string[];
+  try {
+    entries = await readdir(subagentsDir);
+  } catch {
+    return [];
+  }
+
+  const subagents: DiscoveredFsAgent[] = [];
+  for (const name of entries.sort()) {
+    const dir = join(subagentsDir, name);
+    if (!(await stat(dir)).isDirectory()) {
+      continue;
+    }
+    const child = await discoverAgentDir(dir, name, false, onWarn);
+    if (child) {
+      subagents.push(child);
+    }
+  }
+
+  return subagents;
+}
+
+/**
  * Scan `<mastraDir>/agents/*` for file-system routed agents. A directory is
  * treated as an agent only when it contains a `config.(ts|js)` or an
- * `instructions.md`; other directories are ignored. Returns descriptors with
- * absolute, slash-normalized paths ready for codegen. Performs no module
- * evaluation — only filesystem inspection.
+ * `instructions.md`; other directories are ignored. Each top-level agent may
+ * declare one level of `subagents/`. Returns descriptors with absolute,
+ * slash-normalized paths ready for codegen. Performs no module evaluation —
+ * only filesystem inspection.
  */
-export async function discoverFsAgents(mastraDir: string): Promise<DiscoveredFsAgent[]> {
+export async function discoverFsAgents(
+  mastraDir: string,
+  onWarn?: (message: string) => void,
+): Promise<DiscoveredFsAgent[]> {
   const agentsDir = join(mastraDir, 'agents');
   if (!(await exists(agentsDir))) {
     return [];
@@ -242,31 +342,10 @@ export async function discoverFsAgents(mastraDir: string): Promise<DiscoveredFsA
     if (!(await stat(dir)).isDirectory()) {
       continue;
     }
-
-    const configPath = await firstExisting(dir, CONFIG_BASENAMES);
-    const instructionsPath = (await exists(join(dir, INSTRUCTIONS_BASENAME)))
-      ? slash(join(dir, INSTRUCTIONS_BASENAME))
-      : undefined;
-
-    // Not an agent directory unless it has a config or instructions file.
-    if (!configPath && !instructionsPath) {
-      continue;
+    const agent = await discoverAgentDir(dir, name, true, onWarn);
+    if (agent) {
+      discovered.push(agent);
     }
-
-    const workspacePath = await firstExisting(dir, WORKSPACE_BASENAMES);
-    const workspaceSeedDir = await directoryExists(join(dir, 'workspace'));
-    const tools = await discoverTools(join(dir, 'tools'));
-    const skills = await discoverSkills(join(dir, 'skills'));
-    discovered.push({
-      name,
-      dir: slash(dir),
-      configPath,
-      instructionsPath,
-      workspacePath,
-      workspaceSeedDir,
-      tools,
-      skills,
-    });
   }
 
   return discovered;

@@ -54,6 +54,7 @@ describe('generated module evaluation', () => {
         instructionsPath: undefined,
         tools: [{ key: 'get_weather', path: join(agentDir, 'tools', 'get_weather.mjs') }],
         skills: [],
+        subagents: [],
       },
     ];
 
@@ -118,6 +119,7 @@ describe('generated module evaluation', () => {
             references: { 'checklist.md': '# Checklist' },
           },
         ],
+        subagents: [],
       },
     ];
 
@@ -134,5 +136,75 @@ describe('generated module evaluation', () => {
     expect(skill).toMatchObject({ __inline: true, name: 'review', description: 'Use when reviewing.' });
     expect(skill.instructions).toContain('Do it.');
     expect(skill.references['checklist.md']).toContain('Checklist');
+  });
+
+  it('assembles a declared subagent and exposes it under its bare id', async () => {
+    // The stub recursively assembles subagents into a `subagents` map keyed by
+    // the bare child id, mirroring how real assembly wires `agents`.
+    const coreStub = join(dir, 'core-agent.mjs');
+    await writeFile(
+      coreStub,
+      `export function assembleAgentFromFsEntry(entry) {
+         const subagents = {};
+         for (const child of entry.subagents ?? []) {
+           subagents[child.name] = assembleAgentFromFsEntry(child);
+         }
+         return { id: entry.name, name: entry.name, __entry: entry, subagents };
+       }`,
+    );
+
+    const userEntry = join(dir, 'index.mjs');
+    await writeFile(
+      userEntry,
+      `const registered = {};
+       export const mastra = {
+         registered,
+         getLogger() { return { warn() {} }; },
+         __registerFsAgents(map) { Object.assign(registered, map); },
+       };`,
+    );
+
+    const parentDir = join(dir, 'agents', 'supervisor');
+    const childDir = join(parentDir, 'subagents', 'writer');
+    await mkdir(childDir, { recursive: true });
+    await writeFile(join(parentDir, 'config.mjs'), `export default { model: 'm' };`);
+    await writeFile(join(childDir, 'config.mjs'), `export default { model: 'm', description: 'Writes' };`);
+
+    const agents: DiscoveredFsAgent[] = [
+      {
+        name: 'supervisor',
+        dir: parentDir,
+        configPath: join(parentDir, 'config.mjs'),
+        instructionsPath: undefined,
+        tools: [],
+        skills: [],
+        subagents: [
+          {
+            name: 'writer',
+            dir: childDir,
+            configPath: join(childDir, 'config.mjs'),
+            instructionsPath: undefined,
+            tools: [],
+            skills: [],
+            subagents: [],
+          },
+        ],
+      },
+    ];
+
+    let source = await generateFsAgentsModule(userEntry, agents);
+    source = source.replace(`'@mastra/core/agent'`, JSON.stringify(coreStub));
+
+    const generated = join(dir, 'wrapper-subagent.mjs');
+    await writeFile(generated, source);
+
+    const mod = await import(pathToFileURL(generated).href);
+
+    const supervisor = mod.mastra.registered.supervisor;
+    expect(supervisor).toBeTruthy();
+    // The declared subagent is wired in under its bare id.
+    expect(Object.keys(supervisor.subagents)).toEqual(['writer']);
+    expect(supervisor.subagents.writer.name).toBe('writer');
+    expect(supervisor.subagents.writer.__entry.config.description).toBe('Writes');
   });
 });

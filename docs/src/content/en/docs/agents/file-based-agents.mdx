@@ -38,6 +38,7 @@ src/mastra/
 | `agents/<name>/skills/<skill>.md` | a flat skill; the filename is the skill name and the body is the instructions. |
 | `agents/<name>/workspace.ts` | default export: a `Workspace` for the agent. Optional — a default workspace is created if omitted. |
 | `agents/<name>/workspace/` | seed files mirrored into the agent's workspace at build time. Optional. |
+| `agents/<name>/subagents/<childId>/` | a declared subagent; same layout as an agent directory. Wired into the parent as a delegation tool named `<childId>`. |
 
 ## Quickstart
 
@@ -191,15 +192,56 @@ src/mastra/agents/weather/
 
 The contents are copied into the bundle next to the running server, and the agent's default workspace is rooted there. This matches the directory-per-agent model: commit the starting files alongside the agent that uses them.
 
+## Subagents
+
+A file-based agent can declare **subagents** — specialist child agents it can delegate to. Add a `subagents/` directory under the agent, with one directory per subagent. Each subagent directory has the same layout as a top-level agent (`config.ts`, `instructions.md`, `tools/`, `skills/`, `workspace.ts` / `workspace/`):
+
+```
+src/mastra/agents/
+  supervisor/
+    config.ts
+    instructions.md
+    subagents/
+      researcher/
+        config.ts            # must set a description
+        instructions.md
+        tools/
+          search.ts
+```
+
+Each subagent is assembled as its own agent and wired into the parent's `agents` map, which the agent loop lowers into a model-visible delegation tool. The tool name is the bare directory name — `researcher` in the example above — so the supervisor can call it directly.
+
+A subagent's `config.ts` **must set a non-empty `description`**. The description is what the model sees when deciding whether to delegate, so the build fails if it is missing:
+
+```typescript title="src/mastra/agents/supervisor/subagents/researcher/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  description: 'Researches a topic and returns cited findings.',
+})
+```
+
+Subagents are **isolated**: a subagent inherits nothing from its parent. Its tools, skills, and workspace come only from its own directory, and any absent slot falls back to the same framework defaults as a top-level agent (including a default workspace). Seed files under a subagent's `workspace/` are mirrored alongside the parent's.
+
+Subagents are **one level deep**. A `subagents/` directory is only discovered directly under a top-level agent; a `subagents/` directory nested inside a subagent is ignored with a warning. This makes delegation cycles impossible.
+
+Naming rules:
+
+- A subagent id that collides with one of the parent's tool keys is a **build error**.
+- A duplicate subagent id under the same parent is a **build error**.
+- A subagent id that also appears in the parent's `config.agents` keeps the `config.agents` entry and logs a warning.
+
 ## Precedence rules
 
 File-based and code-based agents coexist with deterministic rules:
 
 - **Code wins on name collisions.** If an agent name exists in both code and the filesystem, the code-registered agent is kept and a warning is logged. Explicit registration always beats convention.
-- **A folder can hold a code agent.** If `config.ts` exports `new Agent({...})`, that instance is used as-is — it is not re-wrapped. A sibling `instructions.md` or `tools/` directory is ignored in that case (with a warning).
+- **A folder can hold a code agent.** If `config.ts` exports `new Agent({...})`, that instance is used as-is — it is not re-wrapped. A sibling `instructions.md`, `tools/`, or `subagents/` directory is ignored in that case (with a warning).
 - **Instructions.** A dynamic (function) `instructions` in `config.ts` wins over `instructions.md`; otherwise `instructions.md` wins over a static `instructions` string. If neither is present, the build fails for that agent.
 - **Tools.** Tools from `tools/*.ts` merge with `config.tools`; on a key collision, `config.tools` wins and a warning is logged.
 - **Skills.** Skills from `skills/` merge with `config.skills`; on a name collision, `config.skills` wins and a warning is logged.
+- **Subagents.** Subagents from `subagents/` merge with `config.agents`; on an id collision, `config.agents` wins and a warning is logged. A subagent id that collides with a tool key, or a duplicate subagent id, is a build error.
 - **Model is required.** A missing `model` fails the build, naming the agent directory.
 
 ## Errors
@@ -215,4 +257,5 @@ Agent "weather": missing model in config.ts and no default. Provide a 'model' in
 - [Agents overview](/docs/agents/overview)
 - [Tools](/docs/agents/using-tools)
 - [Skills](/docs/agents/skills)
+- [Supervisor agents](/docs/agents/supervisor-agents)
 - [Studio overview](/docs/studio/overview)

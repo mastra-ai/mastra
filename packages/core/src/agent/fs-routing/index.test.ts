@@ -352,4 +352,147 @@ describe('assembleAgentFromFsEntry', () => {
       expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('workspace.ts is ignored'));
     });
   });
+
+  describe('subagents', () => {
+    function childEntry(name: string, description: string) {
+      return {
+        name,
+        config: { model: 'openai/gpt-4o' as const, description },
+        instructionsMd: `You are the ${name} subagent.`,
+      };
+    }
+
+    it('assembles discovered subagents and wires them into the parent agents map', async () => {
+      const parent = assembleAgentFromFsEntry({
+        name: 'supervisor',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'Delegate to specialists.',
+        subagents: [childEntry('researcher', 'Researches topics.'), childEntry('writer', 'Writes drafts.')],
+      });
+
+      const agents = await parent.listAgents();
+      expect(Object.keys(agents).sort()).toEqual(['researcher', 'writer']);
+      expect(agents.researcher!.getDescription()).toBe('Researches topics.');
+      expect(await (agents.researcher as Agent).getInstructions()).toBe('You are the researcher subagent.');
+    });
+
+    it('throws when a subagent has no description', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'supervisor',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          subagents: [
+            {
+              name: 'researcher',
+              config: { model: 'openai/gpt-4o' },
+              instructionsMd: 'You research.',
+            },
+          ],
+        }),
+      ).toThrow(/requires a non-empty 'description'/);
+    });
+
+    it('throws when a subagent id collides with a sibling tool key', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'supervisor',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          tools: [makeTool('researcher')],
+          subagents: [childEntry('researcher', 'Researches topics.')],
+        }),
+      ).toThrow(/collides with a tool/);
+    });
+
+    it('throws on duplicate subagent ids', () => {
+      expect(() =>
+        assembleAgentFromFsEntry({
+          name: 'supervisor',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          subagents: [childEntry('researcher', 'First.'), childEntry('researcher', 'Second.')],
+        }),
+      ).toThrow(/duplicate subagent/);
+    });
+
+    it('lets config.agents win on id collision and warns', async () => {
+      const onWarn = vi.fn();
+      const configChild = new Agent({
+        id: 'researcher',
+        name: 'researcher',
+        description: 'Config version of the researcher.',
+        instructions: 'config researcher',
+        model: 'openai/gpt-4o',
+      });
+
+      const parent = assembleAgentFromFsEntry(
+        {
+          name: 'supervisor',
+          config: { model: 'openai/gpt-4o', agents: { researcher: configChild } },
+          instructionsMd: 'hi',
+          subagents: [childEntry('researcher', 'FS version.')],
+        },
+        { onWarn },
+      );
+
+      const agents = await parent.listAgents();
+      expect(agents.researcher).toBe(configChild);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('researcher'));
+    });
+
+    it('warns and ignores discovered subagents when config.agents is a function', async () => {
+      const onWarn = vi.fn();
+      const dynamicAgents = () => ({});
+
+      assembleAgentFromFsEntry(
+        {
+          name: 'supervisor',
+          config: { model: 'openai/gpt-4o', agents: dynamicAgents },
+          instructionsMd: 'hi',
+          subagents: [childEntry('researcher', 'FS version.')],
+        },
+        { onWarn },
+      );
+
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('function'));
+    });
+
+    it('ignores discovered subagents when config.ts exports a new Agent()', async () => {
+      const onWarn = vi.fn();
+      const coded = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'Code-defined.',
+        model: 'openai/gpt-4o',
+      });
+
+      const result = assembleAgentFromFsEntry(
+        { name: 'supervisor', config: coded, subagents: [childEntry('researcher', 'FS version.')] },
+        { onWarn },
+      );
+
+      expect(result).toBe(coded);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('subagents'));
+    });
+
+    it('ignores a nested subagents/ inside a subagent (one level only)', async () => {
+      const parent = assembleAgentFromFsEntry({
+        name: 'supervisor',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        subagents: [
+          {
+            ...childEntry('researcher', 'Researches topics.'),
+            subagents: [childEntry('grandchild', 'Should be ignored.')],
+          },
+        ],
+      });
+
+      const agents = await parent.listAgents();
+      expect(Object.keys(agents)).toEqual(['researcher']);
+      const researcher = await (agents.researcher as Agent).listAgents();
+      expect(Object.keys(researcher)).toEqual([]);
+    });
+  });
 });

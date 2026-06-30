@@ -17,20 +17,20 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-async function writeAgent(
-  name: string,
-  files: {
-    config?: string;
-    instructions?: string;
-    workspace?: string;
-    /** Map of relative path under `workspace/` to seed file content. */
-    workspaceSeed?: Record<string, string>;
-    tools?: Record<string, string>;
-    /** Map of relative path under `skills/` to file content. */
-    skills?: Record<string, string>;
-  },
-) {
-  const agentDir = join(dir, 'agents', name);
+interface AgentFiles {
+  config?: string;
+  instructions?: string;
+  workspace?: string;
+  /** Map of relative path under `workspace/` to seed file content. */
+  workspaceSeed?: Record<string, string>;
+  tools?: Record<string, string>;
+  /** Map of relative path under `skills/` to file content. */
+  skills?: Record<string, string>;
+  /** Declared subagents, written under `subagents/<id>/`. */
+  subagents?: Record<string, AgentFiles>;
+}
+
+async function writeAgentDir(agentDir: string, files: AgentFiles) {
   await mkdir(agentDir, { recursive: true });
   if (files.config !== undefined) {
     await writeFile(join(agentDir, 'config.ts'), files.config);
@@ -61,6 +61,15 @@ async function writeAgent(
       await writeFile(target, content);
     }
   }
+  if (files.subagents) {
+    for (const [childName, childFiles] of Object.entries(files.subagents)) {
+      await writeAgentDir(join(agentDir, 'subagents', childName), childFiles);
+    }
+  }
+}
+
+async function writeAgent(name: string, files: AgentFiles) {
+  await writeAgentDir(join(dir, 'agents', name), files);
 }
 
 describe('discoverFsAgents', () => {
@@ -375,5 +384,120 @@ describe('mirrorFsAgentWorkspaces', () => {
     const bundleDir = join(dir, 'output');
 
     expect(await mirrorFsAgentWorkspaces(dir, bundleDir)).toEqual([]);
+  });
+});
+
+describe('subagents', () => {
+  it('discovers one level of subagents under subagents/', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'Delegate.',
+      subagents: {
+        researcher: {
+          config: `export default { model: 'openai/gpt-4o', description: 'Researches' };`,
+          instructions: 'Research.',
+          tools: { 'search.ts': `export default {};` },
+        },
+        writer: {
+          config: `export default { model: 'openai/gpt-4o', description: 'Writes' };`,
+          instructions: 'Write.',
+        },
+      },
+    });
+
+    const agents = await discoverFsAgents(dir);
+    expect(agents).toHaveLength(1);
+    const parent = agents[0]!;
+    expect(parent.subagents.map(s => s.name)).toEqual(['researcher', 'writer']);
+    const researcher = parent.subagents.find(s => s.name === 'researcher')!;
+    expect(researcher.tools.map(t => t.key)).toEqual(['search']);
+    expect(researcher.instructionsPath).toMatch(/supervisor\/subagents\/researcher\/instructions\.md$/);
+  });
+
+  it('skips subagent directories without config or instructions', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    // A stray subagents/ dir with no agent files.
+    await mkdir(join(dir, 'agents', 'supervisor', 'subagents', 'not-an-agent'), { recursive: true });
+
+    const parent = (await discoverFsAgents(dir))[0]!;
+    expect(parent.subagents).toEqual([]);
+  });
+
+  it('ignores nested subagents (one level only) with a warning', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      subagents: {
+        researcher: {
+          config: `export default { model: 'openai/gpt-4o', description: 'Researches' };`,
+          instructions: 'r',
+          subagents: {
+            helper: {
+              config: `export default { model: 'openai/gpt-4o', description: 'Helps' };`,
+              instructions: 'h',
+            },
+          },
+        },
+      },
+    });
+    const warnings: string[] = [];
+
+    const parent = (await discoverFsAgents(dir, m => warnings.push(m)))[0]!;
+    const researcher = parent.subagents[0]!;
+    // The grandchild is dropped: a subagent never carries its own subagents.
+    expect(researcher.subagents).toEqual([]);
+    expect(warnings.some(w => /one level deep/.test(w))).toBe(true);
+  });
+
+  it('emits nested assembleAgentFromFsEntry entries for subagents with inlined instructions', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'Delegate.',
+      subagents: {
+        writer: {
+          config: `export default { model: 'openai/gpt-4o', description: 'Writes' };`,
+          instructions: 'You are the writer subagent.',
+          tools: { 'draft.ts': `export default {};` },
+        },
+      },
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+    // Parent carries a subagents: [...] field.
+    expect(source).toContain('subagents: [');
+    // Child instructions are inlined.
+    expect(source).toContain(JSON.stringify('You are the writer subagent.'));
+    // Child name preserved as the bare delegation key.
+    expect(source).toContain('name: "writer"');
+    // Subagent workspace base path nests under <parent>/<child>.
+    expect(source).toContain('defaultWorkspaceBasePath: __workspaceBasePath("supervisor/writer")');
+    // Generated identifiers are unique across parent/child.
+    expect(source).toMatch(/import config_0_supervisor from /);
+    expect(source).toMatch(/import config_0_0_writer from /);
+  });
+
+  it('mirrors subagent workspace seeds to <bundle>/workspace/<parent>/<child>', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      workspaceSeed: { 'parent.txt': 'p' },
+      subagents: {
+        writer: {
+          config: `export default { model: 'openai/gpt-4o', description: 'Writes' };`,
+          instructions: 'w',
+          workspaceSeed: { 'child.txt': 'c' },
+        },
+      },
+    });
+    const bundleDir = join(dir, 'output');
+
+    const mirrored = await mirrorFsAgentWorkspaces(dir, bundleDir);
+    expect(mirrored.sort()).toEqual(['supervisor', 'supervisor/writer']);
+    expect(await readFile(join(bundleDir, 'workspace', 'supervisor', 'parent.txt'), 'utf-8')).toBe('p');
+    expect(await readFile(join(bundleDir, 'workspace', 'supervisor', 'writer', 'child.txt'), 'utf-8')).toBe('c');
   });
 });

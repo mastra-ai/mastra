@@ -65,10 +65,12 @@ export interface LoopScenarioResult {
  * - `'durable'` — durable execution via `createDurableAgent` wrapper.
  * - `'fs'` — agent assembled from file-system routing (`assembleAgentFromFsEntry`,
  *   `instructions.md` body + discovered `tools/*`) and registered through
- *   `Mastra.__registerFsAgents`, then run on the normal engine. Scenarios whose
- *   inputs the file-routing path cannot model (dynamic-function instructions,
- *   `sharedAgent`, subagents/workflows/goal config) skip this variant via
- *   `{ skip: ['fs'] }`.
+ *   `Mastra.__registerFsAgents`, then run on the normal engine. `agents`
+ *   (subagents), `goal`, `workspace`, and `workflows` config are threaded through,
+ *   so supervisor / agents-as-tools and goal scenarios run on `'fs'`. Scenarios
+ *   whose inputs the file-routing path cannot model (dynamic-function
+ *   instructions, `sharedAgent`, `workflows`-as-tool, durable resume/suspension)
+ *   skip this variant via `{ skip: ['fs'] }`.
  */
 export type EngineVariant = 'normal' | 'evented' | 'durable' | 'fs';
 
