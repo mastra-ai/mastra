@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getExecutorSource } from '../executor';
-import { VercelSandbox } from './index';
+import { VercelServerlessSandbox } from './index';
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -30,14 +30,14 @@ function createExecuteResponse(result: Record<string, unknown>) {
  * Start a sandbox with fake timers. The polling loop and retry backoff use
  * real setTimeout, so we need to flush timers while the promise is in-flight.
  */
-async function startWithTimers(sb: VercelSandbox) {
+async function startWithTimers(sb: VercelServerlessSandbox) {
   const promise = sb._start();
   await vi.runAllTimersAsync();
   return promise;
 }
 
-describe('VercelSandbox', () => {
-  let sandbox: VercelSandbox;
+describe('VercelServerlessSandbox', () => {
+  let sandbox: VercelServerlessSandbox;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -45,7 +45,7 @@ describe('VercelSandbox', () => {
     // vi.clearAllMocks only clears call history, leaking mockResolvedValueOnce
     // values into subsequent tests.
     mockFetch.mockReset();
-    sandbox = new VercelSandbox({ token: 'test-token' });
+    sandbox = new VercelServerlessSandbox({ token: 'test-token' });
   });
 
   afterEach(() => {
@@ -54,10 +54,10 @@ describe('VercelSandbox', () => {
 
   describe('constructor', () => {
     it('should create instance with defaults', () => {
-      expect(sandbox.name).toBe('VercelSandbox');
-      expect(sandbox.provider).toBe('vercel');
+      expect(sandbox.name).toBe('VercelServerlessSandbox');
+      expect(sandbox.provider).toBe('vercel-serverless');
       expect(sandbox.status).toBe('pending');
-      expect(sandbox.id).toMatch(/^vercel-sandbox-/);
+      expect(sandbox.id).toMatch(/^vercel-serverless-sandbox-/);
     });
   });
 
@@ -94,7 +94,7 @@ describe('VercelSandbox', () => {
     });
 
     it('should include vercel.json with correct functions and regions', async () => {
-      const customSandbox = new VercelSandbox({
+      const customSandbox = new VercelServerlessSandbox({
         token: 'test-token',
         memory: 512,
         maxDuration: 30,
@@ -118,7 +118,7 @@ describe('VercelSandbox', () => {
     });
 
     it('should throw if no token', async () => {
-      const noTokenSandbox = new VercelSandbox({ token: '' });
+      const noTokenSandbox = new VercelServerlessSandbox({ token: '' });
       const promise = noTokenSandbox._start().catch(e => e);
       await vi.runAllTimersAsync();
       const error = await promise;
@@ -153,7 +153,7 @@ describe('VercelSandbox', () => {
     });
 
     it('should include teamId in request', async () => {
-      const teamSandbox = new VercelSandbox({ token: 'test-token', teamId: 'team-abc' });
+      const teamSandbox = new VercelServerlessSandbox({ token: 'test-token', teamId: 'team-abc' });
 
       mockFetch
         .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))
@@ -300,7 +300,7 @@ describe('VercelSandbox', () => {
   describe('executeCommand()', () => {
     it('should auto-start on the first command', async () => {
       // Use a fresh sandbox — don't rely on the shared beforeEach start
-      const freshSandbox = new VercelSandbox({ token: 'test-token' });
+      const freshSandbox = new VercelServerlessSandbox({ token: 'test-token' });
 
       mockFetch
         .mockResolvedValueOnce(createDeploymentResponse('dep-123', 'my-deploy.vercel.app', 'BUILDING'))
@@ -422,7 +422,7 @@ describe('VercelSandbox', () => {
     });
 
     it('should throw if destroyed', async () => {
-      const freshSandbox = new VercelSandbox({ token: 'test-token' });
+      const freshSandbox = new VercelServerlessSandbox({ token: 'test-token' });
       // Force status to 'destroyed' to bypass ensureRunning auto-start
       (freshSandbox as any).status = 'destroyed';
       await expect(freshSandbox.executeCommand('echo', ['hi'])).rejects.toThrow(/not ready/i);
@@ -574,7 +574,7 @@ describe('VercelSandbox', () => {
     });
 
     it('should be a no-op when never started', async () => {
-      const freshSandbox = new VercelSandbox({ token: 'test-token' });
+      const freshSandbox = new VercelServerlessSandbox({ token: 'test-token' });
 
       await freshSandbox._destroy();
 
@@ -593,7 +593,7 @@ describe('VercelSandbox', () => {
     });
 
     it('should use string override', () => {
-      const customSandbox = new VercelSandbox({
+      const customSandbox = new VercelServerlessSandbox({
         token: 'test-token',
         instructions: 'Custom instructions',
       });
@@ -601,7 +601,7 @@ describe('VercelSandbox', () => {
     });
 
     it('should use function override', () => {
-      const customSandbox = new VercelSandbox({
+      const customSandbox = new VercelServerlessSandbox({
         token: 'test-token',
         instructions: ({ defaultInstructions }) => `${defaultInstructions}\nExtra info.`,
       });
@@ -615,8 +615,8 @@ describe('VercelSandbox', () => {
     it('should return sandbox info', async () => {
       const info = await sandbox.getInfo!();
       expect(info.id).toBe(sandbox.id);
-      expect(info.name).toBe('VercelSandbox');
-      expect(info.provider).toBe('vercel');
+      expect(info.name).toBe('VercelServerlessSandbox');
+      expect(info.provider).toBe('vercel-serverless');
       expect(info.metadata?.regions).toEqual(['iad1']);
     });
   });
