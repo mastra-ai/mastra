@@ -1,302 +1,288 @@
 /**
- * CLI demo: chat-built, statically-stored, live-registered workflows.
+ * Workflow Builder CLI — HTTP-driven demo.
  *
- *   $ pnpm tsx src/workflow-builder-cli.ts
- *   > build me a workflow that takes a city and writes a weather report
- *   [agent describes plan + calls add-tool-step / add-agent-step / add-map-step / save-and-register]
- *   > /run weather-cli {"location":"Helsinki"}
- *   { ...result }
- *   > /list
- *   - weather-cli (active)
- *   > /exit
+ * Boots a Mastra HTTP server in the same process, then becomes a thin HTTP
+ * client against it. Every action the user takes hits the same endpoints
+ * Studio would hit later:
  *
- * Slash commands:
- *   /list                  list saved workflows
- *   /run <id> <json>       run a saved workflow with the given input
- *   /show                  show the current draft
- *   /reset                 clear the current draft
- *   /exit                  quit
+ *   - chat       → POST /api/agents/workflow-builder-agent/stream  (SSE)
+ *   - /list      → GET  /api/stored/workflows
+ *   - /run       → POST /api/workflows/:id/start-async
  *
- * Anything else is sent to the workflow-builder-agent.
+ * No closure-based tools, no in-process Mastra reach-arounds — the agent's
+ * tools run server-side and call `mastra.addStoredWorkflow()` via the same
+ * code path the `POST /api/stored/workflows` handler uses.
  */
-// Load .env from cwd so OPENAI_API_KEY (and friends) are picked up without
-// the user having to `export` them first. `loadEnvFile` is built into Node
-// 20.6+ — no dotenv dep. The try/catch makes it a no-op when no .env exists.
 try {
   process.loadEnvFile();
 } catch {
-  /* no .env present — fall through */
+  /* no .env present */
 }
 
-import { Mastra } from '@mastra/core/mastra';
-import { createTool } from '@mastra/core/tools';
-import { InMemoryStore } from '@mastra/core/storage';
-import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { z } from 'zod';
-import { createInterface } from 'node:readline/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
-import { weatherTool } from './mastra/tools/weather-tool';
-import { weatherReporterAgent } from './mastra/workflows/weather-report-workflow';
-import { workflowBuilderAgent } from './mastra/agents/workflow-builder-agent';
+import { createInterface } from 'node:readline/promises';
+import { createNodeServer } from '@mastra/deployer/server';
+import { buildWorkflowBuilderMastra } from './mastra/workflow-builder-mastra';
 
 // ============================================================================
-// Draft state (per-process)
+// Boot in-process Mastra HTTP server
 // ============================================================================
 
-interface WorkflowDraft {
-  id?: string;
-  description?: string;
-  inputSchema?: Record<string, any>;
-  outputSchema?: Record<string, any>;
-  graph: SerializedStepFlowEntry[];
-}
+const PORT = Number(process.env.WB_CLI_PORT ?? 4145);
+const API = `http://localhost:${PORT}/api`;
 
-function newDraft(): WorkflowDraft {
-  return { graph: [] };
-}
+const tmpDir = await mkdtemp(join(tmpdir(), 'wb-cli-'));
+const dbPath = join(tmpDir, 'wb.db');
+console.log(`[boot] libsql db: ${dbPath}`);
 
-// ============================================================================
-// Mastra setup
-// ============================================================================
+const mastra = buildWorkflowBuilderMastra({ storageUrl: `file:${dbPath}`, port: PORT });
+const server = await createNodeServer(mastra, { tools: {}, studio: false });
 
-const mastra = new Mastra({
-  logger: false,
-  agents: {
-    'workflow-builder-agent': workflowBuilderAgent,
-    'weather-reporter': weatherReporterAgent,
-  },
-  tools: { 'get-weather': weatherTool } as any,
-  storage: new InMemoryStore({ id: 'workflow-builder-demo' }),
-});
-
-await mastra.startWorkers();
-
-// ============================================================================
-// Client tools (close over `draft` + `mastra`)
-// ============================================================================
-
-let draft = newDraft();
-
-const clientTools = {
-  'set-workflow-id': createTool({
-    id: 'set-workflow-id',
-    description: 'Set the id of the workflow being built. Kebab-case, descriptive.',
-    inputSchema: z.object({ id: z.string().describe('e.g. "weather-report-demo"') }),
-    outputSchema: z.object({ ok: z.boolean() }),
-    execute: async ({ id }) => {
-      draft.id = id;
-      return { ok: true };
-    },
-  }),
-  'set-workflow-description': createTool({
-    id: 'set-workflow-description',
-    description: 'Set a one-sentence description of what the workflow does.',
-    inputSchema: z.object({ description: z.string() }),
-    outputSchema: z.object({ ok: z.boolean() }),
-    execute: async ({ description }) => {
-      draft.description = description;
-      return { ok: true };
-    },
-  }),
-  'set-workflow-input-schema': createTool({
-    id: 'set-workflow-input-schema',
-    description: 'Set the JSON Schema describing the workflow input (Draft 2020-12 object form).',
-    inputSchema: z.object({ schema: z.any() }),
-    outputSchema: z.object({ ok: z.boolean() }),
-    execute: async ({ schema }) => {
-      draft.inputSchema = schema as Record<string, any>;
-      return { ok: true };
-    },
-  }),
-  'set-workflow-output-schema': createTool({
-    id: 'set-workflow-output-schema',
-    description: 'Set the JSON Schema describing the workflow output (Draft 2020-12 object form).',
-    inputSchema: z.object({ schema: z.any() }),
-    outputSchema: z.object({ ok: z.boolean() }),
-    execute: async ({ schema }) => {
-      draft.outputSchema = schema as Record<string, any>;
-      return { ok: true };
-    },
-  }),
-  'add-tool-step': createTool({
-    id: 'add-tool-step',
-    description: 'Append a tool step that calls a registered tool by id.',
-    inputSchema: z.object({
-      toolId: z.string().describe('Must be one of the ids returned by list-available-tools.'),
-    }),
-    outputSchema: z.object({ ok: z.boolean(), stepIndex: z.number() }),
-    execute: async ({ toolId }) => {
-      draft.graph.push({ type: 'tool', id: toolId, toolId });
-      return { ok: true, stepIndex: draft.graph.length - 1 };
-    },
-  }),
-  'add-agent-step': createTool({
-    id: 'add-agent-step',
-    description: 'Append an agent step that calls a registered agent by id with the previous step output as input.',
-    inputSchema: z.object({
-      agentId: z.string().describe('Must be one of the ids returned by list-available-agents.'),
-    }),
-    outputSchema: z.object({ ok: z.boolean(), stepIndex: z.number() }),
-    execute: async ({ agentId }) => {
-      draft.graph.push({ type: 'agent', id: agentId, agentId });
-      return { ok: true, stepIndex: draft.graph.length - 1 };
-    },
-  }),
-  'add-map-step': createTool({
-    id: 'add-map-step',
-    description:
-      'Append a mapping step that reshapes data. mapConfig is an object whose values are { template: "..." }, { value: ... }, or { step: "stepId", path: "field" }.',
-    inputSchema: z.object({
-      mapConfig: z.record(z.string(), z.any()),
-    }),
-    outputSchema: z.object({ ok: z.boolean(), stepIndex: z.number() }),
-    execute: async ({ mapConfig }) => {
-      const id = `mapping_${draft.graph.length}`;
-      draft.graph.push({ type: 'mapping', id, mapConfig: JSON.stringify(mapConfig) });
-      return { ok: true, stepIndex: draft.graph.length - 1 };
-    },
-  }),
-  'list-available-agents': createTool({
-    id: 'list-available-agents',
-    description: 'List the agent ids you can reference in add-agent-step.',
-    inputSchema: z.object({}),
-    outputSchema: z.object({ agents: z.array(z.object({ id: z.string(), description: z.string().optional() })) }),
-    execute: async () => {
-      const all = mastra.getAgents();
-      return {
-        agents: Object.entries(all)
-          .filter(([id]) => id !== 'workflow-builder-agent')
-          .map(([id, a]) => ({ id, description: (a as any).description })),
-      };
-    },
-  }),
-  'list-available-tools': createTool({
-    id: 'list-available-tools',
-    description: 'List the tool ids you can reference in add-tool-step.',
-    inputSchema: z.object({}),
-    outputSchema: z.object({ tools: z.array(z.object({ id: z.string(), description: z.string().optional() })) }),
-    execute: async () => {
-      const all = (mastra as any).getTools?.() ?? {};
-      return {
-        tools: Object.entries(all).map(([id, t]: [string, any]) => ({ id, description: t?.description })),
-      };
-    },
-  }),
-  'save-and-register': createTool({
-    id: 'save-and-register',
-    description:
-      'Persist the current draft to storage and live-register it on the Mastra instance so it becomes runnable.',
-    inputSchema: z.object({}),
-    outputSchema: z.object({ ok: z.boolean(), id: z.string().optional(), error: z.string().optional() }),
-    execute: async () => {
-      const err = validateDraft(draft);
-      if (err) return { ok: false, error: err };
-      try {
-        await mastra.addStoredWorkflow({
-          id: draft.id!,
-          description: draft.description,
-          inputSchema: draft.inputSchema!,
-          outputSchema: draft.outputSchema!,
-          graph: draft.graph,
-        });
-        const savedId = draft.id!;
-        draft = newDraft();
-        return { ok: true, id: savedId };
-      } catch (e) {
-        return { ok: false, error: (e as Error).message };
-      }
-    },
-  }),
-};
-
-function validateDraft(d: WorkflowDraft): string | null {
-  if (!d.id) return 'id is not set — call set-workflow-id first';
-  if (!d.inputSchema) return 'inputSchema is not set — call set-workflow-input-schema first';
-  if (!d.outputSchema) return 'outputSchema is not set — call set-workflow-output-schema first';
-  if (d.graph.length === 0) return 'no steps added — add at least one tool/agent/map step';
-  return null;
-}
+await waitForReady(API);
+console.log(`[boot] Mastra server up on http://localhost:${PORT}`);
+console.log('Type a request, or /list /run <id> <json> /exit.');
+console.log();
 
 // ============================================================================
 // REPL
 // ============================================================================
 
 const rl = createInterface({ input, output, terminal: input.isTTY });
+let exiting = false;
 
-console.log('Workflow Builder CLI. Type your request, or use /list /run /show /reset /exit.');
-
-const builder = mastra.getAgent('workflow-builder-agent');
-const threadId = `workflow-builder-${process.pid}`;
-
-while (true) {
-  const line = (await rl.question('> ')).trim();
+while (!exiting) {
+  let line: string;
+  try {
+    line = (await rl.question('> ')).trim();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ERR_USE_AFTER_CLOSE') break;
+    throw e;
+  }
   if (!line) continue;
 
   if (line === '/exit') break;
 
-  if (line === '/show') {
-    console.log(JSON.stringify(draft, null, 2));
-    continue;
-  }
-
-  if (line === '/reset') {
-    draft = newDraft();
-    console.log('Draft cleared.');
-    continue;
-  }
-
   if (line === '/list') {
-    const store = await (mastra as any).getStorage?.()?.getStore?.('workflowDefinitions');
-    if (!store) {
-      console.log('No workflow-definitions store available.');
-      continue;
-    }
-    const { definitions } = await store.list({ status: 'active' });
-    if (definitions.length === 0) console.log('(no saved workflows)');
-    else for (const d of definitions) console.log(`- ${d.id} (${d.status}) — ${d.description ?? ''}`);
+    await runList();
     continue;
   }
 
   if (line.startsWith('/run ')) {
-    const rest = line.slice('/run '.length).trim();
-    const spaceIdx = rest.indexOf(' ');
-    const id = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
-    const rawInput = spaceIdx === -1 ? '{}' : rest.slice(spaceIdx + 1);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawInput);
-    } catch (e) {
-      console.log(`Invalid JSON input: ${(e as Error).message}`);
-      continue;
-    }
-    const wf = mastra.getWorkflow(id);
-    if (!wf) {
-      console.log(`No workflow registered with id "${id}". Try /list.`);
-      continue;
-    }
-    try {
-      const run = await wf.createRun();
-      const result = await run.start({ inputData: parsed as any });
-      console.log(JSON.stringify(result, null, 2));
-    } catch (e) {
-      console.log(`Run failed: ${(e as Error).message}`);
-    }
+    await runRun(line.slice('/run '.length).trim());
     continue;
   }
 
-  // Anything else → agent
+  // Free text → agent
+  await runChat(line);
+}
+
+await shutdown(0);
+
+// ============================================================================
+// Commands
+// ============================================================================
+
+async function runChat(message: string): Promise<void> {
+  let res: Response;
   try {
-    const result = await builder.stream(line, {
-      threadId,
-      resourceId: 'workflow-builder-cli',
-      clientTools: clientTools as any,
+    res = await fetch(`${API}/agents/workflow-builder-agent/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: message }] }),
     });
-    for await (const chunk of result.textStream) process.stdout.write(chunk);
-    process.stdout.write('\n');
   } catch (e) {
-    console.log(`Agent error: ${(e as Error).message}`);
+    console.log(`[error] could not reach server: ${(e as Error).message}`);
+    return;
+  }
+
+  if (!res.ok || !res.body) {
+    console.log(`[error] stream returned ${res.status} ${res.statusText}`);
+    const body = await res.text().catch(() => '');
+    if (body) console.log(body);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buf.indexOf('\n\n')) !== -1) {
+      const block = buf.slice(0, sep);
+      buf = buf.slice(sep + 2);
+      handleSseBlock(block);
+    }
+  }
+  // Trailing newline so the next prompt sits on a clean line.
+  process.stdout.write('\n');
+}
+
+async function runList(): Promise<void> {
+  try {
+    const res = await fetch(`${API}/stored/workflows`);
+    if (!res.ok) {
+      console.log(`[error] /list returned ${res.status} ${res.statusText}`);
+      return;
+    }
+    const body = (await res.json()) as { workflows: Array<{ id: string; description?: string; status: string }> };
+    if (body.workflows.length === 0) {
+      console.log('(no saved workflows)');
+      return;
+    }
+    for (const wf of body.workflows) {
+      console.log(`- ${wf.id} (${wf.status})${wf.description ? ` — ${wf.description}` : ''}`);
+    }
+  } catch (e) {
+    console.log(`[error] /list failed: ${(e as Error).message}`);
   }
 }
 
-rl.close();
-process.exit(0);
+async function runRun(rest: string): Promise<void> {
+  const spaceIdx = rest.indexOf(' ');
+  const id = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
+  const rawInput = spaceIdx === -1 ? '{}' : rest.slice(spaceIdx + 1);
+  if (!id) {
+    console.log('Usage: /run <workflow-id> <json-input>');
+    return;
+  }
+  let inputData: unknown;
+  try {
+    inputData = JSON.parse(rawInput);
+  } catch (e) {
+    console.log(`Invalid JSON input: ${(e as Error).message}`);
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/workflows/${encodeURIComponent(id)}/start-async`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputData }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.log(`[error] /run returned ${res.status} ${res.statusText}${body ? `\n${body}` : ''}`);
+      return;
+    }
+    const body = await res.json();
+    console.log(JSON.stringify(body, null, 2));
+  } catch (e) {
+    console.log(`[error] /run failed: ${(e as Error).message}`);
+  }
+}
+
+// ============================================================================
+// SSE handling (verbose technical output — every chunk visible)
+// ============================================================================
+
+function handleSseBlock(block: string): void {
+  const dataLines = block.split('\n').filter(l => l.startsWith('data: '));
+  if (dataLines.length === 0) return;
+  const payload = dataLines.map(l => l.slice('data: '.length)).join('\n');
+  if (payload === '[DONE]' || payload === '') return;
+
+  let chunk: any;
+  try {
+    chunk = JSON.parse(payload);
+  } catch {
+    // Not JSON — print raw.
+    process.stdout.write(payload + '\n');
+    return;
+  }
+
+  switch (chunk.type) {
+    case 'text-delta':
+      process.stdout.write(chunk.payload?.text ?? '');
+      return;
+    case 'tool-call': {
+      const name = chunk.payload?.toolName ?? '<unknown>';
+      const args = chunk.payload?.args ?? chunk.payload?.input ?? {};
+      process.stdout.write(`\n→ ${name}(${truncatedJson(args)})\n`);
+      return;
+    }
+    case 'tool-result': {
+      const name = chunk.payload?.toolName ?? '<unknown>';
+      const result = chunk.payload?.result ?? chunk.payload?.output ?? null;
+      process.stdout.write(`← ${name} = ${truncatedJson(result)}\n`);
+      return;
+    }
+    case 'error':
+    case 'tripwire':
+      process.stdout.write(`\n⚠ ${chunk.type}: ${truncatedJson(chunk.payload)}\n`);
+      return;
+    case 'reasoning-delta':
+    case 'start':
+    case 'finish':
+    case 'tool-call-start':
+    case 'tool-call-delta':
+    case 'tool-call-end':
+    case 'tool-call-input-streaming-start':
+    case 'tool-call-input-streaming-end':
+    case 'step-start':
+    case 'step-finish':
+    case 'text-start':
+    case 'text-end':
+      // Quiet — these are framing events that just add noise.
+      return;
+    default:
+      // Verbose-technical mode: surface unknown types so we don't hide things.
+      process.stdout.write(`[${chunk.type}] ${truncatedJson(chunk.payload)}\n`);
+  }
+}
+
+function truncatedJson(value: unknown): string {
+  const s = JSON.stringify(value);
+  if (s === undefined) return String(value);
+  if (s.length <= 400) return s;
+  return s.slice(0, 400) + `… (${s.length - 400} more bytes)`;
+}
+
+// ============================================================================
+// Lifecycle helpers
+// ============================================================================
+
+async function waitForReady(api: string, deadlineMs = 10_000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < deadlineMs) {
+    try {
+      // No /health endpoint — any 4xx still means the HTTP layer is up.
+      const res = await fetch(`${api}/agents`);
+      if (res.status < 500) return;
+    } catch {
+      /* not listening yet */
+    }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  throw new Error(`Server didn't come up within ${deadlineMs}ms`);
+}
+
+async function shutdown(code: number): Promise<void> {
+  if (exiting) return;
+  exiting = true;
+  try {
+    rl.close();
+  } catch {
+    /* already closed */
+  }
+  try {
+    server.close();
+  } catch {
+    /* not running */
+  }
+  try {
+    await rm(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* tmp already gone */
+  }
+  process.exit(code);
+}
+
+process.on('SIGINT', () => void shutdown(130));
+process.on('SIGTERM', () => void shutdown(143));
