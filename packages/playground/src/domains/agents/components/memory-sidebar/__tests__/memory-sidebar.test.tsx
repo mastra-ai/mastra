@@ -14,6 +14,7 @@ import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { observationalMemory, threadMessages } from '../../__tests__/fixtures/memory-panel';
 import { MemorySidebar } from '../memory-sidebar';
 import {
+  memoryDisabledStatus,
   memoryEnabledStatus,
   observationalMemoryConfig,
   observationalMemoryConfigWithThresholds,
@@ -115,6 +116,13 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
+  // MemorySidebar derives memory state from useMemory, so drive it via the wire.
+  server.use(
+    http.get(`${BASE_URL}/api/memory/status`, () =>
+      HttpResponse.json(hasMemory ? memoryEnabledStatus : memoryDisabledStatus),
+    ),
+  );
+
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
@@ -129,7 +137,6 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
                   threads={threads}
                   isLoading={false}
                   onDelete={vi.fn()}
-                  hasMemory={hasMemory}
                 />
               </MemoryTimelineProvider>
             </WorkingMemoryProvider>
@@ -180,7 +187,6 @@ function renderSidebarWithOM(threads: StorageThreadType[]) {
                     threads={threads}
                     isLoading={false}
                     onDelete={vi.fn()}
-                    hasMemory
                   />
                 </MemoryTimelineProvider>
               </ObservationalMemoryProvider>

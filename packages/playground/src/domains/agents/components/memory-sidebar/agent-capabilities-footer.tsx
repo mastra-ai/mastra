@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
 
@@ -121,18 +122,13 @@ function CapabilityDetailRow({ capability }: { capability: Capability }) {
   );
 }
 
-export function AgentCapabilitiesFooter({
-  agentId,
-  hasMemory,
-  isMemoryLoading = false,
-  memoryType,
-}: {
-  agentId: string;
-  hasMemory: boolean;
-  isMemoryLoading?: boolean;
-  memoryType?: 'local' | 'gateway';
-}) {
+export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  // Derive memory state from the shared (React Query deduped) hook instead of
+  // accepting it as props — see structure-derive-dont-duplicate.
+  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
+  const hasMemory = Boolean(memory?.result);
+  const memoryType = memory?.memoryType;
   const { data: agent, isLoading: isAgentLoading } = useAgent(agentId);
   const { isCmsAvailable, isLoading: isCmsAvailabilityLoading } = useIsCmsAvailable();
   const editorEnabled = Boolean(!isCmsAvailabilityLoading && isCmsAvailable && agent && agent.editor !== false);

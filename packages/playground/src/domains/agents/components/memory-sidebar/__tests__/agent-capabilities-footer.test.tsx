@@ -1,9 +1,8 @@
-import type { GetAgentResponse, ListAgentVersionsResponse } from '@mastra/client-js';
+import type { GetAgentResponse, GetMemoryStatusResponse, ListAgentVersionsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { systemPackages } from '../../__tests__/fixtures/channels';
@@ -28,6 +27,8 @@ const emptyVersions: ListAgentVersionsResponse = {
   hasMore: false,
 };
 
+const memoryOn: GetMemoryStatusResponse = { result: true, memoryType: 'local' };
+
 // Counts the version lookups so each test can prove the editor gate works: the
 // footer must only hit this endpoint when the editor is actually available.
 const onVersions = vi.fn<() => void>();
@@ -36,10 +37,12 @@ function registerFooterHandlers({
   agent = baseAgent,
   cmsEnabled = false,
   versions = emptyVersions,
+  memory = memoryOn,
 }: {
   agent?: GetAgentResponse;
   cmsEnabled?: boolean;
   versions?: ListAgentVersionsResponse;
+  memory?: GetMemoryStatusResponse | 'loading';
 } = {}) {
   server.use(
     http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(agent)),
@@ -48,16 +51,20 @@ function registerFooterHandlers({
       onVersions();
       return HttpResponse.json(versions);
     }),
+    // 'loading' returns a never-resolving response so the memory query stays pending.
+    http.get(`${BASE_URL}/api/memory/status`, () =>
+      memory === 'loading' ? new Promise<Response>(() => {}) : HttpResponse.json(memory),
+    ),
   );
 }
 
-function renderFooter(props: Partial<ComponentProps<typeof AgentCapabilitiesFooter>> = {}) {
+function renderFooter() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <AgentCapabilitiesFooter agentId={AGENT_ID} hasMemory {...props} />
+        <AgentCapabilitiesFooter agentId={AGENT_ID} />
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -109,12 +116,13 @@ describe('AgentCapabilitiesFooter', () => {
   });
 
   it.each([
-    { label: 'gateway', props: { memoryType: 'gateway' as const }, status: 'Gateway' },
-    { label: 'loading', props: { isMemoryLoading: true }, status: 'Checking' },
-    { label: 'disabled', props: { hasMemory: false }, status: 'Off' },
-  ])('shows the memory status as "$status" ($label)', async ({ props, status }) => {
-    registerFooterHandlers({ cmsEnabled: false });
-    renderFooter(props);
+    { label: 'gateway', memory: { result: true, memoryType: 'gateway' } as GetMemoryStatusResponse, status: 'Gateway' },
+    { label: 'loading', memory: 'loading' as const, status: 'Checking' },
+    { label: 'disabled', memory: { result: false } as GetMemoryStatusResponse, status: 'Off' },
+  ])('shows the memory status as "$status" ($label)', async ({ memory, status }) => {
+    registerFooterHandlers({ cmsEnabled: false, memory });
+
+    renderFooter();
 
     fireEvent.click(await screen.findByTestId('agent-capabilities-footer'));
     expect(await screen.findByRole('link', { name: `Memory: ${status}` })).not.toBeNull();

@@ -34,7 +34,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId!);
+  const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isSettingsView = view === 'settings';
   const isNewThread = threadId === 'new';
@@ -137,10 +137,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                             agentId={agentId!}
                             threadId={actualThreadId!}
                             threads={sidebarThreads}
-                            isLoading={isMemoryLoading || isThreadsLoading}
-                            memoryType={memory?.memoryType}
-                            hasMemory={hasMemory}
-                            isMemoryLoading={isMemoryLoading}
+                            isLoading={isThreadsLoading}
                           />
                         }
                         browserOverlay={<BrowserViewPanel />}
