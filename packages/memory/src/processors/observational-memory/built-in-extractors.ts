@@ -26,6 +26,7 @@ export function createCurrentTaskExtractor(): Extractor<string> {
       name: 'current-task',
       instructions: currentTaskInstructions,
       schema: z.string(),
+      metadataKeyPath: 'currentTask',
     },
     true,
   );
@@ -37,6 +38,7 @@ export function createSuggestedResponseExtractor(): Extractor<string> {
       name: 'suggested-response',
       instructions: suggestedResponseInstructions,
       schema: z.string(),
+      metadataKeyPath: 'suggestedResponse',
     },
     true,
   );
@@ -48,6 +50,7 @@ export function createThreadTitleExtractor(): Extractor<string> {
       name: 'thread-title',
       instructions: threadTitleInstructions,
       schema: z.string(),
+      metadataKeyPath: 'threadTitle',
     },
     true,
   );
