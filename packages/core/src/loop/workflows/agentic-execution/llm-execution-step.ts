@@ -64,6 +64,7 @@ import {
   TOOL_PAYLOAD_TRANSFORM_KEY,
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
+import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -1177,69 +1178,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               : messageList.get.all.aiV5.llmPrompt;
           let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
-          if (autoResumeSuspendedTools) {
-            const messages = messageList.get.all.db();
-            const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-            const suspendedToolsMessage = assistantMessages.find(message => {
-              const pendingOrSuspendedTools =
-                message.content.metadata?.suspendedTools || message.content.metadata?.pendingToolApprovals;
-              if (pendingOrSuspendedTools) {
-                return true;
-              }
-              const dataToolSuspendedParts = message.content.parts?.filter(
-                part =>
-                  (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                  !(part.data as any).resumed,
-              );
-              if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-                return true;
-              }
-              return false;
-            });
-
-            if (suspendedToolsMessage) {
-              const metadata = suspendedToolsMessage.content.metadata;
-              let suspendedToolObj = (metadata?.suspendedTools || metadata?.pendingToolApprovals) as Record<
-                string,
-                any
-              >;
-              if (!suspendedToolObj) {
-                suspendedToolObj = suspendedToolsMessage.content.parts
-                  ?.filter(part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval')
-                  ?.reduce(
-                    (acc, part) => {
-                      if (
-                        (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
-                        !(part.data as any).resumed
-                      ) {
-                        acc[(part.data as any).toolName] = part.data;
-                      }
-                      return acc;
-                    },
-                    {} as Record<string, any>,
-                  );
-              }
-              const suspendedTools = Object.values(suspendedToolObj);
-              if (suspendedTools.length > 0) {
-                inputMessages = inputMessages.map((message, index) => {
-                  if (message.role === 'system' && index === 0) {
-                    message.content =
-                      message.content +
-                      `\n\nAnalyse the suspended tools: ${JSON.stringify(suspendedTools)}, using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.
-                      resumeData can not be an empty object nor null/undefined.
-                      When you find that and call that tool, add the resumeData to the tool call arguments/input.
-                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
-                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
-
-                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
-                      `;
-                  }
-
-                  return message;
-                });
-              }
-            }
-          }
+          inputMessages = applyAutoResumeSystemMessage({
+            autoResume: autoResumeSuspendedTools,
+            inputMessages,
+            messages: messageList.get.all.db(),
+          });
 
           if (readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager') && currentStep.tools) {
             const bgPrompt = generateBackgroundTaskSystemPrompt(

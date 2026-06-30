@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
+import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import type { Mastra } from '../../../../mastra';
@@ -314,7 +315,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
                 ? messageList.get.all.aiV6.llmPrompt
                 : messageList.get.all.aiV5.llmPrompt;
-            const inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+            let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+
+            // Inject the auto-resume directive into the leading system message when
+            // there are suspended tools waiting for resumption (parity with the
+            // non-durable agentic-execution step).
+            inputMessages = applyAutoResumeSystemMessage({
+              autoResume: execOptions.autoResumeSuspendedTools,
+              inputMessages,
+              messages: messageList.get.all.db(),
+            });
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
