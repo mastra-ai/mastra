@@ -1,6 +1,5 @@
 import { json } from '@codemirror/lang-json';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { SearchCursor } from '@codemirror/search';
 import type { Extension } from '@codemirror/state';
 import { StateEffect, StateField, RangeSetBuilder } from '@codemirror/state';
 import type { DecorationSet } from '@codemirror/view';
@@ -11,6 +10,8 @@ import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { findMatchRanges, getNextMatchIndex } from './search-matches';
+import type { MatchRange } from './search-matches';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -29,9 +30,12 @@ import { cn } from '@/lib/utils';
 
 // -- Search highlight extension -----------------------------------------------
 
-const setSearchQuery = StateEffect.define<string>();
+// Carries the full match list plus which one is "current" so a single transaction can repaint
+// every highlight and move the active one together. Ranges are pre-computed by `findMatchRanges`.
+const setSearchMatches = StateEffect.define<{ ranges: MatchRange[]; activeIndex: number }>();
 
-const searchHighlightMark = Decoration.mark({ class: 'cm-search-match' });
+const searchMatchMark = Decoration.mark({ class: 'cm-search-match' });
+const searchMatchCurrentMark = Decoration.mark({ class: 'cm-search-match-current' });
 
 const searchHighlightField = StateField.define<DecorationSet>({
   create() {
@@ -39,31 +43,119 @@ const searchHighlightField = StateField.define<DecorationSet>({
   },
   update(decorations, tr) {
     for (const effect of tr.effects) {
-      if (effect.is(setSearchQuery)) {
-        const query = effect.value;
-        if (!query) return Decoration.none;
+      if (effect.is(setSearchMatches)) {
+        const { ranges, activeIndex } = effect.value;
+        if (ranges.length === 0) return Decoration.none;
         const builder = new RangeSetBuilder<Decoration>();
-        const cursor = new SearchCursor(tr.state.doc, query, 0, tr.state.doc.length, (a: string) => a.toLowerCase());
-        while (!cursor.next().done) {
-          builder.add(cursor.value.from, cursor.value.to, searchHighlightMark);
-        }
+        ranges.forEach((range, index) => {
+          builder.add(range.from, range.to, index === activeIndex ? searchMatchCurrentMark : searchMatchMark);
+        });
         return builder.finish();
       }
     }
-    return decorations;
+    // Keep highlights anchored to the text if the document ever changes.
+    return tr.docChanged ? decorations.map(tr.changes) : decorations;
   },
   provide: f => EditorView.decorations.from(f),
 });
 
 const searchHighlightTheme = EditorView.baseTheme({
+  // Non-active matches: a faint wash so the current match clearly stands out against them.
   '.cm-search-match': {
-    backgroundColor: 'color-mix(in srgb, var(--accent1) 60%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--accent1) 35%, transparent)',
+    borderRadius: 'var(--radius-sm)',
+  },
+  // The current match the user is parked on: a strong, near-solid accent fill.
+  '.cm-search-match-current': {
+    backgroundColor: 'color-mix(in srgb, var(--accent1) 85%, transparent)',
     borderRadius: 'var(--radius-sm)',
   },
 });
 
 function searchHighlightExtension(): Extension {
   return [searchHighlightField, searchHighlightTheme];
+}
+
+// -- Search navigation hook ---------------------------------------------------
+
+interface CodeSearchControls {
+  query: string;
+  matchCount: number;
+  currentMatch: number;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onReset: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onNext: () => void;
+  onPrev: () => void;
+}
+
+// Drives one search field together with its CodeMirror editor: finds matches, highlights them all,
+// and lets the user step through them (Enter / Shift+Enter or the next/prev buttons) with the
+// active match scrolled into view — like a browser's find bar.
+function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, text: string): CodeSearchControls {
+  const [query, setQuery] = useState('');
+  const [matches, setMatches] = useState<MatchRange[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const applyMatches = useCallback(
+    (ranges: MatchRange[], index: number) => {
+      const view = editorRef.current?.view;
+      if (!view) return;
+      view.dispatch({
+        effects: setSearchMatches.of({ ranges, activeIndex: index }),
+        ...(ranges.length > 0
+          ? { selection: { anchor: ranges[index].from, head: ranges[index].to }, scrollIntoView: true }
+          : {}),
+      });
+    },
+    [editorRef],
+  );
+
+  const runSearch = useCallback(
+    (value: string) => {
+      setQuery(value);
+      const ranges = findMatchRanges(text, value);
+      setMatches(ranges);
+      setActiveIndex(0);
+      applyMatches(ranges, 0);
+    },
+    [text, applyMatches],
+  );
+
+  const goToMatch = useCallback(
+    (direction: 1 | -1) => {
+      if (matches.length === 0) return;
+      const nextIndex = getNextMatchIndex(activeIndex, matches.length, direction);
+      setActiveIndex(nextIndex);
+      applyMatches(matches, nextIndex);
+    },
+    [matches, activeIndex, applyMatches],
+  );
+
+  const onChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => runSearch(e.target.value), [runSearch]);
+  const onReset = useCallback(() => runSearch(''), [runSearch]);
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        goToMatch(e.shiftKey ? -1 : 1);
+      }
+    },
+    [goToMatch],
+  );
+  const onNext = useCallback(() => goToMatch(1), [goToMatch]);
+  const onPrev = useCallback(() => goToMatch(-1), [goToMatch]);
+
+  return {
+    query,
+    matchCount: matches.length,
+    currentMatch: matches.length > 0 ? activeIndex + 1 : 0,
+    onChange,
+    onReset,
+    onKeyDown,
+    onNext,
+    onPrev,
+  };
 }
 
 // -- Themes -------------------------------------------------------------------
@@ -156,12 +248,13 @@ export function DataCodeSection({
   const theme = useCodemirrorTheme();
   const [showAsMultilineText, setShowAsMultilineText] = useState(false);
   const [searchMinimized, setSearchMinimized] = useState(true);
-  const [searchQuery, setSearchQueryState] = useState('');
   const [expandedOpen, setExpandedOpen] = useState(false);
-  const [expandedSearchQuery, setExpandedSearchQuery] = useState('');
   const [expandedMultiline, setExpandedMultiline] = useState(false);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const expandedEditorRef = useRef<ReactCodeMirrorRef>(null);
+
+  const search = useCodeSearch(editorRef, codeStr);
+  const expandedSearch = useCodeSearch(expandedEditorRef, codeStr);
 
   const hasMultilineText = useMemo(() => {
     try {
@@ -171,70 +264,6 @@ export function DataCodeSection({
       return false;
     }
   }, [codeStr]);
-
-  const dispatchSearch = useCallback((query: string) => {
-    const view = editorRef.current?.view;
-    if (view) {
-      view.dispatch({ effects: setSearchQuery.of(query) });
-      if (query) {
-        const cursor = new SearchCursor(view.state.doc, query, 0, view.state.doc.length, (a: string) =>
-          a.toLowerCase(),
-        );
-        if (!cursor.next().done) {
-          view.dispatch({
-            selection: { anchor: cursor.value.from },
-            scrollIntoView: true,
-          });
-        }
-      }
-    }
-  }, []);
-
-  const handleSearchChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.value;
-      setSearchQueryState(val);
-      dispatchSearch(val);
-    },
-    [dispatchSearch],
-  );
-
-  const handleSearchReset = useCallback(() => {
-    setSearchQueryState('');
-    dispatchSearch('');
-  }, [dispatchSearch]);
-
-  const dispatchExpandedSearch = useCallback((query: string) => {
-    const view = expandedEditorRef.current?.view;
-    if (view) {
-      view.dispatch({ effects: setSearchQuery.of(query) });
-      if (query) {
-        const cursor = new SearchCursor(view.state.doc, query, 0, view.state.doc.length, (a: string) =>
-          a.toLowerCase(),
-        );
-        if (!cursor.next().done) {
-          view.dispatch({
-            selection: { anchor: cursor.value.from },
-            scrollIntoView: true,
-          });
-        }
-      }
-    }
-  }, []);
-
-  const handleExpandedSearchChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.value;
-      setExpandedSearchQuery(val);
-      dispatchExpandedSearch(val);
-    },
-    [dispatchExpandedSearch],
-  );
-
-  const handleExpandedSearchReset = useCallback(() => {
-    setExpandedSearchQuery('');
-    dispatchExpandedSearch('');
-  }, [dispatchExpandedSearch]);
 
   const finalCodeStr = showAsMultilineText ? codeStr?.replace(/\\n/g, '\n') : codeStr;
   const expandedFinalCodeStr = expandedMultiline ? codeStr?.replace(/\\n/g, '\n') : codeStr;
@@ -253,9 +282,14 @@ export function DataCodeSection({
               label="Search code"
               labelIsHidden
               placeholder="Search..."
-              value={searchQuery}
-              onChange={handleSearchChange}
-              onReset={handleSearchReset}
+              value={search.query}
+              onChange={search.onChange}
+              onReset={search.onReset}
+              onKeyDown={search.onKeyDown}
+              matchCount={search.query ? search.matchCount : undefined}
+              currentMatch={search.currentMatch}
+              onNext={search.onNext}
+              onPrev={search.onPrev}
               size="sm"
               isMinimized={searchMinimized}
               onMinimizedChange={setSearchMinimized}
@@ -315,9 +349,14 @@ export function DataCodeSection({
                   label="Search code"
                   labelIsHidden
                   placeholder="Search..."
-                  value={expandedSearchQuery}
-                  onChange={handleExpandedSearchChange}
-                  onReset={handleExpandedSearchReset}
+                  value={expandedSearch.query}
+                  onChange={expandedSearch.onChange}
+                  onReset={expandedSearch.onReset}
+                  onKeyDown={expandedSearch.onKeyDown}
+                  matchCount={expandedSearch.query ? expandedSearch.matchCount : undefined}
+                  currentMatch={expandedSearch.currentMatch}
+                  onNext={expandedSearch.onNext}
+                  onPrev={expandedSearch.onPrev}
                   size="sm"
                 />
               )}

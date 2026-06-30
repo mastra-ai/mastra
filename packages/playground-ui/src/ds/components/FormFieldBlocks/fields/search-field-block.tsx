@@ -1,4 +1,4 @@
-import { SearchIcon, XIcon } from 'lucide-react';
+import { ChevronDownIcon, ChevronUpIcon, SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
@@ -19,6 +19,7 @@ export type SearchFieldBlockProps = {
   placeholder?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onReset?: () => void;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
   helpText?: string;
   error?: boolean;
   errorMsg?: string;
@@ -28,6 +29,15 @@ export type SearchFieldBlockProps = {
   variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
+  /**
+   * Optional browser-style match navigation. When `matchCount` is provided, the field shows a
+   * "current / total" counter and prev/next buttons next to the clear button. Leave these unset to
+   * render a plain search field (backward compatible).
+   */
+  matchCount?: number;
+  currentMatch?: number;
+  onNext?: () => void;
+  onPrev?: () => void;
 };
 
 export function SearchFieldBlock({
@@ -43,14 +53,20 @@ export function SearchFieldBlock({
   placeholder = 'Search...',
   onChange,
   onReset,
+  onKeyDown,
   className,
   size,
   variant,
   isMinimized,
   onMinimizedChange,
+  matchCount,
+  currentMatch,
+  onNext,
+  onPrev,
 }: SearchFieldBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const buttonSize = size === 'default' ? 'lg' : size;
+  const hasMatchNav = matchCount !== undefined;
 
   useEffect(() => {
     if (isMinimized === false) {
@@ -99,13 +115,15 @@ export function SearchFieldBlock({
             value={value}
             placeholder={placeholder}
             onChange={onChange}
+            onKeyDown={onKeyDown}
             size={size}
             variant={variant}
             className={cn(
-              size === 'sm' && 'pl-8 pr-8',
-              size === 'md' && 'pl-9 pr-9',
-              (!size || size === 'default') && 'pl-10 pr-10',
-              size === 'lg' && 'pl-11 pr-11',
+              // Extra right padding when the match-nav cluster is shown so it never overlaps text.
+              size === 'sm' && (hasMatchNav ? 'pl-8 pr-[6.5rem]' : 'pl-8 pr-8'),
+              size === 'md' && (hasMatchNav ? 'pl-9 pr-28' : 'pl-9 pr-9'),
+              (!size || size === 'default') && (hasMatchNav ? 'pl-10 pr-[7.5rem]' : 'pl-10 pr-10'),
+              size === 'lg' && (hasMatchNav ? 'pl-11 pr-32' : 'pl-11 pr-11'),
             )}
           />
           <SearchIcon
@@ -118,24 +136,56 @@ export function SearchFieldBlock({
               size === 'lg' && 'w-5 h-5',
             )}
           />
-          {onReset && (value || isMinimized === false) && (
-            <Button
-              variant="ghost"
-              size={buttonSize || 'lg'}
-              aria-label="Clear search"
-              onClick={() => {
-                if (value) {
-                  onReset();
-                }
-                if (isMinimized === false) {
-                  onMinimizedChange?.(true);
-                }
-              }}
-              className="absolute top-1/2 right-0 -translate-y-1/2"
-            >
-              <XIcon />
-            </Button>
-          )}
+          <div className="absolute top-1/2 right-0 -translate-y-1/2 flex items-center">
+            {hasMatchNav && (
+              <div className="flex items-center gap-0.5">
+                <span
+                  aria-live="polite"
+                  aria-label={`${matchCount === 0 ? 0 : (currentMatch ?? 0)} of ${matchCount} matches`}
+                  className="text-neutral3 text-ui-xs tabular-nums whitespace-nowrap select-none px-1"
+                >
+                  {matchCount === 0 ? '0/0' : `${currentMatch ?? 0}/${matchCount}`}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Previous match"
+                  tooltip="Previous match (Shift+Enter)"
+                  disabled={!matchCount}
+                  onClick={onPrev}
+                >
+                  <ChevronUpIcon />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Next match"
+                  tooltip="Next match (Enter)"
+                  disabled={!matchCount}
+                  onClick={onNext}
+                >
+                  <ChevronDownIcon />
+                </Button>
+              </div>
+            )}
+            {onReset && (value || isMinimized === false) && (
+              <Button
+                variant="ghost"
+                size={buttonSize || 'lg'}
+                aria-label="Clear search"
+                onClick={() => {
+                  if (value) {
+                    onReset();
+                  }
+                  if (isMinimized === false) {
+                    onMinimizedChange?.(true);
+                  }
+                }}
+              >
+                <XIcon />
+              </Button>
+            )}
+          </div>
         </div>
         {helpText && <FieldBlock.HelpText>{helpText}</FieldBlock.HelpText>}
         {errorMsg && <FieldBlock.ErrorMsg>{errorMsg}</FieldBlock.ErrorMsg>}
