@@ -124,7 +124,6 @@ gh issue view <ISSUE> --comments --json number,title,state,author,assignees,crea
 ```
 
 - [ ] If `state != OPEN` → stop immediately.
-
   - [ ] Do not write `.mastracode/issue-triage/ISSUE_TRIAGE_<NUMBER>.md`.
 
   - [ ] Do not call `ask_user`.
@@ -179,7 +178,6 @@ git log -p --max-count=3 -- <relevant-file-or-directory>
 - [ ] Add a concise `Context gathered` section to `.mastracode/issue-triage/ISSUE_TRIAGE_<NUMBER>.md` before choosing a branch.
 
 - [ ] Structure the saved context under these headings:
-
   - `Issue context` — what was reported and what activity matters
   - `Linked PR context` — linked PRs found, if any
   - `Repo context` — relevant files, APIs, tests, docs, or missing coverage around issue and linked PR
@@ -235,7 +233,6 @@ Assessment fields must be only:
 Use when the issue is spam, unrelated, invalid, unsupported, or clearly non-actionable.
 
 - [ ] Gather branch output:
-
   - severity + assessment
   - draft maintainer comment
   - recommended status label: `pending close`
@@ -246,7 +243,6 @@ Use when the issue is spam, unrelated, invalid, unsupported, or clearly non-acti
 - [ ] Do not continue to debugging.
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
-
   - `Draft/post maintainer comment`
   - `End triage`
 
@@ -259,7 +255,6 @@ Use when exactly one relevant linked PR exists.
 - [ ] Run the actual `goal/critique-pr` command for the linked PR and pass on the full issue triage context.
 
 - [ ] Gather branch output:
-
   - severity + assessment
   - issue scope / affected area
   - issue assessment summary
@@ -272,7 +267,6 @@ Use when exactly one relevant linked PR exists.
   - `CODEOWNER tagging: Skipped: CODEOWNER unavailable`
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
-
   - `Post author pre-review comment`
   - `Post maintainer triage context comment`
   - `Post both PR comments`
@@ -291,7 +285,6 @@ Use when multiple relevant linked PRs exist.
 - [ ] State whether one PR should be closed or superseded.
 
 - [ ] Gather branch output:
-
   - severity + assessment
   - issue scope / affected area
   - issue assessment summary
@@ -305,7 +298,6 @@ Use when multiple relevant linked PRs exist.
   - `CODEOWNER tagging: Skipped: CODEOWNER unavailable`
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
-
   - `Post author pre-review comment(s)`
   - `Post maintainer triage context comment(s)`
   - `Post all PR comments`
@@ -318,14 +310,12 @@ Use when no relevant linked PR exists.
 - [ ] Run the actual `goal/gh-debug-issue` command for the issue and pass on the full issue triage context.
 
 - [ ] Gather branch output:
-
   - severity + assessment
   - issue assessment summary
   - debug/reproduction summary from `goal/gh-debug-issue`
   - label recommendations only if labels were fetched later for this branch
 
 - [ ] After updating the triage file, immediately call `ask_user` with exactly:
-
   - `Continue from debug findings`
   - `Tag CODEOWNER` — unsupported for now
   - `Pass to MastraCode` — unsupported for now

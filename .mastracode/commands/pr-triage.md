@@ -3,6 +3,7 @@ name: pr-triage
 description: Find Mastra PRs involving me first, sort them by merge/close potential, and pair-review them one at a time
 goal: true
 ---
+
 Mastra has many open PRs. We want to merge or close as many as possible, starting with PRs where I am already involved, then falling back to PRs related to my areas of expertise.
 
 Do this:
@@ -23,7 +24,7 @@ Do this:
    - PRs where I am explicitly tagged as a reviewer
    - PRs with no reviewers tagged
    - PRs where reviewers are tagged, but I am not one of them
-   Within each reviewer bucket, sort so easy merges or easy closes appear first.
+     Within each reviewer bucket, sort so easy merges or easy closes appear first.
 7. Present the best first candidates and pair-review them with me one at a time, updating the list as we go through to add status/notes, until the list is empty.
 8. For each PR in the pair-review sequence, start with a concise TL;DR that explains the issue/change, whether it needs more work or looks close to done, and any other short helpful context for deciding what to do next.
 9. After the TL;DR for each PR, stop and ask me what action to take. Do not submit a review, request changes, approve, merge, close, comment, or mark a GitHub action as taken until I explicitly choose that action.
