@@ -94,9 +94,7 @@ function mergeBackgroundTasks(
   for (const [toolCallId, incomingTask] of Object.entries(incomingBgTasks ?? {})) {
     const existingTask = merged[toolCallId];
     merged[toolCallId] =
-      isPlainRecord(existingTask) && isPlainRecord(incomingTask)
-        ? { ...existingTask, ...incomingTask }
-        : incomingTask;
+      isPlainRecord(existingTask) && isPlainRecord(incomingTask) ? { ...existingTask, ...incomingTask } : incomingTask;
   }
   return merged;
 }
