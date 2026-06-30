@@ -9,6 +9,6 @@ After a `requireApproval` tool call was approved or declined, `memory.recall()` 
 - **Declined** calls persist as `state: 'output-denied'` with `approval: { id, approved: false, reason }`, so recalled AI SDK v6 UI parts render as `output-denied`. In v4 and v5 (which have no denied state) the call downgrades to a single `output-available` (v5) / result (v4) part whose output is the decline reason — so the agent's onFinish memory save no longer throws `ToolInvocation must have a result`.
 - **Approved** calls keep `approval: { id, approved: true }` alongside the result, so v6 UI parts carry the approval.
 
-This applies to both the standard agentic loop and the durable agent engine (`DurableAgent`, including the Inngest durable agent), which previously had the same gap in its own copy of the tool-call and mapping steps.
+Approved and declined decisions now round-trip on recall consistently for both standard agents and durable agents (`DurableAgent`, including the Inngest durable agent).
 
 Live approve/decline already worked; this was a write-path persistence gap. Fixes #17218.
