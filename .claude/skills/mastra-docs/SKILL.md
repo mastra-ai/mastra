@@ -32,4 +32,4 @@ Run these commands in docs/:
 - npm run format - Format files with Prettier
 - npm run lint:remark - Check markdown with Remark
 - npm run lint:vale:ai - Check prose with Vale using the error alert level
-- npm run validate - Check frontmatter values and if all sidebars are valid 
+- npm run validate - Check frontmatter values and if all sidebars are valid
