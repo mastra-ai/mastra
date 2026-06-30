@@ -66,6 +66,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/getting-started/installation/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/examples/agents/ai-sdk-v5-integration",
       "destination": "/guides/getting-started/next-js",
       "permanent": true
@@ -163,6 +168,11 @@
     {
       "source": "/docs/getting-started/quickstart",
       "destination": "/guides/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/quickstart/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
       "permanent": true
     },
     {
