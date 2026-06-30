@@ -36,6 +36,12 @@ async function emitAgentEntry(
     lines.push(`import ${workspaceIdent} from ${JSON.stringify(agent.workspacePath)};`);
   }
 
+  let memoryIdent: string | undefined;
+  if (agent.memoryPath) {
+    memoryIdent = sanitizeIdentifier(`${agent.name}_memory`, 'memory', idPath);
+    lines.push(`import ${memoryIdent} from ${JSON.stringify(agent.memoryPath)};`);
+  }
+
   for (let t = 0; t < agent.tools.length; t++) {
     const tool = agent.tools[t]!;
     const ident = sanitizeIdentifier(`${agent.name}_${tool.key}`, 'tool', `${idPath}_${t}`);
@@ -105,6 +111,9 @@ async function emitAgentEntry(
   if (workspaceIdent) {
     entryFields.push(`workspace: ${workspaceIdent}`);
   }
+  if (memoryIdent) {
+    entryFields.push(`memory: ${memoryIdent}`);
+  }
   // Default-on parity: every FS agent gets a default workspace (file + shell
   // tools) rooted at a per-agent `workspace/` dir next to the bundle, unless
   // config.ts or workspace.ts supplies one. Assembly applies the explicit >
@@ -118,8 +127,9 @@ async function emitAgentEntry(
 /**
  * Generate the source of a wrapper module that:
  * 1. imports the user's real Mastra entry,
- * 2. imports each discovered `config.ts`, `tools/*.ts`, and `skills/*.ts`
- *    (`createSkill(...)` modules), inlining packaged `SKILL.md` skills,
+ * 2. imports each discovered `config.ts`, `tools/*.ts`, `skills/*.ts`
+ *    (`createSkill(...)` modules), `workspace.ts`, and `memory.ts`, inlining
+ *    packaged `SKILL.md` skills,
  * 3. assembles `Agent` instances via `assembleAgentFromFsEntry`, wiring any
  *    declared `subagents/` into the parent (one level deep),
  * 4. registers them onto the user's `mastra` instance (code-registered agents

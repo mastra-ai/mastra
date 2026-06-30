@@ -168,6 +168,15 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Coding Agent',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'coding-agent/build-base-prompt', label: 'buildBasePrompt()' },
+        { type: 'doc', id: 'coding-agent/create-coding-agent', label: 'createCodingAgent()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Core',
       collapsed: true,
       items: [
