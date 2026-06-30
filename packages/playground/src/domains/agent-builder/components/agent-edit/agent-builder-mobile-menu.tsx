@@ -1,4 +1,5 @@
-import { Button, DropdownMenu } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EyeIcon, Globe, LockIcon, MoreVerticalIcon, PencilIcon } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useNavigate } from 'react-router';

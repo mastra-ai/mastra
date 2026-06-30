@@ -6,7 +6,7 @@ import fs from 'node:fs';
 
 import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
-import { hasHeadlessFlag, headlessMain } from './headless.js';
+import { hasHeadlessFlag, runMCCli } from './headless/index.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -17,7 +17,7 @@ import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
 
-let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
+let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
 let hookManager: Awaited<ReturnType<typeof createMastraCode>>['hookManager'];
 let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
@@ -64,7 +64,7 @@ async function tuiMain(pipedInput?: string | null) {
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
   });
-  harness = result.harness;
+  controller = result.controller;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
   authStorage = result.authStorage;
@@ -79,7 +79,7 @@ async function tuiMain(pipedInput?: string | null) {
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that
   // status messages use showInfo() instead of console.info(), which would
-  // corrupt the terminal.  Headless mode still inits from headless.ts.
+  // corrupt the terminal.  Headless mode still inits from headless/cli.ts.
 
   setupDebugLogging();
 
@@ -103,17 +103,22 @@ async function tuiMain(pipedInput?: string | null) {
   }
   applyThemeMode(themeMode, detectedBgHex);
 
+  // createMastraCode() brought up shared resources and minted the single
+  // session that all work runs through. The AgentController owns no session of its own.
+  const session = result.session;
+
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   analytics.capture('mastracode_session_started', {
-    mode: harness.session.mode.get(),
-    resourceId: harness.session.identity.getResourceId(),
+    mode: session.mode.get(),
+    resourceId: session.identity.getResourceId(),
     hasAuthStorage: Boolean(authStorage),
     hasMcp: Boolean(mcpManager),
     theme: themeMode,
   });
 
   const tui = new MastraTUI({
-    harness,
+    controller: controller,
+    session,
     hookManager,
     analytics,
     authStorage,
@@ -132,8 +137,8 @@ async function tuiMain(pipedInput?: string | null) {
     void loadBrowser()
       .then(browser => {
         if (!browser) return;
-        harness.setBrowser(browser);
-        void harness.session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
+        controller.setBrowser(browser);
+        void session.state.set({ activeBrowserSettings: settings.browser } as any).catch(() => {});
       })
       .catch(() => {});
   }
@@ -144,8 +149,8 @@ const asyncCleanup = async () => {
   const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
-    harness?.getMastra()?.stopWorkers(),
-    harness?.stopHeartbeats(),
+    controller?.getMastra()?.stopWorkers(),
+    controller?.stopIntervals(),
     closeSignalsPubSub?.(),
     analytics?.shutdown(),
   ]);
@@ -207,7 +212,12 @@ function handleFatalError(error: unknown): never {
 
 async function main() {
   if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
-    return headlessMain();
+    return runMCCli();
+  }
+
+  if (process.argv.includes('--acp')) {
+    const { acpMain } = await import('./acp/index.js');
+    return acpMain({ dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve') });
   }
 
   // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
@@ -223,7 +233,7 @@ async function main() {
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
-      return headlessMain(pipedInput);
+      return runMCCli(pipedInput);
     }
   }
 

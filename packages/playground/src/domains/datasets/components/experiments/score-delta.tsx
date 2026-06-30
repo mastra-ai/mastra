@@ -1,4 +1,5 @@
-import { cn, Chip } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 
 interface ScoreDeltaProps {

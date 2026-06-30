@@ -5,7 +5,7 @@ description: Documentation guidelines for Mastra. This skill should be used when
 
 # Mastra Documentation Guidelines
 
-Use this skill when you create or update Mastra docs. Keep the docs clear and consistent. Follow the most specific AGENTS.md for the area you change.
+Use this skill when you create or update Mastra docs. Keep the docs clear and consistent. Follow the most specific AGENTS.md for the area you change. After making your changes to the docs and sidebars, run the linters to check your work.
 
 ## Styleguides
 
@@ -32,3 +32,4 @@ Run these commands in docs/:
 - npm run format - Format files with Prettier
 - npm run lint:remark - Check markdown with Remark
 - npm run lint:vale:ai - Check prose with Vale using the error alert level
+- npm run validate - Check frontmatter values and if all sidebars are valid

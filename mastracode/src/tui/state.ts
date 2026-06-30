@@ -6,7 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
-import type { Harness, HarnessMessage, Session } from '@mastra/core/harness';
+import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import type { MastraCodeAnalytics } from '../analytics.js';
@@ -14,6 +14,7 @@ import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
 import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
+import { loadSettings } from '../onboarding/settings.js';
 import { detectProject } from '../utils/project.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
@@ -34,13 +35,16 @@ import type { TaskProgressComponent } from './components/task-progress.js';
 import type { TemporalGapComponent } from './components/temporal-gap.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import type { UserMessageComponent } from './components/user-message.js';
+import { showError, showInfo } from './display.js';
 
 import { GoalManager } from './goal-manager.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
+import { VoiceController } from './voice/voice-controller.js';
 
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  images?: Array<{ data: string; mimeType: string }>;
   isInterjection?: boolean;
 }
 
@@ -88,8 +92,11 @@ export function getGithubPrSubscriptionsFromMetadata(
 // =============================================================================
 
 export interface MastraTUIOptions {
-  /** The harness instance to control */
-  harness: Harness<any>;
+  /** The controller instance */
+  controller: AgentController<any>;
+
+  /** The session created from the controller that all work runs through */
+  session: Session<any>;
 
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
@@ -104,8 +111,8 @@ export interface MastraTUIOptions {
   mcpManager?: McpManager;
 
   /**
-   * @deprecated Workspace is now obtained from the Harness.
-   * Configure workspace via HarnessConfig.workspace instead.
+   * @deprecated Workspace is now obtained from the AgentController.
+   * Configure workspace via AgentControllerConfig.workspace instead.
    * Kept as fallback for backward compatibility.
    */
   workspace?: Workspace;
@@ -138,7 +145,7 @@ export interface MastraTUIOptions {
 
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
-  harness: Harness<any>;
+  controller: AgentController<any>;
   session: Session<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
@@ -157,12 +164,13 @@ export interface TUIState {
   editor: CustomEditor;
   footer: Container;
   terminal: Terminal;
+  voiceController?: VoiceController;
 
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
   gradientAnimator?: GradientAnimator;
   streamingComponent?: AssistantMessageComponent;
-  streamingMessage?: HarnessMessage;
+  streamingMessage?: AgentControllerMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
   /** Task tools are hidden on success but promoted to normal tool boxes on errors */
   pendingTaskToolIds: Set<string>;
@@ -219,6 +227,8 @@ export interface TUIState {
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: Component;
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
+  /** Previous plan snapshot (keyed by plan file path) for diff display on resubmission */
+  previousPlanSnapshot?: { path: string; plan: string };
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -231,8 +241,8 @@ export interface TUIState {
   pendingSlashCommands: string[];
   /** Pending user-message component ids for queued slash commands */
   pendingSlashCommandMessageIds: string[];
-  /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
-  pendingApprovalDismiss: (() => void) | null;
+  /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
+  pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
@@ -241,6 +251,16 @@ export interface TUIState {
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;
+
+  // ── Tokens/sec tracking ────────────────────────────────────────────────
+  /**
+   * Timestamp (ms) of the first streamed content delta of the current step —
+   * i.e. when decoding began. tokens/sec is measured over decode time only
+   * (excludes TTFT and inter-step tool gaps). 0 means decode not yet started.
+   */
+  decodeStartedAt: number;
+  /** Current computed tokens/sec rate (0 when idle) */
+  tokensPerSec: number;
 
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
@@ -275,6 +295,12 @@ export interface TUIState {
   lastCtrlCTime: number;
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */
   userInitiatedAbort: boolean;
+  /**
+   * Set when the run is aborted because the user clicked "Request Changes" on a
+   * plan approval. Suppresses the "Interrupted" abort UI so the rejection ends
+   * cleanly and the user can type revision feedback.
+   */
+  planRejectionAbort: boolean;
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   unsubscribe?: () => void;
@@ -307,8 +333,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editor = new CustomEditor(ui, getEditorTheme());
   const result: TUIState = {
     // Core dependencies
-    harness: options.harness,
-    session: options.harness.session,
+    controller: options.controller,
+    session: options.session,
     options,
     hookManager: options.hookManager,
     analytics: options.analytics,
@@ -368,6 +394,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     modelAuthStatus: { hasAuth: true },
     githubPrPollingActive: false,
 
+    // Tokens/sec tracking
+    decodeStartedAt: 0,
+    tokensPerSec: 0,
+
     // Goal loop
     goalManager: new GoalManager(),
     planStartedGoalId: undefined,
@@ -381,6 +411,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
+    planRejectionAbort: false,
   };
   editor.getModeColor = () => {
     if (result.activeGoalJudge) {
@@ -389,5 +420,21 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     const color = result.session.mode.resolve()?.metadata?.color;
     return typeof color === 'string' ? color : undefined;
   };
+
+  const voiceSettings = loadSettings().voice;
+  result.voiceController = new VoiceController({
+    authStorage: result.authStorage,
+    settings: voiceSettings,
+    onTranscript: text => editor.insertVoiceTranscript(text),
+    onPartialTranscript: text => editor.replaceVoiceTranscript(text),
+    showInfo: message => showInfo(result, message),
+    showError: message => showError(result, message),
+    onListeningChange: listening => editor.setVoiceListening(listening),
+  });
+  editor.voiceInput = result.voiceController;
+  if (voiceSettings.enabled) {
+    result.voiceController.restoreEnabled();
+  }
+
   return result;
 }

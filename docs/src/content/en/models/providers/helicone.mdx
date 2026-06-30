@@ -890,12 +890,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": false,
     "contextWindow": 128000,
-    "maxOutput": 128000,
-    "inputCost": 75,
-    "outputCost": 200
+    "maxOutput": 16384,
+    "inputCost": 0.075,
+    "outputCost": 0.2
   },
   {
     "model": "helicone/o1",

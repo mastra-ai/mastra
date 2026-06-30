@@ -7,19 +7,22 @@ import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
+import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
-import { createStep } from '../../../../workflows';
+import type { CoreTool } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
+import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import type { MastraDBMessage } from '../../../message-list';
 import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
-import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
+import { emitAbortEvent, emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
+import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 
 /**
@@ -202,7 +205,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentTools = tools as unknown as ToolSet;
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
             let currentActiveTools = execOptions.activeTools;
-            let currentModelSettings = { temperature: execOptions.temperature };
+            let currentModelSettings: Record<string, unknown> = { ...(execOptions.modelSettings ?? {}) };
             let currentProviderOptions: SharedProviderOptions | undefined = mergeProviderOptions(
               execOptions.providerOptions,
               modelEntry.config.providerOptions,
@@ -240,8 +243,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : undefined;
 
             const registryEntry = globalRunRegistry.get(runId);
-            const executionAbortSignal = (registryEntry as any)?.abortSignal ?? abortSignal;
-            if (registryEntry?.inputProcessors?.length) {
+            const executionAbortSignal = registryEntry?.abortSignal ?? abortSignal;
+            const baseInputProcessors = registryEntry?.inputProcessors ?? [];
+            const stepInputProcessors = registryEntry?.prepareStep
+              ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
+              : baseInputProcessors;
+            if (stepInputProcessors.length) {
               const inputStepWriter = pubsub
                 ? {
                     custom: async (data: { type: string }) => {
@@ -250,12 +257,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 : undefined;
               const runner = new ProcessorRunner({
-                inputProcessors: registryEntry.inputProcessors,
-                outputProcessors: registryEntry.outputProcessors ?? [],
-                errorProcessors: registryEntry.errorProcessors ?? [],
+                inputProcessors: stepInputProcessors,
+                outputProcessors: registryEntry?.outputProcessors ?? [],
+                errorProcessors: registryEntry?.errorProcessors ?? [],
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
-                processorStates: registryEntry.processorStates,
+                processorStates: registryEntry?.processorStates,
               });
               const processInputStepResult = await runner.runProcessInputStep({
                 messageList,
@@ -263,7 +270,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 steps: (inputData as any).accumulatedSteps ?? [],
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 requestContext,
-                memory: registryEntry.memory,
+                memory: registryEntry?.memory,
                 resourceId: typedInput.state?.resourceId,
                 threadId: typedInput.state?.threadId,
                 model: currentModel,
@@ -294,8 +301,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               };
             }
 
-            // Get messages for LLM (using async llmPrompt for proper format conversion)
-            const inputMessages = (await messageList.get.all.aiV5.llmPrompt()) as LanguageModelV2Prompt;
+            // Forward the model's `supportedUrls` (may be a Promise) so URLs a provider
+            // fetches natively (e.g. Vertex `gs://`) pass through instead of being
+            // downloaded/inlined. Mirrors loop/workflows/agentic-execution/llm-execution-step.ts.
+            let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
+            const modelSupportedUrls = currentModel?.supportedUrls;
+            if (modelSupportedUrls) {
+              resolvedSupportedUrls =
+                typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function'
+                  ? await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>)
+                  : (modelSupportedUrls as Record<string, RegExp[]>);
+            }
+            const llmPromptForModel =
+              currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
+                ? messageList.get.all.aiV6.llmPrompt
+                : messageList.get.all.aiV5.llmPrompt;
+            const inputMessages = (await llmPromptForModel({
+              supportedUrls: resolvedSupportedUrls,
+            })) as LanguageModelV2Prompt;
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
@@ -404,24 +427,52 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             try {
-              for await (const chunk of trackedStream) {
-                if (!chunk) continue;
+              for await (const rawChunk of trackedStream) {
+                if (!rawChunk) continue;
+
+                // Enrich tool-related chunks with the in-process payload transform
+                // policy (mirrors the non-durable agentic-execution layer). The
+                // policy lives on the run registry; serializable `targets` shadow
+                // travels with the workflow input. No-op for non-tool chunks or
+                // when no policy is configured for this run.
+                //
+                // IMPORTANT: the transformed chunk is only used for client-facing
+                // emission. Internal tool-call state (args persisted into
+                // `toolCalls`, downstream tool execution) MUST be built from the
+                // untransformed `rawChunk` so display-layer redactions/rewrites
+                // do not leak into actual tool inputs.
+                //
+                // Use the per-step `currentTools` (post-`prepareStep` and input
+                // processors) rather than the registry-level tool list — that way
+                // any tool-level `transformToolPayload` added or replaced for the
+                // current step is honoured, instead of being silently skipped.
+                const transformTools = currentTools as unknown as Record<string, CoreTool> | undefined;
+                const clientChunk =
+                  registryEntry?.toolPayloadTransform || transformTools
+                    ? await applyToolPayloadTransformToChunk(rawChunk, {
+                        policy: registryEntry?.toolPayloadTransform,
+                        tools: transformTools,
+                        logger: logger as any,
+                      })
+                    : rawChunk;
 
                 // Forward every chunk to the client ('finish' was rewritten to 'step-finish' above).
                 if (pubsub) {
-                  await emitChunkEvent(pubsub, runId, chunk);
+                  await emitChunkEvent(pubsub, runId, clientChunk);
                 }
 
-                // Process different chunk types
-                switch (chunk.type) {
+                // Process different chunk types — always from the raw chunk so
+                // internal state (tool args, finish reason, usage, metadata) is
+                // never affected by display-layer transforms.
+                switch (rawChunk.type) {
                   case 'text-delta': {
-                    const payload = chunk.payload as TextDeltaPayload;
+                    const payload = rawChunk.payload as TextDeltaPayload;
                     textDeltas.push(payload.text);
                     break;
                   }
 
                   case 'tool-call': {
-                    const payload = chunk.payload as ToolCallPayload;
+                    const payload = rawChunk.payload as ToolCallPayload;
                     toolCalls.push({
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
@@ -435,7 +486,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
 
                   case 'step-finish': {
-                    const payload = chunk.payload as any;
+                    const payload = rawChunk.payload as any;
                     // The terminal chunk (rewritten from 'finish' above) carries finishReason
                     // in stepResult.reason and usage in output.usage.
                     finishReason = payload.stepResult?.reason || payload.finishReason || 'stop';
@@ -444,7 +495,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
 
                   case 'response-metadata': {
-                    const payload = chunk.payload as any;
+                    const payload = rawChunk.payload as any;
                     responseMetadata = {
                       id: payload.id,
                       timestamp: payload.timestamp,
@@ -455,7 +506,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
 
                   case 'error': {
-                    const payload = chunk.payload as any;
+                    const payload = rawChunk.payload as any;
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
                     const errorObj = new Error(errorMessage);
                     // DON'T emit error event here - we might have fallback models to try
@@ -474,6 +525,24 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 modelSpan.error({ error: errorObj });
               }
 
+              // If this error was triggered by abortSignal cancellation, surface an
+              // abort event to the client so onAbort callbacks fire and bail out
+              // of the entire fallback/retry flow — a confirmed abort should not
+              // trigger retries on the same model nor fall through to other
+              // models. We deliberately avoid matching on arbitrary error message
+              // text (e.g. /abort/i) because that can fire for retryable provider
+              // errors whose message happens to mention "abort"; we only trust
+              // the canonical AbortError name or an actual aborted signal.
+              const isAbort = executionAbortSignal?.aborted === true || errorObj.name === 'AbortError';
+              if (isAbort) {
+                if (pubsub) {
+                  await emitAbortEvent(pubsub, runId, { steps: [] });
+                }
+                // Re-throw so the outer fallback catch also bypasses retry /
+                // processAPIError and terminates the step cleanly.
+                throw errorObj;
+              }
+
               lastError = errorObj;
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
@@ -482,15 +551,27 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Check if the stream captured an error (MastraModelOutput swallows errors internally)
             const streamError = outputStream.error;
             if (streamError) {
-              logger?.error?.('Stream captured error', { error: streamError, runId });
+              const streamErrorObj = streamError instanceof Error ? streamError : new Error(String(streamError));
+              logger?.error?.('Stream captured error', { error: streamErrorObj, runId });
 
               if (modelSpanTracker) {
-                modelSpanTracker.reportGenerationError({ error: streamError });
+                modelSpanTracker.reportGenerationError({ error: streamErrorObj });
               } else if (modelSpan) {
-                modelSpan.error({ error: streamError });
+                modelSpan.error({ error: streamErrorObj });
               }
 
-              lastError = streamError;
+              // Mirror the iterator catch: a captured stream error that turns out
+              // to be a confirmed abort must short-circuit retry/fallback and
+              // publish the abort event so the client bridge closes cleanly.
+              const isStreamErrorAbort = executionAbortSignal?.aborted === true || streamErrorObj.name === 'AbortError';
+              if (isStreamErrorAbort) {
+                if (pubsub) {
+                  await emitAbortEvent(pubsub, runId, { steps: [] });
+                }
+                throw streamErrorObj;
+              }
+
+              lastError = streamErrorObj;
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
             }
@@ -599,6 +680,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             return output;
           } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
+
+            // Confirmed aborts bypass all retry / fallback / processAPIError
+            // handling — the user (or upstream caller) explicitly cancelled the
+            // run and we must terminate immediately rather than burning more
+            // attempts or paying for fallback model calls. Re-derive the signal
+            // from the registry (the inner try-scoped `executionAbortSignal` is
+            // out of scope here).
+            const outerRegistryEntry = globalRunRegistry.get(runId);
+            const outerAbortSignal = outerRegistryEntry?.abortSignal ?? abortSignal;
+            const isAbort = outerAbortSignal?.aborted === true || lastError.name === 'AbortError';
+            if (isAbort) {
+              throw lastError;
+            }
 
             const modelId = modelEntry.config.modelId;
             logger?.error?.(`Error executing model ${modelId}, attempt ${attempt + 1}/${maxRetries + 1}`, {

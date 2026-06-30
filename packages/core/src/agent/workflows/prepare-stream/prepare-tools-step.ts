@@ -8,6 +8,7 @@ import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
+import { CONVERTED_TOOLS_KEY } from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
@@ -75,7 +76,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
 
       // Tool records contain `execute` functions and are not JSON-serializable.
       // Park them on the factory closure's runScope; map-results-step reads them.
-      runScope.convertedTools = convertedTools;
+      runScope.set(CONVERTED_TOOLS_KEY, convertedTools);
       return {};
     },
   });

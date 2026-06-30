@@ -192,7 +192,7 @@ describe('RailwaySandbox', () => {
   });
 
   describe('template', () => {
-    it('builds a template from a builder callback and creates from it', async () => {
+    it('resolves a template from a builder callback and creates from it', async () => {
       const sandbox = new RailwaySandbox({
         token: 'tok',
         template: t => t.withPackages('git', 'curl').run('npm i -g pnpm'),
@@ -202,8 +202,8 @@ describe('RailwaySandbox', () => {
       expect(mockTemplateFactory).toHaveBeenCalledTimes(1);
       expect(mockTemplate.withPackages).toHaveBeenCalledWith('git', 'curl');
       expect(mockTemplate.run).toHaveBeenCalledWith('npm i -g pnpm');
-      expect(mockTemplate.build).toHaveBeenCalledTimes(1);
-      // create(template, options)
+      expect(mockTemplate.build).not.toHaveBeenCalled();
+      // create(template, options) — Railway builds the template during create
       expect(mockCreate).toHaveBeenCalledWith(mockTemplate, expect.objectContaining({ token: 'tok' }));
     });
 
@@ -212,7 +212,7 @@ describe('RailwaySandbox', () => {
       await sandbox._start();
 
       expect(mockTemplateFactory).not.toHaveBeenCalled();
-      expect(mockTemplate.build).toHaveBeenCalledTimes(1);
+      expect(mockTemplate.build).not.toHaveBeenCalled();
       expect(mockCreate).toHaveBeenCalledWith(mockTemplate, expect.objectContaining({ token: 'tok' }));
     });
 
@@ -225,6 +225,7 @@ describe('RailwaySandbox', () => {
       await sandbox._start();
 
       expect(mockConnect).toHaveBeenCalledWith('rw-existing', expect.anything());
+      expect(mockTemplateFactory).not.toHaveBeenCalled();
       expect(mockTemplate.build).not.toHaveBeenCalled();
       expect(mockCreate).not.toHaveBeenCalled();
     });

@@ -1,6 +1,5 @@
-// @vitest-environment jsdom
-import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -21,18 +20,8 @@ vi.mock('react-router', async () => {
     useNavigate: () => navigateMock,
   };
 });
-
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
-
-vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
-  useDefaultVisibility: () => 'private',
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 const BASE_URL = 'http://localhost:4111';
@@ -56,6 +45,7 @@ const renderStarter = () => {
 
 describe('AgentBuilderStarter', () => {
   beforeEach(() => {
+    usePlaygroundStore.setState({ requestContext: {} });
     // The starter pulls builder settings + provider models so it can pick a
     // model that the admin policy allows. Stub the bare minimum: no policy and
     // an empty provider list, which yields the hard-coded fallback model.
@@ -64,6 +54,7 @@ describe('AgentBuilderStarter', () => {
         HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
       ),
       http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
       http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, login: null })),
     );
   });

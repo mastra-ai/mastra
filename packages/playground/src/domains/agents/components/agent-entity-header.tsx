@@ -1,14 +1,9 @@
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  AgentIcon,
-  Icon,
-  Skeleton,
-  Txt,
-  useCopyToClipboard,
-} from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CopyIcon, Check } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';
 
@@ -30,7 +25,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               type="button"
               onClick={handleCopy}
               aria-label="Copy Agent ID for use in code"
-              className="group/agent-title text-neutral6 flex min-w-0 max-w-full items-center gap-2"
+              className="group/agent-title text-neutral6 flex min-w-0 max-w-full cursor-pointer items-center gap-2"
               data-testid="agent-entity-header-copy-id"
             >
               <span className="flex size-7 shrink-0 items-center justify-center">

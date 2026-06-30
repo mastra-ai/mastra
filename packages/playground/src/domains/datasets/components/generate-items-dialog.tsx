@@ -1,21 +1,21 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
-  Button,
-  Checkbox,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogBody,
   DialogFooter,
-  Input,
-  Label,
-  ScrollArea,
-  Spinner,
-  Textarea,
-  Txt,
-  Icon,
-  toast,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Sparkles, Trash2, Plus } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 
@@ -204,6 +204,7 @@ export function GenerateReviewDialog({
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>(initialItems);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set(initialItems.map((_, i) => i)));
   const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set([0]));
+  const generatedItemCount = generatedItems.length;
 
   const { batchInsertItems } = useDatasetMutations();
 
@@ -256,12 +257,12 @@ export function GenerateReviewDialog({
   }, []);
 
   const toggleAll = useCallback(() => {
-    if (selectedIndices.size === generatedItems.length) {
+    if (selectedIndices.size === generatedItemCount) {
       setSelectedIndices(new Set());
     } else {
-      setSelectedIndices(new Set(generatedItems.map((_, i) => i)));
+      setSelectedIndices(new Set(Array.from({ length: generatedItemCount }, (_, i) => i)));
     }
-  }, [selectedIndices.size, generatedItems.length]);
+  }, [selectedIndices.size, generatedItemCount]);
 
   const handleRemoveItem = useCallback((index: number) => {
     setGeneratedItems(prev => prev.filter((_, i) => i !== index));

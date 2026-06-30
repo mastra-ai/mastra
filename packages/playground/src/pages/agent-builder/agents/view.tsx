@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { memo, useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { Navigate, useParams } from 'react-router';

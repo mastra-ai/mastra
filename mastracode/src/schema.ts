@@ -16,6 +16,16 @@ export interface MastraCodeState {
   subagentModelId?: string;
   projectPath?: string;
   projectName?: string;
+  /** When set, this project is a GitHub/cloud-sandbox-backed project. */
+  githubProjectId?: string;
+  /** Persisted sandbox id for reattaching the project's cloud workspace. */
+  sandboxId?: string;
+  /** Path inside the sandbox the repo is cloned into. */
+  sandboxWorkdir?: string;
+  /** Active git worktree path inside the sandbox for the current unit of work. */
+  worktreePath?: string;
+  /** Active feature branch checked out in the worktree. */
+  branch?: string;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -65,15 +75,20 @@ export interface MastraCodeState {
 }
 
 export const stateSchema = z.object({
-  // Session-scoped selection. The legacy Harness stores these in its state and
+  // Session-scoped selection.
   // validates state against this schema, so they MUST be declared here — Zod
   // strips unknown keys on parse, which would otherwise silently discard the
-  // seeded model and leave the harness with no model selected.
+  // seeded model and leave the controller with no model selected.
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  githubProjectId: z.string().optional(),
+  sandboxId: z.string().optional(),
+  sandboxWorkdir: z.string().optional(),
+  worktreePath: z.string().optional(),
+  branch: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),

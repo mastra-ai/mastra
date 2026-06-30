@@ -1,5 +1,5 @@
 import type { Provider } from '@mastra/client-js';
-import { Notice } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 
 export interface ProviderNotConnectedAlertProps {
   provider: Provider;

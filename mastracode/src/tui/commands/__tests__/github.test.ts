@@ -30,8 +30,14 @@ function createContext() {
     removed: true,
     remainingSubscriptions: 0,
   }));
+  const session = {
+    sendSignal,
+    identity: { getResourceId: vi.fn(() => 'resource-1') },
+    thread: { getId: vi.fn(() => 'thread-1'), list: vi.fn(async () => []) },
+  };
   const ctx = {
     state: {
+      session,
       ui: { requestRender: vi.fn() },
       projectInfo: { rootPath: '/repo' },
       options: {
@@ -44,12 +50,9 @@ function createContext() {
         },
       },
     },
-    harness: {
+    controller: {
       sendSignal,
-      session: {
-        identity: { getResourceId: vi.fn(() => 'resource-1') },
-        thread: { getId: vi.fn(() => 'thread-1'), list: vi.fn(async () => []) },
-      },
+      session,
     },
     showInfo: vi.fn(),
     showError: vi.fn(),
@@ -166,7 +169,7 @@ describe('handleGithubCommand', () => {
 
   it('unsubscribes the only current subscription without prompting', async () => {
     const { ctx, unsubscribeThreadFromPR } = createContext();
-    vi.mocked((ctx.harness as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.controller as any).session.thread.list).mockResolvedValue([
       {
         id: 'thread-1',
         resourceId: 'resource-1',
@@ -192,7 +195,7 @@ describe('handleGithubCommand', () => {
 
   it('syncs GitHub subscriptions for the current thread', async () => {
     const { ctx, sendSignal, syncThreadNow } = createContext();
-    vi.mocked((ctx.harness as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.controller as any).session.thread.list).mockResolvedValue([
       { id: 'thread-1', resourceId: 'resource-from-thread' },
     ]);
 
@@ -215,7 +218,7 @@ describe('handleGithubCommand', () => {
   it('shows GitHub subscription debug information for the current thread', async () => {
     const { ctx, sendSignal } = createContext();
     vi.mocked((ctx.state as any).options.githubSignals.isPollingThread).mockReturnValue(true);
-    vi.mocked((ctx.harness as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.controller as any).session.thread.list).mockResolvedValue([
       {
         id: 'thread-1',
         resourceId: 'resource-1',

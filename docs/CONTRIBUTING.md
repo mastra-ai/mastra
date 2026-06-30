@@ -56,10 +56,10 @@ Before submitting a PR, make sure to:
 
 4. **Verify code examples** - If you've added code examples, test them if possible to ensure they work.
 
-5. **Run linters** to check for style issues:
+5. **Run linters**:
 
    ```shell
-   pnpm run lint:prose
+   pnpm run lint:prose && pnpm run validate
    ```
 
 ## Documentation structure

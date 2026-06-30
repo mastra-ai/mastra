@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { DataPart } from '@mastra/react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';

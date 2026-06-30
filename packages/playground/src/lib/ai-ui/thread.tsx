@@ -1,5 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, ScrollArea, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
 import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -14,6 +20,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './composer-sending.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
@@ -145,8 +152,11 @@ export const Thread = ({
           </div>
         )}
 
+        <TaskPanel />
+
         <Composer
           agentId={agentId}
+          threadId={threadId}
           hasModelList={hasModelList}
           hideModelSwitcher={hideModelSwitcher}
           runOptionsSlot={runOptionsSlot}
@@ -171,15 +181,15 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   agentId?: string;
+  threadId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
 }
 
-const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
-  const { setThreadInput } = useThreadInput();
+const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
+  const { threadInput: text, setThreadInput } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState('');
   const send = useChatSend();
   const { attachments, toCoreUserMessages, clear } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
@@ -194,8 +204,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: 
     if (isEmpty || sendBlocked || !canExecuteAgent) return;
     const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
     const message = text;
-    setText('');
-    setThreadInput?.('');
+    setThreadInput('');
     clear();
     setSendPulseKey(k => k + 1);
     send({ message, attachments: coreUserMessages });
@@ -233,8 +242,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: 
                 className="field-sizing-content min-h-17 w-full text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
                 placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
                 onChange={e => {
-                  setText(e.target.value);
-                  setThreadInput?.(e.target.value);
+                  setThreadInput(e.target.value);
                 }}
                 onKeyDown={e => {
                   // Ignore Enter while an IME composition is active (e.g. committing a
@@ -262,8 +270,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: 
               canSendWhileStreaming={canSendWhileStreaming}
               onCancel={() => void cancelRun()}
               onSetText={value => {
-                setText(value);
-                setThreadInput?.(value);
+                setThreadInput(value);
               }}
             />
           </div>

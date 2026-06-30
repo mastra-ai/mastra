@@ -94,6 +94,22 @@ describe('buildUrl', () => {
       expect.objectContaining({ code: 'MISSING_ARGUMENT', details: { argument: 'agentId' } }),
     );
   });
+
+  it('uses a custom API prefix instead of the default /api', () => {
+    expect(buildUrl('https://example.com', '/agents', {}, undefined, '/api/mastra-studio')).toBe(
+      'https://example.com/api/mastra-studio/agents',
+    );
+  });
+
+  it('does not duplicate a custom prefix already present on the base URL', () => {
+    expect(buildUrl('https://example.com/api/mastra-studio', '/agents', {}, undefined, '/api/mastra-studio')).toBe(
+      'https://example.com/api/mastra-studio/agents',
+    );
+  });
+
+  it('omits any prefix when given an empty string', () => {
+    expect(buildUrl('https://example.com', '/agents', {}, undefined, '')).toBe('https://example.com/agents');
+  });
 });
 
 describe('requestApi', () => {
@@ -123,6 +139,25 @@ describe('requestApi', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/items/parent/children?page=2&perPage=25', {
       method: 'GET',
       headers: { Authorization: 'Bearer token' },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('routes requests through a custom API prefix', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ items: [] }));
+
+    await requestApi({
+      baseUrl: 'https://example.com',
+      headers: {},
+      timeoutMs: 1000,
+      descriptor: descriptor({ method: 'GET', path: '/agents' }),
+      pathParams: {},
+      apiPrefix: '/api/mastra-studio',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/mastra-studio/agents', {
+      method: 'GET',
+      headers: {},
       signal: expect.any(AbortSignal),
     });
   });
@@ -239,6 +274,18 @@ describe('fetchSchemaManifest', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/system/api-schema', {
       method: 'GET',
       headers: { Authorization: 'Bearer token' },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('fetches the schema manifest through a custom API prefix', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ routes: [] }));
+
+    await fetchSchemaManifest('https://example.com', {}, 1000, '/api/mastra-studio');
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/mastra-studio/system/api-schema', {
+      method: 'GET',
+      headers: {},
       signal: expect.any(AbortSignal),
     });
   });

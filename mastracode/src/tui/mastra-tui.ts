@@ -1,12 +1,12 @@
 /**
  * Main TUI class for Mastra Code.
- * Wires the Harness to pi-tui components for a full interactive experience.
+ * Wires the AgentController to pi-tui components for a full interactive experience.
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
-import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -56,7 +56,9 @@ import {
   addUserMessage,
   removePendingUserMessage,
   renderClearedTasksInline,
+  renderCompletedTasksInline,
   renderExistingMessages,
+  renderTaskDeltaInline,
 } from './render-messages.js';
 import {
   setupKeyboardShortcuts,
@@ -65,7 +67,7 @@ import {
   loadCustomSlashCommands,
   refreshSkillsAutocomplete,
   setupKeyHandlers,
-  subscribeToHarness,
+  subscribeToAgentController,
   updateTerminalTitle,
   promptForThreadSelection,
   renderExistingTasks,
@@ -99,6 +101,11 @@ const USER_SIGNAL_DELIVERY_OPTIONS: {
 } = {
   ifActive: { attributes: { delivery: 'while-active' } },
   ifIdle: { attributes: { delivery: 'message' } },
+};
+
+const USER_MESSAGE_APPROVAL_INTERRUPT = {
+  reason: 'interrupted_by_user_message',
+  message: 'The pending tool approval was declined because the user sent a new message.',
 };
 
 /** How often to recheck for updates during a long-running session (ms). */
@@ -290,7 +297,7 @@ export class MastraTUI {
         } else {
           try {
             if (this.state.pendingNewThread) {
-              await this.state.harness.createThread();
+              await this.state.session.thread.create();
               this.state.pendingNewThread = false;
             }
             this.fireMessage(msg);
@@ -349,12 +356,12 @@ export class MastraTUI {
 
   /**
    * Fire off a message without blocking the main loop.
-   * Errors are handled via harness events.
+   * Errors are handled via controller events.
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     this.clearIdleCounter();
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
-    this.state.harness.sendMessage({ content, files }).catch(error => {
+    this.state.session.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
@@ -363,7 +370,7 @@ export class MastraTUI {
     content: string,
     images?: Array<{ data: string; mimeType: string }>,
     id = '',
-  ): HarnessMessage {
+  ): AgentControllerMessage {
     return {
       id,
       role: 'user',
@@ -413,7 +420,7 @@ export class MastraTUI {
   private createPendingNewThread(): Promise<void> | undefined {
     if (!this.state.pendingNewThread) return undefined;
     this.state.pendingNewThread = false;
-    return this.state.harness.createThread().then(() => undefined);
+    return this.state.session.thread.create().then(() => undefined);
   }
 
   private sendOptimisticSignal(
@@ -433,7 +440,7 @@ export class MastraTUI {
         pendingNewThread,
       });
 
-      const signal = this.state.harness.sendSignal({
+      const signal = this.state.session.sendSignal({
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
@@ -461,7 +468,11 @@ export class MastraTUI {
 
     const send = () => {
       this.clearIdleCounter();
-      const signal = this.state.harness.sendSignal({
+      if (hasActiveRun) {
+        this.state.pendingApprovalDismiss?.(USER_MESSAGE_APPROVAL_INTERRUPT);
+      }
+
+      const signal = this.state.session.sendSignal({
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
       });
@@ -553,12 +564,9 @@ export class MastraTUI {
   private async init(): Promise<void> {
     if (this.state.isInitialized) return;
 
-    // Initialize harness (but don't select thread yet)
-    await this.state.harness.init();
-    await this.state.harness.getMastra()?.startWorkers();
-
-    // Check for existing threads and prompt for resume
-    await promptForThreadSelection(this.state);
+    // Initialize controller (but don't select thread yet)
+    await this.state.controller.init();
+    await this.state.controller.getMastra()?.startWorkers();
 
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
@@ -579,8 +587,14 @@ export class MastraTUI {
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
     });
 
-    // Subscribe to harness events
-    subscribeToHarness(this.state, event => this.handleEvent(event));
+    // Start the UI before thread selection so resource-drift prompts can render.
+    this.state.ui.start();
+
+    // Check for existing threads and prompt for resume
+    await promptForThreadSelection(this.state);
+
+    // Subscribe to controller events
+    subscribeToAgentController(this.state, event => this.handleEvent(event));
     // Restore escape-as-cancel setting from persisted state
     const escState = this.state.session.state.get() as any;
     if (escState?.escapeAsCancel === false) {
@@ -590,14 +604,12 @@ export class MastraTUI {
     // Load OM progress now that we're subscribed (the event during
     // thread selection fired before we were listening).
     // This emits om_status → display_state_changed → updateStatusLine.
-    await this.state.harness.loadOMProgress();
+    await this.state.controller.loadOMProgress(this.state.session);
 
     // Sync current thread metadata — the thread_changed event from
     // promptForThreadSelection fired before we subscribed above.
     await syncInitialThreadState(this.state);
 
-    // Start the UI
-    this.state.ui.start();
     this.state.isInitialized = true;
 
     // Start MCP connections now that the TUI owns the terminal.
@@ -640,7 +652,7 @@ export class MastraTUI {
   }
 
   private async refreshModelAuthStatus(): Promise<void> {
-    this.state.modelAuthStatus = await this.state.harness.getCurrentModelAuthStatus();
+    this.state.modelAuthStatus = await this.state.controller.getCurrentModelAuthStatus(this.state.session);
     updateStatusLine(this.state);
   }
 
@@ -699,7 +711,7 @@ export class MastraTUI {
     return this._ectx;
   }
 
-  private async handleEvent(event: HarnessEvent): Promise<void> {
+  private async handleEvent(event: AgentControllerEvent): Promise<void> {
     if (event.type === 'agent_start') {
       this.clearIdleCounter();
       this.startCaffeinate();
@@ -717,7 +729,7 @@ export class MastraTUI {
 
     try {
       await dispatchEvent(event, this.getEventContext(), this.state);
-      this.captureHarnessAnalytics(event);
+      this.captureAgentControllerAnalytics(event);
 
       if (event.type === 'thread_created') {
         await this.syncThreadActivePackMetadata(event.thread);
@@ -742,7 +754,7 @@ export class MastraTUI {
     }
   }
 
-  private captureHarnessAnalytics(event: HarnessEvent): void {
+  private captureAgentControllerAnalytics(event: AgentControllerEvent): void {
     const analytics = this.state.analytics;
     if (!analytics) {
       return;
@@ -782,14 +794,14 @@ export class MastraTUI {
   }
 
   private emitErrorFeedback(errorMessage: string): void {
-    const harness = this.state.harness;
-    const traceId = harness.session.run.getTraceId() ?? undefined;
-    const runId = harness.session.getCurrentRunId() ?? undefined;
-    const threadId = harness.session.thread.getId() ?? undefined;
+    const controller = this.state.controller;
+    const traceId = this.state.session.run.getTraceId() ?? undefined;
+    const runId = this.state.session.getCurrentRunId() ?? undefined;
+    const threadId = this.state.session.thread.getId() ?? undefined;
 
     if (!traceId && !runId && !threadId) return;
 
-    const mastra = harness.getMastra();
+    const mastra = controller.getMastra();
     const observability = mastra?.observability;
     if (!observability?.addFeedback) return;
 
@@ -856,7 +868,7 @@ export class MastraTUI {
   }
 
   private async buildProviderAccess(): Promise<ProviderAccess> {
-    const models = await this.state.harness.listAvailableModels();
+    const models = await this.state.controller.listAvailableModels();
     const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
     const accessLevel = (storageProviderId: string): ProviderAccessLevel => {
       const cred = this.state.authStorage?.get(storageProviderId);
@@ -1035,10 +1047,10 @@ export class MastraTUI {
   }
 
   /**
-   * Get the workspace, preferring harness-owned workspace over the direct option.
+   * Get the workspace, preferring controller-owned workspace over the direct option.
    */
   private getResolvedWorkspace(): Workspace | undefined {
-    return this.state.harness.getWorkspace() ?? this.state.workspace;
+    return this.state.controller.getWorkspace() ?? this.state.workspace;
   }
 
   // ===========================================================================
@@ -1056,7 +1068,7 @@ export class MastraTUI {
   private buildCommandContext(): SlashCommandContext {
     return {
       state: this.state,
-      harness: this.state.harness,
+      controller: this.state.controller,
       session: this.state.session,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
@@ -1093,6 +1105,10 @@ export class MastraTUI {
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
+      renderCompletedTasksInline: (completedTasks, insertIndex) =>
+        renderCompletedTasksInline(this.state, completedTasks, insertIndex),
+      renderTaskDeltaInline: (previousTasks, nextTasks, insertIndex) =>
+        renderTaskDeltaInline(this.state, previousTasks, nextTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),
     };
   }
@@ -1154,7 +1170,7 @@ export class MastraTUI {
           const { PROVIDER_DEFAULT_MODELS } = await import('../auth/storage.js');
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
-            await this.state.harness.switchModel({ modelId: defaultModel });
+            await this.state.session.model.switch({ modelId: defaultModel });
             showInfo(this.state, `Logged in to ${providerName} - switched to ${defaultModel}`);
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
@@ -1244,7 +1260,7 @@ export class MastraTUI {
           });
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
-          const availableModels = await this.state.harness.listAvailableModels();
+          const availableModels = await this.state.controller.listAvailableModels();
           if (availableModels.length === 0) return undefined;
 
           return new Promise<string | undefined>(resolveModel => {
@@ -1278,32 +1294,32 @@ export class MastraTUI {
   }
 
   private async applyOnboardingResult(result: OnboardingResult): Promise<void> {
-    const harness = this.state.harness;
+    const controller = this.state.controller;
     const modePack = result.modePack;
-    const modes = harness.listModes();
+    const modes = controller.listModes();
 
     for (const mode of modes) {
       const modelId = (modePack.models as Record<string, string>)[mode.id];
       if (modelId) {
         (mode as any).defaultModelId = modelId;
-        await harness.session.thread.setSetting({
+        await this.state.session.thread.setSetting({
           key: `modeModelId_${mode.id}`,
           value: modelId,
         });
       }
     }
 
-    const currentModeId = harness.session.mode.get();
+    const currentModeId = this.state.session.mode.get();
     const currentModeModel = (modePack.models as Record<string, string>)[currentModeId];
     if (currentModeModel) {
-      await harness.switchModel({ modelId: currentModeModel });
+      await this.state.session.model.switch({ modelId: currentModeModel });
     }
 
     const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
     for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
       const saModelId = (modePack.models as Record<string, string>)[modeId];
       if (saModelId) {
-        await harness.setSubagentModelId({ modelId: saModelId, agentType });
+        await this.state.session.subagents.model.set({ modelId: saModelId, agentType });
       }
     }
 
@@ -1342,8 +1358,8 @@ export class MastraTUI {
 
     settings.onboarding.modePackId = activeModePackId;
     settings.models.activeModelPackId = activeModePackId;
-    if (harness.session.thread.getId()) {
-      await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
+    if (this.state.session.thread.getId()) {
+      await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
     settings.models.activeOmPackId = omPack.id;
@@ -1386,7 +1402,7 @@ export class MastraTUI {
     const tools = this.state.allToolComponents.filter(
       (tool): tool is IToolExecutionComponent => typeof tool.setQuietModeDisplay === 'function',
     );
-    const color = this.state.harness?.session.mode.resolve().metadata?.color;
+    const color = this.state.session?.mode.resolve().metadata?.color;
     const modeColor = typeof color === 'string' ? color : undefined;
     for (const tool of tools) {
       tool.setCompactToolModeColor?.(modeColor);

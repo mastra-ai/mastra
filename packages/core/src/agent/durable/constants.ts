@@ -31,6 +31,10 @@ export const AgentStreamEventTypes = {
   ERROR: 'error',
   /** Workflow suspended (e.g., for tool approval) */
   SUSPENDED: 'suspended',
+  /** Execution aborted by abortSignal */
+  ABORT: 'abort',
+  /** Single agentic-loop iteration completed (observability hook) */
+  ITERATION_COMPLETE: 'iteration-complete',
 } as const;
 
 /**
@@ -65,4 +69,6 @@ export const DurableStepIds = {
   AGENTIC_LOOP: 'durable-agentic-loop',
   /** Scorer execution step */
   SCORER_EXECUTION: 'durable-scorer-execution',
+  /** isTaskComplete evaluation step */
+  IS_TASK_COMPLETE: 'durable-is-task-complete',
 } as const;

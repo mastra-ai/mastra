@@ -1,24 +1,21 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import {
-  Button,
-  EmptyState,
-  MemoryIcon,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Txt,
-  cn,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentMemory } from './agent-memory';
+import { MemoryDetailView } from './memory-detail-view';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
 import '../agent-view-transition.css';
 import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
-import { useObservationalMemoryContext } from '@/domains/agents/context';
+import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
+
 import { useMemoryConfig } from '@/domains/memory/hooks';
 
 export interface MemorySidebarProps {
@@ -84,8 +81,10 @@ export function MemorySidebar({
   hasMemory,
 }: MemorySidebarProps) {
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
+  const { isPanelOpen } = useMemoryTimeline();
   const { streamProgress } = useObservationalMemoryContext();
   const { data: memoryConfig } = useMemoryConfig(agentId);
+
   const showMemory = selectedTab === 'memory';
   const memoryCardShellRef = useRef<HTMLDivElement>(null);
   const memoryCardButtonRef = useRef<HTMLButtonElement>(null);
@@ -103,6 +102,7 @@ export function MemorySidebar({
     typeof observationalMemory === 'object'
       ? Boolean((observationalMemory as { enabled?: boolean })?.enabled)
       : Boolean(observationalMemory);
+  const showMemoryDetail = observationalOn && isPanelOpen;
 
   // streamProgress is intentionally retained across thread switches (for reload
   // display), so only trust it for the thread this card belongs to — otherwise the
@@ -146,131 +146,137 @@ export function MemorySidebar({
   return (
     <SidebarPanel>
       {hasMemory ? (
-        <div className="relative h-full min-h-0 w-full overflow-hidden">
-          <div
-            aria-hidden={showMemory}
-            inert={showMemory ? true : undefined}
-            data-testid="memory-sidebar-thread-layer"
-            className={cn(
-              'memory-sidebar-thread-layer absolute inset-0 min-h-0 overflow-y-auto',
-              showMemory ? 'pointer-events-none opacity-0' : 'opacity-100',
-            )}
-            style={{ paddingTop: collapsedCardSize.offset || undefined }}
-          >
-            <ChatThreads
-              resourceId={agentId}
-              resourceType="agent"
-              threads={threads || []}
-              isLoading={isLoading}
-              threadId={threadId}
-              onDelete={onDelete}
-              embedded
-            />
-          </div>
-
-          <div
-            ref={memoryCardShellRef}
-            data-testid="memory-sidebar-overlay"
-            className={cn(
-              'memory-sidebar-overlay absolute inset-x-0 top-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
-              showMemory
-                ? 'm-0 rounded-none border-transparent bg-surface3 shadow-none'
-                : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
-            )}
-            style={{ height: showMemory ? '100%' : collapsedCardSize.height || undefined }}
-          >
-            <button
-              ref={memoryCardButtonRef}
-              type="button"
-              onClick={() => handleTabChange(showMemory ? 'threads' : 'memory')}
-              aria-pressed={showMemory}
-              data-testid="memory-sidebar-card"
-              className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
-                  <MemoryIcon className="h-4 w-4 shrink-0" />
-                  <Txt as="span" variant="ui-sm" className="font-medium">
-                    Memory
-                  </Txt>
-                </span>
-                {showMemory ? (
-                  <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
+        <div data-testid="memory-sidebar-panel" className="h-full min-h-0 min-w-0">
+          {showMemoryDetail ? (
+            <MemoryDetailView agentId={agentId} threadId={threadId} />
+          ) : (
+            <div className="relative h-full min-h-0 min-w-0 overflow-hidden">
+              <div
+                aria-hidden={showMemory}
+                inert={showMemory ? true : undefined}
+                data-testid="memory-sidebar-thread-layer"
+                className={cn(
+                  'memory-sidebar-thread-layer absolute inset-0 min-h-0 overflow-y-auto',
+                  showMemory ? 'pointer-events-none opacity-0' : 'opacity-100',
                 )}
-              </span>
-
-              {/* Memory setup at a glance: filled badge = on, faded = off */}
-              <TooltipProvider delay={150} timeout={400}>
-                <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <ConfigBadge
-                    icon={MessageSquare}
-                    label="recent messages"
-                    tooltip={
-                      lastMessages !== undefined
-                        ? `Keeps the last ${lastMessages} messages in context`
-                        : 'Recent message history is off'
-                    }
-                    enabled={lastMessages !== undefined}
-                    value={lastMessages}
-                    expanded={showMemory}
-                  />
-                  <ConfigBadge
-                    icon={Search}
-                    label="Semantic recall"
-                    tooltip={
-                      semanticRecallOn
-                        ? 'Semantic recall is on - retrieves relevant past messages'
-                        : 'Semantic recall is off'
-                    }
-                    enabled={semanticRecallOn}
-                    expanded={showMemory}
-                  />
-                  <ConfigBadge
-                    icon={NotebookPen}
-                    label="Working memory"
-                    tooltip={
-                      workingMemoryOn
-                        ? 'Working memory is on - persists notes across the conversation'
-                        : 'Working memory is off'
-                    }
-                    enabled={workingMemoryOn}
-                    expanded={showMemory}
-                  />
-                  <ConfigBadge
-                    icon={Eye}
-                    label="Observational"
-                    tooltip={
-                      observationalOn
-                        ? 'Observational memory is on - learns from the conversation'
-                        : 'Observational memory is off'
-                    }
-                    enabled={observationalOn}
-                    expanded={showMemory}
-                  />
-                </span>
-              </TooltipProvider>
-
-              {observationPercent !== undefined ? (
-                <span className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-surface5">
-                  <span
-                    className={cn(
-                      'block h-full rounded-full transition-all duration-normal',
-                      barColor(observationPercent),
-                    )}
-                    style={{ width: `${observationPercent}%` }}
-                  />
-                </span>
-              ) : null}
-            </button>
-
-            {showMemory && (
-              <div className="memory-card-content min-h-0 flex-1 overflow-y-auto border-t border-border1">
-                <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
+                style={{ paddingTop: collapsedCardSize.offset || undefined }}
+              >
+                <ChatThreads
+                  resourceId={agentId}
+                  resourceType="agent"
+                  threads={threads || []}
+                  isLoading={isLoading}
+                  threadId={threadId}
+                  onDelete={onDelete}
+                  embedded
+                />
               </div>
-            )}
-          </div>
+
+              <div
+                ref={memoryCardShellRef}
+                data-testid="memory-sidebar-overlay"
+                className={cn(
+                  'memory-sidebar-overlay absolute inset-x-0 top-0 z-10 box-border flex min-h-0 flex-col overflow-hidden border',
+                  showMemory
+                    ? 'm-0 rounded-none border-transparent bg-surface3 shadow-none'
+                    : 'm-1 rounded-xl border-border1/40 bg-surface4 hover:bg-surface5 active:bg-surface4',
+                )}
+                style={{ height: showMemory ? '100%' : collapsedCardSize.height || undefined }}
+              >
+                <button
+                  ref={memoryCardButtonRef}
+                  type="button"
+                  onClick={() => handleTabChange(showMemory ? 'threads' : 'memory')}
+                  aria-pressed={showMemory}
+                  data-testid="memory-sidebar-card"
+                  className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
+                      <MemoryIcon className="h-4 w-4 shrink-0" />
+                      <Txt as="span" variant="ui-sm" className="font-medium">
+                        Memory
+                      </Txt>
+                    </span>
+                    {showMemory ? (
+                      <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
+                    )}
+                  </span>
+
+                  {/* Memory setup at a glance: filled badge = on, faded = off */}
+                  <TooltipProvider delay={150} timeout={400}>
+                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <ConfigBadge
+                        icon={MessageSquare}
+                        label="recent messages"
+                        tooltip={
+                          lastMessages !== undefined
+                            ? `Keeps the last ${lastMessages} messages in context`
+                            : 'Recent message history is off'
+                        }
+                        enabled={lastMessages !== undefined}
+                        value={lastMessages}
+                        expanded={showMemory}
+                      />
+                      <ConfigBadge
+                        icon={Search}
+                        label="Semantic recall"
+                        tooltip={
+                          semanticRecallOn
+                            ? 'Semantic recall is on - retrieves relevant past messages'
+                            : 'Semantic recall is off'
+                        }
+                        enabled={semanticRecallOn}
+                        expanded={showMemory}
+                      />
+                      <ConfigBadge
+                        icon={NotebookPen}
+                        label="Working memory"
+                        tooltip={
+                          workingMemoryOn
+                            ? 'Working memory is on - persists notes across the conversation'
+                            : 'Working memory is off'
+                        }
+                        enabled={workingMemoryOn}
+                        expanded={showMemory}
+                      />
+                      <ConfigBadge
+                        icon={Eye}
+                        label="Observational"
+                        tooltip={
+                          observationalOn
+                            ? 'Observational memory is on - learns from the conversation'
+                            : 'Observational memory is off'
+                        }
+                        enabled={observationalOn}
+                        expanded={showMemory}
+                      />
+                    </span>
+                  </TooltipProvider>
+
+                  {observationPercent !== undefined ? (
+                    <span className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-surface5">
+                      <span
+                        className={cn(
+                          'block h-full rounded-full transition-all duration-normal',
+                          barColor(observationPercent),
+                        )}
+                        style={{ width: `${observationPercent}%` }}
+                      />
+                    </span>
+                  ) : null}
+                </button>
+
+                {showMemory && (
+                  <div className="memory-card-content flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border1">
+                    <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <EmptyState

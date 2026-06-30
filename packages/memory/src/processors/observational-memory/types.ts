@@ -2,6 +2,7 @@ import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { ProviderMetadata } from '@mastra/core/stream';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 
 /**
@@ -842,7 +843,7 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can
    * inspect raw messages behind a stored observation summary.
@@ -851,7 +852,6 @@ export interface ObservationalMemoryConfig {
    * configured vector store for semantic recall, and `scope` to limit recall
    * browsing to the current thread instead of the whole resource.
    *
-   * @experimental
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
@@ -1014,7 +1014,22 @@ export interface ObserveHookUsage {
 
 export interface ObserveHooks {
   onObservationStart?: () => void;
-  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
+  /**
+   * Fires when an observation cycle ends. `providerMetadata` carries the OM
+   * observer model call's full provider metadata (e.g. AI Gateway cost and
+   * generation id under `providerMetadata.gateway`); it is undefined when the
+   * provider emits none. For batched resource-scoped observations it reflects
+   * the last batch that emitted provider metadata (per-call values are not
+   * summed/merged).
+   */
+  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
   onReflectionStart?: () => void;
-  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error }) => void;
+  /**
+   * Fires when a reflection cycle ends. `providerMetadata` carries the OM
+   * reflector model call's full provider metadata; it is undefined when the
+   * provider emits none. Across retry attempts `usage` is summed but
+   * `providerMetadata` reflects the last attempt that emitted it (per-call
+   * values are not merged).
+   */
+  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
 }

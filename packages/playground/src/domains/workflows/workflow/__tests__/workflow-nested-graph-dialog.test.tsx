@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
