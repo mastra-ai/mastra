@@ -703,4 +703,272 @@ describe('MessageList.updateToolInvocation', () => {
       mastra: { modelOutput: true },
     });
   });
+
+  describe('isAlreadySettled guard (background task fix)', () => {
+    it('should not downgrade a result part back to call when onExecution fires', () => {
+      const messageList = new MessageList();
+
+      const msg = makeAssistantMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'tc-bg',
+            toolName: 'delegate_agent',
+            args: { task: 'summarise' },
+            result: { output: 'task dispatched' },
+          },
+        },
+      ]);
+      messageList.add(msg, 'response');
+
+      // onExecution always passes state:'call' to attach metadata — must not downgrade
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-bg',
+          toolName: 'delegate_agent',
+          args: {},
+        },
+      });
+
+      const part = msg.content.parts[0] as any;
+      expect(part.toolInvocation.state).toBe('result');
+      expect(part.toolInvocation.result).toEqual({ output: 'task dispatched' });
+    });
+
+    it('should not downgrade an output-available part back to call', () => {
+      const messageList = new MessageList();
+
+      const msg = makeAssistantMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'output-available' as any,
+            toolCallId: 'tc-bg2',
+            toolName: 'delegate_agent',
+            args: { task: 'analyse' },
+            result: { output: 'running in background' },
+          },
+        },
+      ]);
+      messageList.add(msg, 'response');
+
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-bg2',
+          toolName: 'delegate_agent',
+          args: {},
+        },
+      });
+
+      const part = msg.content.parts[0] as any;
+      expect(part.toolInvocation.state).toBe('output-available');
+    });
+
+    it('should still merge backgroundTasks metadata even when part is settled', () => {
+      const messageList = new MessageList();
+
+      const msg = makeAssistantMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'tc-bg3',
+            toolName: 'delegate_agent',
+            args: { task: 'run' },
+            result: { output: 'dispatched' },
+          },
+        },
+      ]);
+      messageList.add(msg, 'response');
+
+      messageList.updateToolInvocation(
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'tc-bg3',
+            toolName: 'delegate_agent',
+            args: {},
+          },
+        },
+        { backgroundTasks: { 'tc-bg3': { taskId: 'task-123', startedAt: 1000 } } } as any,
+      );
+
+      const part = msg.content.parts[0] as any;
+      expect(part.toolInvocation.state).toBe('result');
+      expect((msg.content.metadata as any)?.backgroundTasks?.['tc-bg3']?.taskId).toBe('task-123');
+    });
+
+    it('should still update a non-settled call part normally', () => {
+      const messageList = new MessageList();
+
+      const msg = makeAssistantMessage([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'tc-normal',
+            toolName: 'web_search',
+            args: { query: 'test' },
+          },
+        },
+      ]);
+      messageList.add(msg, 'response');
+
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-normal',
+          toolName: 'web_search',
+          args: {},
+          result: { data: 'found' },
+        },
+      });
+
+      const part = msg.content.parts[0] as any;
+      expect(part.toolInvocation.state).toBe('result');
+      expect(part.toolInvocation.result).toEqual({ data: 'found' });
+    });
+  });
+});
+
+describe('isAlreadySettled guard (background task fix)', () => {
+  it('should not downgrade a result part back to call when onExecution fires', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-bg',
+          toolName: 'delegate_agent',
+          args: { task: 'summarise' },
+          result: { output: 'task dispatched' },
+        },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    // onExecution always passes state:'call' to attach metadata — must not downgrade
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'call',
+        toolCallId: 'tc-bg',
+        toolName: 'delegate_agent',
+        args: {},
+      },
+    });
+
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.toolInvocation.result).toEqual({ output: 'task dispatched' });
+  });
+
+  it('should not downgrade an output-available part back to call', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'output-available' as any,
+          toolCallId: 'tc-bg2',
+          toolName: 'delegate_agent',
+          args: { task: 'analyse' },
+          result: { output: 'running in background' },
+        },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'call',
+        toolCallId: 'tc-bg2',
+        toolName: 'delegate_agent',
+        args: {},
+      },
+    });
+
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('output-available');
+  });
+
+  it('should still merge backgroundTasks metadata even when part is settled', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-bg3',
+          toolName: 'delegate_agent',
+          args: { task: 'run' },
+          result: { output: 'dispatched' },
+        },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation(
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-bg3',
+          toolName: 'delegate_agent',
+          args: {},
+        },
+      },
+      { backgroundTasks: { 'tc-bg3': { taskId: 'task-123', startedAt: 1000 } } } as any,
+    );
+
+    const part = msg.content.parts[0] as any;
+    // State must not be downgraded
+    expect(part.toolInvocation.state).toBe('result');
+    // backgroundTasks metadata must be merged
+    expect((msg.content.metadata as any)?.backgroundTasks?.['tc-bg3']?.taskId).toBe('task-123');
+  });
+
+  it('should still update a non-settled call part normally', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-normal',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-normal',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'found' },
+      },
+    });
+
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.toolInvocation.result).toEqual({ data: 'found' });
+  });
 });
