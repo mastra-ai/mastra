@@ -118,7 +118,7 @@ function loadDatadogTracer(): DatadogTracerLike | null {
   }
 
   try {
-    const req = createRequire(import.meta.url || 'file:///');
+    const req = createRequire(import.meta.url);
     return req('dd-trace') as DatadogTracerLike;
   } catch {
     return null;
