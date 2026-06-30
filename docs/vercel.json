@@ -839,6 +839,16 @@
       "source": "/reference/harness/session",
       "destination": "/reference/agent-controller/session",
       "permanent": true
+    },
+    {
+      "source": "/docs/community/contributing-templates",
+      "destination": "/templates",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/discord",
+      "destination": "/templates",
+      "permanent": true
     }
   ]
 }
