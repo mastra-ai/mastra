@@ -8,8 +8,13 @@ import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
+import type { ListDatasetItemsOutput } from '../../storage/types';
 import { Dataset } from '../dataset';
 import { SchemaValidationError, SchemaUpdateValidationError } from '../validation/errors';
+
+// Dataset.listItems returns a union for backwards compat, but the runtime
+// always returns the paginated shape. Narrow it in tests.
+const paginated = <T>(r: T | ListDatasetItemsOutput): ListDatasetItemsOutput => r as ListDatasetItemsOutput;
 
 const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<any, any, any, any> => ({
   id: scorerId,
@@ -196,7 +201,7 @@ describe('Dataset', () => {
   // 14. listItems — without version
   it('listItems without version returns { items, pagination }', async () => {
     await ds.addItem({ input: { a: 1 } });
-    const result = await ds.listItems();
+    const result = paginated(await ds.listItems());
     expect(result.items.length).toBeGreaterThanOrEqual(1);
     expect(result.pagination).toBeDefined();
   });
@@ -204,7 +209,7 @@ describe('Dataset', () => {
   // 15. listItems — with version returns paginated shape
   it('listItems with version returns { items, pagination } at that version', async () => {
     const item = await ds.addItem({ input: { a: 1 } });
-    const result = await ds.listItems({ version: item.datasetVersion });
+    const result = paginated(await ds.listItems({ version: item.datasetVersion }));
     expect(result.items.length).toBeGreaterThanOrEqual(1);
     expect(result.pagination).toBeDefined();
   });
@@ -215,7 +220,7 @@ describe('Dataset', () => {
     await ds.addItem({ input: { q: 'banana' } });
     const last = await ds.addItem({ input: { q: 'apricot' } });
 
-    const result = await ds.listItems({ version: last.datasetVersion, search: 'ap' });
+    const result = paginated(await ds.listItems({ version: last.datasetVersion, search: 'ap' }));
     expect(result.items.length).toBe(2);
     expect(result.items.every(i => JSON.stringify(i.input).includes('ap'))).toBe(true);
   });
@@ -227,12 +232,12 @@ describe('Dataset', () => {
     }
     const latest = await ds.addItem({ input: { a: 5 } });
 
-    const page0 = await ds.listItems({ version: latest.datasetVersion, page: 0, perPage: 2 });
+    const page0 = paginated(await ds.listItems({ version: latest.datasetVersion, page: 0, perPage: 2 }));
     expect(page0.items).toHaveLength(2);
     expect(page0.pagination.total).toBe(6);
     expect(page0.pagination.hasMore).toBe(true);
 
-    const page1 = await ds.listItems({ version: latest.datasetVersion, page: 1, perPage: 2 });
+    const page1 = paginated(await ds.listItems({ version: latest.datasetVersion, page: 1, perPage: 2 }));
     expect(page1.items).toHaveLength(2);
     expect(page1.pagination.hasMore).toBe(true);
   });
@@ -589,7 +594,7 @@ describe('Dataset', () => {
     for (let i = 0; i < 5; i++) {
       await ds.addItem({ input: { i } });
     }
-    const result = await ds.listItems({ perPage: 2 });
+    const result = paginated(await ds.listItems({ perPage: 2 }));
     expect(result.items).toHaveLength(2);
     expect(result.pagination.total).toBe(5);
   });

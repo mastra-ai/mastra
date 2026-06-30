@@ -180,15 +180,19 @@ export class Dataset {
 
   /**
    * List items in the dataset, optionally at a specific version, with
-   * optional substring search and pagination. Always returns a paginated
-   * `{ items, pagination }` shape.
+   * optional substring search and pagination.
+   *
+   * Returns a paginated `{ items, pagination }` shape in all cases. The
+   * union return type is preserved for backwards compatibility with callers
+   * that previously narrowed on the `version`-specific `DatasetItem[]`
+   * branch; that branch is no longer produced at runtime.
    */
   async listItems(args?: {
     version?: number;
     page?: number;
     perPage?: number;
     search?: string;
-  }): Promise<ListDatasetItemsOutput> {
+  }): Promise<DatasetItem[] | ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
     return store.listItems({
       datasetId: this.id,
