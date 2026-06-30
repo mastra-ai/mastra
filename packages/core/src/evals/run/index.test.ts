@@ -1525,8 +1525,7 @@ describe('runEvals', () => {
       }).generateScore(({ run }: any) => {
         const output = run.output;
         if (!Array.isArray(output)) return 0;
-        // Should have responses from all turns
-        return output.length >= 2 ? 1.0 : 0.0;
+        return output.length === 3 ? 1.0 : 0.0;
       });
 
       const result = await runEvals({
@@ -1647,8 +1646,10 @@ describe('runEvals', () => {
 
       const alwaysPassGate = createScorer({
         id: 'pass-gate',
-        description: 'Always passes',
-      }).generateScore(() => 1.0);
+        description: 'Asserts multi-turn payload',
+      }).generateScore(({ run }: any) => {
+        return Array.isArray(run.output) && run.output.length === 2 ? 1.0 : 0.0;
+      });
 
       const result = await runEvals({
         data: [

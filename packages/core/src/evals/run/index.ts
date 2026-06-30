@@ -21,19 +21,28 @@ type WorkflowRunOptions = WorkflowRunStartOptions & {
 
 type AgentInputType = string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
 
-type RunEvalsDataItem<TTarget = unknown> = {
-  input: TTarget extends Workflow<any, any> ? any : TTarget extends Agent ? AgentInputType : unknown;
-  /**
-   * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
-   * on the same thread. Scorers see the accumulated output from all turns.
-   * Only supported for Agent targets (not Workflows).
-   */
-  inputs?: TTarget extends Agent ? AgentInputType[] : never;
+type RunEvalsDataItemBase = {
   groundTruth?: any;
   expectedTrajectory?: any;
   requestContext?: RequestContext;
   startOptions?: WorkflowRunOptions;
 } & Partial<ObservabilityContext>;
+
+type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
+  ?
+      | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never })
+      | (RunEvalsDataItemBase & {
+          input?: AgentInputType;
+          /**
+           * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
+           * on the same thread. Scorers see the accumulated output from all turns.
+           * Only supported for Agent targets (not Workflows).
+           */
+          inputs: AgentInputType[];
+        })
+  : TTarget extends Workflow<any, any>
+    ? RunEvalsDataItemBase & { input: any; inputs?: never }
+    : RunEvalsDataItemBase & { input: unknown; inputs?: never };
 
 export type WorkflowScorerConfig = {
   /** Scorers that evaluate the overall workflow input/output */
@@ -442,13 +451,21 @@ function validateEvalsInputs(
         text: `Invalid data item at index ${i}: must have 'input' or 'inputs' property`,
       });
     }
-    if ('inputs' in item && item.inputs) {
+    if ('inputs' in item) {
       if (!Array.isArray(item.inputs) || item.inputs.length === 0) {
         throw new MastraError({
           domain: 'SCORER',
           id: 'INVALID_DATA_ITEM',
           category: 'USER',
           text: `Invalid data item at index ${i}: 'inputs' must be a non-empty array`,
+        });
+      }
+      if (isWorkflow(target)) {
+        throw new MastraError({
+          domain: 'SCORER',
+          id: 'INVALID_DATA_ITEM',
+          category: 'USER',
+          text: `Invalid data item at index ${i}: 'inputs' is not supported for Workflow targets`,
         });
       }
     }
@@ -623,7 +640,7 @@ async function executeAgentMultiTurn(
   let lastResult: any = undefined;
 
   if (isSupportedLanguageModel(model)) {
-    const { structuredOutput, ...restOptions } = targetOptions ?? {};
+    const { structuredOutput, memory: callerMemory, ...restOptions } = targetOptions ?? ({} as any);
 
     for (const turnInput of inputs) {
       const baseOptions = {
@@ -632,7 +649,7 @@ async function executeAgentMultiTurn(
         scorers: {},
         returnScorerData: true,
         requestContext: item.requestContext,
-        memory: { thread: threadId },
+        memory: { ...callerMemory, thread: threadId },
       };
 
       const result = structuredOutput
@@ -649,12 +666,14 @@ async function executeAgentMultiTurn(
       }
     }
   } else {
+    const { memory: callerMemoryLegacy, ...restLegacyOptions } = targetOptions ?? ({} as any);
     for (const turnInput of inputs) {
       const result = await agent.generateLegacy(turnInput, {
+        ...restLegacyOptions,
         scorers: {},
         returnScorerData: true,
         requestContext: item.requestContext,
-        memory: { thread: threadId },
+        memory: { ...callerMemoryLegacy, thread: threadId },
         ...observabilityContext,
       });
 
