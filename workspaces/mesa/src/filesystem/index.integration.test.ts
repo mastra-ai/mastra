@@ -160,8 +160,15 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
   }
 
   async destroy(): Promise<void> {
-    await this.filesystem.rmdir(this.root, { recursive: true, force: true });
+    await this.cleanupRoot();
     await this.filesystem._destroy();
+  }
+
+  async cleanupRoot(): Promise<void> {
+    if (!(await this.exists('/'))) return;
+
+    await this.removeChildren('/');
+    await this.rmdir('/', { force: true });
   }
 
   getInfo(): FilesystemInfo {
@@ -249,6 +256,19 @@ class RootedMesaFilesystem implements WorkspaceFilesystem {
     if (normalized.startsWith(`${this.root}/`)) return normalized.slice(this.root.length);
     throw new Error(`Mesa path escapes conformance test root: ${inputPath}`);
   }
+
+  private async removeChildren(inputPath: string): Promise<void> {
+    for (const entry of await this.readdir(inputPath)) {
+      const childPath = path.join(inputPath, entry.name);
+
+      if (entry.type === 'directory') {
+        await this.removeChildren(childPath);
+        await this.rmdir(childPath, { force: true });
+      } else {
+        await this.deleteFile(childPath, { force: true });
+      }
+    }
+  }
 }
 
 describe('MesaFilesystem integration', () => {
@@ -313,7 +333,11 @@ createFilesystemTestSuite({
     return new RootedMesaFilesystem(createMesaFilesystem(), testRoot);
   },
   cleanupFilesystem: async fs => {
-    await fs.rmdir('/', { recursive: true, force: true });
+    if (fs instanceof RootedMesaFilesystem) {
+      await fs.cleanupRoot();
+    } else {
+      await fs.rmdir('/', { recursive: true, force: true });
+    }
   },
   capabilities: {
     supportsAppend: true,
