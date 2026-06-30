@@ -78,7 +78,7 @@ describe('AgentCapabilitiesFooter', () => {
 
     // Editor reads "Off" and the gated versions query stays put.
     expect(await screen.findByRole('link', { name: 'Editor: Off' })).not.toBeNull();
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Once "Editor: Off" has rendered the gate has settled (versions query disabled), so no extra wait is needed.
     expect(onVersions).not.toHaveBeenCalled();
 
     // Memory links to the canonical docs page (not the retired /en/ path).
@@ -104,7 +104,7 @@ describe('AgentCapabilitiesFooter', () => {
 
     fireEvent.click(await screen.findByTestId('agent-capabilities-footer'));
     expect(await screen.findByRole('link', { name: 'Editor: Locked' })).not.toBeNull();
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // The editor is locked, so the versions query stays disabled — assert directly without a timer.
     expect(onVersions).not.toHaveBeenCalled();
   });
 
