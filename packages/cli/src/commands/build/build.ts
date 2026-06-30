@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
-import { prepareFsAgentsEntry, mirrorFsAgentWorkspaces } from '@mastra/deployer/build';
+import { prepareFsAgentsEntry, writeFsAgentsEntry, mirrorFsAgentWorkspaces } from '@mastra/deployer/build';
 import { FileService } from '../../services/service.file';
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { createLogger } from '../../utils/logger';
@@ -51,6 +51,9 @@ export async function build({
       const discoveredTools = deployer.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 
       await deployer.prepare(outputDirectory);
+      // Write the fs-routed agents wrapper after prepare() empties the output
+      // directory, so it survives for the bundler. No-op when none are found.
+      await writeFsAgentsEntry(fsAgents);
       await deployer.bundle(bundleEntryFile, outputDirectory, {
         toolsPaths: discoveredTools,
         projectRoot: rootDir,
@@ -82,6 +85,9 @@ export async function build({
     const discoveredTools = platformDeployer.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 
     await platformDeployer.prepare(outputDirectory);
+    // Write the fs-routed agents wrapper after prepare() empties the output
+    // directory, so it survives for the bundler. No-op when none are found.
+    await writeFsAgentsEntry(fsAgents);
     await platformDeployer.bundle(bundleEntryFile, outputDirectory, {
       toolsPaths: discoveredTools,
       projectRoot: rootDir,

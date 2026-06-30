@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateFsAgentsModule } from './codegen';
 import { discoverFsAgents } from './discover';
 import { mirrorFsAgentWorkspaces } from './mirror';
-import { prepareFsAgentsEntry } from './prepare';
+import { prepareFsAgentsEntry, writeFsAgentsEntry } from './prepare';
 
 let dir: string;
 
@@ -447,7 +447,7 @@ describe('prepareFsAgentsEntry', () => {
     expect(result).toEqual({ entryFile: '/project/index.ts', toolPaths: [], agentCount: 0 });
   });
 
-  it('writes a wrapper entry and tool paths when fs agents exist', async () => {
+  it('returns a wrapper entry path, tool paths, and deferred source without writing', async () => {
     await writeAgent('weather', {
       config: `export default { model: 'openai/gpt-4o' };`,
       instructions: 'hi',
@@ -459,6 +459,34 @@ describe('prepareFsAgentsEntry', () => {
     expect(result.agentCount).toBe(1);
     expect(result.entryFile).toMatch(/\.mastra-fs-agents-entry\.mjs$/);
     expect(result.toolPaths.some(p => p.includes('agents/*/tools'))).toBe(true);
+    expect(result.moduleSource).toBeTruthy();
+
+    // The wrapper must NOT be written by prepare(): the bundler empties the
+    // output dir between prepare() and the actual write.
+    await expect(access(result.entryFile)).rejects.toThrow();
+  });
+
+  it('writeFsAgentsEntry writes the wrapper after the output dir is emptied', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+
+    // Simulate bundler.prepare() emptying the output directory.
+    await rm(out, { recursive: true, force: true });
+
+    await writeFsAgentsEntry(result);
+    const written = await readFile(result.entryFile, 'utf-8');
+    expect(written).toBe(result.moduleSource);
+  });
+
+  it('writeFsAgentsEntry is a no-op when there are no fs agents', async () => {
+    const out = join(dir, '.mastra');
+    const result = await prepareFsAgentsEntry(dir, '/project/index.ts', out);
+    await expect(writeFsAgentsEntry(result)).resolves.toBeUndefined();
   });
 });
 

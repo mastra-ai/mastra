@@ -10,6 +10,6 @@ export type { RuntimePlatform, BundlerPlatform, StudioInjectionConfig } from './
 export { discoverFsAgents } from './fs-routing/discover';
 export type { DiscoveredFsAgent } from './fs-routing/discover';
 export { generateFsAgentsModule } from './fs-routing/codegen';
-export { prepareFsAgentsEntry } from './fs-routing/prepare';
+export { prepareFsAgentsEntry, writeFsAgentsEntry } from './fs-routing/prepare';
 export type { PrepareFsAgentsEntryResult } from './fs-routing/prepare';
 export { mirrorFsAgentWorkspaces } from './fs-routing/mirror';

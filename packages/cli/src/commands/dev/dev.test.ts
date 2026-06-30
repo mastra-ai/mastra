@@ -41,6 +41,7 @@ vi.mock('@mastra/deployer/build', async importOriginal => {
       toolPaths: [],
       agentCount: 0,
     })),
+    writeFsAgentsEntry: vi.fn().mockResolvedValue(undefined),
     mirrorFsAgentWorkspaces: vi.fn().mockResolvedValue([]),
     getServerOptions: vi.fn().mockResolvedValue({
       port: 4111,
