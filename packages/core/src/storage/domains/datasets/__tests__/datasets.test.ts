@@ -906,5 +906,16 @@ describe('DatasetsInMemory', () => {
       expect(item.source?.type).toBe('candidate-screener');
       expect(item.source?.referenceId).toBe('verdict-123');
     });
+
+    it('source.type accepts human-curation', async () => {
+      const dataset = await storage.createDataset({ name: 'd' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { a: 1 },
+        source: { type: 'human-curation', referenceId: 'curator-456' },
+      });
+      expect(item.source?.type).toBe('human-curation');
+      expect(item.source?.referenceId).toBe('curator-456');
+    });
   });
 });

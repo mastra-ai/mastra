@@ -85912,7 +85912,7 @@ export type GetDatasetsDatasetIdItems_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86241,7 +86241,7 @@ export type PostDatasetsDatasetIdItems_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86284,7 +86284,7 @@ export type PostDatasetsDatasetIdItems_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86603,7 +86603,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86648,7 +86648,7 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86764,7 +86764,7 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -87086,7 +87086,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -87129,7 +87129,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -87347,7 +87347,7 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener' | 'human-curation';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }

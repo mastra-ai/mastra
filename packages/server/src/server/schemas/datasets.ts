@@ -175,7 +175,7 @@ const trajectoryExpectationSchema = z
 const datasetItemSourceSchema = z
   .object({
     type: z
-      .enum(['csv', 'json', 'trace', 'llm', 'experiment-result', 'candidate-screener'])
+      .enum(['csv', 'json', 'trace', 'llm', 'experiment-result', 'candidate-screener', 'human-curation'])
       .describe('How this item was created'),
     referenceId: z.string().optional().describe('Reference identifier (e.g., trace id, csv filename)'),
   })
