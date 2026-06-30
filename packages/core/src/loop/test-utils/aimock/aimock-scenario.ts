@@ -353,7 +353,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       : {};
 
   // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor; stopWhen is not supported.
+  // inputProcessors are on the agent constructor; stopWhen/delegation/onIterationComplete
+  // are now supported by durable and forwarded below.
   const isDurable = engine === 'durable';
 
   const streamOptions = {

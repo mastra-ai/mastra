@@ -288,8 +288,12 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // on the previous iteration, we allowed one more LLM turn with that feedback.
         // Now that the turn has completed, stop the loop unconditionally.
         let hasFinishedSteps = false;
+        // Hard-stop tracks reasons that onIterationComplete must NOT override.
+        // pendingFeedbackStop and delegationBailed are unconditional stops.
+        let hardStop = false;
         if (state.pendingFeedbackStop) {
           hasFinishedSteps = true;
+          hardStop = true;
           state.pendingFeedbackStop = false;
         }
 
@@ -328,6 +332,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         const delegationBailed = !!(state as any).delegationBailed;
         if (delegationBailed) {
           hasFinishedSteps = true;
+          hardStop = true;
           // Reset the flag so it doesn't carry forward
           (state as any).delegationBailed = false;
         }
@@ -380,7 +385,13 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             const iterationResult = await onIterationComplete(iterationContext);
 
             if (iterationResult) {
-              if (iterationResult.feedback && shouldContinue) {
+              // Determine whether we can run another turn. Hard stops
+              // (pendingFeedbackStop, delegationBailed) are unconditional —
+              // onIterationComplete cannot override them.
+              const canRunAnotherTurn =
+                !hardStop && underMaxSteps && (shouldContinue || iterationResult.continue === true);
+
+              if (iterationResult.feedback && canRunAnotherTurn) {
                 // Inject feedback as a synthetic assistant message so the LLM
                 // sees it on the next turn. Mirror the regular agent: mark it
                 // with completionResult.suppressFeedback so isTaskComplete
@@ -423,7 +434,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               } else if (iterationResult.continue === false && !hasFinishedSteps) {
                 hasFinishedSteps = true;
                 isFinal = true;
-              } else if (iterationResult.continue === true && (hasFinishedSteps || !shouldContinue)) {
+              } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
                 if (underMaxSteps || !runMaxSteps) {
                   hasFinishedSteps = false;
                   isFinal = false;

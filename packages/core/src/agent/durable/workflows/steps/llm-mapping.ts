@@ -39,6 +39,7 @@ const durableLLMMappingOutputSchema = z.object({
     steps: z.array(z.any()),
   }),
   state: z.any(),
+  delegationBailed: z.boolean().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
 });
