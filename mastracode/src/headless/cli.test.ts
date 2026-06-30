@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { hasHeadlessFlag, parseHeadlessArgs } from './cli.js';
+import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
 
 function argv(...rest: string[]): string[] {
   return ['node', 'main.js', ...rest];
@@ -168,5 +169,36 @@ describe('parseHeadlessArgs', () => {
       resourceId: 'r-9',
       settings: './ci.json',
     });
+  });
+});
+
+describe('flag spec', () => {
+  it('derives parseArgs options from the flag table', () => {
+    const options = buildParseArgsOptions();
+    // Every declared flag is present with the right kind + short alias.
+    for (const flag of FLAGS) {
+      expect(options[flag.key]).toMatchObject({ type: flag.type });
+      if (flag.short) expect(options[flag.key]!.short).toBe(flag.short);
+    }
+    // Booleans default to false so they're always defined.
+    expect(options.continue).toMatchObject({ type: 'boolean', default: false });
+  });
+
+  it('renders one usage entry per flag, aligned', () => {
+    const usage = renderFlagUsage();
+    for (const flag of FLAGS) {
+      expect(usage).toContain(`--${flag.key}`);
+    }
+    // First help line of a multi-line flag stays on the same row as the flag.
+    expect(usage).toMatch(/--permission-mode <mode>\s+How tool approvals/);
+  });
+
+  it('reports unknown enum values uniformly', () => {
+    expect(() => parseHeadlessArgs(argv('-p', 'x', '--mode', 'turbo'))).toThrow(
+      '--mode must be one of: build, plan, fast',
+    );
+    expect(() => parseHeadlessArgs(argv('-p', 'x', '--permission-mode', 'nope'))).toThrow(
+      '--permission-mode must be one of: auto, deny',
+    );
   });
 });

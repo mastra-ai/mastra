@@ -13,15 +13,14 @@ import { createMastraCode } from '../index.js';
 import { setupDebugLogging } from '../utils/debug-log.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 
+import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
 import { createHumanFormatState, formatHuman, formatJsonl, renderJsonResult } from './format.js';
 import { permissionModeToPolicy } from './policy.js';
 import { runMC } from './run-mc.js';
 import type { PermissionMode, RunMode, ThinkingLevel } from './types.js';
-import { VALID_MODES, VALID_PERMISSION_MODES, VALID_THINKING_LEVELS } from './types.js';
 
 /** Consolidated output mode (replaces the old `--format` + `--output-format`). */
 export type OutputMode = 'human' | 'json' | 'jsonl';
-const VALID_OUTPUTS = ['human', 'json', 'jsonl'] as const;
 
 export interface HeadlessArgs {
   prompt?: string;
@@ -43,23 +42,7 @@ export interface HeadlessArgs {
   permissionMode?: PermissionMode;
 }
 
-const headlessOptions = {
-  prompt: { type: 'string', short: 'p' },
-  continue: { type: 'boolean', short: 'c', default: false },
-  thread: { type: 'string', short: 't' },
-  title: { type: 'string' },
-  'clone-thread': { type: 'boolean', default: false },
-  'resource-id': { type: 'string' },
-  timeout: { type: 'string' }, // parsed to number after validation
-  'max-turns': { type: 'string' }, // parsed to number after validation
-  'permission-mode': { type: 'string' },
-  output: { type: 'string', short: 'o' },
-  model: { type: 'string', short: 'm' },
-  mode: { type: 'string' },
-  'thinking-level': { type: 'string' },
-  settings: { type: 'string' },
-  help: { type: 'boolean', short: 'h', default: false },
-} as const;
+const parseArgsOptions = buildParseArgsOptions();
 
 /**
  * Returns true if `argv` selects headless mode. This must agree with what
@@ -72,7 +55,7 @@ export function hasHeadlessFlag(argv: string[]): boolean {
   try {
     const { values, positionals } = parseArgs({
       args: argv.slice(2),
-      options: headlessOptions,
+      options: parseArgsOptions,
       strict: false,
       allowPositionals: true,
     });
@@ -84,102 +67,48 @@ export function hasHeadlessFlag(argv: string[]): boolean {
 }
 
 /**
- * Parse CLI arguments for headless mode. Output is controlled by a single
- * `--output <human|json|jsonl>` flag (default `human`).
+ * Parse CLI arguments for headless mode. The flag table in `flags.ts` is the
+ * single source of truth: each flag carries its own coercion/validation, so this
+ * function just walks {@link FLAGS} and assembles the typed {@link HeadlessArgs}.
  */
 export function parseHeadlessArgs(argv: string[]): HeadlessArgs {
   const { values, positionals } = parseArgs({
     args: argv.slice(2),
-    options: headlessOptions,
+    options: parseArgsOptions,
     strict: false,
     allowPositionals: true,
   });
 
-  let output: OutputMode = 'human';
-  if (values.output !== undefined) {
-    const raw = String(values.output);
-    if (!(VALID_OUTPUTS as readonly string[]).includes(raw)) {
-      throw new Error('--output must be one of: human, json, jsonl');
+  // Seed defaults; per-flag values below override these.
+  const args: HeadlessArgs = {
+    output: 'human',
+    continue_: false,
+    cloneThread: false,
+  };
+  const sink = args as unknown as Record<string, unknown>;
+
+  for (const flag of FLAGS) {
+    if (!flag.field) continue; // e.g. --help, handled by the caller
+    const raw = values[flag.key];
+    if (raw === undefined) continue;
+
+    if (flag.type === 'boolean') {
+      sink[flag.field] = Boolean(raw);
+    } else if (typeof raw === 'string') {
+      sink[flag.field] = flag.coerce ? flag.coerce(raw) : raw;
     }
-    output = raw as OutputMode;
   }
 
-  let timeout: number | undefined;
-  if (values.timeout !== undefined) {
-    const raw = String(values.timeout);
-    const parsed = Number(raw);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      throw new Error('--timeout must be a positive integer');
-    }
-    timeout = parsed;
+  // A bare positional acts as the prompt when --prompt/-p is absent.
+  if (args.prompt === undefined && positionals[0] !== undefined) {
+    args.prompt = positionals[0];
   }
 
-  let maxTurns: number | undefined;
-  if (values['max-turns'] !== undefined) {
-    const raw = String(values['max-turns']);
-    const parsed = Number(raw);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      throw new Error('--max-turns must be a positive integer');
-    }
-    maxTurns = parsed;
-  }
-
-  let permissionMode: PermissionMode | undefined;
-  if (values['permission-mode'] !== undefined) {
-    const raw = String(values['permission-mode']);
-    if (!(VALID_PERMISSION_MODES as readonly string[]).includes(raw)) {
-      throw new Error(`--permission-mode must be ${VALID_PERMISSION_MODES.map(m => `"${m}"`).join(', ')}`);
-    }
-    permissionMode = raw as PermissionMode;
-  }
-
-  const prompt = typeof values.prompt === 'string' ? values.prompt : positionals[0];
-  const model = typeof values.model === 'string' ? values.model : undefined;
-
-  let mode: RunMode | undefined;
-  if (values.mode !== undefined) {
-    const raw = String(values.mode);
-    if (!(VALID_MODES as readonly string[]).includes(raw)) {
-      throw new Error(`--mode must be ${VALID_MODES.map(m => `"${m}"`).join(', ')}`);
-    }
-    mode = raw as RunMode;
-  }
-
-  let thinkingLevel: ThinkingLevel | undefined;
-  if (values['thinking-level'] !== undefined) {
-    const raw = String(values['thinking-level']);
-    if (!(VALID_THINKING_LEVELS as readonly string[]).includes(raw)) {
-      throw new Error(`--thinking-level must be ${VALID_THINKING_LEVELS.map(l => `"${l}"`).join(', ')}`);
-    }
-    thinkingLevel = raw as ThinkingLevel;
-  }
-
-  const settings = typeof values.settings === 'string' ? values.settings : undefined;
-  const thread = typeof values.thread === 'string' ? values.thread : undefined;
-  const title = typeof values.title === 'string' ? values.title : undefined;
-  const cloneThread = Boolean(values['clone-thread']);
-  const resourceId = typeof values['resource-id'] === 'string' ? values['resource-id'] : undefined;
-
-  if (values.continue && thread) {
+  if (args.continue_ && args.thread) {
     throw new Error('--continue and --thread cannot be used together');
   }
 
-  return {
-    prompt,
-    timeout,
-    output,
-    continue_: Boolean(values.continue),
-    model,
-    mode,
-    thinkingLevel,
-    settings,
-    thread,
-    title,
-    cloneThread,
-    resourceId,
-    maxTurns,
-    permissionMode,
-  };
+  return args;
 }
 
 export function printHeadlessUsage(): void {
@@ -187,25 +116,7 @@ export function printHeadlessUsage(): void {
 Usage: mastracode --prompt <text> [options]
 
 Headless (non-interactive) mode options:
-  --prompt, -p <text>           The task to execute (required, or pipe via stdin)
-  --continue, -c                Resume the most recent thread instead of creating a new one
-  --thread, -t <id>             Resume a specific thread by ID
-  --title <title>               Set or rename the thread title
-  --clone-thread                Clone the current thread before running (work on a copy)
-  --resource-id <id>            Set the resource ID for thread scoping
-  --timeout <seconds>           Exit with code 2 if not complete within timeout
-  --max-turns <n>               Abort after N agentic turns (exit code 1)
-  --permission-mode <mode>      How tool approvals/suspensions resolve:
-                                  auto   approve everything (default)
-                                  deny   refuse approvals, abort on suspension
-  --output, -o <mode>           Output mode: "human" (default), "json", or "jsonl"
-                                  human  streaming text to stdout, activity to stderr
-                                  json   single final JSON object (text, usage, tools)
-                                  jsonl  newline-delimited JSON event stream
-  --model, -m <id>              Model override (e.g., a provider/model id)
-  --mode {build|plan|fast}      Execution mode — defaults to "build" if omitted
-  --thinking-level <level>      Thinking level: off, low, medium, high, xhigh
-  --settings <path>             Path to settings.json file (default: global settings)
+${renderFlagUsage()}
 
 Thread behavior:
   By default, a new thread is created for each run.
