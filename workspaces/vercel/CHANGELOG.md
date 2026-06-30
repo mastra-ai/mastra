@@ -1,5 +1,59 @@
 # @mastra/vercel
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- **Breaking change:** Renamed the Vercel sandbox exports to make the MicroVM and serverless implementations explicit. `VercelSandbox` now refers to the MicroVM-backed Vercel Sandbox product. The serverless implementation is now exported as `VercelServerlessSandbox`. ([#18667](https://github.com/mastra-ai/mastra/pull/18667))
+  - If you have been using `VercelSandbox` in your code, you should update your imports to use `VercelServerlessSandbox` instead.
+
+    ```diff
+    -import { VercelSandbox } from '@mastra/vercel';
+    -import type { VercelSandboxOptions } from '@mastra/vercel';
+    +import { VercelServerlessSandbox } from '@mastra/vercel';
+    +import type { VercelServerlessSandboxOptions } from '@mastra/vercel';
+
+    -const sandbox = new VercelSandbox({
+    +const sandbox = new VercelServerlessSandbox({
+      token: process.env.VERCEL_TOKEN,
+    });
+
+    -const options: VercelSandboxOptions = {
+    +const options: VercelServerlessSandboxOptions = {
+      token: process.env.VERCEL_TOKEN,
+    };
+    ```
+
+  - If you have been using `VercelMicroVMSandbox` in your code, you should update your imports to use `VercelSandbox` instead.
+
+    ```diff
+    -import { VercelMicroVMSandbox } from '@mastra/vercel';
+    +import { VercelSandbox } from '@mastra/vercel';
+    -import type { VercelMicroVMSandboxOptions } from '@mastra/vercel';
+    +import type { VercelSandboxOptions } from '@mastra/vercel';
+
+    -const sandbox = new VercelMicroVMSandbox();
+    +const sandbox = new VercelSandbox();
+
+    -const options: VercelMicroVMSandboxOptions = {
+    +const options: VercelSandboxOptions = {
+      runtime: 'node24',
+    };
+    ```
+
+  - Provider descriptors are also split by runtime:
+
+    ```ts
+    import { vercelSandboxProvider, vercelServerlessSandboxProvider } from '@mastra/vercel';
+    ```
+
+    Use `vercelSandboxProvider` for MicroVM-backed Vercel Sandbox instances and `vercelServerlessSandboxProvider` for Vercel Functions-backed serverless instances.
+
+### Patch Changes
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+
 ## 1.1.1
 
 ### Patch Changes
