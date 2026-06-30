@@ -511,6 +511,8 @@ export const pluginsBlockedConfigScenario: McE2eScenario = {
     terminal.submit('/plugins');
     await runtime.waitForScreenText(new RegExp(PLUGIN_ID), terminal, 8_000);
     await runtime.waitForScreenText(/blocked/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenText(/│ ›/i, terminal, 8_000);
 
     terminal.submit(`/plugins ${PLUGIN_ID}`);
     await runtime.waitForScreenText(/blocked by plugins\.json disabledPlugins/i, terminal, 8_000);
