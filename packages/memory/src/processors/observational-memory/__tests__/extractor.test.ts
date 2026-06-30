@@ -82,6 +82,17 @@ describe('Extractor', () => {
     });
   });
 
+  it('rejects unsafe metadata key path segments', () => {
+    const extractor = new Extractor({
+      name: 'Unsafe',
+      instructions: 'Extract unsafe value.',
+      metadataKeyPath: '__proto__.polluted',
+    });
+
+    expect(() => buildThreadMetadataFromExtractedValues([extractor], { unsafe: 'yes' })).toThrow(/unsafe path segment/);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
   it('rejects empty, duplicate, and reserved slugs', () => {
     expect(() => new Extractor({ name: '!!!', instructions: 'No usable slug.' })).toThrow(/non-empty slug/);
     expect(() => new Extractor({ name: 'current-task', instructions: 'Reserved.' })).toThrow(/reserved/);

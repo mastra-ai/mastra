@@ -68,13 +68,32 @@ export function mergeExtractionFailures(
   return failures.length > 0 ? failures : undefined;
 }
 
+const UNSAFE_METADATA_PATH_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function getMetadataPathSegments(keyPath: string | false): string[] | undefined {
+  if (keyPath === false) {
+    return undefined;
+  }
+
+  const segments = keyPath.split('.').filter(Boolean);
+  if (segments.some(segment => UNSAFE_METADATA_PATH_SEGMENTS.has(segment))) {
+    throw new Error(`Extractor metadataKeyPath "${keyPath}" contains an unsafe path segment.`);
+  }
+  return segments.length > 0 ? segments : undefined;
+}
+
 function getValueAtPath(metadata: ExtractedValueMetadata | undefined, keyPath: string | false): unknown {
-  if (!metadata || keyPath === false) {
+  if (!metadata) {
+    return undefined;
+  }
+
+  const segments = getMetadataPathSegments(keyPath);
+  if (!segments) {
     return undefined;
   }
 
   let current: unknown = metadata;
-  for (const segment of keyPath.split('.').filter(Boolean)) {
+  for (const segment of segments) {
     if (!current || typeof current !== 'object' || Array.isArray(current)) {
       return undefined;
     }
@@ -84,12 +103,12 @@ function getValueAtPath(metadata: ExtractedValueMetadata | undefined, keyPath: s
 }
 
 function setValueAtPath(metadata: ExtractedValueMetadata, keyPath: string | false, value: unknown): void {
-  if (keyPath === false || !isPresentExtractedValue(value)) {
+  if (!isPresentExtractedValue(value)) {
     return;
   }
 
-  const segments = keyPath.split('.').filter(Boolean);
-  if (segments.length === 0) {
+  const segments = getMetadataPathSegments(keyPath);
+  if (!segments) {
     return;
   }
 
