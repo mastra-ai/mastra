@@ -99,9 +99,7 @@ describe('appendSuffixToLeadingSystemMessage', () => {
   });
 
   it('does not append when first message is not a system message', () => {
-    const promptWithoutSystem: LanguageModelV2Prompt = [
-      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
-    ];
+    const promptWithoutSystem: LanguageModelV2Prompt = [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }];
     const result = appendSuffixToLeadingSystemMessage(promptWithoutSystem, '\nEXTRA');
     expect(result).toEqual(promptWithoutSystem);
   });
@@ -110,15 +108,15 @@ describe('appendSuffixToLeadingSystemMessage', () => {
 describe('applyAutoResumeSystemMessage', () => {
   it('returns the prompt unchanged when autoResume is false', () => {
     const messages = [makeAssistantMessage({ metadata: { suspendedTools: { foo: { toolName: 'foo' } } } })];
-    expect(
-      applyAutoResumeSystemMessage({ autoResume: false, inputMessages: baseInputMessages, messages }),
-    ).toBe(baseInputMessages);
+    expect(applyAutoResumeSystemMessage({ autoResume: false, inputMessages: baseInputMessages, messages })).toBe(
+      baseInputMessages,
+    );
   });
 
   it('returns the prompt unchanged when there are no suspended tools', () => {
-    expect(
-      applyAutoResumeSystemMessage({ autoResume: true, inputMessages: baseInputMessages, messages: [] }),
-    ).toBe(baseInputMessages);
+    expect(applyAutoResumeSystemMessage({ autoResume: true, inputMessages: baseInputMessages, messages: [] })).toBe(
+      baseInputMessages,
+    );
   });
 
   it('rewrites the leading system message when suspended tools exist', () => {

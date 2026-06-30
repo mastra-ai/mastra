@@ -19,9 +19,7 @@ describe('buildMemoryHeaders', () => {
 describe('mergeLlmCallHeaders', () => {
   it('returns undefined when no headers come in', () => {
     expect(mergeLlmCallHeaders({})).toBeUndefined();
-    expect(
-      mergeLlmCallHeaders({ memoryHeaders: {}, modelConfigHeaders: {}, callTimeHeaders: {} }),
-    ).toBeUndefined();
+    expect(mergeLlmCallHeaders({ memoryHeaders: {}, modelConfigHeaders: {}, callTimeHeaders: {} })).toBeUndefined();
   });
 
   it('layers memory < modelConfig < callTime so callTime wins on conflict', () => {
@@ -39,8 +37,9 @@ describe('mergeLlmCallHeaders', () => {
   });
 
   it('returns just memory headers when no other layer is provided', () => {
-    expect(
-      mergeLlmCallHeaders({ memoryHeaders: { 'x-thread-id': 't1', 'x-resource-id': 'r1' } }),
-    ).toEqual({ 'x-thread-id': 't1', 'x-resource-id': 'r1' });
+    expect(mergeLlmCallHeaders({ memoryHeaders: { 'x-thread-id': 't1', 'x-resource-id': 'r1' } })).toEqual({
+      'x-thread-id': 't1',
+      'x-resource-id': 'r1',
+    });
   });
 });

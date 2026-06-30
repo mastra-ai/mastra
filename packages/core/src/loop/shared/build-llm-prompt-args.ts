@@ -20,9 +20,12 @@ export interface BuildLlmPromptArgsInput {
    * The resolved AI SDK language model the request is about to be sent to.
    * Only `supportedUrls` is read; other fields are ignored.
    */
-  model: {
-    supportedUrls?: Record<string, RegExp[]> | PromiseLike<Record<string, RegExp[]>>;
-  } | null | undefined;
+  model:
+    | {
+        supportedUrls?: Record<string, RegExp[]> | PromiseLike<Record<string, RegExp[]>>;
+      }
+    | null
+    | undefined;
   /**
    * Optional retry count for downloading remote assets the model can't natively
    * fetch. Defaults to the underlying `MessageList` default (3) when omitted.
