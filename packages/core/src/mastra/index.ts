@@ -2142,6 +2142,14 @@ export class Mastra<
       // Set the Mastra instance on the durable agent for observability
       durableAgent.__setMastra?.(this);
 
+      // Propagate the definition source (e.g. 'fs') onto both the wrapper and
+      // the underlying agent. The durable branch returns early below, so it
+      // never reaches the shared `options?.source` handling.
+      if (options?.source) {
+        (durableAgent as unknown as Agent<any>).source = options.source;
+        underlyingAgent.source = options.source;
+      }
+
       // Initialize the underlying agent (needed for tools, memory, etc.)
       underlyingAgent.__setLogger(this.#logger);
       underlyingAgent.__registerMastra(this);
@@ -2272,6 +2280,39 @@ export class Mastra<
       agentChannelsInstance.initialize(this).catch(err => {
         this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
       });
+    }
+  }
+
+  /**
+   * Registers a map of file-system routed agents (discovered from
+   * `agents/<name>/` directories) into this Mastra instance.
+   *
+   * Code-registered agents win on name collisions: if an agent with the same
+   * key already exists, the file-system agent is skipped and a warning is
+   * logged. Otherwise each agent is added via {@link addAgent} with
+   * `source: 'fs'`.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsAgents(fsAgents: Record<string, Agent | ToolLoopAgentLike | DurableAgentLike>): void {
+    if (!fsAgents) {
+      return;
+    }
+
+    const agents = this.#agents as Record<string, Agent<any>>;
+    for (const [key, agent] of Object.entries(fsAgents)) {
+      if (agent == null) {
+        continue;
+      }
+      if (agents[key]) {
+        this.getLogger().warn(
+          `File-system routed agent "${key}" conflicts with a code-registered agent of the same name. Keeping the code-registered agent.`,
+        );
+        continue;
+      }
+      this.addAgent(agent, key, { source: 'fs' });
     }
   }
 
