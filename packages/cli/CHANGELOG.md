@@ -1,5 +1,47 @@
 # mastra
 
+## 1.16.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`9e76ed9`](https://github.com/mastra-ai/mastra/commit/9e76ed9f9d92619ccf5b77978d8cdea76bcae61e), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+  - @mastra/deployer@1.48.0-alpha.6
+
+## 1.16.1-alpha.5
+
+### Patch Changes
+
+- Added storage-backed discovery of suspended agent runs, so human-in-the-loop approval UIs can recover a pending run after a page refresh or server restart. ([#17898](https://github.com/mastra-ai/mastra/pull/17898))
+
+  `agent.listSuspendedRuns()` lists runs waiting on a tool-call approval or on a tool that called `suspend()`. Unlike the in-memory `getActiveThreadRunId()`, it reads from storage, so it works after a restart and across multiple server instances:
+
+  ```ts
+  const { runs, total } = await agent.listSuspendedRuns({ threadId, resourceId });
+  if (runs[0]) {
+    // runs[0].toolCalls -> [{ toolCallId, toolName, args, requiresApproval }]
+    await agent.approveToolCall({ runId: runs[0].runId, toolCallId: runs[0].toolCalls[0].toolCallId });
+  }
+  ```
+
+  Supports `threadId`/`resourceId`/date filters and pagination, mirroring `listWorkflowRuns()`. The same surface is exposed over HTTP as `GET /agents/:agentId/suspended-runs` and on the client SDK as `agent.listSuspendedRuns()`; server-enforced request-context values take precedence over client query parameters, so clients cannot list runs outside their scope.
+
+  `sendToolApproval()` now falls back to this storage-backed discovery when no active run is found in memory for the thread, so approvals keep working after a restart. If several suspended runs match, it throws an error asking for a `toolCallId` to disambiguate.
+
+  **Why:** approval UIs previously had no public way to recover a suspended run after a refresh or restart, forcing apps to parse internal workflow snapshots.
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+  - @mastra/deployer@1.48.0-alpha.5
+
+## 1.16.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+  - @mastra/deployer@1.48.0-alpha.4
+
 ## 1.16.1-alpha.3
 
 ### Patch Changes

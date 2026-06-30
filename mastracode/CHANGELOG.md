@@ -1,5 +1,81 @@
 # mastracode
 
+## 0.27.0-alpha.6
+
+### Patch Changes
+
+- Renamed the AgentController interval API. `heartbeatHandlers` is now `intervalHandlers`, the `HeartbeatHandler` type is now `IntervalHandler`, and the `removeHeartbeat()`/`stopHeartbeats()` methods are now `removeInterval()`/`stopIntervals()`. This better reflects that these are fixed-interval background tasks, not liveness pings, and is distinct from the unrelated `mastra.heartbeats` scheduled-agent feature. ([#18665](https://github.com/mastra-ai/mastra/pull/18665))
+
+  **Before**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    heartbeatHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeHeartbeat({ id: 'sync' });
+  await controller.stopHeartbeats();
+  ```
+
+  **After**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    intervalHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeInterval({ id: 'sync' });
+  await controller.stopIntervals();
+  ```
+
+- Improved MastraCode web chat so hydrated and streaming messages render consistently, including tool cards, reasoning, and failed-tool states. ([#18620](https://github.com/mastra-ai/mastra/pull/18620))
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`65a66db`](https://github.com/mastra-ai/mastra/commit/65a66dbe249a0d92d828c605b955e73a983cf3b0), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+  - @mastra/schema-compat@1.3.2-alpha.1
+  - @mastra/mcp@1.12.1-alpha.0
+  - @mastra/react@1.2.1-alpha.6
+  - @mastra/memory@1.21.3-alpha.2
+  - @mastra/server@1.48.0-alpha.6
+  - @mastra/hono@1.5.3-alpha.6
+
+## 0.27.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`c607ece`](https://github.com/mastra-ai/mastra/commit/c607eceeda028a80b24d00ee7dae376db73df526), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+  - @mastra/server@1.48.0-alpha.5
+  - @mastra/memory@1.21.3-alpha.1
+  - @mastra/hono@1.5.3-alpha.5
+
+## 0.27.0-alpha.4
+
+### Minor Changes
+
+- Added voice input to the MastraCode TUI. Enable it with /voice, then hold the spacebar to dictate a prompt and release to finish. Your speech streams into the input in real time as you talk and is transcribed with OpenAI Whisper. The setting persists across restarts. ([#18624](https://github.com/mastra-ai/mastra/pull/18624))
+
+  Requires an OpenAI API key (set `OPENAI_API_KEY` or configure it via `/api-keys`) and a local audio recorder on your `PATH` — `rec`/`sox` (recommended for live streaming) or `ffmpeg` on macOS, and `pw-record`/`parecord`/`arecord`/`sox` on Linux.
+
+- Added Amazon Bedrock as a model provider in Mastra Code. Bedrock models surfaced by models.dev are now selectable via `/models` and usable as build/plan/fast or subagent models with the `amazon-bedrock/<modelId>` form. Models are only offered when AWS credentials are detected. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+  Bedrock authenticates with AWS SigV4 through the standard AWS credential chain (`fromNodeProviderChain`), so environment variables, shared `~/.aws` profiles, SSO, and container/instance roles all work without extra configuration. Set `AWS_REGION` (defaults to `us-east-1`) to target a region, or `AWS_BEARER_TOKEN_BEDROCK` to use Bedrock API-key auth instead.
+
+  ```sh
+  # Pick a Bedrock model from the picker
+  /models
+
+  # Or set it directly via the build/plan/fast slots
+  /build amazon-bedrock/<modelId>
+  ```
+
+### Patch Changes
+
+- Amazon Bedrock models now appear under their own `amazon-bedrock/<model>` provider in the model picker instead of the `mastracode/amazon-bedrock/<model>` namespace. Bedrock is resolved through a dedicated Amazon Bedrock gateway that authenticates with the AWS credential chain (SigV4) and surfaces models from the public models.dev catalog. Saved model selections using the previous `mastracode/amazon-bedrock/...` IDs are still resolved at runtime, so existing config keeps working. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+  - @mastra/server@1.48.0-alpha.4
+  - @mastra/hono@1.5.3-alpha.4
+
 ## 0.27.0-alpha.3
 
 ### Patch Changes

@@ -63,7 +63,7 @@ describe('mastracode workspace skill activation', () => {
         },
       });
 
-      const workspace = getDynamicWorkspace({ requestContext });
+      const workspace = await getDynamicWorkspace({ requestContext });
 
       const agent = new Agent({
         id: 'mc-symlink-skill-agent',

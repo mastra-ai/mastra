@@ -9,6 +9,7 @@ import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/proce
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
+import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import { resolveActivationTTL } from './activation-ttl';
@@ -3377,6 +3378,7 @@ ${formattedMessages}
 
     let observed = false;
     let observationUsage: ObserveHookUsage | undefined;
+    let observationProviderMetadata: ProviderMetadata | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
@@ -3415,11 +3417,16 @@ ${formattedMessages}
         }).run();
         observed = result.observed;
         observationUsage = result.usage;
+        observationProviderMetadata = result.providerMetadata;
       } catch (error) {
         observationError = error instanceof Error ? error : new Error(String(error));
         throw error;
       } finally {
-        hooks?.onObservationEnd?.({ usage: observationUsage, error: observationError });
+        hooks?.onObservationEnd?.({
+          usage: observationUsage,
+          error: observationError,
+          ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
+        });
       }
     });
 

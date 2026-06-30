@@ -55,7 +55,7 @@ const {
 | `subagents` | `AgentControllerSubagent[]` | Explore, Plan, Execute | Custom subagent definitions |
 | `storage` | `StorageConfig` | Local LibSQL | Database configuration |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial controller state values |
-| `heartbeatHandlers` | `HeartbeatHandler[]` | Default handlers | Background task definitions |
+| `intervalHandlers` | `IntervalHandler[]` | Default handlers | Background task definitions |
 | `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Default resolver | Custom model resolution function |
 
 #### `AgentControllerMode`
@@ -128,7 +128,7 @@ interface PermissionRules {
 }
 ```
 
-#### `HeartbeatHandler`
+#### `IntervalHandler`
 
 Background task definition.
 
