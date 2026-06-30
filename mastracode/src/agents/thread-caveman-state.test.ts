@@ -151,8 +151,17 @@ describe('restoreOMThreadStateForCurrentThread', () => {
     expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
-  it('does not seed missing sandboxAllowedPaths metadata from current controller state', async () => {
+  it('clears sandboxAllowedPaths when the current thread has no sandbox metadata', async () => {
     const session = createSession({ metadata: {}, state: { sandboxAllowedPaths: ['/outside/project'] } });
+
+    await restoreOMThreadStateForCurrentThread(session as never);
+
+    expect(session.state.set).toHaveBeenCalledWith({ sandboxAllowedPaths: [] });
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not update sandboxAllowedPaths when missing metadata already matches the cleared state', async () => {
+    const session = createSession({ metadata: {}, state: { sandboxAllowedPaths: [] } });
 
     await restoreOMThreadStateForCurrentThread(session as never);
 

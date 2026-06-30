@@ -4,6 +4,7 @@ interface ThreadStateSetting {
   key: string;
   isValid(value: unknown): boolean;
   seedMissingFromCurrentState?: boolean;
+  clearValueWhenMissing?: unknown;
 }
 
 const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
@@ -21,12 +22,20 @@ const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
     key: 'sandboxAllowedPaths',
     isValid: (value: unknown): value is string[] =>
       Array.isArray(value) && value.every(item => typeof item === 'string'),
+    clearValueWhenMissing: [],
   },
 ];
 
 function getStateValue(session: Session<Record<string, unknown>>, setting: ThreadStateSetting): unknown {
   const value = session.state.get()[setting.key];
   return setting.isValid(value) ? value : undefined;
+}
+
+function stateValuesEqual(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => item === right[index]);
+  }
+  return left === right;
 }
 
 async function findThread(
@@ -56,6 +65,14 @@ async function restoreSettingsForThread(session: Session<Record<string, unknown>
     if (setting.isValid(persisted)) {
       if (getStateValue(session, setting) !== persisted) {
         updates[setting.key] = persisted;
+      }
+      continue;
+    }
+
+    if (setting.clearValueWhenMissing !== undefined) {
+      const current = getStateValue(session, setting);
+      if (current !== undefined && !stateValuesEqual(current, setting.clearValueWhenMissing)) {
+        updates[setting.key] = setting.clearValueWhenMissing;
       }
       continue;
     }
