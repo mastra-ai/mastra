@@ -65,6 +65,7 @@ import {
 } from '../../run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../shared/build-llm-prompt-args';
+import { composeStepInput } from '../../shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -1040,7 +1041,27 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 writer: inputStepWriter,
                 abortSignal: options?.abortSignal,
               });
-              Object.assign(currentStep, processInputStepResult);
+              const mergedStepInput = composeStepInput(
+                {
+                  messageId: currentStep.messageId,
+                  model: currentStep.model,
+                  tools: currentStep.tools,
+                  toolChoice: currentStep.toolChoice,
+                  activeTools: currentStep.activeTools as string[] | undefined,
+                  providerOptions: currentStep.providerOptions,
+                  modelSettings: currentStep.modelSettings,
+                  structuredOutput: currentStep.structuredOutput,
+                },
+                processInputStepResult,
+              );
+              currentStep.messageId = mergedStepInput.messageId;
+              currentStep.model = mergedStepInput.model;
+              currentStep.tools = mergedStepInput.tools as typeof currentStep.tools;
+              currentStep.toolChoice = mergedStepInput.toolChoice as typeof currentStep.toolChoice;
+              currentStep.activeTools = mergedStepInput.activeTools as typeof currentStep.activeTools;
+              currentStep.providerOptions = mergedStepInput.providerOptions;
+              currentStep.modelSettings = mergedStepInput.modelSettings;
+              currentStep.structuredOutput = mergedStepInput.structuredOutput;
               executedStepModel =
                 currentStep.model.provider && currentStep.model.modelId
                   ? `${currentStep.model.provider}/${currentStep.model.modelId}`

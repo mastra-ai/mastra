@@ -6,6 +6,7 @@ import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
+import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import type { Mastra } from '../../../../mastra';
@@ -293,16 +294,26 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 abortSignal: executionAbortSignal,
                 writer: inputStepWriter,
               });
-              currentMessageId = processInputStepResult.messageId ?? currentMessageId;
-              currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
-              currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
-              currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
-              currentProviderOptions = processInputStepResult.providerOptions ?? currentProviderOptions;
-              currentActiveTools = processInputStepResult.activeTools;
-              currentModelSettings = {
-                ...currentModelSettings,
-                ...(processInputStepResult.modelSettings ?? {}),
-              };
+              const merged = composeStepInput(
+                {
+                  messageId: currentMessageId,
+                  model: currentModel,
+                  tools: currentTools,
+                  toolChoice: currentToolChoice,
+                  activeTools: currentActiveTools,
+                  providerOptions: currentProviderOptions,
+                  modelSettings: currentModelSettings,
+                  structuredOutput,
+                },
+                processInputStepResult,
+              );
+              currentMessageId = merged.messageId;
+              currentModel = merged.model as typeof currentModel;
+              currentTools = merged.tools as ToolSet;
+              currentToolChoice = merged.toolChoice as ToolChoice<ToolSet> | undefined;
+              currentActiveTools = merged.activeTools;
+              currentProviderOptions = merged.providerOptions;
+              currentModelSettings = merged.modelSettings;
             }
 
             // `downloadRetries` / `downloadConcurrency` are internal-only on the
