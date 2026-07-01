@@ -3,10 +3,9 @@
  * Uses pi-tui overlay pattern with search and navigation.
  */
 
-import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, Container, fuzzyFilter, getKeybindings, Input, matchesKey, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import type { AgentControllerThread } from '@mastra/core/agent-controller';
-import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 
 // =============================================================================
@@ -23,7 +22,7 @@ export interface ThreadSelectorOptions {
   currentProjectPath?: string;
   onSelect: (thread: AgentControllerThread) => void;
   onCancel: () => void;
-  /** Called when user presses 'c' to clone the selected thread */
+  /** Called when user presses Tab to clone the selected thread */
   onClone?: (thread: AgentControllerThread) => void;
   /** Function to fetch message previews for currently visible threads */
   getMessagePreviews?: (threadIds: string[]) => Promise<Map<string, string>>;
@@ -196,7 +195,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
   private buildUI(): void {
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Select Thread')), 0, 0));
     this.addChild(new Spacer(1));
-    const cloneHint = this.onCloneCallback ? ' • c clone' : '';
+    const cloneHint = this.onCloneCallback ? ' • Tab clone active thread' : '';
     this.addChild(
       new Text(theme.fg('muted', `Type to search • ↑↓ navigate • Enter select${cloneHint} • Esc cancel`), 0, 0),
     );
@@ -351,7 +350,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
       }
     } else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
-    } else if (decodePrintableShortcut(keyData) === 'c' && this.onCloneCallback && !this.searchInput.getValue()) {
+    } else if (matchesKey(keyData, 'tab') && this.onCloneCallback) {
       const selected = this.filteredThreads[this.selectedIndex];
       if (selected) {
         this.onCloneCallback(selected);

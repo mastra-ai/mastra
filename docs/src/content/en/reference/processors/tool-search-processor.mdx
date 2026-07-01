@@ -227,6 +227,7 @@ const toolSearch = new ToolSearchProcessor({
 })
 
 const agent = new Agent({
+  id: 'dynamic-tools-agent',
   name: 'dynamic-tools-agent',
   instructions:
     'You are a helpful assistant with access to many tools. Use search_tools to find relevant tools, then load_tool to make them available.',
@@ -308,6 +309,7 @@ import { Agent } from '@mastra/core/agent'
 import { ToolSearchProcessor, TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
