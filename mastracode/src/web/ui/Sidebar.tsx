@@ -1,6 +1,6 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { Badge, Button, Input, Txt } from '@mastra/playground-ui';
-import { ChevronsUpDown, Folder, MoreHorizontal, Plus } from 'lucide-react';
+import { ChevronsUpDown, Folder, MoreHorizontal, Plus, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { Project } from './projects';
@@ -27,6 +27,8 @@ interface SidebarProps {
   activeProjectId: string | null;
   /** Open the app-level Projects modal (add / manage / switch). */
   onManageProjects: () => void;
+  /** Open the Settings modal. */
+  onOpenSettings: () => void;
   threads: AgentControllerThreadInfo[];
   activeThreadId?: string;
   onSwitchThread: (threadId: string) => void;
@@ -42,6 +44,7 @@ export function Sidebar({
   projects,
   activeProjectId,
   onManageProjects,
+  onOpenSettings,
   threads,
   activeThreadId,
   onSwitchThread,
@@ -274,6 +277,19 @@ export function Sidebar({
           </div>
         </div>
       )}
+
+      {/* ── Footer: Settings ──────────────────────────────────────────── */}
+      <div className="mt-auto border-t border-border1 pt-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2"
+          onClick={onOpenSettings}
+          aria-label="Open settings"
+        >
+          <Settings size={15} /> Settings
+        </Button>
+      </div>
     </div>
   );
 }

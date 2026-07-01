@@ -36,6 +36,7 @@ function baseProps() {
     projects: [project],
     activeProjectId: project.id,
     onManageProjects: vi.fn(),
+    onOpenSettings: vi.fn(),
     threads: [threadOne, threadTwo],
     activeThreadId: threadOne.id,
     onSwitchThread: vi.fn(),

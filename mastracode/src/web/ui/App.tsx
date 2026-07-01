@@ -1,6 +1,6 @@
 import type { PlanResume } from '@mastra/client-js';
 import { Button, Notice, Spinner, Textarea, Txt, useTheme } from '@mastra/playground-ui';
-import { ArrowDown, ArrowUp, ChevronsUpDown, Menu, Settings, Square } from 'lucide-react';
+import { ArrowDown, ArrowUp, Menu, Square } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
@@ -482,6 +482,10 @@ export default function App() {
           setProjectsOpen(true);
           closeSidebar();
         }}
+        onOpenSettings={() => {
+          setSettingsOpen(true);
+          closeSidebar();
+        }}
         threads={threads}
         activeThreadId={transcript.threadId}
         onSwitchThread={id => {
@@ -517,32 +521,10 @@ export default function App() {
       />
 
       <div className="relative z-1 flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b border-border1 px-3 py-2">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="md:hidden"
-            onClick={() => setSidebarOpen(o => !o)}
-            aria-label="Toggle sidebar"
-          >
+        <header className="flex items-center gap-2 border-b border-border1 px-3 py-2 md:hidden">
+          <Button variant="ghost" size="icon-sm" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
             <Menu />
           </Button>
-          <button
-            type="button"
-            className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-surface4"
-            onClick={() => setProjectsOpen(true)}
-            title={activeProject ? `${activeProject.path} — switch project` : 'Select a project'}
-          >
-            <Txt as="span" variant="ui-md" className="font-medium text-icon6">
-              {activeProject ? activeProject.name : 'MastraCode'}
-            </Txt>
-            <ChevronsUpDown size={14} className="text-icon3" />
-          </button>
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-              <Settings />
-            </Button>
-          </div>
         </header>
 
         {!activeProject ? (
@@ -581,11 +563,11 @@ export default function App() {
             )}
 
             <div
-              className="flex flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl"
+              className="flex flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]"
               ref={threadRef}
             >
               {transcript.entries.length === 0 && (
-                <div className="m-auto w-full max-w-3xl px-7 py-10 text-left font-mono text-sm leading-relaxed text-icon3">
+                <div className="m-auto w-full max-w-[80ch] px-7 py-10 text-left font-mono text-sm leading-relaxed text-icon3">
                   <dl className="mb-4 mt-0 grid gap-0.5">
                     <div className="flex gap-2">
                       <dt className="min-w-24 text-icon2">Project</dt>
@@ -634,80 +616,79 @@ export default function App() {
               </Button>
             )}
 
-            <form
-              className="relative flex shrink-0 items-end gap-2 border-t border-border1 bg-surface2/70 px-4 py-3.5 backdrop-blur-md"
-              onSubmit={onSubmit}
-            >
-              {showSuggestions && (
-                <div className="absolute bottom-full left-4 right-4 z-50 mb-1 max-h-64 overflow-y-auto rounded-md border border-border1 bg-surface2 shadow-lg">
-                  {suggestions.map((c, i) => (
-                    <button
-                      type="button"
-                      key={c.name}
-                      className={`grid w-full items-baseline gap-2 px-3 py-1.5 text-left text-icon5 ${
-                        i === activeSuggestion ? 'bg-surface4' : 'hover:bg-surface3'
-                      }`}
-                      style={{ gridTemplateColumns: 'max-content max-content 1fr' }}
-                      onMouseEnter={() => setActiveSuggestion(i)}
-                      onClick={() => applyCommand(c.name)}
-                    >
-                      <span className="font-mono text-accent3">/{c.name}</span>
-                      {c.args && <span className="font-mono text-xs text-icon3">{c.args}</span>}
-                      <span className="truncate text-xs text-icon3">{c.description}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <Textarea
-                ref={inputRef}
-                className="max-h-52 min-h-10 resize-none"
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                onKeyDown={onComposerKeyDown}
-                placeholder="Message the agent · / for commands · Shift+Enter for newline"
-                rows={1}
-                disabled={status === 'error'}
-              />
-              {busy ? (
-                <Button
-                  type="button"
-                  variant="default"
-                  size="icon-md"
-                  className="shrink-0 text-accent2"
-                  onClick={() => void abort()}
-                  aria-label="Stop"
-                >
-                  <Square />
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="icon-md"
-                  className="shrink-0"
-                  disabled={status !== 'ready' || !draft.trim()}
-                  aria-label="Send"
-                >
-                  <ArrowUp />
-                </Button>
-              )}
-            </form>
+            <div className="shrink-0 max-w-[80ch] w-full mx-auto">
+              <form className="relative flex items-end gap-2 py-1" onSubmit={onSubmit}>
+                {showSuggestions && (
+                  <div className="absolute bottom-full left-4 right-4 z-50 mb-1 max-h-64 overflow-y-auto rounded-md border border-border1 bg-surface2 shadow-lg">
+                    {suggestions.map((c, i) => (
+                      <button
+                        type="button"
+                        key={c.name}
+                        className={`grid w-full items-baseline gap-2 px-3 py-1.5 text-left text-icon5 ${
+                          i === activeSuggestion ? 'bg-surface4' : 'hover:bg-surface3'
+                        }`}
+                        style={{ gridTemplateColumns: 'max-content max-content 1fr' }}
+                        onMouseEnter={() => setActiveSuggestion(i)}
+                        onClick={() => applyCommand(c.name)}
+                      >
+                        <span className="font-mono text-accent3">/{c.name}</span>
+                        {c.args && <span className="font-mono text-xs text-icon3">{c.args}</span>}
+                        <span className="truncate text-xs text-icon3">{c.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <Textarea
+                  ref={inputRef}
+                  className="max-h-52 min-h-10 resize-none"
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={onComposerKeyDown}
+                  placeholder="Message the agent · / for commands · Shift+Enter for newline"
+                  rows={1}
+                  disabled={status === 'error'}
+                />
+                {busy ? (
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="icon-md"
+                    className="shrink-0 text-accent2"
+                    onClick={() => void abort()}
+                    aria-label="Stop"
+                  >
+                    <Square />
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="icon-md"
+                    className="shrink-0"
+                    disabled={status !== 'ready' || !draft.trim()}
+                    aria-label="Send"
+                  >
+                    <ArrowUp />
+                  </Button>
+                )}
+              </form>
 
-            <StatusLine
-              status={status}
-              modelId={transcript.modelId}
-              running={busy}
-              followUpCount={transcript.followUpCount}
-              omPhase={transcript.omPhase}
-              omProgress={transcript.omProgress}
-              goal={transcript.goal}
-              workspaceReady={transcript.workspaceReady}
-              projectName={activeProject?.name}
-              tokensPerSec={transcript.tokensPerSec}
-              modes={modes}
-              activeModeId={transcript.modeId}
-              onModeChange={modeId => void session.switchMode(modeId)}
-            />
+              <StatusLine
+                status={status}
+                modelId={transcript.modelId}
+                running={busy}
+                followUpCount={transcript.followUpCount}
+                omPhase={transcript.omPhase}
+                omProgress={transcript.omProgress}
+                goal={transcript.goal}
+                workspaceReady={transcript.workspaceReady}
+                projectName={activeProject?.name}
+                tokensPerSec={transcript.tokensPerSec}
+                modes={modes}
+                activeModeId={transcript.modeId}
+                onModeChange={modeId => void session.switchMode(modeId)}
+              />
+            </div>
           </>
         )}
       </div>

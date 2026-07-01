@@ -1,5 +1,6 @@
 import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -182,6 +183,31 @@ describe('MastraCode message rendering', () => {
 
     expect(await screen.findByText('Thread title updated: Better title')).toBeInTheDocument();
     expect(screen.queryByText(/om_thread_title_updated/)).not.toBeInTheDocument();
+  });
+
+  describe('when a tool has JSON arguments', () => {
+    it('shows the argument values when the card is expanded', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        messages: [
+          {
+            id: 'assistant-args',
+            role: 'assistant',
+            content: [
+              { type: 'tool_call', id: 'tool-args', name: 'view', args: { path: 'src/deep/config.ts' } },
+              { type: 'tool_result', id: 'tool-args', name: 'view', result: 'file contents' },
+            ],
+          },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      const card = await findToolCard('view');
+      await userEvent.click(within(card).getByText('view'));
+
+      expect(within(card).getByText(/src\/deep\/config\.ts/)).toBeInTheDocument();
+    });
   });
 
   describe('when a tool approval is required', () => {
@@ -388,6 +414,40 @@ describe('App mode + theme controls', () => {
       await screen.findByRole('button', { name: 'Build' });
 
       expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
+    });
+
+    it('does not render a project switcher in the header', async () => {
+      seedMultiMode();
+
+      renderWithProviders(<App />);
+
+      await screen.findByRole('button', { name: 'Build' });
+
+      const header = document.querySelector('header');
+      expect(header).not.toBeNull();
+
+      // The header must not contain any project switcher.
+      expect(within(header as HTMLElement).queryByRole('button', { name: /MastraCode Test/ })).not.toBeInTheDocument();
+
+      // The sidebar remains the single source of the project switcher: exactly
+      // one project-switcher button exists, it exposes the project name, and it
+      // lives outside the header.
+      const switchers = screen.getAllByRole('button', { name: /MastraCode Test/ });
+      expect(switchers).toHaveLength(1);
+      expect(header).not.toContainElement(switchers[0]);
+    });
+
+    it('renders the settings control in the sidebar, not the header', async () => {
+      seedMultiMode();
+
+      renderWithProviders(<App />);
+
+      await screen.findByRole('button', { name: 'Build' });
+
+      const header = document.querySelector('header');
+      expect(header).not.toBeNull();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Open settings' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
     });
   });
 });

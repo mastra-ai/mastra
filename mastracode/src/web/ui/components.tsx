@@ -3,6 +3,7 @@ import {
   Badge,
   Button,
   ButtonsGroup,
+  CodeBlock as DsCodeBlock,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -162,7 +163,7 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const removed = oldText.split('\n');
   const added = newText.split('\n');
   return (
-    <div className="diff hljs" role="group" aria-label="File change">
+    <div className="diff hljs rounded-xl" role="group" aria-label="File change">
       {removed.map((line, i) => (
         <div key={`r${i}`} className="diff-line removed">
           <span className="diff-gutter">-</span>
@@ -176,16 +177,6 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
         </div>
       ))}
     </div>
-  );
-}
-
-/** A syntax-highlighted code block for full-file writes. */
-function CodeBlock({ text, path }: { text: string; path?: string }) {
-  const lang = languageForPath(path);
-  return (
-    <pre className={`${resultBlock} hljs`}>
-      <code dangerouslySetInnerHTML={{ __html: highlightCode(text, lang) }} />
-    </pre>
   );
 }
 
@@ -233,7 +224,7 @@ function ToolCard({ tool, forceExpanded }: { tool: ToolCall; forceExpanded?: boo
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="rounded-md border border-border1 bg-surface3"
+      className="rounded-xl border border-border1 bg-surface3"
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
@@ -262,33 +253,32 @@ function ToolCard({ tool, forceExpanded }: { tool: ToolCall; forceExpanded?: boo
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2 px-2 pb-2">
         {edit ? (
-          <ToolSection label={edit.path ?? 'Change'} copyText={edit.content ?? edit.new_string ?? ''}>
-            {edit.new_string !== undefined ? (
+          edit.new_string !== undefined ? (
+            <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
               <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
-            ) : (
-              <CodeBlock text={truncate(edit.content ?? '', 2000)} path={edit.path} />
-            )}
-          </ToolSection>
+            </ToolSection>
+          ) : (
+            <DsCodeBlock
+              code={truncate(edit.content ?? '', 2000)}
+              lang={languageForPath(edit.path)}
+              fileName={edit.path ?? 'Change'}
+              overflow="scroll"
+            />
+          )
         ) : argsPretty ? (
-          <ToolSection label="Arguments" copyText={argsPretty}>
-            <pre className={resultBlock}>{argsPretty}</pre>
-          </ToolSection>
+          <DsCodeBlock code={argsPretty} lang="json" fileName="Arguments" />
         ) : null}
         {tool.output && (
           <ToolSection label="Output" copyText={tool.output}>
-            <pre className="m-0 max-h-72 overflow-y-auto whitespace-pre-wrap break-all py-1.5 font-mono text-xs leading-normal text-icon3">
+            <pre className="m-0 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
               {tool.output}
             </pre>
           </ToolSection>
         )}
-        {resultText !== undefined && (
-          <ToolSection label="Result" copyText={resultText}>
-            <pre className={resultBlock}>{truncate(resultText, 800)}</pre>
-          </ToolSection>
-        )}
+        {resultText !== undefined && <DsCodeBlock code={truncate(resultText, 800)} lang="json" fileName="Result" />}
       </CollapsibleContent>
       {!expanded && tool.output && (
-        <pre className="mx-2 mb-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-all py-1.5 font-mono text-xs leading-normal text-icon3 opacity-75">
+        <pre className="mx-2 mb-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3 opacity-75">
           {truncate(tool.output, 180)}
         </pre>
       )}
@@ -796,7 +786,7 @@ export function StatusLine({
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
 
   return (
-    <div className="flex shrink-0 items-center gap-3 border-t border-border1 bg-surface2 px-4 py-2 text-ui-sm text-icon3">
+    <div className="flex shrink-0 items-center gap-3 py-2 text-ui-sm text-icon3">
       {modes && modes.length > 0 && onModeChange && (
         <div role="group" aria-label="Session mode" className="shrink-0">
           <ButtonsGroup spacing="close">
