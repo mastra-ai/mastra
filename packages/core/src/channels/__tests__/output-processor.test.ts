@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 
+import { InMemoryStore } from '../../storage/mock';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
@@ -1586,5 +1587,164 @@ describe('ChatChannelOutputProcessor', () => {
       expect(postArgs[0]).toBe('here you go');
       expect(typeof postArgs[1]).toBe('object');
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fallback render-context resolution (no inbound requestContext)
+// ---------------------------------------------------------------------------
+//
+// Runs that did NOT originate from a platform webhook (heartbeats, Studio,
+// custom UI, user code) have no `CHAT_CHANNEL_RENDER_CONTEXT_KEY` on
+// `requestContext`. When the processor is bound to its owning `AgentChannels`
+// and the run's thread carries channel coordinates, it must reconstruct the
+// render context from the thread and still broadcast.
+
+const FALLBACK_THREAD_ID = 'mastra-thread-1';
+const FALLBACK_EXTERNAL_ID = 'test:c1:t1';
+
+async function makeFallbackChannels(
+  threadMetadata?: Record<string, unknown> | null,
+): Promise<ReturnType<typeof createRecording> & { channels: AgentChannels }> {
+  const recording = createRecording();
+
+  const channels = new AgentChannels({
+    adapters: { test: { adapter: recording.adapter, streaming: false } as any },
+  });
+
+  const storage = new InMemoryStore();
+  if (threadMetadata !== null) {
+    const memory = await storage.getStore('memory');
+    await memory!.saveThread({
+      thread: {
+        id: FALLBACK_THREAD_ID,
+        resourceId: 'resource-1',
+        title: 'channel thread',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: threadMetadata ?? {
+          channel_platform: 'test',
+          channel_externalThreadId: FALLBACK_EXTERNAL_ID,
+        },
+      },
+    });
+  }
+
+  // Bind a minimal agent that exposes the Mastra storage, and a Chat stub that
+  // materializes the live Thread handle from the stored external id.
+  (channels as any).agent = { getMastraInstance: () => ({ getStorage: () => storage }) };
+  (channels as any).chat = {
+    thread: (id: string) => {
+      expect(id).toBe(FALLBACK_EXTERNAL_ID);
+      return recording.chatThread;
+    },
+  };
+
+  return { channels, ...recording };
+}
+
+async function driveFallback(
+  channels: AgentChannels,
+  chunks: any[],
+  opts: { threadId?: string; requestContext?: Map<string, unknown> } = {},
+) {
+  const processor = new ChatChannelOutputProcessor(channels);
+  const requestContext = opts.requestContext ?? new Map<string, unknown>();
+  // The framework stashes the run's thread on `requestContext` under the
+  // `MastraMemory` key; the processor reads its `threadId` from there.
+  if (opts.threadId !== undefined && !requestContext.has('MastraMemory')) {
+    requestContext.set('MastraMemory', { thread: { id: opts.threadId } });
+  }
+  const state: Record<string, unknown> = {};
+
+  const effective = [...chunks, { type: 'step-finish', payload: { stepResult: { isContinued: false } } }];
+
+  for (const chunk of effective) {
+    await processor.processOutputStream({
+      part: chunk,
+      state,
+      requestContext: { get: (key: string) => requestContext.get(key) } as any,
+    } as any);
+  }
+}
+
+describe('ChatChannelOutputProcessor fallback render context', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  it('broadcasts on a channel-backed thread with no requestContext key', async () => {
+    const { channels, calls } = await makeFallbackChannels();
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'heartbeat says hi' } }], {
+      threadId: FALLBACK_THREAD_ID,
+    });
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'heartbeat says hi' }]);
+  });
+
+  it('passes through when the thread has no channel metadata', async () => {
+    const { channels, calls } = await makeFallbackChannels({ some: 'other-metadata' });
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'no channel here' } }], {
+      threadId: FALLBACK_THREAD_ID,
+    });
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('passes through when channel metadata is present but not a string', async () => {
+    // `thread.metadata` is persisted `unknown`; a truthy non-string value must
+    // not slip past the guard into `chat.thread(...)`.
+    const { channels, calls } = await makeFallbackChannels({
+      channel_platform: 123,
+      channel_externalThreadId: { nested: true },
+    });
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'bad metadata' } }], {
+      threadId: FALLBACK_THREAD_ID,
+    });
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('passes through when the thread does not exist in storage', async () => {
+    const { channels, calls } = await makeFallbackChannels(null);
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'orphan run' } }], {
+      threadId: 'unknown-thread',
+    });
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('passes through when no threadId is provided', async () => {
+    const { channels, calls } = await makeFallbackChannels();
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'threadless' } }], {});
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('prefers the inbound requestContext render context over the fallback', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+
+    // Inbound fast path: a render context is already on requestContext. The
+    // fallback must not run (and would post to the same chatThread anyway, so
+    // assert it posts exactly once via the fast path).
+    const render = (channels as any)._buildRenderContext(chatThread, 'test');
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+
+    // Break the fallback so a single post proves the fast path was taken.
+    (channels as any).chat = {
+      thread: () => {
+        throw new Error('fallback should not run when requestContext render exists');
+      },
+    };
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'inbound message' } }], {
+      threadId: FALLBACK_THREAD_ID,
+      requestContext,
+    });
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'inbound message' }]);
   });
 });

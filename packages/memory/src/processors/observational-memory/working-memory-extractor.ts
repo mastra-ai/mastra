@@ -63,6 +63,7 @@ export class WorkingMemoryExtractor extends Extractor<string | Record<string, un
     super({
       name: 'Working Memory',
       includePreviousExtraction: false,
+      metadataKeyPath: false,
       instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
       schema: async context => {
         const details = await getWorkingMemoryDetails(context);

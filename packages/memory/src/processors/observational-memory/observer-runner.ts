@@ -12,6 +12,7 @@ import type { Memory } from '../..';
 import { omDebug } from './debug';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
+import type { Extractor } from './extractor';
 import { resolveExtractors } from './extractor';
 import { withOmInternalThreadId } from './internal-request-context';
 import type { ModelByInputTokens } from './model-by-input-tokens';
@@ -216,6 +217,7 @@ export class ObserverRunner {
     threadTitle?: string;
     extractedValues?: Record<string, unknown>;
     extractionFailures?: Array<{ slug: string; error: string }>;
+    extractors?: readonly Extractor<any>[];
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
     providerMetadata?: ProviderMetadata;
   }> {
@@ -356,6 +358,7 @@ export class ObserverRunner {
       threadTitle: builtIns.threadTitle ?? parsed.threadTitle,
       extractedValues,
       extractionFailures,
+      extractors: activeExtractors,
       usage: usage
         ? { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, totalTokens: usage.totalTokens }
         : undefined,
@@ -388,6 +391,7 @@ export class ObserverRunner {
         threadTitle?: string;
         extractedValues?: Record<string, unknown>;
         extractionFailures?: Array<{ slug: string; error: string }>;
+        extractors?: readonly Extractor<any>[];
       }
     >;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -418,6 +422,7 @@ export class ObserverRunner {
           threadTitle?: string;
           extractedValues?: Record<string, unknown>;
           extractionFailures?: Array<{ slug: string; error: string }>;
+          extractors?: readonly Extractor<any>[];
         }
       >();
       let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -438,6 +443,7 @@ export class ObserverRunner {
           threadTitle: threadResult.threadTitle,
           extractedValues: threadResult.extractedValues,
           extractionFailures: threadResult.extractionFailures,
+          extractors: threadResult.extractors,
         });
         if (threadResult.usage) {
           totalUsage.inputTokens += threadResult.usage.inputTokens ?? 0;
@@ -583,6 +589,7 @@ export class ObserverRunner {
         threadTitle?: string;
         extractedValues?: Record<string, unknown>;
         extractionFailures?: Array<{ slug: string; error: string }>;
+        extractors?: readonly Extractor<any>[];
       }
     >();
     for (const [threadId, threadResult] of parsed.threads) {
@@ -600,6 +607,7 @@ export class ObserverRunner {
         threadTitle: builtIns.threadTitle ?? threadResult.threadTitle,
         extractedValues,
         extractionFailures,
+        extractors: activeExtractors,
       });
     }
 

@@ -707,6 +707,31 @@ describe('buffer()', () => {
     expect(result.record).toBeTruthy();
   });
 
+  it('preserves extraction fields on buffered chunks', async () => {
+    const extractor = new Extractor({
+      name: 'Priority',
+      instructions: 'Extract the priority.',
+    });
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observerModel: createMockObserverModel(`<observations>
+* User asked for urgent help
+</observations>
+<priority>high</priority>`),
+      observationExtract: [extractor],
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.buffer({ threadId });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    const status = await om.getStatus({ threadId });
+    const chunk = status.record?.bufferedObservationChunks?.[0];
+    expect(chunk?.extractedValues).toEqual({ priority: 'high' });
+  });
+
   it('should use provided messages instead of loading from storage', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     const messages = createBulkMessages(5, threadId);

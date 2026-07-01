@@ -22,6 +22,7 @@ import {
   mergeExtractionFailures,
 } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
+import type { Extractor } from './extractor';
 import { resolveExtractors } from './extractor';
 import { withOmInternalThreadId } from './internal-request-context';
 import {
@@ -62,6 +63,7 @@ import type {
 
 async function getThreadExtractedValues(
   storage: MemoryStorage,
+  extractors: readonly Extractor<any>[],
   threadId?: string | null,
 ): Promise<Record<string, unknown> | undefined> {
   if (!threadId) {
@@ -69,11 +71,12 @@ async function getThreadExtractedValues(
   }
 
   const thread = await storage.getThreadById({ threadId });
-  return getPriorExtractedValues(getThreadOMMetadata(thread?.metadata));
+  return getPriorExtractedValues(getThreadOMMetadata(thread?.metadata), extractors);
 }
 
 async function persistThreadExtractedValues(
   storage: MemoryStorage,
+  extractors: readonly Extractor<any>[],
   threadId: string | undefined,
   values: Record<string, unknown> | undefined,
 ): Promise<void> {
@@ -81,7 +84,7 @@ async function persistThreadExtractedValues(
     return;
   }
 
-  const metadataUpdate = buildThreadMetadataFromExtractedValues(values);
+  const metadataUpdate = buildThreadMetadataFromExtractedValues(extractors, values);
   const thread = await storage.getThreadById({ threadId });
   if (!thread) {
     return;
@@ -730,6 +733,7 @@ export class ReflectorRunner {
 
     await persistThreadExtractedValues(
       this.storage,
+      this.reflectionConfig.extractors,
       currentRecord.threadId ?? undefined,
       reflectResult.extractedValues,
     );
@@ -977,7 +981,11 @@ export class ReflectorRunner {
     } = opts;
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
-    const priorExtractedValues = await getThreadExtractedValues(this.storage, requestedThreadId ?? record.threadId);
+    const priorExtractedValues = await getThreadExtractedValues(
+      this.storage,
+      this.reflectionConfig.extractors,
+      requestedThreadId ?? record.threadId,
+    );
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
@@ -1179,7 +1187,12 @@ export class ReflectorRunner {
       );
       reflectionUsage = reflectResult.usage;
       reflectionProviderMetadata = reflectResult.providerMetadata;
-      await persistThreadExtractedValues(this.storage, record.threadId ?? undefined, reflectResult.extractedValues);
+      await persistThreadExtractedValues(
+        this.storage,
+        this.reflectionConfig.extractors,
+        record.threadId ?? undefined,
+        reflectResult.extractedValues,
+      );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
       await this.storage.createReflectionGeneration({

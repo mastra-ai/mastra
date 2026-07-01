@@ -1,9 +1,11 @@
 import type { Adapter, Thread } from 'chat';
 
 import type { IMastraLogger } from '../logger/logger';
+import { parseMemoryRequestContext } from '../memory/types';
 import type { ProcessOutputStreamArgs } from '../processors';
 import type { AgentChunkType, ChunkType } from '../stream/types';
 
+import type { AgentChannels } from './agent-channels';
 import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
 import type { PendingApprovalRecord } from './stream-helpers';
@@ -121,9 +123,21 @@ interface RenderSession {
  * awaited so the run doesn't end (and a serverless invocation isn't allowed
  * to freeze) before the last `chat.update` lands.
  *
- * Skips entirely when no `CHAT_CHANNEL_RENDER_CONTEXT_KEY` exists on
- * `requestContext` — runs that didn't come in through the channels path
- * (Studio, direct API, etc.) pass through untouched.
+ * Render context is resolved in two ways, in order:
+ *
+ * 1. Fast path — `CHAT_CHANNEL_RENDER_CONTEXT_KEY` on `requestContext`, stashed
+ *    by `AgentChannels` on inbound platform events (`processChatMessage`,
+ *    approve/decline). This is the original webhook path and is unchanged.
+ * 2. Fallback — when no render context is on `requestContext` (heartbeat,
+ *    Studio, custom UI, user code) but the processor is bound to its owning
+ *    `AgentChannels`, it reconstructs the render context from the run's
+ *    `threadId` via `agentChannels.buildRenderContextForThread(threadId)`,
+ *    which reads the thread's persisted channel coordinates. The `threadId` is
+ *    taken from the memory context the framework stashes on `requestContext`
+ *    under the `MastraMemory` key.
+ *
+ * Runs that resolve no render context at all — non-channel threads, or an
+ * unbound processor with no `requestContext` key — pass through untouched.
  *
  * @internal
  */
@@ -133,12 +147,23 @@ export class ChatChannelOutputProcessor {
   /** Need data-* chunks because some drivers (`hidden`/`grouped`) inspect them. */
   readonly processDataParts = true;
 
+  /**
+   * The owning `AgentChannels`, bound at construction. Enables the fallback
+   * render-context reconstruction for runs without an inbound `requestContext`.
+   * Optional so the processor can still be constructed standalone in tests.
+   */
+  #agentChannels?: AgentChannels;
+
+  constructor(agentChannels?: AgentChannels) {
+    this.#agentChannels = agentChannels;
+  }
+
   async processOutputStream({
     part,
     state,
     requestContext,
   }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
-    const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+    const render = await this.#resolveRenderContext(state, requestContext);
     if (!render) return part;
 
     let session = state.session as RenderSession | undefined;
@@ -166,6 +191,42 @@ export class ChatChannelOutputProcessor {
     }
 
     return part;
+  }
+
+  /**
+   * Resolve the render context for this run, built once and cached on `state`.
+   *
+   * Fast path: the inbound `requestContext` key. Fallback: reconstruct from the
+   * run's `threadId` via the bound `AgentChannels`. The `threadId` is read from
+   * the memory context the framework stashes on `requestContext` under the
+   * `MastraMemory` key (populated on every run that resolves a thread, including
+   * heartbeat / signal-wake runs). The resolved value (or `null` for
+   * non-channel runs) is cached on `state.render` so we don't reload thread
+   * metadata on every chunk.
+   */
+  async #resolveRenderContext(
+    state: Record<string, any>,
+    requestContext: ProcessOutputStreamArgs['requestContext'],
+  ): Promise<ChatChannelRenderContext | undefined> {
+    if (state.render !== undefined) {
+      return state.render as ChatChannelRenderContext | undefined;
+    }
+
+    const fromRequest = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+    if (fromRequest) {
+      state.render = fromRequest;
+      return fromRequest;
+    }
+
+    const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
+    if (this.#agentChannels && threadId) {
+      const rebuilt = await this.#agentChannels.buildRenderContextForThread(threadId);
+      // Cache `null` too, so a non-channel thread isn't re-resolved per chunk.
+      state.render = rebuilt ?? null;
+      return rebuilt ?? undefined;
+    }
+
+    return undefined;
   }
 
   #openSession(render: ChatChannelRenderContext): RenderSession {
