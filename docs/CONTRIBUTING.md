@@ -62,6 +62,8 @@ Before submitting a PR, make sure to:
    pnpm run lint:prose && pnpm run validate
    ```
 
+6. **Add redirect** (optional) - If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
+
 ## Documentation structure
 
 The Mastra documentation is organized into several sections:

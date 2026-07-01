@@ -26,4 +26,5 @@ export const coreFeatures = new Set<string>([
   'deploy-diagnosis',
   'model-inference-span',
   'internal-usage-rollup',
+  'json-prompt-injection:inline',
 ]);

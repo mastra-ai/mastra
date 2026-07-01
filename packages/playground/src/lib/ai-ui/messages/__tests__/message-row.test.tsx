@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MessageRow } from '../message-row';
+import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/services/om-parts-converter';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 
@@ -49,6 +50,11 @@ const Providers = ({ children }: { children: ReactNode }) => {
 };
 
 const renderRow = (message: MastraDBMessage) => render(<MessageRow message={message} />, { wrapper: Providers });
+
+const omPart = (name: string, data: Record<string, unknown>) => ({
+  type: `data-${name}`,
+  data,
+});
 
 const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
   ({
@@ -295,6 +301,71 @@ describe('MessageRow', () => {
       }),
     );
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  it('renders live streamed OM extraction output from a dynamic-tool part', () => {
+    renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mode: 'stream' },
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'mastra-memory-om-observation',
+              toolCallId: 'om-observation-cycle-live',
+              state: 'output-available',
+              input: { cycleId: 'cycle-live', _state: 'loading', operationType: 'observation' },
+              output: {
+                status: 'complete',
+                omData: {
+                  cycleId: 'cycle-live',
+                  _state: 'complete',
+                  operationType: 'observation',
+                  extractedValues: { workingMemory: { name: 'Tyler' } },
+                },
+              },
+            } as never,
+          ],
+        },
+      }),
+    );
+
+    expect(screen.getByRole('button', { name: /observed/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+  });
+
+  it('renders buffered OM extraction output when activation and completion are both present', () => {
+    const rawMessage = baseMessage({
+      role: 'assistant',
+      content: {
+        format: 2,
+        metadata: { mode: 'stream' },
+        parts: [
+          omPart('om-buffering-start', { cycleId: 'cycle-buffer-live', operationType: 'observation' }),
+          omPart('om-activation', {
+            cycleId: 'cycle-buffer-live',
+            operationType: 'observation',
+            tokensActivated: 42,
+          }),
+          omPart('om-buffering-end', {
+            cycleId: 'cycle-buffer-live',
+            operationType: 'observation',
+            tokensBuffered: 42,
+            bufferedTokens: 8,
+            extractedValues: { workingMemory: { name: 'Tyler' } },
+          }),
+        ] as never,
+      },
+    });
+    const globalParts = buildGlobalOmPartsByCycleId([rawMessage]);
+    const message = convertOmPartsInMastraMessage(rawMessage, globalParts);
+
+    renderRow(message);
+
+    expect(screen.getByRole('button', { name: /buffered observations/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
   });
 
   it('routes a user file part into an in-message attachment preview', () => {

@@ -1,3 +1,12 @@
 {
-  "attachment": ["moonshotai/Kimi-K2.6"]
+  "attachment": ["moonshotai/Kimi-K2.6"],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M2.7",
+    "moonshotai/Kimi-K2.6",
+    "nvidia/DeepSeek-V3.2-NVFP4",
+    "nvidia/Llama-3.1-Nemotron-Safety-Guard-8B-v3",
+    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
+    "nvidia/Nemotron-Cascade-2-30B-A3B",
+    "zai-org/GLM-5.1-FP8"
+  ]
 }
