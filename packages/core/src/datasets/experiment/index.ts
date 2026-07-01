@@ -337,6 +337,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // 6. Execute items with p-map
   let succeededCount = 0;
   let failedCount = 0;
+  // Rows whose target run completed but whose persistence to
+  // `mastra_experiment_results` failed. Surfaced on the summary so callers
+  // can detect the DB being out of sync with the returned results.
+  let persistenceFailures = 0;
   // Pre-allocate for deterministic ordering (results[i] matches items[i])
   const results: ItemWithScores[] = new Array(items.length);
 
@@ -399,7 +403,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           succeededCount++;
         }
 
-        // Build item result
+        // Build item result. `persistenceError` starts null and is set below
+        // if `addExperimentResult` throws so callers can detect rows that
+        // never landed in storage.
         const itemResult: ItemResult = {
           itemId: item.id,
           itemVersion: item.datasetVersion ?? 0,
@@ -410,6 +416,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
           retryCount,
+          persistenceError: null,
           ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
         };
 
@@ -454,7 +461,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
         const itemScores = [...flatScores, ...stepScores];
 
-        // Persist result with scores (if storage available)
+        // Persist result with scores (if storage available). A throw here does
+        // NOT abort the run — persistence is best-effort and the target run's
+        // outcome is already recorded in `itemResult`. Instead we surface the
+        // failure on the item (`persistenceError`) and bump the run-level
+        // `persistenceFailures` counter so callers can detect rows that never
+        // landed in `mastra_experiment_results`.
         if (experimentsStore) {
           try {
             await experimentsStore.addExperimentResult({
@@ -474,7 +486,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
             });
           } catch (persistError) {
-            console.warn(`Failed to persist result for item ${item.id}:`, persistError);
+            persistenceFailures++;
+            itemResult.persistenceError = {
+              message: persistError instanceof Error ? persistError.message : String(persistError),
+              ...(persistError instanceof Error && persistError.stack ? { stack: persistError.stack } : {}),
+            };
+            mastra
+              .getLogger()
+              ?.error(
+                `Failed to persist experiment result for item ${item.id} in experiment ${experimentId}: ${itemResult.persistenceError.message}`,
+              );
           }
 
           // Throttled progress update
@@ -524,6 +545,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       succeededCount,
       failedCount,
       skippedCount,
+      persistenceFailures,
       completedWithErrors: false,
       startedAt,
       completedAt,
@@ -555,6 +577,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     succeededCount,
     failedCount,
     skippedCount,
+    persistenceFailures,
     completedWithErrors,
     startedAt,
     completedAt,

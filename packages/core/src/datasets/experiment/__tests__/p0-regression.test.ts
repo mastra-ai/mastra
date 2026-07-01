@@ -85,6 +85,7 @@ function setupMastra(agent: Agent) {
     getScorerById: vi.fn(),
     getWorkflowById: vi.fn(),
     getWorkflow: vi.fn(),
+    getLogger: vi.fn().mockReturnValue(undefined),
   } as unknown as Mastra;
 }
 
@@ -239,11 +240,86 @@ describe('P0 Regression', () => {
 
       expect(result).toBeDefined();
       expect(result.status).toBe('completed');
+      // succeededCount/failedCount reflect target-run outcomes; all 3 agent
+      // runs succeeded even though none of them landed in storage.
       expect(result.succeededCount).toBe(3);
       expect(result.results.length).toBe(3);
 
       // Verify addExperimentResult was attempted
       expect(experimentsStorage.addExperimentResult).toHaveBeenCalledTimes(3);
+    });
+
+    it('surfaces persistence failures on the summary and each item', async () => {
+      await setupDataset(3);
+      const agent = createMockAgent({ response: 'success' });
+      setupMastra(agent);
+
+      experimentsStorage.addExperimentResult = vi.fn().mockRejectedValue(new Error('DB down'));
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 1,
+      });
+
+      // The run must not silently swallow the persistence failures — the
+      // summary counter should match the number of rows that dropped.
+      expect(result.persistenceFailures).toBe(3);
+
+      // Every returned item should carry a structured persistenceError so
+      // callers can retry or alert per-item.
+      for (const item of result.results) {
+        expect(item.persistenceError).not.toBeNull();
+        expect(item.persistenceError?.message).toBe('DB down');
+      }
+    });
+
+    it('reports zero persistence failures on a clean run', async () => {
+      await setupDataset(2);
+      const agent = createMockAgent({ response: 'success' });
+      setupMastra(agent);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 1,
+      });
+
+      expect(result.persistenceFailures).toBe(0);
+      for (const item of result.results) {
+        expect(item.persistenceError).toBeNull();
+      }
+    });
+
+    it('surfaces a partial persistence failure without affecting persisted rows', async () => {
+      await setupDataset(3);
+      const agent = createMockAgent({ response: 'success' });
+      setupMastra(agent);
+
+      const originalAdd = experimentsStorage.addExperimentResult.bind(experimentsStorage);
+      let callCount = 0;
+      experimentsStorage.addExperimentResult = vi.fn().mockImplementation(async input => {
+        callCount++;
+        // Fail only the second write to simulate a transient DB blip.
+        if (callCount === 2) throw new Error('transient DB blip');
+        return originalAdd(input);
+      });
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 1,
+      });
+
+      expect(result.persistenceFailures).toBe(1);
+      const failed = result.results.filter(r => r.persistenceError !== null);
+      const persisted = result.results.filter(r => r.persistenceError === null);
+      expect(failed).toHaveLength(1);
+      expect(persisted).toHaveLength(2);
+      expect(failed[0].persistenceError?.message).toBe('transient DB blip');
     });
   });
 });
