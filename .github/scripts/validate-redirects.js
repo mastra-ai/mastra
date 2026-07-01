@@ -23,30 +23,6 @@ const checkLocalFile = urlPath => {
     .replace(/^\//, '')
     .replace(/\/(v\d+|v\d+\.\d+)\//g, '/');
 
-  // For /llms.txt suffixed paths, check if the parent page exists
-  // (llms.txt files are generated at build time for every page)
-  if (cleanPath.endsWith('/llms.txt')) {
-    const parentPath = cleanPath.replace(/\/llms\.txt$/, '');
-    const parentPossiblePaths = [
-      path.resolve(__dirname, '../../docs/src/content/en', parentPath + '.mdx'),
-      path.resolve(__dirname, '../../docs/src/content/en', parentPath + '/index.mdx'),
-      path.resolve(__dirname, '../../docs/src/content/en', parentPath, 'index.mdx'),
-    ];
-    return parentPossiblePaths.some(filePath => existsSync(filePath));
-  }
-
-  // For .md suffixed paths, check if the parent page exists
-  // (.md routes are served at runtime from the same source pages)
-  if (cleanPath.endsWith('.md')) {
-    const parentPath = cleanPath.replace(/\.md$/, '');
-    const parentPossiblePaths = [
-      path.resolve(__dirname, '../../docs/src/content/en', parentPath + '.mdx'),
-      path.resolve(__dirname, '../../docs/src/content/en', parentPath + '/index.mdx'),
-      path.resolve(__dirname, '../../docs/src/content/en', parentPath, 'index.mdx'),
-    ];
-    return parentPossiblePaths.some(filePath => existsSync(filePath));
-  }
-
   // Try different possible file locations
   const possiblePaths = [
     path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '.mdx'),

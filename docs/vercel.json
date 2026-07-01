@@ -66,61 +66,6 @@
       "permanent": true
     },
     {
-      "source": "/docs/getting-started/installation/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/getting-started/installation.md",
-      "destination": "/guides/getting-started/quickstart.md",
-      "permanent": true
-    },
-    {
-      "source": "/docs/getting-started",
-      "destination": "/guides/getting-started/quickstart",
-      "permanent": true
-    },
-    {
-      "source": "/docs/getting-started/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/getting-started.md",
-      "destination": "/guides/getting-started/quickstart.md",
-      "permanent": true
-    },
-    {
-      "source": "/docs/tools/overview",
-      "destination": "/docs/agents/using-tools",
-      "permanent": true
-    },
-    {
-      "source": "/docs/tools/overview/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/tools/overview.md",
-      "destination": "/docs/agents/using-tools.md",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agents/model-providers",
-      "destination": "/models",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agents/model-providers/llms.txt",
-      "destination": "/models/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/agents/model-providers.md",
-      "destination": "/models.md",
-      "permanent": true
-    },
-    {
       "source": "/examples/agents/ai-sdk-v5-integration",
       "destination": "/guides/getting-started/next-js",
       "permanent": true
@@ -218,16 +163,6 @@
     {
       "source": "/docs/getting-started/quickstart",
       "destination": "/guides/getting-started/quickstart",
-      "permanent": true
-    },
-    {
-      "source": "/docs/getting-started/quickstart/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/getting-started/quickstart.md",
-      "destination": "/guides/getting-started/quickstart.md",
       "permanent": true
     },
     {
