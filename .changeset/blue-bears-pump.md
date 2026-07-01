@@ -2,11 +2,11 @@
 '@mastra/livekit': minor
 ---
 
-Brought the workflow entrypoint to feature parity with the agent entrypoint and added per-turn lifecycle hooks that work on both.
+Added two lifecycle hooks to voice workers, and brought the workflow path up to the same feature set as the agent path.
 
-**Per-turn `onTurnComplete` hook**
+**Run work after each turn with `onTurnComplete`**
 
-`createLiveKitWorker` now fires `onTurnComplete` once per turn after the reply has finished streaming to text-to-speech — off the audio path and fire-and-forget (the worker never awaits it) — so post-turn work like memory maintenance, CRM writes, or analytics never adds to the caller's latency or delays the next turn. It receives the produced reply and the call's memory mapping, so it's the right place for a fully non-blocking `memory.updateWorkingMemory(...)`. It also fires with `result.interrupted: true` when barge-in cuts a turn short. Works on both the agent and workflow paths.
+`createLiveKitWorker` now calls `onTurnComplete` once per turn, right after the reply finishes playing to the caller. It runs in the background — the worker never waits for it — so you can save memory, update your CRM, or record analytics without adding any delay for the caller or the next reply. The hook receives the reply that was spoken and the call's memory mapping, so it's the place to update working memory without blocking. It also runs with `result.interrupted: true` when the caller talks over the agent. Works whether you drive replies with an agent or a workflow.
 
 ```ts
 createLiveKitWorker({
@@ -15,25 +15,25 @@ createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   onTurnComplete: async ({ result, memory }) => {
-    // Runs after the caller has heard the reply — fire-and-forget, off the audio path.
+    // Runs after the caller has heard the reply, in the background.
     if (!memory) return;
     await crm.logContact(memory.resource, result.text);
   },
 });
 ```
 
-**End-of-call `onCallEnd` hook**
+**Run work when the call ends with `onCallEnd`**
 
-`createLiveKitWorker` now also fires `onCallEnd` once when the call ends (the participant disconnects / the job shuts down), via LiveKit's shutdown callback — entirely off the audio path, when latency no longer matters. Unlike `onTurnComplete`, it is _awaited_ within LiveKit's shutdown grace window, so end-of-call work finishes before the process exits. It receives the call's memory mapping and `Memory` instance — the ideal place to flush observational memory once for the whole call instead of paying for it inline per turn.
+`createLiveKitWorker` now also calls `onCallEnd` once when the call ends (the caller hangs up or the job shuts down). Unlike `onTurnComplete`, the worker waits for it to finish before the process exits — so it's the place for end-of-call work like summarizing the whole conversation into long-term memory once, instead of paying that cost on every turn. The hook receives the call's memory mapping and its `Memory` instance.
 
 ```ts
-import { callCenterMemory } from './memory'; // your @mastra/memory `Memory` instance
+import { callCenterMemory } from './memory'; // your @mastra/memory Memory instance
 
 createLiveKitWorker({
   mastra,
   agent: 'callCenter',
   onCallEnd: async ({ memory }) => {
-    // After the caller hangs up: distill the call into durable memory, off the audio path.
+    // After the caller hangs up: save a lasting summary of the call.
     if (!memory) return;
     const om = await callCenterMemory.omEngine;
     await om?.observe({ threadId: memory.thread, resourceId: memory.resource });
@@ -41,13 +41,13 @@ createLiveKitWorker({
 });
 ```
 
-**Workflow entrypoint parity**
+**Workflow replies now support the same options as agent replies**
 
-The workflow path no longer silently drops options that the agent path supports:
+Driving replies with a workflow no longer drops options the agent path already supported:
 
-- `toolFeedback` now fires on the workflow path too, and `onTurnComplete` carries the turn's tool calls — for any tool call the reply step surfaces to its `writer`. A new `pipeAgentReplyToWriter(agentStream, writer)` helper makes that a one-liner: it forwards the agent's text deltas _and_ its tool calls (unlike piping only `.textStream`, which silently drops tool calls) and returns the spoken text.
-- The per-session request context is now forwarded into the workflow run, so steps see it.
-- A new `memoryInstance` option supplies the `Memory` used to bootstrap the call thread and persist the greeting on the workflow path (where there is no agent to source it from), so the saved transcript is faithful — greeting plus every turn — just like the agent path.
+- `toolFeedback` now runs on the workflow path, and `onTurnComplete` includes the turn's tool calls. A new `pipeAgentReplyToWriter(agentStream, writer)` helper makes this a one-liner: it streams the agent's words to the caller *and* forwards its tool calls, then returns the spoken text. Streaming only the agent's text would drop the tool calls.
+- The per-call request context now reaches workflow steps.
+- A new `memoryInstance` option gives the workflow path a `Memory` instance to open the call's thread and save the greeting, so the saved conversation is complete — greeting included — just like the agent path.
 
 ```ts
 import { createLiveKitWorker } from '@mastra/livekit';
@@ -58,7 +58,7 @@ createLiveKitWorker({
   workflowInput: ({ messages, memory }) => ({ turn: messages, memory: memory || undefined }),
   replyStep: 'generateResponse',
   memory: ({ metadata, roomName }) => ({ thread: metadata.threadId ?? roomName, resource: metadata.resourceId ?? roomName }),
-  // Bootstraps the thread + persists the greeting on the workflow path.
+  // Opens the thread and saves the greeting on the workflow path.
   memoryInstance: callCenterMemory,
   toolFeedback: ({ toolName }) => (toolName === 'checkServiceArea' ? 'Let me check your area.' : undefined),
   onTurnComplete: async ({ result, memory }) => {
@@ -66,6 +66,6 @@ createLiveKitWorker({
   },
 });
 
-// In the reply step — forwards text AND tool calls into the step writer:
+// In the reply step — streams the agent's words and forwards its tool calls:
 const reply = await pipeAgentReplyToWriter(await agent.stream(messages, { memory, abortSignal }), writer);
 ```
