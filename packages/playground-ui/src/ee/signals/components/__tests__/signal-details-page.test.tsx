@@ -41,35 +41,51 @@ vi.mock('react-resizable-panels', () => ({
 
 const SUPPORT_ENTITY: SelectedEntity = { entityType: 'agent', entityId: 'entity_support' };
 
-function renderSignalDetailsPage({
-  entity = SUPPORT_ENTITY as SelectedEntity | null,
-  selectedTraceId = 'trace-1' as string | null,
-  initialTopicId = null as string | null,
-  tracePanel = (<aside aria-label="Trace details">Trace panel</aside>) as ReactNode,
-  onTraceSelect = () => {},
-}: {
+type RenderSignalDetailsPageOptions = {
   entity?: SelectedEntity | null;
+  signalId?: string;
   selectedTraceId?: string | null;
   initialTopicId?: string | null;
   tracePanel?: ReactNode;
   onTraceSelect?: (signalId: string, traceId: string) => void;
-} = {}) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+};
 
-  return render(
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>
-        <SignalDetailsPage
-          signalId="sentiment"
-          entity={entity}
-          selectedTraceId={selectedTraceId}
-          initialTopicId={initialTopicId}
-          tracePanel={tracePanel}
-          onTraceSelect={onTraceSelect}
-        />
-      </QueryClientProvider>
-    </MastraReactProvider>,
-  );
+function renderSignalDetailsPage(options: RenderSignalDetailsPageOptions = {}) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const defaultOptions = {
+    entity: SUPPORT_ENTITY as SelectedEntity | null,
+    signalId: 'sentiment',
+    selectedTraceId: 'trace-1' as string | null,
+    initialTopicId: null as string | null,
+    tracePanel: <aside aria-label="Trace details">Trace panel</aside>,
+    onTraceSelect: () => {},
+  } satisfies Required<RenderSignalDetailsPageOptions>;
+
+  const renderPage = (nextOptions: RenderSignalDetailsPageOptions = {}) => {
+    const props = { ...defaultOptions, ...options, ...nextOptions };
+    return (
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={queryClient}>
+          <SignalDetailsPage
+            signalId={props.signalId}
+            entity={props.entity}
+            selectedTraceId={props.selectedTraceId}
+            initialTopicId={props.initialTopicId}
+            tracePanel={props.tracePanel}
+            onTraceSelect={props.onTraceSelect}
+          />
+        </QueryClientProvider>
+      </MastraReactProvider>
+    );
+  };
+
+  const result = render(renderPage());
+
+  return {
+    ...result,
+    rerenderSignalDetailsPage: (nextOptions: RenderSignalDetailsPageOptions = {}) =>
+      result.rerender(renderPage(nextOptions)),
+  };
 }
 
 /** Entity-learning happy path: entities, topics, the selected topic's examples, points. */
@@ -153,6 +169,123 @@ describe('SignalDetailsPage', () => {
 
       // The default first topic ("Frustrated escalations" = topic 89) is not selected.
       expect(screen.getByRole('button', { name: /Frustrated escalations/, pressed: false })).not.toBeNull();
+    });
+
+    it('updates the selected topic when initialTopicId changes after navigation', async () => {
+      useLiveDataHandlers();
+      const requestedTopicIds: string[] = [];
+      server.use(
+        http.get(`${ROOT}/entities/:entityId/topics/:topicId/examples`, ({ params }) => {
+          const topicId = String(params.topicId);
+          requestedTopicIds.push(topicId);
+          return HttpResponse.json({
+            ...topicExamplesResponse,
+            examples: [
+              {
+                ...topicExamplesResponse.examples[0],
+                exampleId: `ex-${topicId}`,
+                topicId,
+                traceId: `trace-${topicId}`,
+                signalText: `Example for topic ${topicId}`,
+              },
+            ],
+          });
+        }),
+      );
+
+      const { rerenderSignalDetailsPage } = renderSignalDetailsPage({ initialTopicId: '89' });
+
+      expect(await screen.findByRole('button', { name: /Frustrated escalations/, pressed: true })).not.toBeNull();
+      expect(await screen.findByText('Example for topic 89')).not.toBeNull();
+
+      rerenderSignalDetailsPage({ initialTopicId: '90' });
+
+      expect(await screen.findByRole('button', { name: /Satisfied resolutions/, pressed: true })).not.toBeNull();
+      expect(await screen.findByText('Example for topic 90')).not.toBeNull();
+      expect(requestedTopicIds).toContain('89');
+      expect(requestedTopicIds).toContain('90');
+    });
+  });
+
+  describe('when navigating between signal topic sets', () => {
+    it('does not keep stale sidebar or chart selections', async () => {
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        http.get(`${ROOT}/entities/:entityId/topics`, ({ params }) => {
+          if (params.entityId === 'entity_search') {
+            return HttpResponse.json({
+              ...topicsResponse,
+              run: { ...topicsResponse.run, runId: '7', signalName: 'outcome', topicCount: 1 },
+              topics: [
+                {
+                  ...topicsResponse.topics[0],
+                  topicId: 'search-1',
+                  runId: '7',
+                  signalName: 'outcome',
+                  name: 'Search successes',
+                  description: 'Searches that returned useful results.',
+                },
+              ],
+            });
+          }
+
+          return HttpResponse.json(topicsResponse);
+        }),
+        http.get(`${ROOT}/entities/:entityId/topics/:topicId/examples`, ({ params }) => {
+          const topicId = String(params.topicId);
+          return HttpResponse.json({
+            ...topicExamplesResponse,
+            runId: params.entityId === 'entity_search' ? '7' : '32',
+            examples: [
+              {
+                ...topicExamplesResponse.examples[0],
+                exampleId: `ex-${topicId}`,
+                runId: params.entityId === 'entity_search' ? '7' : '32',
+                signalName: params.entityId === 'entity_search' ? 'outcome' : 'sentiment',
+                topicId,
+                traceId: `trace-${topicId}`,
+                signalText: `Example for ${topicId}`,
+              },
+            ],
+          });
+        }),
+        http.get(`${ROOT}/entities/:entityId/points`, ({ params }) =>
+          HttpResponse.json({
+            ...pointsResponse,
+            runId: params.entityId === 'entity_search' ? '7' : '32',
+            points: [
+              {
+                ...pointsResponse.points[0],
+                exampleId: params.entityId === 'entity_search' ? 'ex-search-1' : 'ex-89',
+                runId: params.entityId === 'entity_search' ? '7' : '32',
+                signalName: params.entityId === 'entity_search' ? 'outcome' : 'sentiment',
+                topicId: params.entityId === 'entity_search' ? 'search-1' : '89',
+              },
+            ],
+          }),
+        ),
+      );
+
+      const { rerenderSignalDetailsPage } = renderSignalDetailsPage({ initialTopicId: '90' });
+
+      expect(await screen.findByRole('button', { name: /Satisfied resolutions/, pressed: true })).not.toBeNull();
+      fireEvent.click(screen.getByRole('tab', { name: 'Chart' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: /Satisfied resolutions/, checked: true }));
+      expect(screen.getByRole('checkbox', { name: /Satisfied resolutions/, checked: false })).not.toBeNull();
+
+      rerenderSignalDetailsPage({
+        entity: { entityType: 'tool', entityId: 'entity_search' },
+        signalId: 'outcome',
+        initialTopicId: null,
+      });
+
+      expect(await screen.findByText('Search successes')).not.toBeNull();
+      expect(screen.queryByText('Satisfied resolutions')).toBeNull();
+      expect(screen.getByRole('checkbox', { name: /Search successes/, checked: true })).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Trace list' }));
+      expect(await screen.findByRole('button', { name: /Search successes/, pressed: true })).not.toBeNull();
+      expect(await screen.findByText('Example for search-1')).not.toBeNull();
     });
   });
 

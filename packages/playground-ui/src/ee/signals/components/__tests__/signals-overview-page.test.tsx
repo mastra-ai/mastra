@@ -136,6 +136,22 @@ describe('SignalsOverviewPage', () => {
 
       expect(onSignalSelect).toHaveBeenCalledWith('sentiment', '89');
     });
+
+    it('calls onSignalSelect with only the signal name when See details is clicked', async () => {
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
+      );
+
+      const onSignalSelect = vi.fn();
+      renderOverview({ entityType: 'agent', entityId: 'entity_support' }, onSignalSelect);
+
+      const seeDetails = (await screen.findAllByRole('button', { name: /See details/ }))[0];
+      fireEvent.click(seeDetails);
+
+      expect(onSignalSelect).toHaveBeenCalledWith('sentiment');
+      expect(onSignalSelect).not.toHaveBeenCalledWith('sentiment', expect.any(String));
+    });
   });
 
   describe('when the entities request fails', () => {

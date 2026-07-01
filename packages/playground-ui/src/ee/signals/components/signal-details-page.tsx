@@ -357,12 +357,30 @@ export function SignalDetailsPage({
   } = useEntityTopics(resolvedEntity?.entityId, signalId, runId);
   const topics: EntityLearningTopic[] = topicsData?.topics ?? [];
 
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(initialTopicId ?? null);
-  const [selectedChartTopicIds, setSelectedChartTopicIds] = useState<string[] | null>(null);
+  const topicSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}:${initialTopicId ?? ''}`;
+  const chartSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}`;
+  const topicIds = useMemo(() => topics.map(topic => topic.topicId), [topics]);
+  const topicIdSet = useMemo(() => new Set(topicIds), [topicIds]);
+  const [selectedTopic, setSelectedTopic] = useState<{ scope: string; topicId: string | null }>(() => ({
+    scope: topicSelectionScope,
+    topicId: initialTopicId ?? null,
+  }));
+  const [selectedChartTopics, setSelectedChartTopics] = useState<{ scope: string; topicIds: string[] | null }>(() => ({
+    scope: chartSelectionScope,
+    topicIds: null,
+  }));
   const [activeTab, setActiveTab] = useState<SignalTab>('trace-list');
 
-  const selectedTopic = topics.find(topic => topic.topicId === selectedTopicId) ?? topics[0];
-  const chartTopicIds = selectedChartTopicIds ?? topics.map(topic => topic.topicId);
+  const requestedTopicId =
+    selectedTopic.scope === topicSelectionScope ? selectedTopic.topicId : (initialTopicId ?? null);
+  const resolvedTopicId = requestedTopicId && topicIdSet.has(requestedTopicId) ? requestedTopicId : topics[0]?.topicId;
+  const selectedTopicData = topics.find(topic => topic.topicId === resolvedTopicId);
+  const examplesEnabled = Boolean(resolvedEntity?.entityId && signalId && runId && selectedTopicData);
+  const pointsEnabled = Boolean(resolvedEntity?.entityId && signalId && runId);
+  const chartTopicIds =
+    selectedChartTopics.scope === chartSelectionScope && selectedChartTopics.topicIds
+      ? selectedChartTopics.topicIds.filter(topicId => topicIdSet.has(topicId))
+      : topicIds;
 
   const {
     data: examplesData,
@@ -371,8 +389,8 @@ export function SignalDetailsPage({
     isError: examplesError,
   } = useEntityTopicExamples(
     resolvedEntity?.entityId,
-    selectedTopic?.topicId,
-    runId && signalId ? { signalName: signalId, runId } : undefined,
+    selectedTopicData?.topicId,
+    examplesEnabled && runId && signalId ? { signalName: signalId, runId } : undefined,
   );
   const examples: EntityLearningTopicExample[] = examplesData?.examples ?? [];
   // Show the skeleton on the first load and while switching topics refetches,
@@ -381,7 +399,7 @@ export function SignalDetailsPage({
 
   const { data: pointsData, isError: pointsError } = useEntityPoints(
     resolvedEntity?.entityId,
-    runId && signalId ? { signalName: signalId, runId, includeOutliers: true } : undefined,
+    pointsEnabled && runId && signalId ? { signalName: signalId, runId, includeOutliers: true } : undefined,
   );
   const points: EntityLearningPoint[] = pointsData?.points ?? [];
 
@@ -390,10 +408,17 @@ export function SignalDetailsPage({
     onTraceSelect(signalId, traceId);
   };
 
+  const handleTopicSelect = (topicId: string) => {
+    setSelectedTopic({ scope: topicSelectionScope, topicId });
+  };
+
   const handleChartTopicToggle = (topicId: string) => {
-    setSelectedChartTopicIds(current => {
-      const base = current ?? topics.map(topic => topic.topicId);
-      return base.includes(topicId) ? base.filter(id => id !== topicId) : [...base, topicId];
+    setSelectedChartTopics(current => {
+      const base = current.scope === chartSelectionScope && current.topicIds ? current.topicIds : topicIds;
+      return {
+        scope: chartSelectionScope,
+        topicIds: base.includes(topicId) ? base.filter(id => id !== topicId) : [...base, topicId],
+      };
     });
   };
 
@@ -405,7 +430,7 @@ export function SignalDetailsPage({
     );
   }
 
-  if (entitiesError || topicsError || examplesError || pointsError) {
+  if (entitiesError || topicsError || (examplesEnabled && examplesError) || (pointsEnabled && pointsError)) {
     return (
       <SignalsLayout sidebar={null}>
         <p className="text-ui-md text-accent2">Failed to load this signal from the observability endpoint.</p>
@@ -413,7 +438,7 @@ export function SignalDetailsPage({
     );
   }
 
-  if (!resolvedEntity || !selectedTopic) {
+  if (!resolvedEntity || !selectedTopicData) {
     return <SignalsLayout sidebar={null}>Signal not found</SignalsLayout>;
   }
 
@@ -432,12 +457,12 @@ export function SignalDetailsPage({
             examples={examples}
             examplesLoading={examplesPending}
             points={points}
-            selectedTopicId={selectedTopic.topicId}
+            selectedTopicId={selectedTopicData.topicId}
             selectedTraceId={selectedTraceId}
             selectedChartTopicIds={chartTopicIds}
             activeTab={activeTab}
             onActiveTabChange={setActiveTab}
-            onTopicSelect={setSelectedTopicId}
+            onTopicSelect={handleTopicSelect}
             onChartTopicToggle={handleChartTopicToggle}
             onTraceSelect={handleTraceSelect}
           />
