@@ -73,5 +73,8 @@ describeForAllEngines(
       expect(toolResultChunk?.payload?.toolName).toBe('background-work');
     });
   },
+  // TODO(durable-parity): unskip after Phase 4 wires `runOutputProcessorsForToolChunks`
+  // into durable `llm-mapping` — the durable path currently doesn't emit a
+  // `tool-result` chunk for background-task tool results.
   { skip: ['durable'] },
 );
