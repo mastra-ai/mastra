@@ -13,8 +13,7 @@ Use this file as the default writing guide for Mastra's documentation.
 
 ## Keep docs current
 
-- Use current model names for providers such as OpenAI and Claude.
-- Check `packages/core/src/llm/model/provider-registry.json` for the latest models supported by Mastra.
+- When adding a model name or ID to docs, use a placeholder token from docs/src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time)
 
 ## Scope
 
@@ -49,6 +48,7 @@ Use this file as the default writing guide for Mastra's documentation.
 - When an instruction is opinionated, separate the required action from the opinionated choice used in the example.
 - Use `Ensure`, not `make sure`.
 - Use exclamation points rarely.
+- Do not use "Alpha" to mark early-stage features. Only use "Beta" (this also applies to the sidebars)
 
 ## Links and references
 

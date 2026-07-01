@@ -17,6 +17,7 @@ Mastra Code organizes its capabilities around these areas:
 - [**Configuration**](/configuration): Project-scoped threads, MCP servers, hooks, custom commands, skills, and database settings.
 - [**Terminal notifications**](/terminal-notifications): Show clickable notifications for Mastra Code running in an inactive terminal pane.
 - [**Customization**](/customization): Extend Mastra Code programmatically with custom modes, tools, subagents, and storage.
+- [**Headless mode**](/headless): Run Mastra Code non-interactively from your shell or from Node and CI with the `runMC` API.
 
 In this demo, you'll see Mastra Code in action:
 
@@ -94,20 +95,29 @@ Mastra Code provides built-in slash commands for managing sessions and settings:
 | `/name` | Rename the current thread |
 | `/models` | Switch model pack |
 | `/mode` | Switch or list modes |
-| `/goal` | Start, inspect, pause, resume, or clear a persistent goal |
-| `/judge` | Configure the judge model and attempt limit for goals |
+| `/goal` | Start, inspect, pause, resume, or clear a persistent goal (use `/goal judge` to configure the judge model and attempt limit) |
+| `/think` | Set the thinking level (off/low/medium/high/xhigh) |
 | `/permissions` | Configure tool approval permissions |
+| `/yolo` | Toggle YOLO mode (auto-approve all tools) |
 | `/settings` | Open the settings panel |
 | `/om` | Configure Observational Memory |
+| `/subagents` | Configure subagent model defaults |
 | `/skills` | List available skills |
 | `/skill/<name>` | Activate a specific skill |
 | `/cost` | Show token usage and costs |
 | `/diff` | Show modified files or git diff |
+| `/resource` | Show or switch the resource ID (tag for sharing) |
+| `/thread:tag-dir` | Tag the current thread with this directory |
 | `/sandbox` | Manage sandbox allowed paths |
 | `/review` | Review a GitHub pull request |
+| `/github` | Subscribe, sync, or debug GitHub PR signals |
 | `/report-issue` | Open or browse mastracode issues |
 | `/login` | Authenticate with OAuth provider |
 | `/logout` | Log out from an OAuth provider |
+| `/api-keys` | Manage API keys for model providers |
+| `/custom-providers` | Manage custom providers and models |
+| `/observability` | Configure cloud observability |
+| `/voice` | Toggle push-to-talk voice input |
 | `/setup` | Run the setup wizard |
 | `/theme` | Switch color theme (auto/dark/light) |
 | `/browser` | Configure browser automation |
@@ -149,4 +159,5 @@ Mastra Code is built on four layers:
 - [Tools](/tools)
 - [Configuration](/configuration)
 - [Customization](/customization)
+- [Headless mode](/headless)
 - [API reference](/reference)

@@ -14,61 +14,57 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * where prepareStep's activeTools is ignored or applied to the wrong step is
  * caught here.
  */
-describeForAllEngines(
-  'AIMock loop scenario: prepareStep per-step overrides',
-  engine => {
-    const getMock = useLoopScenarioAimock();
+describeForAllEngines('AIMock loop scenario: prepareStep per-step overrides', engine => {
+  const getMock = useLoopScenarioAimock();
 
-    it('applies per-step activeTools to each request', async () => {
-      const toolA = createTool({
-        id: 'tool_a',
-        description: 'Tool A, only active on step 0.',
-        inputSchema: z.object({}),
-        outputSchema: z.object({ ok: z.boolean() }),
-        execute: async () => ({ ok: true }),
-      });
-      const toolB = createTool({
-        id: 'tool_b',
-        description: 'Tool B, only active on step 1.',
-        inputSchema: z.object({}),
-        outputSchema: z.object({ ok: z.boolean() }),
-        execute: async () => ({ ok: true }),
-      });
-
-      const { requests } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Use the right tool for each step.',
-        tools: { tool_a: toolA, tool_b: toolB },
-        stopWhen: stepCountIs(3),
-        prepareStep: ({ stepNumber }: { stepNumber: number }) => ({
-          activeTools: stepNumber === 0 ? ['tool_a'] : ['tool_b'],
-        }),
-        fixtures: llm => {
-          // Step 0: call tool_a. Step 1: receive the result and finish.
-          llm.on(
-            { endpoint: 'chat', hasToolResult: false },
-            {
-              toolCalls: [{ id: 'call_a', name: 'tool_a', arguments: {} }],
-            },
-          );
-          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
-        },
-      });
-
-      expect(requests).toHaveLength(2);
-
-      const toolNames = (req: number) =>
-        ((requests[req]?.body as any)?.tools ?? []).map((t: any) => t.function?.name ?? t.name);
-
-      // Step 0 request exposes only tool_a.
-      expect(toolNames(0)).toContain('tool_a');
-      expect(toolNames(0)).not.toContain('tool_b');
-
-      // Step 1 request exposes only tool_b (the per-step override changed).
-      expect(toolNames(1)).toContain('tool_b');
-      expect(toolNames(1)).not.toContain('tool_a');
+  it('applies per-step activeTools to each request', async () => {
+    const toolA = createTool({
+      id: 'tool_a',
+      description: 'Tool A, only active on step 0.',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
     });
-  },
-  { skip: ['durable'] },
-);
+    const toolB = createTool({
+      id: 'tool_b',
+      description: 'Tool B, only active on step 1.',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Use the right tool for each step.',
+      tools: { tool_a: toolA, tool_b: toolB },
+      stopWhen: stepCountIs(3),
+      prepareStep: ({ stepNumber }: { stepNumber: number }) => ({
+        activeTools: stepNumber === 0 ? ['tool_a'] : ['tool_b'],
+      }),
+      fixtures: llm => {
+        // Step 0: call tool_a. Step 1: receive the result and finish.
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [{ id: 'call_a', name: 'tool_a', arguments: {} }],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+
+    const toolNames = (req: number) =>
+      ((requests[req]?.body as any)?.tools ?? []).map((t: any) => t.function?.name ?? t.name);
+
+    // Step 0 request exposes only tool_a.
+    expect(toolNames(0)).toContain('tool_a');
+    expect(toolNames(0)).not.toContain('tool_b');
+
+    // Step 1 request exposes only tool_b (the per-step override changed).
+    expect(toolNames(1)).toContain('tool_b');
+    expect(toolNames(1)).not.toContain('tool_a');
+  });
+});

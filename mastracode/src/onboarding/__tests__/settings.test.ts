@@ -67,6 +67,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       stagehand: { env: 'LOCAL' },
     },
     shellPassthrough: { mode: 'default' },
+    voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
     signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
@@ -101,6 +102,69 @@ function withTempSettingsFile(run: (filePath: string) => void): void {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+describe('voice settings parsing', () => {
+  it('back-compat: old { enabled }-only file gets engine + provider defaults', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ voice: { enabled: true } }), 'utf-8');
+
+      const { voice } = loadSettings(filePath);
+
+      expect(voice.enabled).toBe(true);
+      expect(voice.engine).toMatch(/^(macos-native|cloud)$/);
+      expect(voice.provider).toBe('openai');
+      expect(voice.model).toBe('whisper-1');
+    });
+  });
+
+  it('keeps a valid provider/model pair', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ voice: { enabled: true, engine: 'cloud', provider: 'groq', model: 'whisper-large-v3' } }),
+        'utf-8',
+      );
+
+      const { voice } = loadSettings(filePath);
+
+      expect(voice.engine).toBe('cloud');
+      expect(voice.provider).toBe('groq');
+      expect(voice.model).toBe('whisper-large-v3');
+    });
+  });
+
+  it('falls back to the provider default when the model is unknown', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ voice: { provider: 'groq', model: 'does-not-exist' } }), 'utf-8');
+
+      const { voice } = loadSettings(filePath);
+
+      expect(voice.provider).toBe('groq');
+      expect(voice.model).toBe('whisper-large-v3-turbo');
+    });
+  });
+
+  it('falls back to the global default for an unknown provider', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ voice: { provider: 'nope' } }), 'utf-8');
+
+      const { voice } = loadSettings(filePath);
+
+      expect(voice.provider).toBe('openai');
+      expect(voice.model).toBe('whisper-1');
+    });
+  });
+
+  it('rejects an invalid engine value', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ voice: { engine: 'bogus' } }), 'utf-8');
+
+      const { voice } = loadSettings(filePath);
+
+      expect(voice.engine).toMatch(/^(macos-native|cloud)$/);
+    });
+  });
+});
 
 describe('customProviders parsing/persistence', () => {
   it('returns defaults with empty customProviders when missing from settings file', () => {

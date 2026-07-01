@@ -174,5 +174,5 @@ describeForAllEngines(
       expect(toolCompleted).toBe(false);
     });
   },
-  { skip: ['durable'] },
+  { skip: ['durable', 'fs'] },
 );

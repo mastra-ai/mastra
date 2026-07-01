@@ -12,8 +12,8 @@ function createMockLocalFilesystem() {
   return { fs, setAllowedPaths: spy };
 }
 
-function createAgentControllerCtx() {
-  const getState = () => ({ sandboxAllowedPaths: [] });
+function createAgentControllerCtx(state: Record<string, unknown> = {}) {
+  const getState = () => ({ sandboxAllowedPaths: [], ...state });
   const setState = vi.fn();
   return {
     getState,

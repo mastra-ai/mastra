@@ -135,6 +135,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: 'false',
           },
           {
+            name: 'extract',
+            type: 'Extractor[]',
+            description:
+              'Custom values to extract after observation. Schema-less extractors are requested inline in the Observer output. Schema-backed extractors run as a follow-up structured output call and are stored in thread OM metadata.',
+            isOptional: true,
+          },
+          {
             name: 'observeAttachments',
             type: 'boolean | string[]',
             description:
@@ -268,6 +275,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             isOptional: true,
           },
           {
+            name: 'extract',
+            type: 'Extractor[]',
+            description:
+              'Custom values to extract after reflection. Schema-less extractors are requested inline in the Reflector output. Schema-backed extractors run as a follow-up structured output call and are stored in thread OM metadata.',
+            isOptional: true,
+          },
+          {
             name: 'observationTokens',
             type: 'number',
             description:
@@ -351,7 +365,118 @@ OM persists token payload estimates so repeated counting can reuse prior token e
 - Per-message and per-conversation overhead are always recomputed at runtime and aren't cached.
 - `data-*` and `reasoning` parts are skipped and don't receive cache entries.
 
+## Extractor API
+
+`Extractor` defines a value that OM should extract during observation or reflection. Built-in OM values such as `current-task`, `suggested-response`, and `thread-title` use the same extractor pipeline as custom values.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory, Extractor } from '@mastra/memory'
+import { z } from 'zod'
+
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      observation: {
+        extract: [
+          new Extractor({
+            name: 'User profile',
+            instructions: 'Extract stable user profile facts that should be remembered.',
+            schema: z.object({
+              name: z.string().optional(),
+              timezone: z.string().optional(),
+            }),
+          }),
+        ],
+      },
+    },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      'Human-readable extractor name. OM slugifies this value into the extractor slug. Names must be unique after slug generation.',
+  },
+  {
+    name: 'slug',
+    type: 'string',
+    description:
+      'Generated stable identifier for persisted values and XML tags. Slugs use lowercase letters, numbers, and hyphens. Built-in slugs and reserved XML tags cannot be used by custom extractors.',
+  },
+  {
+    name: 'instructions',
+    type: 'string | (context) => string',
+    description:
+      'Instructions for what to extract and when to update the value. Use a function to derive instructions from runtime context.',
+  },
+  {
+    name: 'schema',
+    type: 'ZodType<T> | (context) => ZodType<T> | undefined',
+    description:
+      'Optional Zod schema for structured extraction. When provided, OM runs a follow-up structured output call after the main OM operation. When omitted, the extractor is an inline string extractor emitted in the Observer or Reflector response. Use a function to derive the schema from runtime context.',
+    isOptional: true,
+  },
+  {
+    name: 'includePreviousExtraction',
+    type: 'boolean',
+    description:
+      'Controls whether the previous extraction is shown to the extractor on future OM runs. Set to `false` for values that should only come from the current OM run.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'onExtracted',
+    type: '(context) => T | void | Promise<T | void>',
+    description:
+      'Optional hook called after a custom extractor returns a value and before metadata is persisted. Returning a value replaces the extracted value. Throwing records an extraction failure.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Extraction behavior
+
+- Extracted values are stored in thread OM metadata under `om.extracted`.
+- Built-in extractor values are also mirrored to the compatibility metadata fields `currentTask`, `suggestedResponse`, and `threadTitle`.
+- `thread-title` updates the thread title only when `observation.threadTitle` is enabled.
+- `observation.extract` runs during observation. `reflection.extract` runs during reflection.
+- Schema-backed extractors add a follow-up structured output request.
+- Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector output.
+- Dynamic extractor functions receive runtime context, including `source`, `threadId`, `resourceId`, `mainAgent`, `memory`, and `requestContext` when available.
+- `WorkingMemoryExtractor` uses the normal extractor pipeline to update working memory through the active `Memory` instance. It uses structured extraction when working memory has a JSON schema and skips OM metadata persistence, so the working memory payload isn't duplicated under OM extracted metadata.
+- `observationalMemory.observation.manageWorkingMemory` adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true` when working memory is enabled.
+- Extraction failures are reported in OM marker data and do not discard other successful extracted values.
+
 ## Examples
+
+### Working memory updates
+
+Use `observationalMemory.observation.manageWorkingMemory` when OM should update working memory.
+
+```typescript title="src/mastra/agents/agent.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+    },
+    observationalMemory: {
+      enabled: true,
+      observation: {
+        manageWorkingMemory: true,
+      },
+    },
+  },
+})
+```
+
+Set `workingMemory.agentManaged: true` if the main agent should still receive working memory tool and instruction injection.
 
 ### Resource scope with custom thresholds (experimental)
 
@@ -688,6 +813,18 @@ Emitted when observation or reflection completes successfully.
     description: 'Suggested response extracted by the Observer.',
     isOptional: true,
   },
+  {
+    name: 'extractedValues',
+    type: 'Record<string, unknown>',
+    description: 'Values extracted during this OM operation, keyed by extractor slug.',
+    isOptional: true,
+  },
+  {
+    name: 'extractionFailures',
+    type: 'Array<{ slug: string; error: string }>',
+    description: 'Extractor failures from this OM operation. Successful extractor values are still included.',
+    isOptional: true,
+  },
   { name: 'recordId', type: 'string', description: 'The OM record ID.' },
   { name: 'threadId', type: 'string', description: "This thread's ID." },
 ]}
@@ -745,6 +882,18 @@ Emitted when async buffering completes. The content is stored but not yet activa
     description: 'Observation tokens (output) after the Observer compressed them.',
   },
   { name: 'observations', type: 'string', description: 'The buffered content.', isOptional: true },
+  {
+    name: 'extractedValues',
+    type: 'Record<string, unknown>',
+    description: 'Values extracted during this buffered OM operation, keyed by extractor slug.',
+    isOptional: true,
+  },
+  {
+    name: 'extractionFailures',
+    type: 'Array<{ slug: string; error: string }>',
+    description: 'Extractor failures from this buffered OM operation. Successful extractor values are still included.',
+    isOptional: true,
+  },
   { name: 'recordId', type: 'string', description: 'The OM record ID.' },
   { name: 'threadId', type: 'string', description: "This thread's ID." },
 ]}

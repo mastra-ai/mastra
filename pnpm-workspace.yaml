@@ -106,6 +106,9 @@ trustPolicyExclude:
   - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
+  # Required for the Mesa workspace filesystem provider. 0.38.0 is published
+  # without the trusted-publisher evidence that older @mesadev/sdk versions had.
+  - '@mesadev/sdk@0.38.0'
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
@@ -253,4 +256,6 @@ allowBuilds:
   sqlite3: false
   ssh2: false
   unrs-resolver: false
+  '@mongodb-js/zstd': false
+  node-liblzma: false
   workerd: false

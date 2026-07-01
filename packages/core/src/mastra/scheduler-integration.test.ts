@@ -75,7 +75,6 @@ describe('Mastra — workflow scheduler integration', () => {
 
   it('does not instantiate the scheduler when no schedules are configured', async () => {
     const storage = new MockStore();
-    const getStoreSpy = vi.spyOn(storage, 'getStore');
 
     const mastra = new Mastra({
       logger: false,
@@ -86,16 +85,16 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.startWorkers();
     await flushAsyncInit();
 
+    // The schedules store may be touched on boot to check for existing
+    // heartbeat rows (cold-boot rehydration via #detectExistingHeartbeats).
+    // What matters is that the scheduler itself never spins up.
     expect(mastra.scheduler).toBeUndefined();
-    // Prove the scheduler never touched the schedules domain.
-    expect(getStoreSpy.mock.calls.some(call => call[0] === 'schedules')).toBe(false);
 
     await mastra.shutdown();
   });
 
   it('does not instantiate the scheduler when only unscheduled workflows are registered', async () => {
     const storage = new MockStore();
-    const getStoreSpy = vi.spyOn(storage, 'getStore');
 
     const wf = createDefaultWorkflow({
       id: 'plain-wf',
@@ -121,8 +120,9 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.startWorkers();
     await flushAsyncInit();
 
+    // As above, boot-time cold rehydration may probe the schedules store;
+    // the invariant under test is that no scheduler worker is created.
     expect(mastra.scheduler).toBeUndefined();
-    expect(getStoreSpy.mock.calls.some(call => call[0] === 'schedules')).toBe(false);
 
     await mastra.shutdown();
   });

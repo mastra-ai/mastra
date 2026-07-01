@@ -553,6 +553,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   args: inputData.args,
                 },
                 __streamState: streamState.serialize(),
+                __agentId: agentId,
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -674,6 +675,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args: inputData.args,
                   },
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
                   // Persist the inner suspended run id in the workflow snapshot, partitioned
                   // per tool call (resumeLabel = toolCallId). The shared per-message
                   // pendingToolApprovals metadata is keyed by toolName and flushed/rehydrated
@@ -725,6 +727,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                 },
@@ -1161,51 +1164,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     }
                   }
                 },
-                // Execution injector — updates the existing tool-invocation in the
-                // message list (keyed by toolCallId) background task startedAt.
+                // Execution injector — records background task lifecycle metadata on the
+                // assistant message without changing the model-visible tool result.
                 onExecution: async params => {
-                  const inputTransform = await transformToolPayloadForTargets(
-                    {
-                      phase: 'input-available',
-                      toolName: params.toolName,
-                      toolCallId: params.toolCallId,
-                      input: args,
-                      providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
-                    },
-                    transformSource,
-                    logger,
-                  );
-                  const transformCarrier = withToolPayloadTransformMetadata(
-                    { metadata: {} as Record<string, any> },
-                    inputTransform,
-                  );
-                  const providerMetadata = withToolPayloadTransformProviderMetadata(
-                    inputData.providerMetadata as ProviderMetadata | undefined,
-                    transformCarrier.metadata,
-                  ) as ProviderMetadata | undefined;
-
-                  messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        state: 'call',
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args,
-                      },
-                      ...(providerMetadata ? { providerMetadata } : {}),
-                    },
-                    {
-                      mode: 'stream',
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          suspendedAt: params.suspendedAt,
-                          taskId: params.taskId,
-                        },
+                  messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+                    mode: 'stream',
+                    backgroundTasks: {
+                      [params.toolCallId]: {
+                        startedAt: params.startedAt,
+                        suspendedAt: params.suspendedAt,
+                        taskId: params.taskId,
                       },
                     },
-                  );
+                  });
                 },
 
                 // Per-task callbacks

@@ -14,6 +14,57 @@ function stripAnsi(text: string): string {
 }
 
 describe('ToolExecutionComponentEnhanced quiet display', () => {
+  it('shows the latest lines from partial generic tool progress in quiet mode', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'mastra_expert',
+      { question: 'How does tool streaming work?' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult(
+      {
+        content: [
+          {
+            type: 'text',
+            text: [
+              'Task: How does tool streaming work?',
+              '───',
+              '✓ view {"path":"knowledge/features/tools/README.md"}',
+              '⋯ search_content {"pattern":"createTool"}',
+            ].join('\n'),
+          },
+        ],
+        isError: false,
+      },
+      true,
+    );
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('✓ view {"path":"knowledge/features/tools/README.md"}');
+    expect(visible).toContain('⋯ search_content {"pattern":"createTool"}');
+    expect(visible).not.toContain('Task: How does tool streaming work?');
+  });
+
+  it('keeps completed generic tool previews compact in quiet mode', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'mastra_expert',
+      { question: 'How does tool streaming work?' },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateResult({
+      content: [{ type: 'text', text: ['first', 'second', 'third'].join('\n') }],
+      isError: false,
+    });
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('first');
+    expect(visible).toContain('second');
+    expect(visible).not.toContain('third');
+  });
+
   it('renders quiet view tools with a path range summary and content preview', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',

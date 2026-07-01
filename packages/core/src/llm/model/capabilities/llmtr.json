@@ -1,3 +1,4 @@
 {
-  "attachment": ["medgemma-4b", "qwen3-6-35b"]
+  "attachment": ["medgemma-4b", "qwen3-6-35b"],
+  "temperature": ["gemma-4", "magibu-11b-v8", "medgemma-4b", "qwen3-6-35b", "sincap", "trendyol-7b"]
 }

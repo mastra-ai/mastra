@@ -22,6 +22,7 @@ export const RESOURCES = [
   'datasets',
   'embedders',
   'experiments',
+  'heartbeats',
   'infrastructure',
   'logs',
   'mcp',
@@ -108,6 +109,8 @@ export const PERMISSION_PATTERNS = {
   'embedders:*': 'embedders:*',
   /** Full access to experiments */
   'experiments:*': 'experiments:*',
+  /** Full access to heartbeats */
+  'heartbeats:*': 'heartbeats:*',
   /** Full access to infrastructure */
   'infrastructure:*': 'infrastructure:*',
   /** Full access to logs */
@@ -196,6 +199,14 @@ export const PERMISSION_PATTERNS = {
   'embedders:read': 'embedders:read',
   /** View experiments */
   'experiments:read': 'experiments:read',
+  /** Delete heartbeats */
+  'heartbeats:delete': 'heartbeats:delete',
+  /** Execute heartbeats */
+  'heartbeats:execute': 'heartbeats:execute',
+  /** View heartbeats */
+  'heartbeats:read': 'heartbeats:read',
+  /** Create and modify heartbeats */
+  'heartbeats:write': 'heartbeats:write',
   /** View infrastructure */
   'infrastructure:read': 'infrastructure:read',
   /** View logs */
@@ -366,6 +377,10 @@ export const PERMISSIONS = [
   'datasets:write',
   'embedders:read',
   'experiments:read',
+  'heartbeats:delete',
+  'heartbeats:execute',
+  'heartbeats:read',
+  'heartbeats:write',
   'infrastructure:read',
   'logs:read',
   'mcp:execute',
@@ -484,6 +499,14 @@ export const MastraFGAPermissions = {
   EMBEDDERS_READ: 'embedders:read',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
+  /** Delete heartbeats */
+  HEARTBEATS_DELETE: 'heartbeats:delete',
+  /** Execute heartbeats */
+  HEARTBEATS_EXECUTE: 'heartbeats:execute',
+  /** View heartbeats */
+  HEARTBEATS_READ: 'heartbeats:read',
+  /** Create and modify heartbeats */
+  HEARTBEATS_WRITE: 'heartbeats:write',
   /** View infrastructure */
   INFRASTRUCTURE_READ: 'infrastructure:read',
   /** View logs */

@@ -40,6 +40,7 @@ import {
   handleUpdateCommand,
   handleMemoryGatewayCommand,
   handleApiKeysCommand,
+  handlePluginsCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
   handleGithubCommand,
@@ -185,7 +186,7 @@ export async function dispatchSlashCommand(
       handleYoloCommand(ctx);
       return true;
     case 'voice':
-      handleVoiceCommand(ctx);
+      await handleVoiceCommand(ctx, args);
       return true;
     case 'settings':
       await handleSettingsCommand(ctx);
@@ -243,6 +244,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'api-keys':
       await handleApiKeysCommand(buildCtx());
+      return true;
+    case 'plugins':
+      await handlePluginsCommand(buildCtx(), args);
       return true;
     case 'feedback':
       await handleFeedbackCommand(buildCtx(), args);
