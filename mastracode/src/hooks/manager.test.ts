@@ -123,6 +123,20 @@ describe('HookManager run_id propagation', () => {
     expect(mocks.runHooksForEvent).not.toHaveBeenCalled();
   });
 
+  it('returns a fresh empty result for each skipped hook call', async () => {
+    const mgr = createManager();
+
+    const first = await mgr.runAgentStart();
+    first.results.push({ hook: { type: 'command', command: 'mutated' }, exitCode: 0, timedOut: false, durationMs: 0 });
+    first.warnings.push('mutated');
+
+    const second = await mgr.runAgentStart();
+
+    expect(second.results).toEqual([]);
+    expect(second.warnings).toEqual([]);
+    expect(second).not.toBe(first);
+  });
+
   it('fires AgentStart with run_id when hooks and run_id are both present', async () => {
     const mgr = createManager({
       AgentStart: [{ type: 'command', command: 'echo test' }],
@@ -153,18 +167,58 @@ describe('HookManager run_id propagation', () => {
     expect(stdin.tool_input).toEqual({ command: 'rm -rf /' });
   });
 
-  it('fires Interrupt with reason', async () => {
+  it('skips PermissionResult when no run_id is active', async () => {
+    const mgr = createManager({
+      PermissionResult: [{ type: 'command', command: 'echo test' }],
+    });
+
+    const result = await mgr.runPermissionResult('tool_approval', 'call-1', 'execute_command', 'approved');
+
+    expect(result.allowed).toBe(true);
+    expect(mocks.runHooksForEvent).not.toHaveBeenCalled();
+  });
+
+  it('fires PermissionResult with decision context and run_id', async () => {
+    const mgr = createManager({
+      PermissionResult: [{ type: 'command', command: 'echo test' }],
+    });
+    mgr.setRunId('run-uuid-8');
+
+    await mgr.runPermissionResult('tool_approval', 'call-1', 'execute_command', 'approved', { command: 'npm test' });
+
+    const stdin = mocks.runHooksForEvent.mock.calls[0][1];
+    expect(stdin.hook_event_name).toBe('PermissionResult');
+    expect(stdin.run_id).toBe('run-uuid-8');
+    expect(stdin.permission_kind).toBe('tool_approval');
+    expect(stdin.tool_call_id).toBe('call-1');
+    expect(stdin.tool_name).toBe('execute_command');
+    expect(stdin.decision).toBe('approved');
+    expect(stdin.tool_input).toEqual({ command: 'npm test' });
+  });
+
+  it('skips Interrupt when no run_id is active', async () => {
     const mgr = createManager({
       Interrupt: [{ type: 'command', command: 'echo test' }],
     });
-    mgr.setRunId('run-uuid-8');
+
+    const result = await mgr.runInterrupt('user_interrupt');
+
+    expect(result.allowed).toBe(true);
+    expect(mocks.runHooksForEvent).not.toHaveBeenCalled();
+  });
+
+  it('fires Interrupt with reason and run_id', async () => {
+    const mgr = createManager({
+      Interrupt: [{ type: 'command', command: 'echo test' }],
+    });
+    mgr.setRunId('run-uuid-9');
 
     await mgr.runInterrupt('user_interrupt');
 
     const stdin = mocks.runHooksForEvent.mock.calls[0][1];
     expect(stdin.hook_event_name).toBe('Interrupt');
     expect(stdin.reason).toBe('user_interrupt');
-    expect(stdin.run_id).toBe('run-uuid-8');
+    expect(stdin.run_id).toBe('run-uuid-9');
   });
 
   it('fires SubagentStart and SubagentEnd with delegation context', async () => {

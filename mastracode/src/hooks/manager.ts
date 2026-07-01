@@ -26,7 +26,7 @@ import type {
   InterruptReason,
 } from './types.js';
 
-const EMPTY_RESULT: HookEventResult = { allowed: true, results: [], warnings: [] };
+const emptyResult = (): HookEventResult => ({ allowed: true, results: [], warnings: [] });
 
 export class HookManager {
   private config: HooksConfig;
@@ -113,7 +113,7 @@ export class HookManager {
   async runPreToolUse(toolName: string, toolInput: unknown): Promise<HookEventResult> {
     const hooks = this.config.PreToolUse;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinToolEvent = {
@@ -133,7 +133,7 @@ export class HookManager {
   ): Promise<HookEventResult> {
     const hooks = this.config.PostToolUse;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinToolEvent = {
@@ -150,7 +150,7 @@ export class HookManager {
   async runUserPromptSubmit(userMessage: string): Promise<HookEventResult> {
     const hooks = this.config.UserPromptSubmit;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinUserPrompt = {
@@ -167,7 +167,7 @@ export class HookManager {
   ): Promise<HookEventResult> {
     const hooks = this.config.Stop;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinStop = {
@@ -182,7 +182,7 @@ export class HookManager {
   async runSessionStart(): Promise<HookEventResult> {
     const hooks = this.config.SessionStart;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinSession = {
@@ -194,7 +194,7 @@ export class HookManager {
   async runSessionEnd(): Promise<HookEventResult> {
     const hooks = this.config.SessionEnd;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinSession = {
@@ -229,11 +229,11 @@ export class HookManager {
   async runAgentStart(): Promise<HookEventResult> {
     const hooks = this.config.AgentStart;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
     const runId = this.runId;
     if (!runId) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinAgentStart = {
@@ -247,11 +247,11 @@ export class HookManager {
   async runAgentEnd(stopReason: 'complete' | 'aborted' | 'error' | 'suspended'): Promise<HookEventResult> {
     const hooks = this.config.AgentEnd;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
     const runId = this.runId;
     if (!runId) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinAgentEnd = {
@@ -271,11 +271,11 @@ export class HookManager {
   ): Promise<HookEventResult> {
     const hooks = this.config.PermissionRequest;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
     const runId = this.runId;
     if (!runId) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinPermissionRequest = {
@@ -299,11 +299,17 @@ export class HookManager {
   ): Promise<HookEventResult> {
     const hooks = this.config.PermissionResult;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
+    }
+
+    const runId = this.runId;
+    if (!runId) {
+      return emptyResult();
     }
 
     const stdin: HookStdinPermissionResult = {
       ...this.baseStdinFields('PermissionResult'),
+      run_id: runId,
       permission_kind: permissionKind,
       tool_call_id: toolCallId,
       tool_name: toolName,
@@ -317,11 +323,17 @@ export class HookManager {
   async runInterrupt(reason: InterruptReason): Promise<HookEventResult> {
     const hooks = this.config.Interrupt;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
+    }
+
+    const runId = this.runId;
+    if (!runId) {
+      return emptyResult();
     }
 
     const stdin: HookStdinInterrupt = {
       ...this.baseStdinFields('Interrupt'),
+      run_id: runId,
       reason,
     };
 
@@ -337,11 +349,11 @@ export class HookManager {
   ): Promise<HookEventResult> {
     const hooks = this.config.SubagentStart;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
     const runId = this.runId;
     if (!runId) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinSubagentStart = {
@@ -366,11 +378,11 @@ export class HookManager {
   ): Promise<HookEventResult> {
     const hooks = this.config.SubagentEnd;
     if (!hooks || hooks.length === 0) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
     const runId = this.runId;
     if (!runId) {
-      return EMPTY_RESULT;
+      return emptyResult();
     }
 
     const stdin: HookStdinSubagentEnd = {

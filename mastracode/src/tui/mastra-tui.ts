@@ -1004,6 +1004,15 @@ export class MastraTUI {
       case 'tool_approval_required':
         hookMgr.runPermissionRequest('tool_approval', event.toolCallId, event.toolName, event.args).catch(() => {});
         break;
+      case 'tool_suspended': {
+        const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+        if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+          hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
+        } else if (event.toolName === 'submit_plan') {
+          hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
+        }
+        break;
+      }
       case 'subagent_start':
         hookMgr
           .runSubagentStart(event.toolCallId, event.agentType, event.task, event.modelId, event.forked)

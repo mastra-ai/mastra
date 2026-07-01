@@ -179,6 +179,9 @@ async function prepareTerminalRun(
 
   seedSettings(isolatedHome, scenario.useOpenAIModel === true, openAiApiKey);
   await initializeStorage(dbPath);
+  if (scenario.projectFixture === 'long-branch') createLongBranchProject(projectDir);
+  else createBasicProject(projectDir);
+
   const scenarioContext = {
     appDataDir: isolatedAppDataDir,
     dbPath,
@@ -188,8 +191,6 @@ async function prepareTerminalRun(
   };
   await scenario.prepare?.(scenarioContext);
 
-  if (scenario.projectFixture === 'long-branch') createLongBranchProject(projectDir);
-  else createBasicProject(projectDir);
   const launchCwd = projectDir;
 
   const env: Record<string, string | null> = {

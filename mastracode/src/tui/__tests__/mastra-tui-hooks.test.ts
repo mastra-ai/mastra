@@ -291,6 +291,53 @@ describe('MastraTUI hook wiring', () => {
     });
   });
 
+  it('fires PermissionRequest on sandbox access suspension with suspend payload', async () => {
+    const runPermissionRequest = vi.fn().mockResolvedValue(createHookResult());
+    const tui = createBareTui({ runPermissionRequest });
+    const suspendPayload = { kind: 'sandbox_access_request', path: '/tmp/project', reason: 'read files' };
+
+    await tui.handleEvent({
+      type: 'tool_suspended',
+      toolCallId: 'call-2',
+      toolName: 'request_access',
+      args: { path: '/tmp/project', reason: 'read files' },
+      suspendPayload,
+    });
+
+    expect(runPermissionRequest).toHaveBeenCalledWith('sandbox_access', 'call-2', 'request_access', suspendPayload);
+  });
+
+  it('fires PermissionRequest on plan approval suspension with suspend payload', async () => {
+    const runPermissionRequest = vi.fn().mockResolvedValue(createHookResult());
+    const tui = createBareTui({ runPermissionRequest });
+    const suspendPayload = { path: '.mastracode/plans/change.md' };
+
+    await tui.handleEvent({
+      type: 'tool_suspended',
+      toolCallId: 'call-3',
+      toolName: 'submit_plan',
+      args: { path: '.mastracode/plans/change.md' },
+      suspendPayload,
+    });
+
+    expect(runPermissionRequest).toHaveBeenCalledWith('plan_approval', 'call-3', 'submit_plan', suspendPayload);
+  });
+
+  it('does not fire PermissionRequest on ask_user suspension', async () => {
+    const runPermissionRequest = vi.fn().mockResolvedValue(createHookResult());
+    const tui = createBareTui({ runPermissionRequest });
+
+    await tui.handleEvent({
+      type: 'tool_suspended',
+      toolCallId: 'call-4',
+      toolName: 'ask_user',
+      args: { question: 'Continue?' },
+      suspendPayload: { question: 'Continue?' },
+    });
+
+    expect(runPermissionRequest).not.toHaveBeenCalled();
+  });
+
   it('fires SubagentStart on subagent_start with delegation context', async () => {
     const runSubagentStart = vi.fn().mockResolvedValue(createHookResult());
     const tui = createBareTui({ runSubagentStart });

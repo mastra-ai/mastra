@@ -357,7 +357,7 @@ Hook processes receive a JSON payload on stdin with context about the event:
 }
 ```
 
-During an active agent run, all hook payloads include a `run_id` that identifies the current run. The same `run_id` appears on `AgentStart`, tool hooks, `PermissionRequest`, `SubagentStart`, `SubagentEnd`, `AgentEnd`, and `Stop` for that run, so external integrations can correlate events. `Interrupt` and `PermissionResult` include `run_id` when a run is active.
+During an active agent run, all hook payloads include a `run_id` that identifies the current run. The same `run_id` appears on `AgentStart`, tool hooks, `PermissionRequest`, `PermissionResult`, `Interrupt`, `SubagentStart`, `SubagentEnd`, `AgentEnd`, and `Stop` for that run, so external integrations can correlate events.
 
 A `PermissionRequest` payload includes the tool and approval kind:
 

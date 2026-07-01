@@ -148,7 +148,7 @@ export type PermissionDecision = 'approved' | 'declined' | 'dismissed' | 'auto_a
 
 export interface HookStdinPermissionResult extends HookStdinBase {
   hook_event_name: 'PermissionResult';
-  run_id?: string;
+  run_id: string;
   permission_kind: PermissionKind;
   tool_call_id: string;
   tool_name: string;
@@ -160,7 +160,7 @@ export type InterruptReason = 'user_interrupt' | 'goal_judge_interrupt' | 'proce
 
 export interface HookStdinInterrupt extends HookStdinBase {
   hook_event_name: 'Interrupt';
-  run_id?: string;
+  run_id: string;
   reason: InterruptReason;
 }
 

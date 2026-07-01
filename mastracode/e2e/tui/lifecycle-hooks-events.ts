@@ -16,6 +16,7 @@ export const lifecycleHooksEventsScenario: McE2eScenario = {
   description:
     'Configure lifecycle hooks, run an agent, interrupt it, and verify AgentStart, AgentEnd, and Interrupt events carry the same run_id.',
   testName: 'emits AgentStart, AgentEnd, and Interrupt lifecycle hooks with a shared run_id',
+  projectFixture: 'long-branch',
   useOpenAIModel: true,
   aimockFixture: 'lifecycle-hooks-events.json',
   env() {
