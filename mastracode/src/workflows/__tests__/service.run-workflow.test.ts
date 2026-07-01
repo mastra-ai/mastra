@@ -27,6 +27,7 @@ import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { runWorkflowTool } from '../../tools/workflows/run-workflow.js';
 import { runWorkflow } from '../service.js';
 
 // ============================================================================
@@ -238,6 +239,46 @@ async function buildMastraWithMemoryProcessor(): Promise<Mastra> {
 
   return mastra;
 }
+
+// ============================================================================
+// Tool-boundary reproduction: `run-workflow` chat tool must forward
+// requestContext into the service. Without this, chat-driven runs (LLM invokes
+// the tool) blow up with "No model selected" even though /workflows run works.
+// ============================================================================
+
+describe('run-workflow chat tool — forwards requestContext to service', () => {
+  let mastra: Mastra;
+
+  beforeEach(async () => {
+    mastra = await buildMastra();
+  });
+
+  it('succeeds when the tool is invoked with a populated requestContext (mirroring code-agent turn)', async () => {
+    const rc = new RequestContext();
+    rc.set('controller', { session: { modelId: 'openai/gpt-5.5' }, state: {} });
+
+    const result = (await (runWorkflowTool as any).execute(
+      { workflowId: WORKFLOW_ID, inputData: { name: 'Tony' } },
+      { mastra, requestContext: rc },
+    )) as { status: string; result?: { text?: string }; error?: unknown };
+
+    if (result.status !== 'success') {
+      throw new Error(`Expected success, got ${result.status}. error=${JSON.stringify(result.error)}`);
+    }
+    expect(result.result?.text).toBeDefined();
+  });
+
+  it('fails the same way as the service when requestContext is empty (regression guard for the seam)', async () => {
+    const rc = new RequestContext();
+    const result = (await (runWorkflowTool as any).execute(
+      { workflowId: WORKFLOW_ID, inputData: { name: 'Tony' } },
+      { mastra, requestContext: rc },
+    )) as { status: string; error?: { message?: string } };
+
+    expect(result.status).toBe('failed');
+    expect(result.error?.message ?? '').toContain('No model selected');
+  });
+});
 
 // ============================================================================
 // Third reproduction: onEvent callback wiring

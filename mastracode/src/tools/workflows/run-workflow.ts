@@ -20,9 +20,14 @@ export const runWorkflowTool = createTool({
     result: z.any().optional(),
     error: z.any().optional(),
   }),
-  execute: async ({ workflowId, inputData }, { mastra }) => {
+  execute: async ({ workflowId, inputData }, { mastra, requestContext }) => {
     if (!mastra) throw new Error('run-workflow requires a Mastra context.');
-    const result = await runWorkflow(mastra as unknown as Mastra, workflowId, inputData);
+    // Forward the caller's requestContext so agent steps (code-agent's
+    // getDynamicModel + memory processors) can resolve. When code-agent
+    // invokes this tool, requestContext already contains its `controller`
+    // and `MastraMemory` bindings — same shape /workflows run builds
+    // synthetically. See packages/core/src/tools/tool.ts:389-406.
+    const result = await runWorkflow(mastra as unknown as Mastra, workflowId, inputData, requestContext);
     return { status: result.status, result: result.result, error: result.error };
   },
 });
