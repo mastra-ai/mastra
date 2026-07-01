@@ -71,5 +71,8 @@ om-reflector-fixture.json
 .dev/lima
 .mastracode/*
 !.mastracode/commands/
-!.mastracode/commands/gh-issue-triage.md
+!.mastracode/commands/gh-triage.md
+!.mastracode/shared/
+!.mastracode/shared/pr-review-context.md
+!.mastracode/shared/issue-debug-context.md
 .tmp-mc-e2e-vitest/
