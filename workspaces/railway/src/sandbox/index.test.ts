@@ -328,9 +328,6 @@ describe('RailwaySandbox', () => {
     it('refreshes the checkpoint shortly before the sandbox idle timeout', async () => {
       vi.useFakeTimers();
       mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
-      mockCheckpoints
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ id: 'old-checkpoint', key: 'mastracode-repo-abc123', environmentId: 'env-1' }]);
 
       const sandbox = new RailwaySandbox({
         token: 'tok',
@@ -343,7 +340,7 @@ describe('RailwaySandbox', () => {
 
       await vi.advanceTimersByTimeAsync(50_000);
 
-      expect(mockDeleteCheckpoint).toHaveBeenCalledWith('old-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockDeleteCheckpoint).not.toHaveBeenCalled();
       expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(2);
       expect(mockSandbox.checkpoint).toHaveBeenLastCalledWith('mastracode-repo-abc123');
     });

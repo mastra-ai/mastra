@@ -356,8 +356,6 @@ export class RailwaySandbox extends MastraSandbox {
       return;
     }
 
-    await this._deleteCheckpointByName(this._checkpointName);
-
     try {
       this.logger.debug(`${LOG_PREFIX} Capturing Railway sandbox checkpoint ${this._checkpointName} for: ${this.id}`);
       await sandbox.checkpoint(this._checkpointName);
