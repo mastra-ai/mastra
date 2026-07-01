@@ -27,7 +27,8 @@ export const MODEL_TOKENS: Record<string, string> = {
   __AI_SDK_ANTHROPIC_MODEL_SONNET__: 'claude-sonnet-4-6',
 
   // Google
-  __GATEWAY_GOOGLE_MODEL__: 'google/gemini-2.5-flash',
+  __GATEWAY_GOOGLE_MODEL__: 'google/gemini-2.5-pro',
+  __GATEWAY_GOOGLE_MODEL_FLASH__: 'google/gemini-2.5-flash',
 
   // Alibaba
   __GATEWAY_ALIBABA_MODEL__: 'alibaba/qwen-max',
