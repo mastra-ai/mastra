@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { LogMessage } from '../client/client';
@@ -7,23 +8,78 @@ import { MCPClient } from '../client/configuration';
 // Increase test timeout for server operations
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
+const WEATHER_FIXTURE_HOST = '127.0.0.1';
+
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+
+    server.unref();
+    server.on('error', reject);
+    server.listen(0, WEATHER_FIXTURE_HOST, () => {
+      const address = server.address();
+      server.close(error => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (!address || typeof address === 'string') {
+          reject(new Error('Could not allocate a test port'));
+          return;
+        }
+
+        resolve(address.port);
+      });
+    });
+  });
+}
+
+async function stopWeatherServer(process?: ReturnType<typeof spawn>): Promise<void> {
+  if (!process || process.killed || process.exitCode !== null || process.signalCode !== null) {
+    return;
+  }
+
+  await new Promise<void>(resolve => {
+    const timeout = setTimeout(resolve, 5000);
+    process.once('exit', () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    process.kill('SIGINT');
+  });
+}
+
 describe('MCP Server Logging', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let weatherProcess: ReturnType<typeof spawn>;
   let weatherServerPort: number;
   beforeAll(async () => {
-    weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
+    weatherServerPort = await getAvailablePort();
 
     // Start the weather SSE server
     weatherProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-      env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) },
+      env: {
+        ...process.env,
+        WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST,
+        WEATHER_SERVER_PORT: String(weatherServerPort),
+      },
     });
 
     // Wait for SSE server to be ready
     let resolved = false;
     await new Promise<void>((resolve, reject) => {
-      weatherProcess.on(`exit`, () => {
-        if (!resolved) reject();
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          reject(new Error(`Timed out waiting for weather fixture server on port ${weatherServerPort}`));
+        }
+      }, 15000);
+
+      weatherProcess.on(`exit`, (code, signal) => {
+        if (!resolved) {
+          clearTimeout(timeout);
+          reject(new Error(`Weather fixture server exited before startup with code ${code} and signal ${signal}`));
+        }
       });
       if (weatherProcess.stderr) {
         weatherProcess.stderr.on(`data`, chunk => {
@@ -33,8 +89,9 @@ describe('MCP Server Logging', () => {
       if (weatherProcess.stdout) {
         weatherProcess.stdout.on('data', chunk => {
           if (chunk.toString().includes('server is running on SSE')) {
-            resolve();
             resolved = true;
+            clearTimeout(timeout);
+            resolve();
           }
         });
       }
@@ -52,7 +109,7 @@ describe('MCP Server Logging', () => {
 
   afterAll(async () => {
     // Kill the weather SSE server
-    weatherProcess.kill('SIGINT');
+    await stopWeatherServer(weatherProcess);
   });
 
   it('should log events from specific servers to their handlers', async () => {
@@ -64,7 +121,7 @@ describe('MCP Server Logging', () => {
       id: 'server-log-test',
       servers: {
         weather: {
-          url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          url: new URL(`http://${WEATHER_FIXTURE_HOST}:${weatherServerPort}/sse`),
           logger: weatherLogHandler,
         },
         stock: {
