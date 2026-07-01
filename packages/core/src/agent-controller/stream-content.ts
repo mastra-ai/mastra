@@ -15,16 +15,31 @@ export function getDisplayTransform(metadata: unknown, phase: ToolPayloadTransfo
   return hasTransformedToolPayload(transform) ? transform.transformed : fallback;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getAnthropicStopDetails(providerMetadata: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(providerMetadata)) {
+    return undefined;
+  }
+  const anthropic = providerMetadata.anthropic;
+  if (!isRecord(anthropic)) {
+    return undefined;
+  }
+  const stopDetails = anthropic.stopDetails;
+  return isRecord(stopDetails) ? stopDetails : undefined;
+}
+
 /**
  * Map a non-success terminal finish reason (content-filter, error, length) to a
  * user-facing message, or `undefined` for success reasons. A non-success finish
- * must surface as an explicit terminal error rather than a silent `complete`.
+ * must become an explicit terminal error rather than a silent `complete`.
  */
 export function describeNonSuccessFinishReason(reason: string, providerMetadata: unknown): string | undefined {
   switch (reason) {
     case 'content-filter': {
-      const stopDetails = (providerMetadata as { anthropic?: { stopDetails?: Record<string, unknown> } } | undefined)
-        ?.anthropic?.stopDetails;
+      const stopDetails = getAnthropicStopDetails(providerMetadata);
       const explanation =
         stopDetails && typeof stopDetails.explanation === 'string' ? stopDetails.explanation : undefined;
       const category = stopDetails && typeof stopDetails.category === 'string' ? stopDetails.category : undefined;

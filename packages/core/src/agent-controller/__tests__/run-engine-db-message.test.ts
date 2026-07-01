@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MastraDBMessage } from '../../agent/message-list/state/types';
+import { RequestContext } from '../../request-context';
+import { Workspace } from '../../workspace';
+import { LocalFilesystem } from '../../workspace/filesystem/local-filesystem';
+import type { SessionMachinery } from '../session';
+import { Session } from '../session';
 import { SessionRunEngine } from '../session-run-engine';
+import type { AgentControllerEvent } from '../types';
 
 /**
  * BDD spec for the DB-native message contract of the run engine.
@@ -11,48 +17,77 @@ import { SessionRunEngine } from '../session-run-engine';
  * legacy flat `AgentControllerMessageContent` union.
  */
 
-type EmittedEvent = { type: string; message?: MastraDBMessage; [k: string]: unknown };
+type StreamChunk = Parameters<SessionRunEngine['processStreamChunk']>[1];
 
 function createHarness() {
-  const events: EmittedEvent[] = [];
+  const events: AgentControllerEvent[] = [];
   let idCounter = 0;
 
-  const session: any = {
-    emit: (event: EmittedEvent) => events.push(event),
-    run: {
-      nextOperation: vi.fn(),
-      setRunId: vi.fn(),
-      isAbortRequested: () => false,
-      reset: vi.fn(),
-    },
-    drainFollowUpQueue: vi.fn(async () => {}),
-    thread: { getId: () => 'thread-1' },
-  };
+  const session = new Session({
+    resourceId: 'resource-1',
+    id: 'session-1',
+    ownerId: 'owner-1',
+    workspace: new Workspace({
+      id: 'workspace-1',
+      filesystem: new LocalFilesystem({ basePath: '/tmp' }),
+    }),
+  });
+  session.thread.set({ threadId: 'thread-1' });
+  session.subscribe(event => {
+    events.push(event);
+  });
 
-  const machinery: any = {
+  const machinery: SessionMachinery = {
+    getAgent: () => {
+      throw new Error('getAgent is not used by these stream-folding tests');
+    },
+    subscribeToThread: async () => {
+      throw new Error('subscribeToThread is not used by these stream-folding tests');
+    },
+    buildStreamOptions: async () => ({}),
+    buildSharedRunOptions: () => ({}),
+    buildToolsets: async () => ({}),
+    buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
+    persistTokenUsage: vi.fn(async () => {}),
     generateId: () => `msg-${++idCounter}`,
-    buildRequestContext: async () => ({}),
+    resolveTransitionModeId: () => undefined,
+    saveSystemReminder: vi.fn(async () => null),
   };
 
   const engine = new SessionRunEngine(session, machinery);
   return { engine, events, session };
 }
 
-function lastMessageEvent(events: EmittedEvent[]): MastraDBMessage {
-  const evt = [...events].reverse().find(e => e.message);
-  if (!evt?.message) throw new Error('no message event emitted');
-  return evt.message;
+function isMastraDBMessage(value: unknown): value is MastraDBMessage {
+  return typeof value === 'object' && value !== null && 'content' in value && 'role' in value;
+}
+
+function lastMessageEvent(events: AgentControllerEvent[]): MastraDBMessage {
+  for (const event of [...events].reverse()) {
+    if ('message' in event && isMastraDBMessage(event.message)) {
+      return event.message;
+    }
+  }
+  throw new Error('no message event emitted');
+}
+
+function requestContext(): RequestContext {
+  return new RequestContext();
+}
+
+function chunk(value: StreamChunk): StreamChunk {
+  return value;
 }
 
 describe('SessionRunEngine — MastraDBMessage contract', () => {
   it('Given a text stream, When chunks arrive, Then it emits a MastraDBMessage with a text part', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
-    const ctx: any = {};
+    const ctx = requestContext();
 
-    await engine.processStreamChunk(state, { type: 'text-start', payload: { id: 't1' } }, ctx);
-    await engine.processStreamChunk(state, { type: 'text-delta', payload: { id: 't1', text: 'Hello' } }, ctx);
-    await engine.processStreamChunk(state, { type: 'text-delta', payload: { id: 't1', text: ' world' } }, ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), ctx);
 
     const message = lastMessageEvent(events);
     expect(message.content.format).toBe(2);
@@ -63,37 +98,58 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
   it('Given a reasoning stream, When chunks arrive, Then it emits a reasoning part', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
-    const ctx: any = {};
+    const ctx = requestContext();
 
-    await engine.processStreamChunk(state, { type: 'reasoning-start', payload: { id: 'r1' } }, ctx);
-    await engine.processStreamChunk(state, { type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }, ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking…' } }),
+      ctx,
+    );
 
     const message = lastMessageEvent(events);
-    const reasoningPart = message.content.parts.find(p => p.type === 'reasoning');
+    const reasoningPart = message.content.parts.find(part => part.type === 'reasoning');
     expect(reasoningPart).toMatchObject({ type: 'reasoning', reasoning: 'thinking…' });
   });
 
   it('Given a tool call + result, When chunks arrive, Then it emits a tool-invocation part', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();
-    const ctx: any = {};
+    const ctx = requestContext();
 
     await engine.processStreamChunk(
       state,
-      { type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } },
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } }),
       ctx,
     );
     await engine.processStreamChunk(
       state,
-      { type: 'tool-result', payload: { toolCallId: 'tc1', toolName: 'read', result: 'ok' } },
+      chunk({ type: 'tool-result', payload: { toolCallId: 'tc1', toolName: 'read', result: 'ok' } }),
       ctx,
     );
 
     const message = lastMessageEvent(events);
-    const toolPart = message.content.parts.find(p => p.type === 'tool-invocation') as any;
+    const toolPart = message.content.parts.find(part => part.type === 'tool-invocation');
+    if (!toolPart || toolPart.type !== 'tool-invocation') throw new Error('no tool invocation part emitted');
     expect(toolPart.toolInvocation.toolCallId).toBe('tc1');
     expect(toolPart.toolInvocation.toolName).toBe('read');
     expect(toolPart.toolInvocation.state).toBe('result');
     expect(toolPart.toolInvocation.result).toBe('ok');
+  });
+
+  it('Given a signal data chunk, When it arrives, Then it emits a DB-native signal message', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+    const payload = { signalId: 'sig-1', message: 'hello' };
+
+    await engine.processStreamChunk(state, chunk({ type: 'data-signal', data: payload }), ctx);
+
+    const message = lastMessageEvent(events);
+    const [part] = message.content.parts;
+    expect(message.role).toBe('signal');
+    expect(message.content.format).toBe(2);
+    expect(part).toEqual({ type: 'data-signal', data: payload });
+    expect(message.content.metadata?.signal).toEqual(payload);
   });
 });
