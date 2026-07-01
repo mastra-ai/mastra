@@ -634,7 +634,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     resourceId: typedInput.state?.resourceId,
                   }),
                   modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
-                  callTimeHeaders: registryEntry?.callTimeHeaders,
+                  callTimeHeaders:
+                    registryEntry?.callTimeHeaders || currentModelSettings.headers
+                      ? {
+                          ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
+                          ...(currentModelSettings.headers as Record<string, string> | undefined),
+                        }
+                      : undefined,
                 }),
                 modelSettings: {
                   ...currentModelSettings,

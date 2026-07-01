@@ -200,7 +200,6 @@ export function serializeModelSettings(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-
 /**
  * Extract serializable options from agent execution options
  */

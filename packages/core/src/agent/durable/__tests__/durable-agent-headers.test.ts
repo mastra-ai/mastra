@@ -133,6 +133,47 @@ describe('DurableAgent header handling', () => {
     expect(result.registryEntry.callTimeHeaders).toBeUndefined();
   });
 
+  it('prepareStep-injected headers merge with callTimeHeaders', async () => {
+    const doStream = createDoStreamMock();
+    const mockModel = new MockLanguageModelV2({ doStream });
+
+    const baseAgent = new Agent({
+      id: 'prepare-step-headers-agent',
+      name: 'PrepareStep Headers Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { output, cleanup } = await durableAgent.stream('Hello', {
+      modelSettings: {
+        headers: {
+          'x-original': 'from-call',
+        },
+      },
+      prepareStep: () => ({
+        modelSettings: {
+          headers: {
+            'x-from-step': 'injected',
+            'x-original': 'overridden-by-step',
+          },
+        },
+      }),
+    });
+
+    await output.consumeStream();
+
+    expect(doStream).toHaveBeenCalledTimes(1);
+    const callArgs = doStream.mock.calls[0]![0];
+    // prepareStep headers should override call-time headers (step wins)
+    expect(callArgs.headers).toMatchObject({
+      'x-original': 'overridden-by-step',
+      'x-from-step': 'injected',
+    });
+
+    cleanup();
+  });
+
   it('filters out non-string header values', async () => {
     const doStream = createDoStreamMock();
     const mockModel = new MockLanguageModelV2({ doStream });
