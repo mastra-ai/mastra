@@ -27,14 +27,14 @@
 /packages/core/src/background-tasks/ @taofeeq-deru @rase-
 /packages/core/src/browser/ @NikAiyer @CalebBarnes
 /packages/core/src/browser/recording/ @DanielSLew @NikAiyer
-/packages/core/src/bundler/ @wardpeet @taofeeq-deru @LekoArts
+/packages/core/src/bundler/ @wardpeet @TheIsrael1 @LekoArts
 /packages/core/src/cache/ @abhiaiyer91 @rase- @taofeeq-deru
 /packages/core/src/channels/ @CalebBarnes @NikAiyer
 /packages/core/src/datasets/ @YujohnNattrass @DanielSLew
-/packages/core/src/deployer/ @wardpeet @taofeeq-deru @LekoArts
+/packages/core/src/deployer/ @wardpeet @TheIsrael1 @LekoArts
 /packages/core/src/di/ @abhiaiyer91 @wardpeet
 /packages/core/src/editor/ @DanielSLew @NikAiyer @YujohnNattrass
-/packages/core/src/error/ @wardpeet @taofeeq-deru @intojhanurag
+/packages/core/src/error/ @wardpeet @TheIsrael1 @intojhanurag
 /packages/core/src/evals/ @YujohnNattrass @intojhanurag
 /packages/core/src/events/ @rase- @TylerBarnes
 /packages/core/src/features/ @CalebBarnes @TylerBarnes
@@ -156,7 +156,7 @@
 # ============================================================================
 # Deployers
 # ============================================================================
-/deployers/ @wardpeet @taofeeq-deru @LekoArts
+/deployers/ @wardpeet @TheIsrael1 @LekoArts
 
 # ============================================================================
 # Observability — Eric Pinzur primary, Anurag secondary
@@ -181,12 +181,12 @@
 # ============================================================================
 # Agent SDKs
 # ============================================================================
-/agent-sdks/ @taofeeq-deru @wardpeet
+/agent-sdks/ @TheIsrael1 @wardpeet
 
 # ============================================================================
 # Client SDKs
 # ============================================================================
-/client-sdks/ @taofeeq-deru @wardpeet @mfrachet
+/client-sdks/ @TheIsrael1 @wardpeet @mfrachet
 
 # ============================================================================
 # PubSub
