@@ -20,7 +20,7 @@
 /packages/core/src/agent/heartbeat/ @CalebBarnes @TylerBarnes
 /packages/core/src/agent/message-list/ @TylerBarnes @CalebBarnes @abhiaiyer91
 /packages/core/src/agent/save-queue/ @TylerBarnes @CalebBarnes @abhiaiyer91
-/packages/core/src/agent/workflows/ @rase- @taofeeq-deru
+/packages/core/src/agent/workflows/ @rase- @taofeeq-deru @abhiaiyer91
 /packages/core/src/agent-builder/ @YujohnNattrass @mfrachet @NikAiyer
 /packages/core/src/agent-controller/ @abhiaiyer91 @wardpeet
 /packages/core/src/auth/ @rphansen91 @graysonhicks
@@ -89,10 +89,10 @@
 /packages/core/src/tts/ @wardpeet @abhiaiyer91
 /packages/core/src/utils/ @wardpeet @NikAiyer
 /packages/core/src/vector/ @intojhanurag @NikAiyer
-/packages/core/src/voice/ @wardpeet @LekoArts
+/packages/core/src/voice/ @rphansen91 @wardpeet @abhiaiyer91
 /packages/core/src/voice/aisdk/ @wardpeet @abhiaiyer91
 /packages/core/src/worker/ @rase- @NikAiyer
-/packages/core/src/workflows/ @rase- @taofeeq-deru
+/packages/core/src/workflows/ @rase- @taofeeq-deru @abhiaiyer91
 /packages/core/src/workflows/scheduler/ @abhiaiyer91 @rase-
 /packages/core/src/workspace/ @CalebBarnes @NikAiyer
 /packages/core/src/workspace/sandbox/process-manager/ @CalebBarnes @NikAiyer
@@ -102,45 +102,36 @@
 # ============================================================================
 /packages/cli/ @LekoArts @wardpeet
 /packages/create-mastra/ @wardpeet @TheIsrael1
-/packages/memory/ @TylerBarnes @wardpeet
-/packages/memory/src/processors/observational-memory/ @TylerBarnes @rase-
-/packages/memory/src/processors/working-memory-state/ @CalebBarnes @TylerBarnes
-/packages/evals/ @epinzur @intojhanurag
+/packages/memory/ @TylerBarnes @CalebBarnes @abhiaiyer91
+/packages/memory/src/processors/observational-memory/ @TylerBarnes @rase- @abhiaiyer91
+/packages/memory/src/processors/working-memory-state/ @CalebBarnes @TylerBarnes @abhiaiyer91
+/packages/evals/ @YujohnNattrass @DanielSLew @abhiaiyer91
 /packages/evals/src/scorers/ @YujohnNattrass @wardpeet
 /packages/evals/src/scorers/llm/trajectory/ @DanielSLew @YujohnNattrass
 /packages/evals/src/scorers/code/trajectory/ @DanielSLew @YujohnNattrass
-/packages/rag/ @wardpeet @NikAiyer
-/packages/mcp/ @wardpeet @graysonhicks
-/packages/mcp/src/server/ @DanielSLew @wardpeet
-/packages/mcp/src/client/ @DanielSLew @wardpeet
-/packages/mcp/src/shared/ @graysonhicks @roaminro
-/packages/server/ @DanielSLew @NikAiyer
-/packages/server/src/a2a/ @abhiaiyer91 @DanielSLew
-/packages/server/src/auth/ @NikAiyer @DanielSLew
-/packages/server/src/schemas/ @rase- @DanielSLew
-/packages/server/src/server-adapter/ @rase- @DanielSLew
-/packages/deployer/ @wardpeet @NikAiyer
-/packages/editor/ @DanielSLew @wardpeet
-/packages/editor/src/ee/ @YujohnNattrass @DanielSLew
-/packages/agent-builder/ @wardpeet @abhiaiyer91
-/packages/agent-builder/src/workflows/workflow-builder/ @DanielSLew @wardpeet
+/packages/rag/ @NikAiyer @abhiaiyer91
+/packages/mcp/ @DanielSLew @graysonhicks
+/packages/server/ @rase- @NikAiyer
+/packages/deployer/ @wardpeet @TheIsrael1 @LekoArts
+/packages/editor/ @DanielSLew @YujohnNattrass @mfrachet
+/packages/agent-builder/ @YujohnNattrass @NikAiyer @mfrachet
 /packages/auth/ @rphansen91 @wardpeet
-/packages/acp/ @wardpeet @TylerBarnes
+/packages/acp/ @wardpeet @TheIsrael1
 /packages/loggers/ @wardpeet @abhiaiyer91
-/packages/fastembed/ @TylerBarnes @wardpeet
+/packages/fastembed/ @TylerBarnes @abhiaiyer91
 /packages/mcp-docs-server/ @TylerBarnes @wardpeet
 /packages/mcp-registry-registry/ @abhiaiyer91 @wardpeet
 /packages/codemod/ @LekoArts @wardpeet
-/packages/schema-compat/ @wardpeet @DanielSLew
-/packages/_changeset-cli/ @wardpeet @LekoArts
-/packages/_config/ @wardpeet @TylerBarnes
-/packages/_external-types/ @NikAiyer @wardpeet
-/packages/_internal-core/ @epinzur @intojhanurag
-/packages/_internals/ @wardpeet @abhiaiyer91
-/packages/_llm-recorder/ @wardpeet @abhiaiyer91
-/packages/_test-utils/ @wardpeet @TylerBarnes
-/packages/_types-builder/ @wardpeet @TylerBarnes
-/packages/_vendored/ @wardpeet @CalebBarnes
+/packages/schema-compat/ @wardpeet @DanielSLew @TylerBarnes
+/packages/_changeset-cli/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_config/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_external-types/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_internal-core/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_internals/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_llm-recorder/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_test-utils/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_types-builder/ @wardpeet @TheIsrael1 @abhiaiyer91
+/packages/_vendored/ @wardpeet @TheIsrael1 @abhiaiyer91
 
 # ============================================================================
 # Playground & UI — Marvin + Damien on all
@@ -215,7 +206,7 @@
 # ============================================================================
 # Workflow integrations (inngest, temporal)
 # ============================================================================
-/workflows/ @taofeeq-deru @rase-
+/workflows/ @taofeeq-deru @rase- @abhiaiyer91
 
 # ============================================================================
 # Workspace providers (e2b, docker, etc.)
