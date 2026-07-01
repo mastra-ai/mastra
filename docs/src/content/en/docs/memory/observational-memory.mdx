@@ -21,6 +21,7 @@ import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -73,6 +74,7 @@ import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -212,6 +214,7 @@ const memory = new Memory({
 })
 
 export const agent = new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -297,6 +300,7 @@ If your Observer model is text-only or its API rejects multimodal input, set `ob
 
 ```typescript
 new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
