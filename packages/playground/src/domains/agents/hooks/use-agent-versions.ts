@@ -8,10 +8,16 @@ import type {
   DeleteAgentVersionResponse,
 } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, skipToken } from '@tanstack/react-query';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 export type { ListAgentVersionsParams, CreateAgentVersionParams };
+
+type UseAgentVersionsParams = {
+  agentId?: string | null;
+  params?: ListAgentVersionsParams;
+  enabled?: boolean;
+};
 
 /**
  * Hook to list versions of a stored agent
@@ -20,18 +26,16 @@ export const useAgentVersions = ({
   agentId,
   params,
   enabled = true,
-}: {
-  agentId: string;
-  params?: ListAgentVersionsParams;
-  enabled?: boolean;
-}) => {
+}: UseAgentVersionsParams) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
+  const queryFn = agentId ? () => client.getStoredAgent(agentId).listVersions(params, requestContext) : skipToken;
+
   return useQuery<ListAgentVersionsResponse>({
     queryKey: ['agent-versions', agentId, params, requestContext],
-    queryFn: () => client.getStoredAgent(agentId).listVersions(params, requestContext),
-    enabled: enabled && !!agentId,
+    queryFn,
+    enabled,
   });
 };
 

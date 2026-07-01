@@ -7,7 +7,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatShell } from '@/domains/agents/components/agent-chat-shell';
-import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import {
+  AgentSidebarLoadingSkeleton,
+  AgentViewLoadingSkeleton,
+} from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
@@ -133,12 +136,11 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                         view={view}
                         leftDrawerLabel="Open threads and memory"
                         leftSlot={
-                          <AgentSidebar
-                            agentId={agentId!}
-                            threadId={actualThreadId!}
-                            threads={sidebarThreads}
-                            isLoading={isThreadsLoading}
-                          />
+                          isThreadsLoading ? (
+                            <AgentSidebarLoadingSkeleton />
+                          ) : (
+                            <AgentSidebar agentId={agentId!} threadId={actualThreadId!} threads={sidebarThreads} />
+                          )
                         }
                         browserOverlay={<BrowserViewPanel />}
                       >

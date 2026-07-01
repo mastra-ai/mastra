@@ -57,7 +57,7 @@ This catalog is an index for React performance and quality guidance used by agen
 
 | Rule                    | Title                                          | Impact      | Summary                                                                                    | Canonical file                              |
 | ----------------------- | ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------ | ------------------------------------------- |
-| `client-request-dedupe` | Use TanStack Query for Automatic Deduplication | MEDIUM-HIGH | Use TanStack Query for request deduplication, caching, and revalidation across components. | `references/rules/client-request-dedupe.md` |
+| `client-request-dedupe` | Use TanStack Query for Automatic Deduplication | MEDIUM-HIGH | Use TanStack Query for dedupe, caching, revalidation, and typed dependent params. | `references/rules/client-request-dedupe.md` |
 
 ### 4. Re-render Optimization
 

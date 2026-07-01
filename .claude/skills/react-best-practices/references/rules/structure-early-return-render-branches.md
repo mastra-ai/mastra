@@ -37,25 +37,46 @@ return (
 );
 ```
 
-**Correct (one wrapper; the body early-returns bare content):**
+**Also incorrect (passing query state down for the child to sort out):**
 
 ```tsx
-function PanelBody(props) {
-  if (isLoading) return <Skeleton />;
-  if (isDetailOpen) return <Detail />;
-  return <List items={items} />;
-}
+function ThingPanel({ itemId, isDetailOpen }: ThingPanelProps) {
+  const query = useItems(itemId);
 
-function ThingPanel(props) {
   return (
     <Panel>
-      <PanelBody {...props} />
+      <PanelBody {...query} isDetailOpen={isDetailOpen} />
     </Panel>
   );
 }
 ```
 
-Hooks must run before the first early return, so they live in the body component, above the guards. Lifting the wrapper to the parent is the same idea — wherever it lives, it appears once.
+**Correct (one wrapper; the body owns the query source and branches from it):**
+
+```tsx
+function PanelBody({ itemId, isDetailOpen }: { itemId: string; isDetailOpen: boolean }) {
+  const { data: items, isLoading, error } = useItems(itemId);
+
+  if (isLoading) return <Skeleton />;
+  if (error) return <ErrorState error={error} />;
+  if (isDetailOpen) return <Detail items={items} />;
+  return <List items={items} />;
+}
+
+function ThingPanel({ itemId, isDetailOpen }: ThingPanelProps) {
+  return (
+    <Panel>
+      <PanelBody itemId={itemId} isDetailOpen={isDetailOpen} />
+    </Panel>
+  );
+}
+```
+
+Prefer colocating the query with the branch that renders its result. The component that calls `useQuery` or a data hook owns that hook's `isLoading` and `error` states; do not spread query props into a child just so the child can rediscover loading/error responsibility.
+
+If a parent must call the query because multiple sibling regions share the data, that parent is the data owner. It should branch on `isLoading` and `error` before rendering ready children, then pass those children only the data and view flags they can render.
+
+Hooks must run before the first branch, so if the body component owns the query hook, it handles its own loading/error guards above the ready branch. Lifting the wrapper to the parent is the same idea — wherever it lives, it appears once.
 
 This applies only to **mutually exclusive** views. When regions coexist in the layout — `<Panel><Detail /><List /></Panel>` — do not hoist one skeleton over both; let each child own its loading state (a skeleton colocated inside `<Detail />` / `<List />`). A top-level early return there would wrongly hide siblings.
 

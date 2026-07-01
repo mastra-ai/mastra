@@ -24,8 +24,7 @@ import { useMemory } from '@/domains/memory/hooks/use-memory';
 export interface MemorySidebarProps {
   agentId: string;
   threadId: string;
-  threads?: StorageThreadType[];
-  isLoading: boolean;
+  threads: StorageThreadType[];
   onDelete: (threadId: string) => void;
 }
 
@@ -85,15 +84,15 @@ function MemorySidebarSkeleton() {
 
 // SidebarPanel is the single layout shell; the body picks the view with guard
 // clauses and returns bare content — see structure-early-return-render-branches.
-export function MemorySidebar(props: MemorySidebarProps) {
+export function MemorySidebar({ agentId, threadId, threads, onDelete }: MemorySidebarProps) {
   return (
     <SidebarPanel>
-      <MemorySidebarBody {...props} />
+      <MemorySidebarBody agentId={agentId} threadId={threadId} threads={threads} onDelete={onDelete} />
     </SidebarPanel>
   );
 }
 
-function MemorySidebarBody({ agentId, threadId, threads, isLoading, onDelete }: MemorySidebarProps) {
+function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySidebarProps) {
   // Derive memory state from the shared (React Query deduped) hook instead of
   // accepting it as props — see structure-derive-dont-duplicate.
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
@@ -193,8 +192,7 @@ function MemorySidebarBody({ agentId, threadId, threads, isLoading, onDelete }: 
               <ChatThreads
                 resourceId={agentId}
                 resourceType="agent"
-                threads={threads || []}
-                isLoading={isLoading}
+                threads={threads}
                 threadId={threadId}
                 onDelete={onDelete}
                 embedded

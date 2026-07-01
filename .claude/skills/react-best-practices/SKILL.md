@@ -52,6 +52,7 @@ Rules are prioritized by impact:
 **Client-Side Data Fetching:**
 
 - Use Tanstack Query for automatic request deduplication (`client-request-dedupe`)
+- For optional query params, type the hook input as optional/null; use `skipToken` for type-safe dependent queries, or `enabled` plus a runtime guard when manual `refetch()` must work (`client-request-dedupe`)
 
 **Re-render Optimization:**
 

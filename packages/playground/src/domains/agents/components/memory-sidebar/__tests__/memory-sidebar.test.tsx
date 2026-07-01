@@ -135,7 +135,6 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
                   agentId={AGENT_ID}
                   threadId={THREAD_ID}
                   threads={threads}
-                  isLoading={false}
                   onDelete={vi.fn()}
                 />
               </MemoryTimelineProvider>
@@ -185,7 +184,6 @@ function renderSidebarWithOM(threads: StorageThreadType[]) {
                     agentId={AGENT_ID}
                     threadId={THREAD_ID}
                     threads={threads}
-                    isLoading={false}
                     onDelete={vi.fn()}
                   />
                 </MemoryTimelineProvider>

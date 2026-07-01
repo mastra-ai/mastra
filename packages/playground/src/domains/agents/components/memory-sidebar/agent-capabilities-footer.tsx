@@ -1,3 +1,4 @@
+import type { GetAgentResponse } from '@mastra/client-js';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
@@ -24,6 +25,11 @@ type Capability = {
   icon: ReactNode;
 };
 
+type CapabilityCollection =
+  | NonNullable<GetAgentResponse['tools']>
+  | NonNullable<GetAgentResponse['workflows']>
+  | NonNullable<GetAgentResponse['agents']>;
+
 const toneClassName: Record<CapabilityTone, { icon: string }> = {
   purple: {
     icon: 'text-purple-700 dark:text-purple-300',
@@ -45,8 +51,7 @@ const toneClassName: Record<CapabilityTone, { icon: string }> = {
   },
 };
 
-const getCount = (value?: Record<string, unknown> | unknown[]) => {
-  if (Array.isArray(value)) return value.length;
+const getRecordCount = (value?: CapabilityCollection) => {
   return value ? Object.keys(value).length : 0;
 };
 
@@ -140,9 +145,9 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
   });
 
   const versionCount = versionsQuery.data?.total ?? versionsQuery.data?.versions.length ?? 0;
-  const toolsCount = getCount(agent?.tools);
-  const workflowsCount = getCount(agent?.workflows);
-  const subAgentsCount = getCount(agent?.agents);
+  const toolsCount = getRecordCount(agent?.tools);
+  const workflowsCount = getRecordCount(agent?.workflows);
+  const subAgentsCount = getRecordCount(agent?.agents);
   const processorsCount = (agent?.inputProcessors?.length ?? 0) + (agent?.outputProcessors?.length ?? 0);
   const isEditorLoading = isAgentLoading || isCmsAvailabilityLoading || (editorEnabled && versionsQuery.isLoading);
   const isAgentCapabilitiesLoading = isAgentLoading && !agent;
