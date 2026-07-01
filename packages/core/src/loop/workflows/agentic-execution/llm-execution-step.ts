@@ -1389,7 +1389,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
                   // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
-                  // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Mastra Gateway)
+                  // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Gateway)
                   headers: (() => {
                     const memoryHeaders: Record<string, string> = {};
                     const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');

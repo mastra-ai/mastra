@@ -14,7 +14,7 @@ describe('Gateway serializeForSpan', () => {
 
     const serialized = gateway.serializeForSpan();
 
-    expect(serialized).toEqual({ id: 'mastra', name: 'Mastra Gateway' });
+    expect(serialized).toEqual({ id: 'mastra', name: 'Gateway' });
     expect(JSON.stringify(serialized)).not.toContain('sk-mastra-secret');
     expect(JSON.stringify(serialized)).not.toContain('internal.gateway.example.com');
   });

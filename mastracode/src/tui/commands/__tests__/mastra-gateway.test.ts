@@ -103,7 +103,7 @@ describe('handleMastraGatewayCommand', () => {
     expect(mockGatewayRegistryGetInstance).toHaveBeenCalledWith({ useDynamicLoading: true });
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
     expect(ctx.showInfo).toHaveBeenLastCalledWith(
-      'Mastra gateway configured. Memory mode changes take effect on next restart.',
+      'Gateway configured. Memory mode changes take effect on next restart.',
     );
   });
 
@@ -164,8 +164,6 @@ describe('handleMastraGatewayCommand', () => {
     expect(process.env.MASTRA_GATEWAY_API_KEY).toBeUndefined();
     expect(process.env.MASTRA_GATEWAY_URL).toBeUndefined();
     expect(mockGatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
-    expect(ctx.showInfo).toHaveBeenLastCalledWith(
-      'Mastra gateway cleared. Memory mode changes take effect on next restart.',
-    );
+    expect(ctx.showInfo).toHaveBeenLastCalledWith('Gateway cleared. Memory mode changes take effect on next restart.');
   });
 });

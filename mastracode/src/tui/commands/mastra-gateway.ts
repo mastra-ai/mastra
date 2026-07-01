@@ -74,7 +74,7 @@ export async function handleMastraGatewayCommand(ctx: SlashCommandContext): Prom
     settings.memoryGateway = {};
     saveSettings(settings);
     await refreshGatewayModels(ctx);
-    ctx.showInfo('Mastra gateway cleared. Memory mode changes take effect on next restart.');
+    ctx.showInfo('Gateway cleared. Memory mode changes take effect on next restart.');
     return;
   } else if (keyAnswer.length > 0) {
     authStorage.setStoredApiKey(MASTRA_GATEWAY_PROVIDER, keyAnswer, 'MASTRA_GATEWAY_API_KEY');
@@ -109,5 +109,5 @@ export async function handleMastraGatewayCommand(ctx: SlashCommandContext): Prom
   saveSettings(settings);
   await refreshGatewayModels(ctx);
 
-  ctx.showInfo('Mastra gateway configured. Memory mode changes take effect on next restart.');
+  ctx.showInfo('Gateway configured. Memory mode changes take effect on next restart.');
 }

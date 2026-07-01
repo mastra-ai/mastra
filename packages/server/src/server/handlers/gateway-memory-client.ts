@@ -1,5 +1,5 @@
 /**
- * HTTP client for the Mastra Gateway memory REST API.
+ * HTTP client for the Gateway memory REST API.
  * Used to proxy memory operations from the local Mastra server to the remote gateway
  * when agents use `mastra/` model strings.
  */
