@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
-import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -281,7 +281,7 @@ export class MastraTUI {
         addUserMessage(this.state, {
           id: messageId,
           role: 'user',
-          content: [{ type: 'text', text: msg }],
+          content: { format: 2, parts: [{ type: 'text', text: msg }] },
           createdAt: new Date(),
         });
         this.state.ui.requestRender();
@@ -370,14 +370,17 @@ export class MastraTUI {
     content: string,
     images?: Array<{ data: string; mimeType: string }>,
     id = '',
-  ): AgentControllerMessage {
+  ): MastraDBMessage {
     return {
       id,
       role: 'user',
-      content: [
-        { type: 'text', text: content },
-        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: content },
+          ...(images?.map(img => ({ type: 'file' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+        ],
+      },
       createdAt: new Date(),
     };
   }

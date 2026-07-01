@@ -374,9 +374,18 @@ describe('tool lifecycle', () => {
       new RequestContext(),
     );
 
-    expect(result.message.content).toEqual([
-      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: { customerId: 'cus_123' } },
-      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: { displayName: 'Acme' }, isError: false },
+    // DB-native: tool call + result collapse into a single tool-invocation part.
+    expect(result.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: { customerId: 'cus_123' },
+          state: 'result',
+          result: { displayName: 'Acme' },
+        },
+      },
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -466,9 +475,17 @@ describe('tool lifecycle', () => {
       new RequestContext(),
     );
 
-    expect(result.message.content).toEqual([
-      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: null },
-      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: null, isError: false },
+    expect(result.message.content.parts).toEqual([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'call-1',
+          toolName: 'lookupCustomer',
+          args: null,
+          state: 'result',
+          result: null,
+        },
+      },
     ]);
     expect(events).toContainEqual(
       expect.objectContaining({

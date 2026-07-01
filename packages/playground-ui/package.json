@@ -174,7 +174,7 @@
   },
   "peerDependencies": {
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.7.1-0 <2.0.0-0",
+    "@mastra/core": ">=1.7.1-0 <3.0.0-0",
     "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.90.21",

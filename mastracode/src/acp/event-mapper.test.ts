@@ -52,7 +52,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'assistant',
-          content: [{ type: 'text', text: 'Hello' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       };
@@ -79,7 +79,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'assistant',
-          content: [{ type: 'text', text: 'Hello, world!' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello, world!' }] },
           createdAt: new Date(),
         },
       };
@@ -104,7 +104,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'user',
-          content: [{ type: 'text', text: 'User message' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
           createdAt: new Date(),
         },
       };
@@ -490,7 +490,7 @@ describe('ACP Event Mapper', () => {
         message: {
           id: 'msg-1',
           role: 'assistant',
-          content: [{ type: 'text', text: 'Hello' }],
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
           createdAt: new Date(),
         },
       };

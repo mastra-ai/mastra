@@ -138,11 +138,12 @@ vi.mock('../../prompt-api-key.js', () => ({
 }));
 
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
+import { getReminderView } from '../../db-message-parts.js';
 import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager.js';
 import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
 
 describe('createGoalReminderMessage', () => {
-  it('creates a canonical goal system reminder for chat history', () => {
+  it('creates a canonical goal system reminder as a DB-native signal message', () => {
     const message = createGoalReminderMessage(
       'goal-1',
       'Finish <the> task & verify it',
@@ -150,18 +151,16 @@ describe('createGoalReminderMessage', () => {
       '__GATEWAY_OPENAI_MODEL__',
     );
 
-    expect(message).toMatchObject({
-      id: 'goal-goal-1',
-      role: 'user',
-      content: [
-        {
-          type: 'system_reminder',
-          reminderType: 'goal',
-          message: 'Finish <the> task & verify it',
-          goalMaxTurns: DEFAULT_MAX_TURNS,
-          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
-        },
-      ],
+    expect(message.id).toBe('goal-goal-1');
+    expect(message.role).toBe('signal');
+    expect(message.content.format).toBe(2);
+
+    const view = getReminderView(message);
+    expect(view).toMatchObject({
+      reminderType: 'goal',
+      message: 'Finish <the> task & verify it',
+      goalMaxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     });
   });
 });

@@ -14,6 +14,7 @@ import type {
 } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentsMDInjector } from '@mastra/core/processors';
+import { createSignal } from '@mastra/core/signals';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { Workspace } from '@mastra/core/workspace';
@@ -23,6 +24,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import z from 'zod';
 
 import { runHeadless } from './headless.js';
+import { isSignalMessage, getReminderView, getStateSignalView } from './tui/db-message-parts.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -331,7 +333,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(
       resumeEvents.some(e =>
         e.type === 'message_update'
-          ? (e as any).message?.content?.some(
+          ? (e as any).message?.content?.parts?.some(
               (part: any) => part.type === 'text' && part.text?.includes('Deployment confirmed'),
             )
           : false,
@@ -361,7 +363,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     // At least one update should contain text
     const hasText = messageUpdates.some(e => {
       const msg = (e as any).message;
-      return msg?.content?.some((c: any) => c.type === 'text' && c.text?.includes('result'));
+      return msg?.content?.parts?.some((c: any) => c.type === 'text' && c.text?.includes('result'));
     });
     expect(hasText).toBe(true);
   });
@@ -469,35 +471,34 @@ describe('headless mode — event-driven auto-resolution', () => {
 
     expect(mockExecute).toHaveBeenCalledTimes(1);
 
-    const reminderUpdates = events.filter(
-      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
-    );
-    const persistedReminderMessages = reminderUpdates.filter(event =>
-      event.message.content.some(
-        part =>
-          part.type === 'system_reminder' &&
-          part.reminderType === 'dynamic-agents-md' &&
-          part.path === instructionPath &&
-          part.message === instructionContents,
-      ),
+    const matchesReminder = (message: Extract<AgentControllerEvent, { type: 'message_end' }>['message']) => {
+      if (!isSignalMessage(message)) return false;
+      const reminder = getReminderView(message);
+      return (
+        reminder.reminderType === 'dynamic-agents-md' &&
+        reminder.path === instructionPath &&
+        reminder.message === instructionContents
+      );
+    };
+
+    // The dynamic-agents-md reminder is now delivered as its own DB-native
+    // `role: 'signal'` message (message_start/message_end), not flattened into
+    // an assistant message's content.
+    const reminderSignalMessages = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' | 'message_end' }> =>
+        (event.type === 'message_start' || event.type === 'message_end') && matchesReminder(event.message),
     );
 
-    expect(persistedReminderMessages.length).toBeGreaterThan(0);
+    expect(reminderSignalMessages.length).toBeGreaterThan(0);
 
-    const finalMessageEnd = [...events]
+    const finalReminderSignal = [...events]
       .reverse()
-      .find((event): event is Extract<AgentControllerEvent, { type: 'message_end' }> => event.type === 'message_end');
+      .find(
+        (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
+          event.type === 'message_end' && matchesReminder(event.message),
+      );
 
-    expect(finalMessageEnd).toBeDefined();
-    expect(
-      finalMessageEnd?.message.content.some(
-        part =>
-          part.type === 'system_reminder' &&
-          part.reminderType === 'dynamic-agents-md' &&
-          part.path === instructionPath &&
-          part.message === instructionContents,
-      ),
-    ).toBe(true);
+    expect(finalReminderSignal).toBeDefined();
   });
 });
 
@@ -691,32 +692,34 @@ describe('headless mode — --output-format contracts', () => {
     expect(events.some(event => event.text === 'Streamed JSON response')).toBe(false);
 
     const assistantEnd = events.find(event => event.type === 'message_end' && event.message?.role === 'assistant');
-    expect(assistantEnd?.message.content).toEqual(
+    expect(assistantEnd?.message.content.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Streamed JSON response' })]),
     );
   });
 
-  it('keeps state-signal parts visible in stream-json message events', async () => {
+  it('keeps state-signal messages visible in stream-json message events', async () => {
     let listener: ((event: AgentControllerEvent) => void) | undefined;
-    const stateSignalPart = {
-      type: 'state_signal',
+    const stateSignalMessage = createSignal({
       id: 'state-signal-browser-1',
-      stateId: 'browser',
-      mode: 'delta',
-      cacheKey: 'browser:v2',
-      version: 2,
-      message: 'Browser state changed',
-    };
+      type: 'state',
+      tagName: 'browser',
+      contents: 'Browser state changed',
+      metadata: { state: { id: 'browser', mode: 'delta', cacheKey: 'browser:v2', version: 2 } },
+    } as never).toDBMessage();
     const controller = {
       session: {
         sendMessage: vi.fn(async () => {
           listener?.({ type: 'agent_start', runId: 'run-state' } as AgentControllerEvent);
           listener?.({
             type: 'message_end',
+            message: stateSignalMessage,
+          } as AgentControllerEvent);
+          listener?.({
+            type: 'message_end',
             message: {
               id: 'assistant-state-message',
               role: 'assistant',
-              content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
+              content: { format: 2, parts: [{ type: 'text', text: 'Observed browser state.' }] },
               createdAt: new Date(0),
             },
           } as AgentControllerEvent);
@@ -755,19 +758,18 @@ describe('headless mode — --output-format contracts', () => {
       .trim()
       .split('\n')
       .map(line => JSON.parse(line));
+    const stateSignalEnd = events.find(event => event.type === 'message_end' && event.message?.role === 'signal');
+    expect(stateSignalEnd).toBeDefined();
+    expect(getStateSignalView(stateSignalEnd.message)).toMatchObject({
+      stateId: 'browser',
+      mode: 'delta',
+      cacheKey: 'browser:v2',
+      version: 2,
+      message: 'Browser state changed',
+    });
+
     const assistantEnd = events.find(event => event.type === 'message_end' && event.message?.role === 'assistant');
-    expect(assistantEnd?.message.content).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'state_signal',
-          stateId: 'browser',
-          mode: 'delta',
-          cacheKey: 'browser:v2',
-          message: 'Browser state changed',
-        }),
-      ]),
-    );
-    expect(assistantEnd?.message.content).toEqual(
+    expect(assistantEnd?.message.content.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Observed browser state.' })]),
     );
     expect(events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' });

@@ -176,7 +176,15 @@ describe('AgentController Resource', () => {
   it('parses SSE frames into events (skipping heartbeats)', async () => {
     const events = [
       { type: 'agent_start' },
-      { type: 'message_update', message: { id: 'm1', role: 'assistant', content: [{ type: 'text', text: 'hi' }] } },
+      {
+        type: 'message_update',
+        message: {
+          id: 'm1',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
     ];
     mockSse([`data: ${JSON.stringify(events[0])}\n\n`, `: heartbeat\n\n`, `data: ${JSON.stringify(events[1])}\n\n`]);
 

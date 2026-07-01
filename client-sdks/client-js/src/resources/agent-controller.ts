@@ -21,24 +21,41 @@ export interface AgentControllerInfo {
   id: string;
 }
 
-export interface AgentControllerMessageContent {
-  type: 'text' | 'thinking' | 'tool_call' | 'tool_result' | string;
-  /** Correlates a `tool_call` part with its `tool_result` part. */
-  id?: string;
+/**
+ * A single part of a {@link MastraDBMessage}'s nested content. This mirrors the
+ * persisted AI-SDK-v4 `UIMessage`-style part shape: a discriminated `type`
+ * (`text`, `reasoning`, `tool-invocation`, `data-signal`, `data-*`, …) plus
+ * type-specific fields. Harness-only UI signals arrive as `data-*` parts on
+ * `role: 'signal'` messages rather than as a flattened union.
+ */
+export interface MastraMessagePart {
+  type: string;
   text?: string;
-  thinking?: string;
-  name?: string;
-  args?: unknown;
-  result?: unknown;
-  isError?: boolean;
+  [key: string]: unknown;
 }
 
-export interface AgentControllerMessage {
+/** The persisted `MastraMessageContentV2` shape: `format: 2` plus nested `parts`. */
+export interface MastraMessageContentV2 {
+  format: 2;
+  parts: MastraMessagePart[];
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * The canonical persisted message shape exposed by the agent controller. This is
+ * `MastraDBMessage` from `@mastra/core`: shared fields plus DB-native nested
+ * `content.parts`. Streaming `message_*` events carry in-flight `stopReason` /
+ * `errorMessage` under `content.metadata`.
+ */
+export interface MastraDBMessage {
   id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: AgentControllerMessageContent[];
-  stopReason?: string;
-  errorMessage?: string;
+  role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
+  content: MastraMessageContentV2;
+  createdAt?: string;
+  threadId?: string;
+  resourceId?: string;
+  type?: string;
 }
 
 /**
@@ -69,9 +86,9 @@ export type KnownAgentControllerEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   // Assistant message streaming.
-  | { type: 'message_start'; message: AgentControllerMessage }
-  | { type: 'message_update'; message: AgentControllerMessage }
-  | { type: 'message_end'; message: AgentControllerMessage }
+  | { type: 'message_start'; message: MastraDBMessage }
+  | { type: 'message_update'; message: MastraDBMessage }
+  | { type: 'message_end'; message: MastraDBMessage }
   // Tool lifecycle.
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
@@ -518,9 +535,9 @@ export class AgentControllerSession extends BaseResource {
   }
 
   /** List messages for a specific thread. */
-  async listMessages(threadId: string, limit?: number): Promise<AgentControllerMessage[]> {
+  async listMessages(threadId: string, limit?: number): Promise<MastraDBMessage[]> {
     const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: AgentControllerMessage[] }>(
+    const body = await this.request<{ messages: MastraDBMessage[] }>(
       `${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`,
     );
     return body.messages;
@@ -664,10 +681,10 @@ export class AgentController extends BaseResource {
   }
 }
 
-/** Pull the plain text out of an assistant message's content parts. */
-export function agentControllerMessageText(message: AgentControllerMessage): string {
-  return message.content
-    .filter(c => c.type === 'text' && typeof c.text === 'string')
-    .map(c => c.text)
+/** Pull the plain text out of an assistant message's nested content parts. */
+export function agentControllerMessageText(message: MastraDBMessage): string {
+  return message.content.parts
+    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
+    .map(p => p.text)
     .join('');
 }

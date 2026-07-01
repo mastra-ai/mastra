@@ -208,18 +208,29 @@ const threadResponseSchema = z.object({
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
-const messageContentSchema = z
+const messagePartSchema = z
   .object({
     type: z.string(),
+  })
+  .passthrough();
+// Mirrors the persisted `MastraMessageContentV2` shape (AI-SDK-v4 `UIMessage`-style):
+// `format: 2` plus a nested `parts` array, with optional companion fields preserved.
+const messageContentV2Schema = z
+  .object({
+    format: z.literal(2),
+    parts: z.array(messagePartSchema),
   })
   .passthrough();
 const listMessagesResponseSchema = z.object({
   messages: z.array(
     z.object({
       id: z.string(),
-      role: z.enum(['user', 'assistant', 'system']),
-      content: z.array(messageContentSchema),
+      role: z.enum(['user', 'assistant', 'system', 'tool', 'signal']),
+      content: messageContentV2Schema,
       createdAt: z.string().optional(),
+      threadId: z.string().optional(),
+      resourceId: z.string().optional(),
+      type: z.string().optional(),
     }),
   ),
 });
@@ -933,8 +944,11 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
         messages: messages.map(m => ({
           id: m.id,
           role: m.role,
-          content: m.content as Array<{ type: string; [key: string]: unknown }>,
+          content: m.content as { format: 2; parts: Array<{ type: string; [key: string]: unknown }> },
           createdAt: m.createdAt instanceof Date ? m.createdAt.toISOString() : undefined,
+          threadId: m.threadId,
+          resourceId: m.resourceId,
+          type: m.type,
         })),
       };
     } catch (error) {

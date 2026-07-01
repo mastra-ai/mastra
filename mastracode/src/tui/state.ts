@@ -6,7 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
-import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
+import type { AgentController, MastraDBMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import type { MastraCodeAnalytics } from '../analytics.js';
@@ -170,7 +170,7 @@ export interface TUIState {
   isInitialized: boolean;
   gradientAnimator?: GradientAnimator;
   streamingComponent?: AssistantMessageComponent;
-  streamingMessage?: AgentControllerMessage;
+  streamingMessage?: MastraDBMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
   /** Task tools are hidden on success but promoted to normal tool boxes on errors */
   pendingTaskToolIds: Set<string>;

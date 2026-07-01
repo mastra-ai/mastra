@@ -2,7 +2,7 @@
  * Shared context passed to extracted slash command handlers.
  * Keeps commands decoupled from the MastraTUI class.
  */
-import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
+import type { AgentController, MastraDBMessage, Session } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import type { MastraCodeAnalytics } from '../../analytics.js';
 import type { AuthStorage } from '../../auth/storage.js';
@@ -25,7 +25,7 @@ export interface SlashCommandContext {
   updateStatusLine: () => void;
   stop: () => void;
   getResolvedWorkspace: () => Workspace | undefined;
-  addUserMessage: (message: AgentControllerMessage) => void;
+  addUserMessage: (message: MastraDBMessage) => void;
   renderExistingMessages: () => Promise<void>;
   showOnboarding: () => Promise<void>;
 }

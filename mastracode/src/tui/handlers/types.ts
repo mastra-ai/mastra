@@ -3,7 +3,7 @@
  * Keeps handlers decoupled from the MastraTUI class.
  */
 import type { Component } from '@earendil-works/pi-tui';
-import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 
 import type { MastraCodeAnalytics } from '../../analytics.js';
@@ -22,7 +22,7 @@ export interface EventHandlerContext {
   notify: (reason: NotificationReason, message?: string) => void;
   analytics?: MastraCodeAnalytics;
   handleSlashCommand: (input: string) => Promise<boolean>;
-  addUserMessage: (message: AgentControllerMessage) => void;
+  addUserMessage: (message: MastraDBMessage) => void;
   addChildBeforeFollowUps: (child: Component) => void;
   fireMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => void;
   startGoal: (objective: string, cancelMessage?: string, options?: StartGoalOptions) => Promise<void>;

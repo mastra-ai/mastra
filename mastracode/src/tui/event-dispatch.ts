@@ -6,6 +6,7 @@ import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getCurrentGitBranchAsync } from '../utils/project.js';
+import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -93,10 +94,7 @@ export async function dispatchEvent(
       // text — tool-result-only updates (e.g. plan approval resume) must not
       // count toward tokens/sec. This mirrors the web UI's hasAssistantText()
       // guard in transcriptReducer.
-      if (
-        state.decodeStartedAt === 0 &&
-        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0)
-      ) {
+      if (state.decodeStartedAt === 0 && getMessageText(event.message).trim().length > 0) {
         state.decodeStartedAt = Date.now();
       }
       handleMessageUpdate(ectx, event.message);

@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Container } from '@earendil-works/pi-tui';
-import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '../utils/plans.js';
@@ -81,23 +82,100 @@ function createState(): TUIState {
   } as unknown as TUIState;
 }
 
-function createUserMessage(text: string, id = 'user-1'): AgentControllerMessage {
-  return {
-    id,
-    role: 'user',
-    content: [{ type: 'text', text }],
-  } as AgentControllerMessage;
+/**
+ * Legacy flat content shapes used only to build DB-native fixtures below.
+ * The renderer no longer consumes these; `flatToDb` converts them into the
+ * canonical `MastraDBMessage` (`content.parts`) shape the TUI now reads.
+ */
+type FlatTextPart = { type: 'text'; text: string };
+type FlatToolCallPart = { type: 'tool_call'; id: string; name: string; args: unknown };
+type FlatToolResultPart = { type: 'tool_result'; id: string; name: string; result: unknown; isError?: boolean };
+type FlatContentPart = FlatTextPart | FlatToolCallPart | FlatToolResultPart;
+
+function flatToParts(content: FlatContentPart[]): MastraDBMessage['content']['parts'] {
+  const parts: MastraDBMessage['content']['parts'] = [];
+  for (const item of content) {
+    if (item.type === 'text') {
+      parts.push({ type: 'text', text: item.text });
+    } else if (item.type === 'tool_call') {
+      parts.push({
+        type: 'tool-invocation',
+        toolInvocation: { toolCallId: item.id, toolName: item.name, args: item.args, state: 'call' },
+      } as never);
+    } else if (item.type === 'tool_result') {
+      const existing = parts.find(
+        part =>
+          (part as { type?: string }).type === 'tool-invocation' &&
+          (part as { toolInvocation?: { toolCallId?: string } }).toolInvocation?.toolCallId === item.id,
+      ) as { toolInvocation?: Record<string, unknown> } | undefined;
+      if (existing?.toolInvocation) {
+        existing.toolInvocation.state = 'result';
+        existing.toolInvocation.result = item.result;
+      } else {
+        parts.push({
+          type: 'tool-invocation',
+          toolInvocation: {
+            toolCallId: item.id,
+            toolName: item.name,
+            args: {},
+            state: 'result',
+            result: item.result,
+          },
+        } as never);
+      }
+    }
+  }
+  return parts;
 }
 
-function createReminderMessage(
-  reminder: Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>,
-  id = '__temporal_1',
-): AgentControllerMessage {
+function dbMessage(
+  role: MastraDBMessage['role'],
+  content: FlatContentPart[],
+  id: string,
+  extra: Partial<MastraDBMessage> = {},
+): MastraDBMessage {
   return {
     id,
-    role: 'user',
-    content: [reminder],
-  } as AgentControllerMessage;
+    role,
+    createdAt: new Date(),
+    content: { format: 2, parts: flatToParts(content) },
+    ...extra,
+  } as MastraDBMessage;
+}
+
+function createUserMessage(text: string, id = 'user-1'): MastraDBMessage {
+  return dbMessage('user', [{ type: 'text', text }], id);
+}
+
+interface LegacyMessage {
+  id: string;
+  role: MastraDBMessage['role'];
+  createdAt?: Date;
+  content: FlatContentPart[];
+}
+
+function toDbMessages(messages: LegacyMessage[]): MastraDBMessage[] {
+  return messages.map(message =>
+    dbMessage(message.role, message.content, message.id, message.createdAt ? { createdAt: message.createdAt } : {}),
+  );
+}
+
+interface ReminderInput {
+  reminderType: string;
+  message: string;
+  gapText?: string;
+  precedesMessageId?: string;
+}
+
+function createReminderMessage(reminder: ReminderInput, id = '__temporal_1'): MastraDBMessage {
+  const { reminderType, message, gapText, precedesMessageId } = reminder;
+  return createSignal({
+    id,
+    type: 'reactive',
+    tagName: 'system-reminder',
+    contents: message,
+    attributes: { type: reminderType, gapText, precedesMessageId },
+  }).toDBMessage();
 }
 
 describe('addUserMessage', () => {
@@ -107,7 +185,6 @@ describe('addUserMessage', () => {
     addUserMessage(
       state,
       createReminderMessage({
-        type: 'system_reminder',
         reminderType: 'temporal-gap',
         message: '15 minutes later — 9:15 AM',
         gapText: '15 minutes later',
@@ -129,7 +206,6 @@ describe('addUserMessage', () => {
     addUserMessage(
       state,
       createReminderMessage({
-        type: 'system_reminder',
         reminderType: 'temporal-gap',
         message: '15 minutes later — 9:15 AM',
         gapText: '15 minutes later',
@@ -211,7 +287,7 @@ describe('renderExistingMessages startup history loading', () => {
     const messages = [
       { ...createUserMessage('first', 'user-1'), createdAt: new Date('2026-05-15T13:00:00.000Z') },
       { ...createUserMessage('second', 'user-2'), createdAt: latest },
-    ] as AgentControllerMessage[];
+    ];
     const state = createState();
     state.session = {
       ...(state.session as any),
@@ -268,11 +344,9 @@ describe('renderExistingMessages startup history loading', () => {
 
 describe('renderExistingMessages subagents', () => {
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
-    const message: AgentControllerMessage = {
-      id: 'assistant-1',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: [
+    const message = dbMessage(
+      'assistant',
+      [
         {
           type: 'tool_call',
           id: 'tool-1',
@@ -291,7 +365,8 @@ describe('renderExistingMessages subagents', () => {
           isError: false,
         },
       ],
-    };
+      'assistant-1',
+    );
     const state = createState();
     state.session = {
       ...(state.session as any),
@@ -318,7 +393,7 @@ describe('renderExistingMessages subagents', () => {
 
 describe('renderExistingMessages task tools', () => {
   it('replays task patch results into the pinned task list', async () => {
-    const messages: AgentControllerMessage[] = [
+    const messages = toDbMessages([
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -360,7 +435,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ];
+    ]);
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
@@ -390,7 +465,7 @@ describe('renderExistingMessages task tools', () => {
 
   it('replays task_check result snapshots into the pinned task list', async () => {
     const checkedTasks = [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }];
-    const messages: AgentControllerMessage[] = [
+    const messages = toDbMessages([
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -425,7 +500,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ];
+    ]);
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
@@ -447,7 +522,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('replays early task patch history without structured task snapshots', async () => {
-    const messages: AgentControllerMessage[] = [
+    const messages = toDbMessages([
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -486,7 +561,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ];
+    ]);
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
@@ -514,7 +589,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('keeps replayed task state local when controller state schema rejects tasks', async () => {
-    const messages: AgentControllerMessage[] = [
+    const messages = toDbMessages([
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -537,7 +612,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ];
+    ]);
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockRejectedValue(new Error('Invalid state update'));
@@ -560,7 +635,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('does not reuse previous IDs by order when replaying duplicate task content', async () => {
-    const messages: AgentControllerMessage[] = [
+    const messages = toDbMessages([
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -610,7 +685,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ];
+    ]);
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
@@ -639,7 +714,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('restores task state from snapshots in the bounded rendered window', async () => {
-    const fillerMessages = Array.from({ length: 39 }, (_, index): AgentControllerMessage => {
+    const fillerMessages = Array.from({ length: 39 }, (_, index): LegacyMessage => {
       return {
         id: `user-${index}`,
         role: 'user',
@@ -647,7 +722,7 @@ describe('renderExistingMessages task tools', () => {
         content: [{ type: 'text', text: `Message ${index}` }],
       };
     });
-    const visibleTaskUpdate: AgentControllerMessage = {
+    const visibleTaskUpdate: LegacyMessage = {
       id: 'assistant-visible',
       role: 'assistant',
       createdAt: new Date(),
@@ -673,7 +748,7 @@ describe('renderExistingMessages task tools', () => {
     const state = createState();
     const updateTasks = vi.fn();
     const setState = vi.fn().mockResolvedValue(undefined);
-    const listActiveMessages = vi.fn().mockResolvedValue([...fillerMessages, visibleTaskUpdate]);
+    const listActiveMessages = vi.fn().mockResolvedValue(toDbMessages([...fillerMessages, visibleTaskUpdate]));
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
@@ -698,7 +773,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('renders inline receipts when replaying repeated complete patches that finish the list', async () => {
-    const messages: AgentControllerMessage[] = [
+    const messages = toDbMessages([
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -756,7 +831,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ];
+    ]);
     const state = createState();
     state.session = {
       ...(state.session as any),
@@ -782,7 +857,7 @@ describe('renderExistingMessages task tools', () => {
 
   it('renders completed task receipts when replaying repeated completed task writes', async () => {
     const completedTasks = [{ id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' }];
-    const messages: AgentControllerMessage[] = [
+    const messages = toDbMessages([
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -816,7 +891,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ] as AgentControllerMessage[];
+    ]);
     const state = createState();
     state.session = {
       ...(state.session as any),
@@ -874,31 +949,33 @@ describe('renderExistingMessages submit_plan approval status', () => {
     const projectPath = createTmpProjectWithPlan('My Plan', 'Step 1\nStep 2');
     const state = createState();
     (state.session.state.get as any).mockReturnValue({ projectPath });
-    (state.session.thread.listActiveMessages as any).mockResolvedValue([
-      {
-        id: 'msg-1',
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool_call',
-            id: 'call-1',
-            name: 'submit_plan',
-            args: { path: PLAN_PATH },
-          },
-          {
-            type: 'tool_result',
-            id: 'call-1',
-            result: {
-              content:
-                'Plan was not approved. The user wants revisions.\n\nUser feedback: Add more tests\n\nPlease revise the plan based on the feedback and submit again with submit_plan.',
-              submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
+    (state.session.thread.listActiveMessages as any).mockResolvedValue(
+      toDbMessages([
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_call',
+              id: 'call-1',
+              name: 'submit_plan',
+              args: { path: PLAN_PATH },
             },
-            isError: false,
-          },
-        ],
-        createdAt: '2026-01-01T00:00:00Z',
-      },
-    ]);
+            {
+              type: 'tool_result',
+              id: 'call-1',
+              name: 'submit_plan',
+              result: {
+                content:
+                  'Plan was not approved. The user wants revisions.\n\nUser feedback: Add more tests\n\nPlease revise the plan based on the feedback and submit again with submit_plan.',
+                submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
+              },
+              isError: false,
+            },
+          ],
+        },
+      ]),
+    );
 
     await renderExistingMessages(state);
 
@@ -916,30 +993,32 @@ describe('renderExistingMessages submit_plan approval status', () => {
 
   it('renders approved plan as "Approved"', async () => {
     const state = createState();
-    (state.session.thread.listActiveMessages as any).mockResolvedValue([
-      {
-        id: 'msg-1',
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool_call',
-            id: 'call-1',
-            name: 'submit_plan',
-            args: { path: PLAN_PATH },
-          },
-          {
-            type: 'tool_result',
-            id: 'call-1',
-            result: {
-              content: 'Plan approved. Proceed with implementation following the approved plan.',
-              submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
+    (state.session.thread.listActiveMessages as any).mockResolvedValue(
+      toDbMessages([
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_call',
+              id: 'call-1',
+              name: 'submit_plan',
+              args: { path: PLAN_PATH },
             },
-            isError: false,
-          },
-        ],
-        createdAt: '2026-01-01T00:00:00Z',
-      },
-    ]);
+            {
+              type: 'tool_result',
+              id: 'call-1',
+              name: 'submit_plan',
+              result: {
+                content: 'Plan approved. Proceed with implementation following the approved plan.',
+                submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
+              },
+              isError: false,
+            },
+          ],
+        },
+      ]),
+    );
 
     await renderExistingMessages(state);
 

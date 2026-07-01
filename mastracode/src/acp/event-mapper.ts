@@ -1,6 +1,8 @@
 import type { SessionNotification, RequestPermissionRequest, AgentSideConnection } from '@agentclientprotocol/sdk';
 import type { AgentControllerEvent, Session, TokenUsage } from '@mastra/core/agent-controller';
 
+import { getMessageText } from '../tui/db-message-parts.js';
+
 let autoApprove = false;
 
 /**
@@ -66,10 +68,7 @@ export function handleAgentControllerEvent(
 
     case 'message_update': {
       if (event.message.role !== 'assistant') break;
-      const fullText = event.message.content
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map(p => p.text)
-        .join('');
+      const fullText = getMessageText(event.message);
       if (fullText.length > state.lastTextLength) {
         const delta = fullText.slice(state.lastTextLength);
         state.lastTextLength = fullText.length;

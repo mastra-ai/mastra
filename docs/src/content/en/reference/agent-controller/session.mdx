@@ -263,6 +263,8 @@ Retrieve messages for a specific thread.
 const messages = await agentController.session.thread.listMessages({ threadId: 'thread-abc123' })
 ```
 
+The message-reading methods — `listActiveMessages`, `listMessages`, `firstUserMessage`, and `firstUserMessages` — return `MastraDBMessage` objects. Each message has a `role`, an `id`, a `createdAt`, and a `content` object with `content.format` and a `content.parts` array. Read text, reasoning, tool calls, and attachments from `content.parts`. Signals such as system reminders and notifications are returned as separate messages with `role: 'signal'`.
+
 ### `session.thread.firstUserMessage({ threadId })`
 
 Retrieve the first user message for a thread, or `null` if none.

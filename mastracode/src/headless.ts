@@ -4,12 +4,9 @@
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
-import type {
-  AgentController,
-  AgentControllerEvent,
-  AgentControllerMessage,
-  Session,
-} from '@mastra/core/agent-controller';
+import type { AgentController, AgentControllerEvent, MastraDBMessage, Session } from '@mastra/core/agent-controller';
+
+import { getMessageText } from './tui/db-message-parts.js';
 
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
@@ -253,10 +250,7 @@ function formatDefault(event: AgentControllerEvent, ctx: { lastTextLength: numbe
       ctx.lastTextLength = 0;
       break;
     case 'message_update': {
-      const fullText = event.message.content
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map(p => p.text)
-        .join('');
+      const fullText = getMessageText(event.message);
       if (fullText.length > ctx.lastTextLength) {
         process.stdout.write(fullText.slice(ctx.lastTextLength));
         ctx.lastTextLength = fullText.length;
@@ -304,11 +298,8 @@ function createEmptySummary(): HeadlessSummary {
   return { text: '', toolCalls: [], toolResults: [] };
 }
 
-function extractAssistantText(message: AgentControllerMessage): string {
-  return message.content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-    .map(c => c.text)
-    .join('');
+function extractAssistantText(message: MastraDBMessage): string {
+  return getMessageText(message);
 }
 
 function aggregateIntoSummary(event: AgentControllerEvent, summary: HeadlessSummary): void {

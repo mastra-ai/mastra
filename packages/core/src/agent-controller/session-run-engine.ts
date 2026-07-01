@@ -1,3 +1,4 @@
+import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
 import type { RequestContext } from '../request-context';
@@ -9,14 +10,8 @@ import {
   describeServerSideFallback,
   getDisplayTransform,
   getUsageNumber,
-  toNotificationContent,
-  toNotificationSummaryContent,
-  toReactiveSignalContent,
-  toStateSignalContent,
-  toSystemReminderContent,
-  toUserSignalMessage,
 } from './stream-content';
-import type { AgentControllerMessage, TokenUsage } from './types';
+import type { TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -24,11 +19,12 @@ import type { AgentControllerMessage, TokenUsage } from './types';
  * flags. One per run; recreated per run within a subscribed thread stream.
  */
 type StreamState = {
-  currentMessage: AgentControllerMessage;
-  lastFinishedMessage?: AgentControllerMessage;
+  currentMessage: MastraDBMessage;
+  lastFinishedMessage?: MastraDBMessage;
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
+  toolPartById: Map<string, number>;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -59,27 +55,71 @@ export class SessionRunEngine {
     this.#machinery = machinery;
   }
 
-  private createEmptyAssistantMessage(): AgentControllerMessage {
+  private createEmptyAssistantMessage(): MastraDBMessage {
     return {
       id: this.#machinery.generateId(),
       role: 'assistant',
-      content: [],
+      content: { format: 2, parts: [] },
       createdAt: new Date(),
     };
   }
 
+  /**
+   * Build a DB-native signal message from a streamed `data-signal` /
+   * `data-user-message` / `data-system-reminder` chunk. The raw data-part is
+   * carried verbatim on `content.parts` and the signal identity is preserved on
+   * `content.metadata.signal` so consumers read the native shape (no flattening).
+   */
+  private createSignalMessage(partType: string, payload: Record<string, unknown>): MastraDBMessage {
+    const signalId = typeof payload.id === 'string' ? payload.id : this.#machinery.generateId();
+    const createdAt =
+      typeof payload.createdAt === 'string' && !Number.isNaN(Date.parse(payload.createdAt))
+        ? new Date(payload.createdAt)
+        : new Date();
+    return {
+      id: signalId,
+      role: 'signal',
+      content: {
+        format: 2,
+        parts: [{ type: partType, data: payload } as MastraMessagePart],
+        metadata: { signal: payload },
+      },
+      createdAt,
+    };
+  }
+
   private hasCurrentMessageContent(state: StreamState): boolean {
-    return state.currentMessage.content.length > 0;
+    return state.currentMessage.content.parts.length > 0;
+  }
+
+  private cloneMessage(message: MastraDBMessage): MastraDBMessage {
+    return { ...message, content: { ...message.content, parts: [...message.content.parts] } };
+  }
+
+  private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
+    message.content.metadata ??= {};
+    const metadata = message.content.metadata as Record<string, unknown>;
+    if (force) {
+      metadata.stopReason = stopReason;
+    } else {
+      metadata.stopReason ??= stopReason;
+    }
+  }
+
+  private setErrorMessage(message: MastraDBMessage, errorMessage: string): void {
+    message.content.metadata ??= {};
+    (message.content.metadata as Record<string, unknown>).errorMessage = errorMessage;
   }
 
   private finishCurrentMessageAndRotate(state: StreamState): void {
     if (!this.hasCurrentMessageContent(state)) return;
-    state.currentMessage.stopReason ??= 'complete';
+    this.setStopReason(state.currentMessage, 'complete');
     this.#session.emit({ type: 'message_end', message: state.currentMessage });
     state.lastFinishedMessage = state.currentMessage;
     state.currentMessage = this.createEmptyAssistantMessage();
     state.textContentById.clear();
     state.thinkingContentById.clear();
+    state.toolPartById.clear();
   }
 
   createStreamState(): StreamState {
@@ -88,6 +128,7 @@ export class SessionRunEngine {
       isSuspended: false,
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
+      toolPartById: new Map<string, number>(),
     };
   }
 
@@ -105,13 +146,13 @@ export class SessionRunEngine {
   async processStream(
     response: { fullStream: AsyncIterable<any> },
     requestContextInput?: RequestContext,
-  ): Promise<{ message: AgentControllerMessage; suspended?: boolean } | undefined> {
+  ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     const state = this.createStreamState();
     const requestContext = await this.#machinery.buildRequestContext(requestContextInput);
     this.#session.run.nextOperation();
     this.#session.emit({ type: 'agent_start' });
 
-    let result: { message: AgentControllerMessage; suspended?: boolean } | undefined;
+    let result: { message: MastraDBMessage; suspended?: boolean } | undefined;
     let error = false;
     let aborted = false;
 
@@ -167,17 +208,17 @@ export class SessionRunEngine {
     state: StreamState,
     chunk: any,
     requestContext: RequestContext,
-  ): Promise<{ message: AgentControllerMessage; suspended?: boolean } | undefined> {
+  ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
     }
 
     switch (chunk.type) {
       case 'text-start': {
-        const textIndex = state.currentMessage.content.length;
-        state.currentMessage.content.push({ type: 'text', text: '' });
+        const textIndex = state.currentMessage.content.parts.length;
+        state.currentMessage.content.parts.push({ type: 'text', text: '' });
         state.textContentById.set(chunk.payload.id, { index: textIndex, text: '' });
-        this.#session.emit({ type: 'message_start', message: { ...state.currentMessage } });
+        this.#session.emit({ type: 'message_start', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
@@ -185,20 +226,20 @@ export class SessionRunEngine {
         const textState = state.textContentById.get(chunk.payload.id);
         if (textState) {
           textState.text += chunk.payload.text;
-          const textContent = state.currentMessage.content[textState.index];
+          const textContent = state.currentMessage.content.parts[textState.index];
           if (textContent && textContent.type === 'text') {
             textContent.text = textState.text;
           }
-          this.#session.emit({ type: 'message_update', message: { ...state.currentMessage } });
+          this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         }
         break;
       }
 
       case 'reasoning-start': {
-        const thinkingIndex = state.currentMessage.content.length;
-        state.currentMessage.content.push({ type: 'thinking', thinking: '' });
+        const thinkingIndex = state.currentMessage.content.parts.length;
+        state.currentMessage.content.parts.push({ type: 'reasoning', reasoning: '', details: [] });
         state.thinkingContentById.set(chunk.payload.id, { index: thinkingIndex, text: '' });
-        this.#session.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
@@ -206,11 +247,12 @@ export class SessionRunEngine {
         const thinkingState = state.thinkingContentById.get(chunk.payload.id);
         if (thinkingState) {
           thinkingState.text += chunk.payload.text;
-          const thinkingContent = state.currentMessage.content[thinkingState.index];
-          if (thinkingContent && thinkingContent.type === 'thinking') {
-            thinkingContent.thinking = thinkingState.text;
+          const thinkingContent = state.currentMessage.content.parts[thinkingState.index];
+          if (thinkingContent && thinkingContent.type === 'reasoning') {
+            thinkingContent.reasoning = thinkingState.text;
+            thinkingContent.details = [{ type: 'text', text: thinkingState.text }];
           }
-          this.#session.emit({ type: 'message_update', message: { ...state.currentMessage } });
+          this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         }
         break;
       }
@@ -244,19 +286,24 @@ export class SessionRunEngine {
       case 'tool-call': {
         const toolCall = chunk.payload;
         const args = getDisplayTransform(chunk.metadata, 'input-available', toolCall.args);
-        state.currentMessage.content.push({
-          type: 'tool_call',
-          id: toolCall.toolCallId,
-          name: toolCall.toolName,
-          args,
+        const toolIndex = state.currentMessage.content.parts.length;
+        state.currentMessage.content.parts.push({
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            args,
+          },
         });
+        state.toolPartById.set(toolCall.toolCallId, toolIndex);
         this.#session.emit({
           type: 'tool_start',
           toolCallId: toolCall.toolCallId,
           toolName: toolCall.toolName,
           args,
         });
-        this.#session.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
@@ -264,14 +311,30 @@ export class SessionRunEngine {
         const toolResult = chunk.payload;
         const providerMetadata = toolResult.providerMetadata as Record<string, unknown> | undefined;
         const result = getDisplayTransform(chunk.metadata, 'output-available', toolResult.result);
-        state.currentMessage.content.push({
-          type: 'tool_result',
-          id: toolResult.toolCallId,
-          name: toolResult.toolName,
-          result,
-          isError: toolResult.isError ?? false,
-          ...(providerMetadata ? { providerMetadata } : {}),
-        });
+        const toolIndex = state.toolPartById.get(toolResult.toolCallId);
+        const existing = toolIndex !== undefined ? state.currentMessage.content.parts[toolIndex] : undefined;
+        if (existing && existing.type === 'tool-invocation') {
+          existing.toolInvocation = {
+            ...existing.toolInvocation,
+            state: 'result',
+            result,
+          };
+          if (providerMetadata) {
+            (existing as { providerMetadata?: unknown }).providerMetadata = providerMetadata;
+          }
+        } else {
+          state.currentMessage.content.parts.push({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: toolResult.toolCallId,
+              toolName: toolResult.toolName,
+              args: {},
+              result,
+            },
+            ...(providerMetadata ? { providerMetadata: providerMetadata as never } : {}),
+          });
+        }
         this.#session.emit({
           type: 'tool_end',
           toolCallId: toolResult.toolCallId,
@@ -279,7 +342,7 @@ export class SessionRunEngine {
           isError: toolResult.isError ?? false,
           ...(providerMetadata ? { providerMetadata } : {}),
         });
-        this.#session.emit({ type: 'message_update', message: { ...state.currentMessage } });
+        this.#session.emit({ type: 'message_update', message: this.cloneMessage(state.currentMessage) });
         break;
       }
 
@@ -415,9 +478,9 @@ export class SessionRunEngine {
           this.#session.emit({ type: 'info', message: fallbackNotice });
         }
         if (finishReason === 'stop' || finishReason === 'end-turn') {
-          state.currentMessage.stopReason = 'complete';
+          this.setStopReason(state.currentMessage, 'complete', true);
         } else if (finishReason === 'tool-calls') {
-          state.currentMessage.stopReason = 'tool_use';
+          this.setStopReason(state.currentMessage, 'tool_use', true);
         } else {
           // Non-success terminal reasons (e.g. `content-filter` from a
           // `claude-fable-5` refusal, `error`, or `length`) must surface as an
@@ -426,11 +489,11 @@ export class SessionRunEngine {
           // unable to tell whether it completed, failed, or is still active.
           const errorMessage = describeNonSuccessFinishReason(finishReason, finishProviderMetadata);
           if (errorMessage) {
-            state.currentMessage.stopReason = 'error';
-            state.currentMessage.errorMessage = errorMessage;
+            this.setStopReason(state.currentMessage, 'error', true);
+            this.setErrorMessage(state.currentMessage, errorMessage);
             state.terminalError = errorMessage;
           } else {
-            state.currentMessage.stopReason = 'complete';
+            this.setStopReason(state.currentMessage, 'complete', true);
           }
         }
         break;
@@ -610,55 +673,20 @@ export class SessionRunEngine {
       }
       case 'data-signal': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
-        if (payload?.type === 'state') {
-          const stateSignal = toStateSignalContent(payload);
-          if (stateSignal) {
-            state.currentMessage.content.push(stateSignal);
-            this.#session.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'reactive' && payload.tagName === 'system-reminder') {
-          const reminder = toSystemReminderContent(payload);
-          if (reminder) {
-            state.currentMessage.content.push(reminder);
-            this.#session.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'notification' && payload.tagName === 'notification-summary') {
-          const notificationSummary = toNotificationSummaryContent(payload);
-          if (notificationSummary) {
-            state.currentMessage.content.push(notificationSummary);
-            this.#session.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'notification' && payload.tagName === 'notification') {
-          const notification = toNotificationContent(payload);
-          if (notification) {
-            state.currentMessage.content.push(notification);
-            this.#session.emit({ type: 'message_update', message: state.currentMessage });
-          }
-        } else if (payload?.type === 'reactive') {
-          const reactiveSignal = toReactiveSignalContent(payload);
-          if (reactiveSignal) {
-            state.currentMessage.content.push(reactiveSignal);
-            this.#session.emit({ type: 'message_update', message: state.currentMessage });
-          }
+        if (payload) {
+          const message = this.createSignalMessage('data-signal', payload);
+          this.#session.emit({ type: 'message_start', message });
+          this.#session.emit({ type: 'message_end', message });
         }
         break;
       }
       case 'data-user-message': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
-        const message = payload ? toUserSignalMessage(payload) : undefined;
-        if (message) {
-          if (state.currentMessage.content.length > 0) {
-            state.currentMessage.stopReason ??= 'complete';
-            this.#session.emit({ type: 'message_end', message: { ...state.currentMessage } });
-            state.currentMessage = {
-              id: this.#machinery.generateId(),
-              role: 'assistant',
-              content: [],
-              createdAt: new Date(),
-            };
-            state.textContentById.clear();
-            state.thinkingContentById.clear();
-          }
+        if (payload) {
+          // A user signal interrupts the in-flight assistant message: finalize and
+          // rotate it first so the user signal is its own message in order.
+          this.finishCurrentMessageAndRotate(state);
+          const message = this.createSignalMessage('data-user-message', payload);
           this.#session.emit({ type: 'message_start', message });
           this.#session.emit({ type: 'message_end', message });
         }
@@ -667,10 +695,10 @@ export class SessionRunEngine {
       // Back-compat: persisted streams may still contain data-system-reminder parts
       case 'data-system-reminder': {
         const payload = (chunk as any).data as Record<string, unknown> | undefined;
-        const reminder = payload ? toSystemReminderContent(payload) : undefined;
-        if (reminder) {
-          state.currentMessage.content.push(reminder);
-          this.#session.emit({ type: 'message_update', message: state.currentMessage });
+        if (payload) {
+          const message = this.createSignalMessage('data-system-reminder', payload);
+          this.#session.emit({ type: 'message_start', message });
+          this.#session.emit({ type: 'message_end', message });
         }
         break;
       }
@@ -732,7 +760,7 @@ export class SessionRunEngine {
     }
   }
 
-  private finishStreamState(state: StreamState): { message: AgentControllerMessage; suspended?: boolean } {
+  private finishStreamState(state: StreamState): { message: MastraDBMessage; suspended?: boolean } {
     if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
       this.#session.emit({ type: 'message_end', message: state.currentMessage });
       return { message: state.currentMessage, suspended: state.isSuspended || undefined };
