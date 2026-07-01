@@ -785,8 +785,6 @@ function NoticeCard({ entry }: { entry: NoticeEntry }) {
 
 export function StatusLine({
   status,
-  modeId,
-  modeName,
   modelId,
   running,
   followUpCount,
@@ -798,8 +796,6 @@ export function StatusLine({
   tokensPerSec,
 }: {
   status: string;
-  modeId?: string;
-  modeName?: string;
   modelId?: string;
   running: boolean;
   followUpCount?: number;
@@ -818,7 +814,6 @@ export function StatusLine({
 
   return (
     <div className="flex shrink-0 items-center gap-3 border-t border-border1 bg-surface2 px-4 py-2 text-ui-sm text-icon3">
-      <Badge variant="info">{modeName ?? modeId ?? '—'}</Badge>
       <span className="text-icon3 tabular-nums">{modelId ? lastSegment(modelId) : 'no model'}</span>
 
       {showMsg && (

@@ -331,3 +331,63 @@ describe('MastraCode message rendering', () => {
     });
   });
 });
+
+describe('App mode + theme controls', () => {
+  describe('when a project with multiple modes is active', () => {
+    function seedMultiMode() {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${API}/modes`, () =>
+          HttpResponse.json({
+            modes: [
+              { id: 'build', name: 'Build' },
+              { id: 'plan', name: 'Plan' },
+            ],
+          }),
+        ),
+      );
+    }
+
+    it('renders the mode switcher below the composer, not in the header', async () => {
+      seedMultiMode();
+
+      renderWithProviders(<App />);
+
+      const buildButton = await screen.findByRole('button', { name: 'Build' });
+      const planButton = screen.getByRole('button', { name: 'Plan' });
+      const composer = screen.getByRole('textbox');
+
+      // Switcher lives after the composer in DOM order (below it), not in the header.
+      expect(composer.compareDocumentPosition(buildButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(composer.compareDocumentPosition(planButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      const header = document.querySelector('header');
+      expect(header).not.toBeNull();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Build' })).not.toBeInTheDocument();
+      expect(within(header as HTMLElement).queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument();
+    });
+
+    it('marks the active mode as selected', async () => {
+      seedMultiMode();
+
+      renderWithProviders(<App />);
+
+      const buildButton = await screen.findByRole('button', { name: 'Build' });
+      const planButton = screen.getByRole('button', { name: 'Plan' });
+
+      expect(buildButton).toHaveAttribute('aria-pressed', 'true');
+      expect(planButton).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('does not render a theme toggle in the header', async () => {
+      seedMultiMode();
+
+      renderWithProviders(<App />);
+
+      await screen.findByRole('button', { name: 'Build' });
+
+      expect(screen.queryByLabelText('Toggle theme')).not.toBeInTheDocument();
+    });
+  });
+});

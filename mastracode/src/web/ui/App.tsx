@@ -1,5 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
-import { Button, ButtonsGroup, Notice, Spinner, Textarea, ThemeToggle, Txt, useTheme } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, Notice, Spinner, Textarea, Txt, useTheme } from '@mastra/playground-ui';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Menu, Settings, Square } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -539,21 +539,6 @@ export default function App() {
             <ChevronsUpDown size={14} className="text-icon3" />
           </button>
           <div className="ml-auto flex items-center gap-2">
-            {activeProject && modes.length > 0 && (
-              <ButtonsGroup spacing="close">
-                {modes.map(m => (
-                  <Button
-                    key={m.id}
-                    variant={transcript.modeId === m.id ? 'primary' : 'ghost'}
-                    size="sm"
-                    onClick={() => void session.switchMode(m.id)}
-                  >
-                    {m.name ?? m.id}
-                  </Button>
-                ))}
-              </ButtonsGroup>
-            )}
-            <ThemeToggle aria-label="Toggle theme" />
             <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
               <Settings />
             </Button>
@@ -708,10 +693,30 @@ export default function App() {
               )}
             </form>
 
+            {modes.length > 0 && (
+              <div
+                role="group"
+                aria-label="Session mode"
+                className="flex shrink-0 items-center gap-2 border-t border-border1 bg-surface2 px-4 py-2"
+              >
+                <ButtonsGroup spacing="close">
+                  {modes.map(m => (
+                    <Button
+                      key={m.id}
+                      variant={transcript.modeId === m.id ? 'primary' : 'ghost'}
+                      size="sm"
+                      aria-pressed={transcript.modeId === m.id}
+                      onClick={() => void session.switchMode(m.id)}
+                    >
+                      {m.name ?? m.id}
+                    </Button>
+                  ))}
+                </ButtonsGroup>
+              </div>
+            )}
+
             <StatusLine
               status={status}
-              modeId={transcript.modeId}
-              modeName={modes.find(m => m.id === transcript.modeId)?.name}
               modelId={transcript.modelId}
               running={busy}
               followUpCount={transcript.followUpCount}
