@@ -6,7 +6,7 @@ import { createLiveKitWorker, resolveMemoryInstance } from './worker';
 import type { ResolveMastraAgentArgs } from './worker';
 import { workerSetupComplete } from './worker-setup';
 
-function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent', unknown>> = {}): Mastra {
+function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent' | 'getLogger', unknown>> = {}): Mastra {
   return {
     getAgentById: vi.fn(() => {
       throw new Error('not found');
@@ -14,6 +14,7 @@ function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent', unkno
     getAgent: vi.fn(() => {
       throw new Error('not found');
     }),
+    getLogger: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
     ...overrides,
   } as unknown as Mastra;
 }

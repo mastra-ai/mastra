@@ -394,6 +394,9 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       }
     },
     entry: async (ctx: JobContext<WorkerUserData>) => {
+      // Route degradation warnings through the Mastra logger so they honor the app's
+      // configured log level and transports instead of writing straight to the console.
+      const logger = options.mastra.getLogger();
       const metadata = parseSessionMetadata(ctx.job.metadata);
       const args: ResolveMastraAgentArgs = { metadata, ctx };
       const requestContext = metadata.requestContext
@@ -457,7 +460,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
             roomName,
           });
         } catch (error) {
-          console.warn('@mastra/livekit: failed to create the voice call thread', error);
+          logger.warn('@mastra/livekit: failed to create the voice call thread', error);
         }
       }
 
@@ -491,7 +494,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           try {
             await onCallEnd({ memory, memoryInstance, metadata, requestContext, roomName, ctx });
           } catch (error) {
-            console.warn('@mastra/livekit: onCallEnd hook threw', error);
+            logger.warn('@mastra/livekit: onCallEnd hook threw', error);
           }
         });
       }
@@ -536,7 +539,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
                 greeting: options.greeting,
               });
             } catch (error) {
-              console.warn('@mastra/livekit: failed to persist the greeting', error);
+              logger.warn('@mastra/livekit: failed to persist the greeting', error);
             }
           }
         }
