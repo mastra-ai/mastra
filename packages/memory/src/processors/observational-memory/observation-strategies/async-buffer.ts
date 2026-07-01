@@ -2,7 +2,11 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { applyExtractorHooks, filterUserExtractedValues, getPriorExtractedValues } from '../extracted-values';
+import {
+  applyExtractorHooks,
+  buildThreadMetadataFromExtractedValues,
+  getPriorExtractedValues,
+} from '../extracted-values';
 import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
 
@@ -52,7 +56,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
     const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
-    this.priorExtractedValues = getPriorExtractedValues(omMeta);
+    this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
     const result = await this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
@@ -64,7 +68,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',
-      extractors: this.observationConfig.extractors,
+      extractors: result.extractors ?? this.observationConfig.extractors,
       values: result.extractedValues,
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
@@ -123,6 +127,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       threadTitle: output.threadTitle,
       extractedValues: output.extractedValues,
       extractionFailures: output.extractionFailures,
+      extractors: output.extractors,
     };
   }
 
@@ -160,11 +165,17 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         const oldTitle = thread.title?.trim();
         const shouldUpdateThreadTitle = hasValidThreadTitle && newTitle !== oldTitle;
         const previousOmMetadata = getThreadOMMetadata(thread.metadata);
+        const metadataUpdate = buildThreadMetadataFromExtractedValues(
+          processed.extractors ?? this.observationConfig.extractors,
+          processed.extractedValues,
+        );
         const newMetadata = setThreadOMMetadata(thread.metadata, {
-          ...(hasValidThreadTitle ? { threadTitle: processed.threadTitle } : {}),
+          ...(hasValidThreadTitle || metadataUpdate.threadTitle
+            ? { threadTitle: metadataUpdate.threadTitle ?? processed.threadTitle }
+            : {}),
           extracted: {
             ...(previousOmMetadata?.extracted ?? {}),
-            ...(filterUserExtractedValues(processed.extractedValues) ?? {}),
+            ...(metadataUpdate.extracted ?? {}),
           },
         });
         await this.storage.updateThread({
