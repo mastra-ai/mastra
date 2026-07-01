@@ -345,6 +345,11 @@ async function resolveInstructions(
  * ```
  */
 export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
+  if (options.generate && (options.agent || options.workflow)) {
+    throw new Error(
+      '@mastra/livekit: set exactly one reply generator — `generate`, `agent`, or `workflow` — not a combination.',
+    );
+  }
   if (options.agent && options.workflow) {
     throw new Error(
       '@mastra/livekit: set `agent` or `workflow`, not both — they are mutually exclusive reply generators.',

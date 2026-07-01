@@ -58,6 +58,24 @@ describe('createLiveKitWorker', () => {
     expect(typeof definition.prewarm).toBe('function');
   });
 
+  it('rejects `generate` combined with `agent`', () => {
+    expect(() => createLiveKitWorker({ mastra: fakeMastra(), generate: vi.fn(), agent: 'callCenter' })).toThrow(
+      /exactly one reply generator/,
+    );
+  });
+
+  it('rejects `generate` combined with `workflow`', () => {
+    expect(() =>
+      createLiveKitWorker({ mastra: fakeMastra(), generate: vi.fn(), workflow: 'phone', workflowInput: () => ({}) }),
+    ).toThrow(/exactly one reply generator/);
+  });
+
+  it('rejects `agent` combined with `workflow`', () => {
+    expect(() =>
+      createLiveKitWorker({ mastra: fakeMastra(), agent: 'callCenter', workflow: 'phone', workflowInput: () => ({}) }),
+    ).toThrow(/mutually exclusive/);
+  });
+
   it('does not load a VAD during prewarm when vad is disabled', async () => {
     const definition = createLiveKitWorker({ mastra: fakeMastra(), vad: false });
     const proc = { userData: {} } as JobProcess<Record<string, unknown>>;
