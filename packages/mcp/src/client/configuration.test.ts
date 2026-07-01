@@ -164,6 +164,33 @@ describe('MCPClient tool discovery retries', () => {
     expect(reconnectSpy).toHaveBeenCalledWith('weather');
   });
 
+  it('retries listToolsetsWithErrors once after a reconnectable connection failure', async () => {
+    const client = createClient();
+    const toolset = { getWeather: {} as any };
+    const internalClient = {
+      tools: vi.fn().mockResolvedValue(toolset),
+    } as any;
+
+    const getConnectedClientSpy = vi
+      .spyOn(client as any, 'getConnectedClientForServer')
+      .mockRejectedValueOnce(new Error('Could not connect to server with any available HTTP transport'))
+      .mockResolvedValueOnce(internalClient);
+    const reconnectSpy = vi.spyOn(client, 'reconnectServer').mockResolvedValue();
+
+    const result = await client.listToolsetsWithErrors();
+
+    expect(result).toEqual({
+      toolsets: {
+        weather: toolset,
+      },
+      errors: {},
+    });
+    expect(getConnectedClientSpy).toHaveBeenCalledTimes(2);
+    expect(internalClient.tools).toHaveBeenCalledTimes(1);
+    expect(reconnectSpy).toHaveBeenCalledTimes(1);
+    expect(reconnectSpy).toHaveBeenCalledWith('weather');
+  });
+
   it('does not retry listToolsetsWithErrors for non-reconnectable discovery failures', async () => {
     const client = createClient();
     const internalClient = {

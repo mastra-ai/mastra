@@ -14,6 +14,7 @@ export function isReconnectableMCPError(error: unknown): boolean {
     errorMessage.includes('http 401') ||
     errorMessage.includes('http 403') ||
     errorMessage.includes('http 404') ||
+    errorMessage.includes('could not connect to server with any available http transport') ||
     errorMessage.includes('econnrefused') ||
     errorMessage.includes('fetch failed') ||
     errorMessage.includes('connection refused') ||
