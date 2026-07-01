@@ -737,8 +737,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                 // Collect every chunk for post-stream processLLMResponse hook.
                 // Skipped on cache hit because the processor already handled
-                // the original response.
-                if (!cachedResponse) {
+                // the original response, and skipped when no request/response
+                // processors exist to avoid buffering the entire stream in memory.
+                if (!cachedResponse && requestStepRunner) {
                   collectedChunks.push({
                     type: rawChunk.type,
                     payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
@@ -1050,6 +1051,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Success - return the output
             return output;
           } catch (error) {
+            // TripWire errors from processLLMRequest / processLLMResponse are
+            // guardrail/cache processor decisions, not model failures. They
+            // must not be retried or fall back to the next model.
+            if (error instanceof TripWire) {
+              throw error;
+            }
+
             lastError = error instanceof Error ? error : new Error(String(error));
 
             // Confirmed aborts bypass all retry / fallback / processAPIError
