@@ -36,11 +36,18 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
 
   const providers = dataProviders?.providers || [];
 
-  // Update local state when agent data changes
+  // Only hydrate from agent defaults while the local picker is still empty.
+  // This avoids clobbering the first manual selection when the initial agent
+  // details query resolves slightly after the user interacts.
   useEffect(() => {
-    setSelectedModel(defaultModel);
-    setSelectedProvider(defaultProvider);
-  }, [defaultModel, defaultProvider]);
+    if (!selectedProvider && defaultProvider) {
+      setSelectedProvider(defaultProvider);
+    }
+
+    if (!selectedModel && defaultModel) {
+      setSelectedModel(defaultModel);
+    }
+  }, [defaultModel, defaultProvider, selectedModel, selectedProvider]);
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 
