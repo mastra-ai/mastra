@@ -303,7 +303,13 @@ export const DELETE_DATASET_ROUTE = createRoute({
     assertDatasetsAvailable();
     try {
       const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
-      await mastra.datasets.get({ id: datasetId, organizationId, projectId }); // validates existence + tenancy
+      // For unscoped deletes, preserve the legacy 404-on-missing behavior via a
+      // preflight get(). For scoped deletes, skip the preflight: a tenancy
+      // mismatch must be a silent no-op (matches "delete non-existent id is a
+      // no-op") so cross-tenant existence is not leaked via error timing/status.
+      if (organizationId === undefined && projectId === undefined) {
+        await mastra.datasets.get({ id: datasetId });
+      }
       await mastra.datasets.delete({ id: datasetId, organizationId, projectId });
       return { success: true };
     } catch (error) {

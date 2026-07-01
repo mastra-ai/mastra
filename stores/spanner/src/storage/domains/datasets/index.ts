@@ -32,6 +32,7 @@ import type {
   ListDatasetVersionsOutput,
   UpdateDatasetInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -719,7 +720,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem(args: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem(args: DeleteDatasetItemInput): Promise<void> {
     try {
       const existing = await this.loadCurrentItemRow(args.id);
       if (!existing) return;

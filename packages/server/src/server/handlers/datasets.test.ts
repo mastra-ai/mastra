@@ -202,25 +202,29 @@ describe('Datasets Handlers', () => {
       await expect(mastra.datasets.get({ id: created.id }).then(d => d.getDetails())).rejects.toThrow();
     });
 
-    it('rejects delete when organizationId does not match and dataset remains', async () => {
+    it('silently no-ops delete when organizationId does not match and dataset remains', async () => {
       const created = await mastra.datasets.create({
         name: 'Guarded',
         organizationId: 'org_a',
         projectId: 'proj_1',
       });
 
-      await expect(
-        DELETE_DATASET_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          datasetId: created.id,
-          organizationId: 'org_b',
-        } as any),
-      ).rejects.toThrow(HTTPException);
+      // Scoped delete on wrong tenant must NOT throw — silent no-op matches the
+      // storage contract so cross-tenant existence is not leaked via error
+      // timing or status. See MASTRA-4438 and _test-utils/datasets.
+      const result = (await DELETE_DATASET_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: created.id,
+        organizationId: 'org_b',
+      } as any)) as any;
 
-      // dataset survives
+      expect(result.success).toBe(true);
+
+      // dataset survives untouched
       const survivor = await mastra.datasets.get({ id: created.id });
       const details = await survivor.getDetails();
       expect(details.id).toBe(created.id);
+      expect(details.organizationId).toBe('org_a');
     });
   });
 

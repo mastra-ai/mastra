@@ -101,6 +101,28 @@ export class Dataset {
     return store;
   }
 
+  /**
+   * Preflight tenancy gate for storage APIs whose signatures don't accept
+   * `filters`. When the handle has a `#scope`, a scoped `getDatasetById` is
+   * used to prove the dataset exists in the caller's tenancy; on miss we
+   * throw NOT_FOUND, mirroring {@link Dataset.getDetails}. Callers that must
+   * return a non-throwing empty result (e.g. list endpoints) should catch and
+   * translate.
+   */
+  async #assertScope(): Promise<void> {
+    if (!this.#scope) return;
+    const store = await this.#getDatasetsStore();
+    const record = await store.getDatasetById({ id: this.id, filters: this.#scope });
+    if (!record) {
+      throw new MastraError({
+        id: 'DATASET_NOT_FOUND',
+        text: `Dataset not found: ${this.id}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Dataset metadata
   // ---------------------------------------------------------------------------
@@ -185,6 +207,7 @@ export class Dataset {
    * Get a single item by ID, optionally at a specific version.
    */
   async getItem(args: { itemId: string; version?: number }): Promise<DatasetItem | null> {
+    await this.#assertScope();
     const store = await this.#getDatasetsStore();
     return store.getItemById({ id: args.itemId, datasetVersion: args.version });
   }
@@ -201,6 +224,7 @@ export class Dataset {
     | DatasetItem[]
     | { items: DatasetItem[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }
   > {
+    await this.#assertScope();
     const store = await this.#getDatasetsStore();
     if (args?.version) {
       return store.getItemsByVersion({ datasetId: this.id, version: args.version });
@@ -227,7 +251,7 @@ export class Dataset {
    */
   async deleteItem(args: { itemId: string }): Promise<void> {
     const store = await this.#getDatasetsStore();
-    return store.deleteItem({ id: args.itemId, datasetId: this.id });
+    return store.deleteItem({ id: args.itemId, datasetId: this.id, filters: this.#scope });
   }
 
   /**
@@ -249,6 +273,7 @@ export class Dataset {
     versions: DatasetVersion[];
     pagination: { total: number; page: number; perPage: number | false; hasMore: boolean };
   }> {
+    await this.#assertScope();
     const store = await this.#getDatasetsStore();
     return store.listDatasetVersions({
       datasetId: this.id,
@@ -260,6 +285,7 @@ export class Dataset {
    * Get full SCD-2 history of a specific item across all dataset versions.
    */
   async getItemHistory(args: { itemId: string }): Promise<DatasetItemRow[]> {
+    await this.#assertScope();
     const store = await this.#getDatasetsStore();
     return store.getItemHistory(args.itemId);
   }
@@ -357,6 +383,7 @@ export class Dataset {
    * List all experiments (runs) for this dataset.
    */
   async listExperiments(args?: { page?: number; perPage?: number }) {
+    await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.listExperiments({
       datasetId: this.id,
@@ -368,6 +395,7 @@ export class Dataset {
    * Get a specific experiment (run) by ID.
    */
   async getExperiment(args: { experimentId: string }) {
+    await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.getExperimentById({ id: args.experimentId });
   }
@@ -376,6 +404,7 @@ export class Dataset {
    * List results for a specific experiment.
    */
   async listExperimentResults(args: { experimentId: string; page?: number; perPage?: number }) {
+    await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.listExperimentResults({
       experimentId: args.experimentId,
@@ -390,11 +419,13 @@ export class Dataset {
    * Update an experiment result's status or tags.
    */
   async updateExperimentResult(input: UpdateExperimentResultInput) {
+    await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.updateExperimentResult(input);
   }
 
   async deleteExperiment(args: { experimentId: string }) {
+    await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.deleteExperiment({ id: args.experimentId });
   }

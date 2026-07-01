@@ -234,6 +234,76 @@ export function createDatasetsTests({
           expect(found).not.toBeNull();
           expect(found!.id).toBe(ds.id);
         });
+
+        it('updateDataset throws NOT_FOUND when tenancy does not match (does not mutate row)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          // Wrong org — must NOT_FOUND and must NOT mutate.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: ds.id,
+              name: 'renamed-by-attacker',
+              filters: { organizationId: 'org_b' },
+            }),
+          ).rejects.toThrow();
+
+          const after = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(after).not.toBeNull();
+          expect(after!.name).toBe('update-scoped');
+          expect(after!.organizationId).toBe('org_a');
+        });
+
+        it('updateDataset with matching tenancy applies the update', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped-ok',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const updated = await datasetsStorage.updateDataset({
+            id: ds.id,
+            name: 'renamed',
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+
+          expect(updated.name).toBe('renamed');
+          expect(updated.organizationId).toBe('org_a');
+        });
+
+        it('mixed-tenancy: updating scoped to org A does not touch org B rows', async () => {
+          const dsA = await datasetsStorage.createDataset({
+            name: 'A-original',
+            organizationId: 'org_a',
+          });
+          const dsB = await datasetsStorage.createDataset({
+            name: 'B-original',
+            organizationId: 'org_b',
+          });
+
+          // Cross-tenant attempt on dsB using org A tenancy — must NOT_FOUND.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: dsB.id,
+              name: 'B-hijacked',
+              filters: { organizationId: 'org_a' },
+            }),
+          ).rejects.toThrow();
+
+          const afterB = await datasetsStorage.getDatasetById({ id: dsB.id });
+          expect(afterB!.name).toBe('B-original');
+
+          // Legitimate scoped update on dsA — must succeed.
+          const updatedA = await datasetsStorage.updateDataset({
+            id: dsA.id,
+            name: 'A-renamed',
+            filters: { organizationId: 'org_a' },
+          });
+          expect(updatedA.name).toBe('A-renamed');
+        });
       });
 
       it('listDatasets with pagination', async () => {

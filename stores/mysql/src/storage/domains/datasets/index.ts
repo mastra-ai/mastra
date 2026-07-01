@@ -24,6 +24,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -688,7 +689,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     const existing = await this.getItemById({ id });
     if (!existing) return;
     if (existing.datasetId !== datasetId) {

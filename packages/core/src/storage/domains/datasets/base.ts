@@ -8,6 +8,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -169,13 +170,21 @@ export abstract class DatasetsStorage extends StorageDomain {
   /**
    * Delete an item from a dataset. Creates a tombstone row via SCD-2.
    * Subclasses implement _doDeleteItem which handles SCD-2 versioning internally.
+   *
+   * When `args.filters` is set, the delete is a silent no-op if the parent
+   * dataset row does not match the tenancy filters — prevents deleting items
+   * from a dataset in another tenant via a leaked datasetId.
    */
-  async deleteItem(args: { id: string; datasetId: string }): Promise<void> {
+  async deleteItem(args: DeleteDatasetItemInput): Promise<void> {
+    if (args.filters) {
+      const dataset = await this.getDatasetById({ id: args.datasetId, filters: args.filters });
+      if (!dataset) return;
+    }
     return this._doDeleteItem(args);
   }
 
   /** Subclasses implement actual storage delete logic with SCD-2 versioning */
-  protected abstract _doDeleteItem(args: { id: string; datasetId: string }): Promise<void>;
+  protected abstract _doDeleteItem(args: DeleteDatasetItemInput): Promise<void>;
 
   abstract listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput>;
   abstract getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null>;

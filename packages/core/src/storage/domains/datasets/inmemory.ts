@@ -8,6 +8,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -306,7 +307,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetItem(newRow);
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     const rows = this.db.datasetItems.get(id);
     if (!rows || rows.length === 0) {
       return; // no-op if item doesn't exist

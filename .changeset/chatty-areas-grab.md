@@ -11,7 +11,7 @@
 
 Added optional tenancy arguments to `getDataset`, `updateDataset`, and `deleteDataset`.
 
-You can now pass `organizationId` and `projectId` to scope dataset reads, updates, and deletes to a specific tenant. The server rejects the request with a 404 if the dataset id does not belong to that tenant, closing a cross-tenant read/delete gap.
+You can now pass `organizationId` and `projectId` to scope dataset reads, updates, and deletes to a specific tenant. Reads and updates against a dataset in a different tenant throw `DATASET_NOT_FOUND` (surfaced as a 404 over HTTP). Deletes silently no-op on a tenancy mismatch — matching the existing "delete non-existent id is a no-op" semantics so cross-tenant existence is never leaked via error timing or status.
 
 **Example**
 

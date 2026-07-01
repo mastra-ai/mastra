@@ -2559,7 +2559,7 @@ export interface UpdateDatasetInput {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
-  /** Tenancy read-scope. When set, the update is a no-op if the row does not match. */
+  /** Tenancy read-scope. When set, the update only applies if the row matches; otherwise it is treated as NOT_FOUND. */
   filters?: DatasetTenancyFilters;
 }
 
@@ -2602,6 +2602,16 @@ export interface AddDatasetItemInput extends DatasetItemPayload {
  * see {@link AddDatasetItemInput.filters}.
  */
 export interface UpdateDatasetItemInput extends Partial<DatasetItemPayload> {
+  id: string;
+  datasetId: string;
+  filters?: DatasetTenancyFilters;
+}
+
+/**
+ * Delete input for a single dataset item. The optional `filters` field is a
+ * tenancy read-scope for the parent dataset; see {@link AddDatasetItemInput.filters}.
+ */
+export interface DeleteDatasetItemInput {
   id: string;
   datasetId: string;
   filters?: DatasetTenancyFilters;
