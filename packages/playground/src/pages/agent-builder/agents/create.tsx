@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { useBuilderAgentAccess, useBuilderAgentFeatures } from '@/domains/agent-builder';
@@ -43,6 +43,7 @@ export default function AgentBuilderCreate() {
           }
           className="rounded-full"
           tooltip="Agents list"
+          data-testid="agent-builder-back-to-list"
         >
           <ArrowLeftIcon />
         </Button>

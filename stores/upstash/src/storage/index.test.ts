@@ -6,6 +6,7 @@ import {
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -48,6 +49,20 @@ const createMessage = (thread: StorageThreadType, overrides: Partial<MastraDBMes
     parts: [{ type: 'text', text: 'Test message' }],
     content: 'Test message',
   },
+});
+
+const createWorkflowSnapshot = (runId: string, status: WorkflowRunState['status']): WorkflowRunState => ({
+  runId,
+  status,
+  value: {},
+  context: {},
+  activePaths: [],
+  suspendedPaths: {},
+  activeStepsPath: {},
+  serializedStepGraph: [],
+  waitingPaths: {},
+  resumeLabels: {},
+  timestamp: Date.now(),
 });
 
 afterEach(() => {
@@ -341,5 +356,50 @@ describe('StoreMemoryUpstash error propagation (no empty-on-error)', () => {
 
   it('listMessages re-throws backend failures instead of returning empty', async () => {
     await expectOutage(createFailingDomain().listMessages({ threadId: 'thread-err' }), /LIST_MESSAGES.*FAILED/);
+  });
+});
+
+describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
+  it('preserves, loads, and deletes a resource-scoped workflow run', async () => {
+    const workflowsDomain = new WorkflowsUpstash({ client: createTestClient() });
+    await workflowsDomain.init();
+
+    const workflowName = `workflow-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+    const resourceId = `resource-${randomUUID()}`;
+    const createdAt = new Date('2024-01-15T10:00:00.000Z');
+    const updatedAt = new Date('2024-06-01T12:00:00.000Z');
+
+    await workflowsDomain.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot: createWorkflowSnapshot(runId, 'running'),
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    await workflowsDomain.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot: createWorkflowSnapshot(runId, 'success'),
+      updatedAt,
+    });
+
+    const loaded = await workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId });
+    expect(loaded?.status).toBe('success');
+
+    const fetched = await workflowsDomain.getWorkflowRunById({ runId, workflowName });
+    expect(fetched?.createdAt.toISOString()).toBe(createdAt.toISOString());
+    expect(fetched?.updatedAt.toISOString()).toBe(updatedAt.toISOString());
+    expect(fetched?.resourceId).toBe(resourceId);
+
+    await workflowsDomain.deleteWorkflowRunById({ runId, workflowName });
+
+    await expect(
+      workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId }),
+    ).resolves.toBeNull();
+    await expect(workflowsDomain.getWorkflowRunById({ runId, workflowName })).resolves.toBeNull();
   });
 });

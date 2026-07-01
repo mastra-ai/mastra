@@ -15,16 +15,11 @@ RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments
 
 ### Stage 1: Understand the Context
 
-1. Verify the checked-out branch matches the PR head branch before reviewing
-2. Read the PR title and description carefully
-3. Check linked issues (if any) using `gh issue view`
-4. Review the commit history to understand the progression of changes
-5. Note any labels, assignees, and check status
+Use `.mastracode/shared/pr-review-context.md` for the context-gathering portion of this review. Keep this command responsible for the critique, summary artifact, optional review draft, and posting flow.
 
 ### Stage 2: Analyze the Code
 
-1. List all changed files using `gh pr diff`
-2. Create a .pr-review/PR_SUMMARY.md file with sections for:
+1. Create a .pr-review/PR_SUMMARY.md file with sections for:
    - **Overview**: What this PR accomplishes
    - **How It Works**: Technical explanation of the implementation
    - **Key Changes**: File-by-file breakdown with links (use format: `path/to/file.ts:line`)
@@ -33,10 +28,10 @@ RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments
    - **Testing**: What tests cover these changes, what validation you ran, and whether dependencies were installed and affected packages were built first
    - **Potential Concerns**: Confirmed issues, speculative risks, or areas that need attention
 
-3. Before running tests, check whether dependencies are installed. If dependencies are missing, stale, or package manifests / lockfiles changed, run the project install command first. For this repo, prefer `pnpm i` unless local instructions say otherwise.
-4. Build affected packages before relying on tests that consume their compiled outputs. Prefer narrow package/workspace build commands over repo-wide builds.
-5. Do not claim a test, build, or check passed unless you ran it or verified the matching CI check.
-6. For each significant file change:
+2. Before running tests, check whether dependencies are installed. If dependencies are missing, stale, or package manifests / lockfiles changed, run the project install command first. For this repo, prefer `pnpm i` unless local instructions say otherwise.
+3. Build affected packages before relying on tests that consume their compiled outputs. Prefer narrow package/workspace build commands over repo-wide builds.
+4. Do not claim a test, build, or check passed unless you ran it or verified the matching CI check.
+5. For each significant file change:
    - Understand the context and purpose
    - Explain the logic flow and implementation details
    - Note how it connects to other parts of the codebase
@@ -60,7 +55,7 @@ RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments
 3. Include helpful diagrams or examples if complex logic is involved
 4. Link to specific files and line numbers for easy navigation
 5. Highlight any interesting design decisions or trade-offs
-6. Draft a PR review comment for the user, ask what changes they want, and make clear that posting it is optional. Do not post it unless the user explicitly asks you to post the current draft.
+6. Draft a PR review comment for the user. Include the full text of the drafted comment directly in your message to the user — do not just reference the `.pr-review/PR_SUMMARY.md` file path. Ask what changes they want, and make clear that posting it is optional. Do not post it unless the user explicitly asks you to post the current draft.
 
 ## Summary Structure Example
 
@@ -110,11 +105,11 @@ How these changes fit into and affect the overall system architecture.
 - Speculative risk: performance impact of additional middleware
 ```
 
-After you've finished and written the .md file, give the user a TLDR containing the most important points. After the TLDR explain concisely your main concerns, and just note that you don't have any concerns if you don't.
+After you've finished and written the .md file, give the user a TLDR containing the most important points. After the TLDR explain concisely your main concerns, and just note that you don't have any concerns if you don't. Then present the full text of the drafted PR review comment directly in your message — do not tell the user to go read the `.pr-review/PR_SUMMARY.md` file.
 
 ## Posting a PR Review Comment (Optional)
 
-Draft a PR review comment proactively, but the user decides whether it gets posted. Ask what changes the user wants to the draft, whether they want to post it, or whether they do not want to post anything. If the user asks for changes, re-draft the full comment and ask again. Do not post unless the user explicitly asks you to post the current draft.
+Draft a PR review comment proactively, but the user decides whether it gets posted. Always include the full draft text directly in your message to the user so they can read and evaluate it without opening any files. Ask what changes the user wants to the draft, whether they want to post it, or whether they do not want to post anything. If the user asks for changes, re-draft the full comment, present the updated text directly, and ask again. Do not post unless the user explicitly asks you to post the current draft.
 
 If the user decides to post the review comment, first align on the contents of the review comment, then follow this guidance for posting:
 

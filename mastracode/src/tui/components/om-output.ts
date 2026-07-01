@@ -5,9 +5,10 @@
  * Includes marker info (emoji, compression stats) in the footer.
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 // Read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -215,7 +216,6 @@ export class OMOutputComponent extends Container {
 
     // Bottom border with footer
     this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
-    this.addChild(new Spacer(1));
   }
 
   private buildFooterText(color: string): string {
@@ -245,5 +245,9 @@ export class OMOutputComponent extends Container {
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
       return `${emoji} ${chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)} ${chalk.hex(mastra.green)('✓')}`;
     }
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }

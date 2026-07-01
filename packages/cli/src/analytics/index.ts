@@ -161,6 +161,10 @@ export class PosthogAnalytics {
     });
   }
 
+  getDistinctId(): string {
+    return this.distinctId;
+  }
+
   trackEvent(eventName: string, properties?: Record<string, any>): void {
     try {
       if (!this.client) {

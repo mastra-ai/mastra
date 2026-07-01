@@ -243,10 +243,12 @@ export class SchedulesMongoDB extends SchedulesStorage {
   }
 
   async deleteSchedule(id: string): Promise<void> {
-    const triggers = await this.getTriggersCollection();
-    await triggers.deleteMany({ schedule_id: id });
-    const schedules = await this.getSchedulesCollection();
-    await schedules.deleteOne({ id });
+    await this.#connector.withTransaction(async session => {
+      const triggers = await this.getTriggersCollection();
+      await triggers.deleteMany({ schedule_id: id }, { session });
+      const schedules = await this.getSchedulesCollection();
+      await schedules.deleteOne({ id }, { session });
+    });
   }
 
   async recordTrigger(trigger: ScheduleTrigger): Promise<void> {

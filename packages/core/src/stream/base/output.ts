@@ -201,6 +201,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
   #warnings: LLMStepResult<OUTPUT>['warnings'] = [];
   #finishReason: LLMStepResult<OUTPUT>['finishReason'] = undefined;
+  /**
+   * Provider-specific metadata captured from the most recent step `finish`
+   * chunk (e.g. AWS Bedrock guardrail trace under
+   * `providerMetadata.bedrock.trace`). Exposed via {@link _getImmediateProviderMetadata}
+   * so output-step processors can attribute content-filter blocks, for which
+   * the completed-steps array is empty.
+   */
+  #stepProviderMetadata: ProviderMetadata | undefined = undefined;
   #request: LLMStepResult<OUTPUT>['request'] = {};
   #usageCount: LLMStepResult<OUTPUT>['usage'] = {
     inputTokens: undefined,
@@ -234,13 +242,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   };
 
   #consumptionStarted = false;
+  #consumeStreamPromise: Promise<void> | undefined;
+  #consumeStreamErrored = false;
+  #consumeStreamError: unknown;
   #returnScorerData = false;
   #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
 
   #model: {
     modelId: string | undefined;
     provider: string | undefined;
-    version: 'v2' | 'v3';
+    version: 'v2' | 'v3' | 'v4';
   };
 
   /**
@@ -277,7 +288,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     model: {
       modelId: string | undefined;
       provider: string | undefined;
-      version: 'v2' | 'v3';
+      version: 'v2' | 'v3' | 'v4';
     };
     stream: ReadableStream<ChunkType<OUTPUT>>;
     messageList: MessageList;
@@ -704,9 +715,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 response: {
                   id: chunk.payload.id || '',
                   timestamp: (chunk.payload.metadata?.timestamp as Date) || new Date(),
+                  ...otherMetadata,
                   modelId:
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
-                  ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser || [],
                   dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
@@ -809,6 +820,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // We can preserve finish metadata from whichever shape the upstream SDK emitted,
               // but we cannot reconstruct providerMetadata if the provider omitted it entirely.
               const finalProviderMetadata = chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata;
+
+              // Retain the step providerMetadata so output-step processors can
+              // read it (e.g. to attribute a Bedrock guardrail content-filter
+              // block to the responsible policy). The completed-steps array is
+              // empty on such blocks, so this is the only carrier of the trace.
+              if (finalProviderMetadata) {
+                self.#stepProviderMetadata = finalProviderMetadata;
+              }
 
               // Check if this is a tripwire case - set tripwire data
               // This can happen when max retries is exceeded or a processor triggers a tripwire
@@ -1360,20 +1379,26 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    if (this.#consumptionStarted) {
-      return;
-    }
-
-    this.#consumptionStarted = true;
-
-    try {
-      await consumeStream({
+    // Drain #baseStream exactly once but let every caller await full consumption,
+    // so `await consumeStream()` holds regardless of who started it. Capture any
+    // drain error once (don't bind a caller's onError to the drain), then fire each
+    // caller's own onError after the shared promise settles.
+    if (!this.#consumeStreamPromise) {
+      this.#consumptionStarted = true;
+      this.#consumeStreamPromise = consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
-        onError: options?.onError,
+        onError: error => {
+          this.#consumeStreamErrored = true;
+          this.#consumeStreamError = error;
+        },
         logger: this.logger,
       });
-    } catch (error) {
-      options?.onError?.(error);
+    }
+
+    await this.#consumeStreamPromise;
+
+    if (this.#consumeStreamErrored) {
+      options?.onError?.(this.#consumeStreamError);
     }
   }
 
@@ -1598,6 +1623,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   /** @internal */
   _getImmediateFinishReason() {
     return this.#finishReason;
+  }
+  /** @internal */
+  _getImmediateProviderMetadata() {
+    return this.#stepProviderMetadata;
   }
   /** @internal  */
   _getBaseStream() {

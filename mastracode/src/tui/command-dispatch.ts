@@ -2,11 +2,13 @@
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
 import { processSlashCommand } from '../utils/slash-command-processor.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 import {
   handleHelpCommand,
   handleCostCommand,
   handleYoloCommand,
+  handleVoiceCommand,
   handleThinkCommand,
   handlePermissionsCommand,
   handleNameCommand,
@@ -38,11 +40,11 @@ import {
   handleUpdateCommand,
   handleMemoryGatewayCommand,
   handleApiKeysCommand,
+  handlePluginsCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
-  handleJudgeCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -70,9 +72,9 @@ export async function dispatchSlashCommand(
     if (!TRACKED_COMMANDS.has(command)) return;
     ctx.analytics?.trackCommand(command, {
       action: 'attempted',
-      threadId: state.harness.getCurrentThreadId(),
-      resourceId: state.harness.getResourceId(),
-      mode: state.harness.getCurrentModeId(),
+      threadId: state.session.thread.getId(),
+      resourceId: state.session.identity.getResourceId(),
+      mode: state.session.mode.get(),
     });
   };
   const trimmedInput = input.trim();
@@ -183,6 +185,9 @@ export async function dispatchSlashCommand(
     case 'yolo':
       handleYoloCommand(ctx);
       return true;
+    case 'voice':
+      await handleVoiceCommand(ctx, args);
+      return true;
     case 'settings':
       await handleSettingsCommand(ctx);
       return true;
@@ -240,6 +245,9 @@ export async function dispatchSlashCommand(
     case 'api-keys':
       await handleApiKeysCommand(buildCtx());
       return true;
+    case 'plugins':
+      await handlePluginsCommand(buildCtx(), args);
+      return true;
     case 'feedback':
       await handleFeedbackCommand(buildCtx(), args);
       return true;
@@ -251,9 +259,6 @@ export async function dispatchSlashCommand(
       return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);
-      return true;
-    case 'judge':
-      await handleJudgeCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);
@@ -304,7 +309,10 @@ async function handleGoalSourceCommand(
   const goalSkill = state.goalSkillCommands.find(skill => skill.name === sourceName);
   if (goalSkill) {
     try {
-      const workspace = ctx.getResolvedWorkspace();
+      let workspace = ctx.getResolvedWorkspace();
+      if (!workspace && ctx.controller?.hasWorkspace?.()) {
+        workspace = await ctx.controller.resolveWorkspace({ session: ctx.state.session });
+      }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {
         showError(state, `Unknown goal command: ${sourceName}`);
@@ -339,11 +347,11 @@ async function handleCustomSlashCommand(
     const processedContent = await processSlashCommand(command as any, args, process.cwd());
     // Add the processed content as a system message / context
     if (processedContent.trim()) {
-      const commandCtx = { ...ctx, state, harness: ctx.harness ?? state.harness } as SlashCommandContext;
+      const commandCtx = { ...ctx, state, controller: ctx.controller ?? state.controller } as SlashCommandContext;
       if (!isCurrentThreadActive(commandCtx)) {
         const slashComp = new SlashCommandComponent(command.name, processedContent.trim());
         state.allSlashCommandComponents.push(slashComp);
-        state.chatContainer.addChild(slashComp);
+        insertChatComponentWithBoundarySpacing(state.chatContainer, slashComp);
         state.ui.requestRender();
       }
 

@@ -11,7 +11,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 The `@mastra/nestjs` package provides a NestJS module for running Mastra with the Express-based NestJS platform.
 
-It is intentionally Express-only for v1. If Nest is bootstrapped with a different HTTP adapter, `MastraModule` throws during startup instead of attempting a partial integration.
+It's intentionally Express-only for v1. If Nest is bootstrapped with a different HTTP adapter, `MastraModule` throws during startup instead of attempting a partial integration.
 
 :::info
 
@@ -46,7 +46,7 @@ export class AppModule {}
 
 :::note
 
-`MastraModule` registers a catch-all controller (`@All('*')`). If it is imported before your app modules, it can intercept unrelated routes and return 404s. To avoid conflicts, import `MastraModule` last or mount it under a dedicated prefix (e.g., `/api/v1/mastra`).
+`MastraModule` registers a catch-all controller (`@All('*')`). If it's imported before your app modules, it can intercept unrelated routes and return 404s. To avoid conflicts, import `MastraModule` last or mount it under a dedicated prefix (e.g., `/api/v1/mastra`).
 
 :::
 

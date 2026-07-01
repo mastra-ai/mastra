@@ -76,7 +76,7 @@ const checkRedirects = async () => {
     const { destination } = redirect;
     if (!destination) continue;
 
-    if (destination.includes(':path*')) {
+    if (destination.includes(':path*') || destination.endsWith('/llms.txt')) {
       console.log('├──SKIPPED──', `${baseUrl}${destination}`);
       skipped++;
       continue;

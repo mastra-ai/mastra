@@ -20,7 +20,7 @@ import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { z } from 'zod/v4';
 import { supportsSessionRefresh } from '../auth/helpers';
-import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import { MASTRA_USER_PERMISSIONS_KEY, MASTRA_CLIENT_TYPE_HEADER, isStudioClientTypeHeader } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -72,8 +72,23 @@ function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> 
 
 /**
  * Helper to get auth provider from Mastra instance.
+ *
+ * Dual auth is OPT-IN: if studio.auth is explicitly configured, Studio requests
+ * use it exclusively. Otherwise, Studio requests fall back to server.auth for
+ * backward compatibility.
  */
-function getAuthProvider(mastra: any): MastraAuthProvider | null {
+function getAuthProvider(mastra: any, isStudio?: boolean): MastraAuthProvider | null {
+  // Check if studio.auth is explicitly configured
+  const studioConfig = mastra.getStudio?.();
+  const hasStudioAuth = studioConfig?.auth && typeof studioConfig.auth.authenticateToken === 'function';
+
+  // If this is a Studio request AND studio.auth is configured, use it exclusively
+  if (isStudio && hasStudioAuth) {
+    return studioConfig.auth as MastraAuthProvider;
+  }
+
+  // Otherwise (non-studio request, OR studio request without studio.auth configured),
+  // fall back to server.auth for backward compatibility
   const serverConfig = mastra.getServer?.();
   if (!serverConfig?.auth) return null;
 
@@ -84,6 +99,13 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
   }
 
   return null;
+}
+
+/**
+ * Check if the request is from Studio (via x-mastra-client-type header).
+ */
+function isStudioRequest(request: Request): boolean {
+  return isStudioClientTypeHeader(request.headers.get(MASTRA_CLIENT_TYPE_HEADER) ?? undefined);
 }
 
 /**
@@ -121,17 +143,31 @@ export function getPublicOrigin(request: Request): string {
 }
 
 /**
- * Helper to get RBAC provider from Mastra server config.
+ * Helper to get RBAC provider from Mastra config.
+ * Checks studio config first when isStudio is true.
  */
-function getRBACProvider(mastra: any): IRBACProvider<EEUser> | undefined {
+function getRBACProvider(mastra: any, isStudio?: boolean): IRBACProvider<EEUser> | undefined {
+  if (isStudio) {
+    const studioConfig = mastra.getStudio?.();
+    if (studioConfig?.rbac) {
+      return studioConfig.rbac as IRBACProvider<EEUser>;
+    }
+  }
   const serverConfig = mastra.getServer?.();
   return serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
 }
 
 /**
- * Helper to get FGA provider from Mastra server config.
+ * Helper to get FGA provider from Mastra config.
+ * Checks studio config first when isStudio is true.
  */
-function getFGAProvider(mastra: any): IFGAProvider<EEUser> | undefined {
+function getFGAProvider(mastra: any, isStudio?: boolean): IFGAProvider<EEUser> | undefined {
+  if (isStudio) {
+    const studioConfig = mastra.getStudio?.();
+    if (studioConfig?.fga) {
+      return studioConfig.fga as IFGAProvider<EEUser>;
+    }
+  }
   const serverConfig = mastra.getServer?.();
   return serverConfig?.fga as IFGAProvider<EEUser> | undefined;
 }
@@ -160,14 +196,17 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
     try {
       const { mastra, request, routePrefix } = ctx as any;
 
-      const auth = getAuthProvider(mastra);
+      // Check if this is a Studio request (via x-mastra-client-type header)
+      const isStudio = isStudioRequest(request);
+
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth) {
         return { enabled: false, login: null };
       }
 
-      const rbac = getRBACProvider(mastra);
-      const fga = getFGAProvider(mastra);
+      const rbac = getRBACProvider(mastra, isStudio);
+      const fga = getFGAProvider(mastra, isStudio);
 
       const buildCapabilities = await loadBuildCapabilities();
       if (!buildCapabilities) {
@@ -243,8 +282,9 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
   handler: async ctx => {
     try {
       const { mastra, request } = ctx as any;
-      const auth = getAuthProvider(mastra);
-      const rbac = getRBACProvider(mastra);
+      const isStudio = isStudioRequest(request);
+      const auth = getAuthProvider(mastra, isStudio);
+      const rbac = getRBACProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<IUserProvider>(auth, 'getCurrentUser')) {
         return null;
@@ -295,7 +335,8 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   handler: async ctx => {
     try {
       const { mastra, redirect_uri, request, routePrefix } = ctx as any;
-      const auth = getAuthProvider(mastra);
+      const isStudio = isStudioRequest(request);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
         throw new HTTPException(404, { message: 'SSO not configured' });
@@ -339,7 +380,7 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
       const stateId = crypto.randomUUID();
       const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
-      const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
+      const loginUrl = await Promise.resolve(auth.getLoginUrl(oauthCallbackUri, state));
 
       // Build response with optional PKCE cookies
       const headers = new Headers({ 'Content-Type': 'application/json' });
@@ -376,6 +417,7 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, code, state, request } = ctx as any;
+    const _isStudio = isStudioRequest(request); // Kept for potential future use; currently we prefer studio auth for SSO
 
     // Build base URL for redirects (Response.redirect requires absolute URL)
     const baseUrl = getPublicOrigin(request);
@@ -415,7 +457,15 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
     }
 
     try {
-      const auth = getAuthProvider(mastra);
+      // For SSO callback, the redirect from the identity provider won't include
+      // the x-mastra-client-type header. Prefer studio auth for SSO (it's the
+      // typical SSO use case), fall back to server auth only if studio doesn't exist.
+      let auth = getAuthProvider(mastra, true); // Try studio first
+
+      // If studio doesn't have SSO, fall back to server
+      if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
+        auth = getAuthProvider(mastra, false);
+      }
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
         return Response.redirect(`${absoluteRedirect}?error=sso_not_configured`, 302);
@@ -478,9 +528,10 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, request } = ctx as any;
+    const isStudio = isStudioRequest(request);
 
     try {
-      const auth = getAuthProvider(mastra);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth) {
         return new Response(JSON.stringify({ success: true }), {
@@ -541,9 +592,10 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, request } = ctx as any;
+    const isStudio = isStudioRequest(request);
 
     try {
-      const auth = getAuthProvider(mastra);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (
         !auth ||
@@ -599,9 +651,10 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, request, email, password } = ctx as any;
+    const isStudio = isStudioRequest(request);
 
     try {
-      const auth = getAuthProvider(mastra);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
         throw new HTTPException(404, { message: 'Credentials authentication not configured' });
@@ -655,9 +708,10 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, request, email, password, name } = ctx as any;
+    const isStudio = isStudioRequest(request);
 
     try {
-      const auth = getAuthProvider(mastra);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signUp')) {
         throw new HTTPException(404, { message: 'Credentials authentication not configured' });

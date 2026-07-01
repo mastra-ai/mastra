@@ -4,12 +4,13 @@
  *
  * Root cause: state.activeInlineQuestion is a single property that gets
  * overwritten when multiple ask_question events arrive concurrently.
- * The Harness dispatches events fire-and-forget (no await), so multiple
+ * The AgentController dispatches events fire-and-forget (no await), so multiple
  * interactive handlers run concurrently, and the last one wins — earlier
  * prompts become unreachable.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { handleAskQuestion, handleSandboxAccessRequest } from '../handlers/prompts.js';
 import type { EventHandlerContext } from '../handlers/types.js';
 import type { TUIState } from '../state.js';
@@ -31,12 +32,11 @@ function createMockState(): TUIState {
   chatContainer.addChild = chatContainer.addChild.bind(chatContainer);
   chatContainer.clear = chatContainer.clear.bind(chatContainer);
 
+  const session = { respondToToolSuspension: vi.fn() };
   return {
-    options: { inlineQuestions: true, harness: {} as any },
-    harness: {
-      respondToQuestion: vi.fn(),
-      respondToPlanApproval: vi.fn(),
-    },
+    options: { inlineQuestions: true, controller: {} as any },
+    controller: { session },
+    session,
     chatContainer,
     ui: {
       requestRender: vi.fn(),
@@ -45,6 +45,7 @@ function createMockState(): TUIState {
     activeInlinePlanApproval: undefined,
     pendingInlineQuestions: [],
     lastAskUserComponent: undefined,
+    pendingAskUserComponents: new Map(),
     pendingApprovalDismiss: null,
   } as unknown as TUIState;
 }
@@ -63,8 +64,9 @@ function createMockContext(state: TUIState): EventHandlerContext {
     fireMessage: vi.fn(),
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
-    renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),
+    renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
   };
 }
@@ -117,14 +119,14 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
 
       expect(state.activeInlineQuestion).toBeDefined();
       expect(answerQuestion).not.toHaveBeenCalled();
-      expect(state.harness.respondToQuestion).not.toHaveBeenCalled();
+      expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
 
       state.activeInlineQuestion!.handleInput('\r');
       await prompt;
     });
 
     it('should allow answering all parallel questions sequentially', async () => {
-      const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       // Fire 3 concurrent ask_question events (simulating parallel tool calls)
       const p1 = handleAskQuestion(ctx, 'q1', 'Question 1?');
@@ -135,7 +137,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       expect(state.activeInlineQuestion).toBeDefined();
 
       // Simulate answering first question via its select/input
-      // The onSubmit callback should call respondToQuestion and resolve the promise
+      // The onSubmit callback should call respondToToolSuspension and resolve the promise
       // We need to trigger the component's internal submission mechanism
       // Since AskQuestionInlineComponent uses Input with onSubmit,
       // we simulate by directly triggering the select list or sending Enter
@@ -151,10 +153,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       // Wait for the first promise to resolve
       await p1;
 
-      expect(respondToQuestion).toHaveBeenCalledWith({
-        questionId: 'q1',
-        answer: 'ans1',
-      });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q1', resumeData: 'ans1' });
 
       // Second question should now be active
       expect(state.activeInlineQuestion).toBeDefined();
@@ -169,10 +168,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
 
       await p2;
 
-      expect(respondToQuestion).toHaveBeenCalledWith({
-        questionId: 'q2',
-        answer: 'ans2',
-      });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q2', resumeData: 'ans2' });
 
       // Third question should now be active
       expect(state.activeInlineQuestion).toBeDefined();
@@ -186,14 +182,59 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
 
       await p3;
 
-      expect(respondToQuestion).toHaveBeenCalledWith({
-        questionId: 'q3',
-        answer: 'ans3',
-      });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q3', resumeData: 'ans3' });
+    });
+
+    it('activates the streaming component matching each toolCallId, not the last one (#13642)', async () => {
+      // Simulate handleToolInputStart having created one streaming component per
+      // parallel ask_user call. The single-field lastAskUserComponent points at
+      // the LAST one (toppings); the bug overwrote every prompt with it.
+      const colorComp = AskQuestionInlineComponent.createStreaming();
+      const sizeComp = AskQuestionInlineComponent.createStreaming();
+      const toppingsComp = AskQuestionInlineComponent.createStreaming();
+      state.pendingAskUserComponents.set('color', colorComp);
+      state.pendingAskUserComponents.set('size', sizeComp);
+      state.pendingAskUserComponents.set('toppings', toppingsComp);
+      // lastAskUserComponent reflects the last streaming start (the buggy source of truth)
+      state.lastAskUserComponent = toppingsComp;
+
+      const activateSpy = vi.spyOn(colorComp, 'activate');
+      const sizeSpy = vi.spyOn(sizeComp, 'activate');
+      const toppingsSpy = vi.spyOn(toppingsComp, 'activate');
+
+      handleAskQuestion(ctx, 'color', "What's your favorite color?");
+      handleAskQuestion(ctx, 'size', 'Pick a size:', [{ label: 'small' }, { label: 'medium' }, { label: 'large' }]);
+      handleAskQuestion(ctx, 'toppings', 'Pick toppings:', [{ label: 'cheese' }, { label: 'onion' }], 'multi_select');
+
+      // First (color) activates immediately on ITS own component.
+      expect(activateSpy).toHaveBeenCalledTimes(1);
+      expect(activateSpy.mock.calls[0][0].question).toBe("What's your favorite color?");
+      expect(state.activeInlineQuestion).toBe(colorComp);
+
+      // The other two are queued — not activated yet.
+      expect(sizeSpy).not.toHaveBeenCalled();
+      expect(toppingsSpy).not.toHaveBeenCalled();
+      expect(state.pendingInlineQuestions).toHaveLength(2);
+
+      // Answer color → size activates on the size component with the size question.
+      colorComp.handleInput('b');
+      colorComp.handleInput('\r');
+      await Promise.resolve();
+      expect(sizeSpy).toHaveBeenCalledTimes(1);
+      expect(sizeSpy.mock.calls[0][0].question).toBe('Pick a size:');
+      expect(state.activeInlineQuestion).toBe(sizeComp);
+
+      // Answer size → toppings activates on the toppings component, multi-select.
+      sizeComp.handleInput('\r');
+      await Promise.resolve();
+      expect(toppingsSpy).toHaveBeenCalledTimes(1);
+      expect(toppingsSpy.mock.calls[0][0].question).toBe('Pick toppings:');
+      expect(toppingsSpy.mock.calls[0][0].selectionMode).toBe('multi_select');
+      expect(state.activeInlineQuestion).toBe(toppingsComp);
     });
 
     it('should resolve all promises even when questions arrive concurrently', async () => {
-      const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       // Fire concurrent questions
       const p1 = handleAskQuestion(ctx, 'q1', 'Q1?');
@@ -212,15 +253,15 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       await p2;
 
       // Both should have been answered
-      expect(respondToQuestion).toHaveBeenCalledTimes(2);
-      expect(respondToQuestion).toHaveBeenCalledWith({ questionId: 'q1', answer: 'y' });
-      expect(respondToQuestion).toHaveBeenCalledWith({ questionId: 'q2', answer: 'n' });
+      expect(respondToToolSuspension).toHaveBeenCalledTimes(2);
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q1', resumeData: 'y' });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q2', resumeData: 'n' });
     });
   });
 
   describe('concurrent sandbox_access_request calls', () => {
     it('should queue parallel sandbox access requests', async () => {
-      const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       const p1 = handleSandboxAccessRequest(ctx, 'sa1', '/path/a', 'reason A');
       const p2 = handleSandboxAccessRequest(ctx, 'sa2', '/path/b', 'reason B');
@@ -233,7 +274,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       comp1.handleInput('\r'); // Enter selects first option ("Yes")
       await p1;
 
-      expect(respondToQuestion).toHaveBeenCalledWith({ questionId: 'sa1', answer: 'Yes' });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'sa1', resumeData: 'Yes' });
 
       // Second should now be active
       expect(state.activeInlineQuestion).toBeDefined();
@@ -245,13 +286,13 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       comp2.handleInput('\r'); // Enter selects "No"
       await p2;
 
-      expect(respondToQuestion).toHaveBeenCalledWith({ questionId: 'sa2', answer: 'No' });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'sa2', resumeData: 'No' });
     });
   });
 
   describe('abort clears queued prompts', () => {
     it('should clear the queue and not activate pending questions after abort', async () => {
-      const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       // Fire two concurrent questions: first is active, second is queued
       handleAskQuestion(ctx, 'q1', 'Active question?');
@@ -268,8 +309,8 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       expect(state.activeInlineQuestion).toBeUndefined();
       expect(state.pendingInlineQuestions).toHaveLength(0);
 
-      // respondToQuestion should not have been called (nothing was answered)
-      expect(respondToQuestion).not.toHaveBeenCalled();
+      // respondToToolSuspension should not have been called (nothing was answered)
+      expect(respondToToolSuspension).not.toHaveBeenCalled();
     });
 
     it('should not activate queued questions if the active one is cancelled after abort', async () => {
@@ -294,9 +335,63 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
     });
   });
 
+  describe('serialized ask_user flow (real backend ordering)', () => {
+    // The agent serializes suspend-capable tools: when the model emits three
+    // ask_user calls in one step, only the FIRST suspends and emits tool_suspended.
+    // The streamed boxes for all three are created up front, but the size/toppings
+    // tool_suspended events arrive ONLY after the prior question is answered and
+    // the run resumes. This test mirrors that exact ordering — the bug the user hit
+    // ("answering one doesn't activate the next") only reproduces with this timing,
+    // not when all three handleAskQuestion calls fire synchronously together.
+    it('activates the next streamed question when its tool_suspended arrives after resume', async () => {
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
+
+      // All three streamed boxes exist from the initial step's tool-call chunks.
+      const colorComp = AskQuestionInlineComponent.createStreaming();
+      const sizeComp = AskQuestionInlineComponent.createStreaming();
+      const toppingsComp = AskQuestionInlineComponent.createStreaming();
+      state.pendingAskUserComponents.set('color', colorComp);
+      state.pendingAskUserComponents.set('size', sizeComp);
+      state.pendingAskUserComponents.set('toppings', toppingsComp);
+      state.lastAskUserComponent = toppingsComp;
+
+      // Resume emits the NEXT question's tool_suspended only after the prior answer.
+      respondToToolSuspension.mockImplementation(({ toolCallId }: { toolCallId: string }) => {
+        if (toolCallId === 'color') {
+          handleAskQuestion(ctx, 'size', 'Pick a size:', [{ label: 'small' }, { label: 'medium' }]);
+        } else if (toolCallId === 'size') {
+          handleAskQuestion(
+            ctx,
+            'toppings',
+            'Pick toppings:',
+            [{ label: 'cheese' }, { label: 'onion' }],
+            'multi_select',
+          );
+        }
+      });
+
+      // Initial run: only the first question's tool_suspended fires.
+      handleAskQuestion(ctx, 'color', "What's your favorite color?");
+      expect(state.activeInlineQuestion).toBe(colorComp);
+
+      // Answer color → resume fires size's tool_suspended → size must activate.
+      colorComp.handleInput('b');
+      colorComp.handleInput('\r');
+      await Promise.resolve();
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'color', resumeData: 'b' });
+      expect(state.activeInlineQuestion).toBe(sizeComp);
+
+      // Answer size → resume fires toppings' tool_suspended → toppings must activate.
+      sizeComp.handleInput('\r');
+      await Promise.resolve();
+      expect(state.activeInlineQuestion).toBe(toppingsComp);
+      expect((toppingsComp as any).multiSelect).toBe(true);
+    });
+  });
+
   describe('mixed interactive tool calls', () => {
     it('should handle ask_question and sandbox_access_request arriving concurrently', async () => {
-      const respondToQuestion = state.harness.respondToQuestion as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       const p1 = handleAskQuestion(ctx, 'q1', 'Pick one', [{ label: 'A' }, { label: 'B' }]);
       const p2 = handleSandboxAccessRequest(ctx, 'sa1', '/some/path', 'need access');
@@ -308,13 +403,13 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
       // Select first option
       comp1.handleInput('\r');
       await p1;
-      expect(respondToQuestion).toHaveBeenCalledWith({ questionId: 'q1', answer: 'A' });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q1', resumeData: 'A' });
 
       // Sandbox request should now be active
       expect(state.activeInlineQuestion).toBeDefined();
       state.activeInlineQuestion!.handleInput('\r'); // Yes
       await p2;
-      expect(respondToQuestion).toHaveBeenCalledWith({ questionId: 'sa1', answer: 'Yes' });
+      expect(respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'sa1', resumeData: 'Yes' });
     });
   });
 });

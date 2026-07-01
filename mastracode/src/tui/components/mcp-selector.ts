@@ -3,8 +3,8 @@
  * Uses pi-tui overlay pattern with navigation.
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, TUI } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import type { McpServerStatus, McpSkippedServer } from '../../mcp/types.js';
 import { decodePrintableShortcut } from '../key-input.js';

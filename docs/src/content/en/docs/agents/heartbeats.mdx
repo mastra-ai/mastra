@@ -1,0 +1,223 @@
+---
+title: "Heartbeats | Agents"
+description: "Run an agent on a cron schedule to deliver a recurring prompt, with optional thread delivery and lifecycle hooks."
+packages:
+  - "@mastra/core"
+  - "@mastra/client-js"
+---
+
+# Heartbeats
+
+**Added in:** `@mastra/core@1.46.0`
+
+:::experimental
+
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+A heartbeat runs an agent on a cron schedule. On each fire, Mastra sends a prompt to the agent, either as a [signal](/docs/agents/signals) into a thread or as a threadless `agent.generate()` run. Use heartbeats for recurring agent work such as daily summaries, periodic checks, or scheduled nudges into a conversation.
+
+Heartbeats are persisted, so they survive restarts and redeploys. Manage them at runtime through `mastra.heartbeats`, the canonical create, read, update, and delete (CRUD) surface.
+
+## Prerequisites
+
+Heartbeats require a [storage](/docs/memory/storage) adapter that implements the schedules domain, for example `@mastra/libsql`. Without one, `mastra.heartbeats.create()` throws.
+
+## Quickstart
+
+The following heartbeat runs the `pinger` agent every hour. It has no thread, so each fire is an isolated `agent.generate()` run.
+
+```typescript title="src/mastra/heartbeats.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { LibSQLStore } from '@mastra/libsql'
+
+const pinger = new Agent({
+  id: 'pinger',
+  name: 'Pinger',
+  instructions: 'Report the current system status in one sentence.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const mastra = new Mastra({
+  agents: { pinger },
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+})
+
+await mastra.heartbeats.create({
+  agentId: 'pinger',
+  cron: '0 * * * *',
+  prompt: 'Give me a status update.',
+})
+```
+
+Mastra starts the scheduler the first time a heartbeat is created, then fires the agent on the cron you specify.
+
+## Cadence
+
+Heartbeats fire on a cron expression. The `cron` field accepts a standard 5-, 6-, or 7-part cron expression, and it's validated when you create or update the heartbeat.
+
+Croner nicknames also work, for example `@hourly`, `@daily`, `@weekly`, `@monthly`, and `@midnight`. For day-and-time combinations, write the cron field directly:
+
+```typescript
+// Every weekday at 9am
+await mastra.heartbeats.create({
+  agentId: 'pinger',
+  cron: '0 9 * * 1-5',
+  prompt: 'Start-of-day check.',
+})
+```
+
+Set `timezone` to an IANA timezone, for example `America/New_York`, so fire times don't depend on the host's locale. When omitted, the cron resolves against the host's local timezone.
+
+For more readable cron construction, you can use a userland builder such as [`cron-time-generator`](https://www.npmjs.com/package/cron-time-generator) and pass its output to `cron`.
+
+## Threadless and threaded heartbeats
+
+A heartbeat fires in one of two modes, decided by whether you pass a `threadId`.
+
+### Threadless
+
+Without a `threadId`, each fire is an isolated `agent.generate()` run. Nothing is written to a conversation thread. This is the simplest mode and suits status checks, reports, and other work that doesn't need conversation context.
+
+### Threaded
+
+With a `threadId`, the heartbeat sends a [signal](/docs/agents/signals) into that thread, so the prompt joins the agent's conversation. Threaded heartbeats require a `resourceId` alongside the `threadId`.
+
+```typescript title="src/mastra/heartbeats.ts"
+await mastra.heartbeats.create({
+  agentId: 'pinger',
+  cron: '0 9 * * *',
+  prompt: 'Summarize anything new since yesterday.',
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+})
+```
+
+Threaded heartbeats accept extra fields that control how the signal behaves. They mirror the options [`agent.sendSignal`](/docs/agents/signals) accepts and stay JSON-serializable so they persist with the schedule.
+
+- `signalType`: the [signal type](/docs/agents/signals) to send, for example `notification` or `system-reminder`. Defaults to `notification`.
+- `tagName`: the XML tag the signal renders as. Defaults to `heartbeat`, so a fire surfaces to the agent as `<heartbeat>…</heartbeat>`.
+- `attributes`: values rendered onto the signal's XML tag.
+- `ifActive`: behavior when the thread is already streaming, as `{ behavior, attributes }`. `behavior` is one of `deliver`, `persist`, or `discard`.
+- `ifIdle`: behavior when the thread is idle, as `{ behavior, attributes, streamOptions }`. `behavior` is one of `wake`, `persist`, or `discard`. `streamOptions.requestContext` is applied to the woken run.
+
+These fields require a `threadId`. Passing them on a threadless heartbeat throws.
+
+```typescript
+await mastra.heartbeats.create({
+  agentId: 'pinger',
+  cron: '0 9 * * *',
+  prompt: 'Summarize anything new since yesterday.',
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  tagName: 'check-in', // renders as <check-in>…</check-in>
+  attributes: { source: 'cron' },
+  ifActive: { behavior: 'discard' }, // skip if the thread is mid-stream
+  ifIdle: {
+    behavior: 'wake', // wake the agent if the thread is idle
+    streamOptions: { requestContext: { locale: 'en-US' } },
+  },
+})
+```
+
+`providerOptions` are merged into the signal payload on every fire and apply to both threaded and threadless heartbeats.
+
+## Managing heartbeats
+
+Use `mastra.heartbeats` for all heartbeat operations. To scope to a single agent, pass `agentId` to `create` or `list`.
+
+```typescript
+// Create
+const hb = await mastra.heartbeats.create({
+  agentId: 'pinger',
+  cron: '0 * * * *',
+  prompt: 'Status check.',
+})
+
+// Read
+await mastra.heartbeats.get(hb.id)
+await mastra.heartbeats.list({ agentId: 'pinger' })
+
+// Update — changing cron or timezone recomputes the next fire time
+await mastra.heartbeats.update(hb.id, { cron: '*/30 * * * *' })
+
+// Pause and resume
+await mastra.heartbeats.pause(hb.id)
+await mastra.heartbeats.resume(hb.id)
+
+// Fire once now, off-schedule
+await mastra.heartbeats.run(hb.id)
+
+// Delete
+await mastra.heartbeats.delete(hb.id)
+```
+
+A few rules worth knowing:
+
+- `pause` and `resume` are durable and idempotent. A paused heartbeat survives restarts, and `resume` recomputes the next fire time from now rather than firing backlogged runs.
+- `run` fires the heartbeat once immediately without affecting its schedule.
+- `list` filters by `agentId`, `threadId`, `resourceId`, and `name`.
+
+### Custom IDs
+
+By default `create` generates a random `hb_<uuid>` id. Pass `id` to choose a stable one, for example when you want a predictable handle to look up, update, or delete later:
+
+```typescript
+await mastra.heartbeats.create({
+  id: 'nightly-summary',
+  agentId: 'pinger',
+  cron: '0 9 * * *',
+  prompt: 'Summarize anything new since yesterday.',
+})
+// stored as `hb_nightly-summary`
+```
+
+The id is normalized to `hb_<slug>`: the `hb_` prefix is added if missing and the rest is slugified. Creating a heartbeat with an id that already exists throws, so use `update` to change an existing one.
+
+### From the client
+
+The same operations are available from `@mastra/client-js` over the server routes, so you can manage heartbeats from a separate process or a UI.
+
+## Lifecycle hooks
+
+Hooks let you run code at key points in a heartbeat's lifecycle, for example to compute fire-time parameters or react to the outcome. Configure them on the `Mastra` constructor under `heartbeat`. The hooks are a single flat bundle that runs for every agent's heartbeats; each hook context carries the firing `agentId`, so branch on it when you need per-agent behavior. Hooks live at the `Mastra` level so they apply to both code-defined and stored agents.
+
+```typescript title="src/mastra/index.ts"
+const mastra = new Mastra({
+  agents: { pinger },
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  heartbeat: {
+    prepare: async ({ agentId, heartbeat, trigger }) => {
+      // Return overrides, null to skip this fire, or undefined for defaults
+      return { prompt: `Status as of ${trigger.firedAt.toISOString()}` }
+    },
+    onFinish: async ({ agentId, outcome, runId }) => {
+      // Runs on any non-error, non-abort outcome
+    },
+    onError: async ({ agentId, phase, error }) => {
+      // Runs when prepare, the signal, or the agent run threw
+    },
+    onAbort: async ({ agentId, runId }) => {
+      // Runs when the run was aborted mid-stream
+    },
+  },
+})
+```
+
+The hooks are:
+
+- `prepare`: runs before the fire. Return an object to override fire-time parameters such as `prompt` or `threadId`, `null` to skip the fire, or `undefined` to use the stored defaults.
+- `onFinish`: runs once per trigger that reached a non-error, non-abort terminal state.
+- `onError`: runs when `prepare`, the signal, or the agent run threw.
+- `onAbort`: runs when the run was aborted mid-stream.
+
+Every hook context includes `agentId` (the agent the heartbeat fired for) alongside `heartbeat` and `trigger`.
+
+Hook exceptions are caught and logged. They never re-route the worker or trigger another hook.
+
+## Related
+
+- [Signals](/docs/agents/signals): the delivery mechanism behind threaded heartbeats.
+- [Scheduled workflows](/docs/workflows/scheduled-workflows): run a workflow, rather than an agent, on a cron schedule.

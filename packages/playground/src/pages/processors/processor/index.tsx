@@ -1,10 +1,7 @@
-import {
-  PermissionDenied,
-  SessionExpired,
-  Skeleton,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useParams, Navigate } from 'react-router';
 import { ProcessorPanel } from '@/domains/processors/components/processor-panel';
 import { useProcessor } from '@/domains/processors/hooks/use-processors';

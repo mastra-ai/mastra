@@ -230,7 +230,7 @@ export class MemoryDSQL extends MemoryStorage {
       let paramIndex = 1;
 
       if (filter?.resourceId) {
-        whereClauses.push(`"resourceId" = ${paramIndex}`);
+        whereClauses.push(`"resourceId" = $${paramIndex}`);
         queryParams.push(filter.resourceId);
         paramIndex++;
       }
@@ -238,7 +238,7 @@ export class MemoryDSQL extends MemoryStorage {
       // Aurora DSQL stores JSONB as TEXT, so cast to jsonb for containment operator
       if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
         for (const [key, value] of Object.entries(filter.metadata)) {
-          whereClauses.push(`metadata::jsonb @> ${paramIndex}::jsonb`);
+          whereClauses.push(`metadata::jsonb @> $${paramIndex}::jsonb`);
           queryParams.push(JSON.stringify({ [key]: value }));
           paramIndex++;
         }
@@ -262,7 +262,7 @@ export class MemoryDSQL extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ${paramIndex} OFFSET ${paramIndex + 1}`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],

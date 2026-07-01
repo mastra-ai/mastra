@@ -1,4 +1,4 @@
-import { Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useState } from 'react';
 import { providerMapToIcon } from '../provider-map-icon';
 import { cleanProviderId as cleanProviderIdUtil } from './utils';

@@ -14,6 +14,7 @@ import { requestContextDemoAgent } from './request-context-demo-agent';
 // Export Dynamic Tools Agent
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
 export { slackDemoAgent } from './slack-agent.js';
+export { billingAgent, balanceAgent } from './billing-agent.js';
 const memory = new Memory();
 
 /**

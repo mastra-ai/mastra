@@ -12,6 +12,10 @@ const packageJsonPath = join(packageRoot, 'package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as {
   peerDependencies?: Record<string, string>;
 };
+const corePackageJsonPath = join(corePackageRoot, 'package.json');
+const corePackageJson = JSON.parse(readFileSync(corePackageJsonPath, 'utf-8')) as {
+  version?: string;
+};
 
 type CoreValueImport = {
   file: string;
@@ -26,9 +30,10 @@ const formatHost: ts.FormatDiagnosticsHost = {
 };
 
 const coreRange = packageJson.peerDependencies?.['@mastra/core'];
-const coreVersion = coreRange?.match(/>=\s*(\d+\.\d+\.\d+)/)?.[1];
+const coreFloorVersion = coreRange?.match(/>=\s*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)/)?.[1];
+const corePackVersion = coreFloorVersion?.endsWith('-0') ? coreFloorVersion.slice(0, -2) : coreFloorVersion;
 
-if (!coreRange || !coreVersion) {
+if (!coreRange || !coreFloorVersion || !corePackVersion) {
   console.error('✗ Could not determine @mastra/core peer dependency floor from package.json');
   process.exit(1);
 }
@@ -85,35 +90,74 @@ function runCommand(command: string, args: string[], cwd: string) {
   return spawnSync(command, args, {
     cwd,
     encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'inherit'],
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
 
-function extractCorePackage(version: string, tempDir: string) {
-  const pack = runCommand(
-    'npm',
-    ['pack', `@mastra/core@${version}`, '--pack-destination', tempDir, '--silent'],
-    repoRoot,
+function formatCommandFailure(result: ReturnType<typeof runCommand>) {
+  const stderr = result.stderr.trim();
+  return stderr ? `\n${stderr}` : '';
+}
+
+function extractTarball(tarball: string, tempDir: string) {
+  const tarballPath = join(tempDir, tarball);
+  const extract = runCommand('tar', ['-xzf', tarballPath, '-C', tempDir], repoRoot);
+
+  if (extract.status !== 0) {
+    throw new Error(`Failed to extract ${tarballPath}${formatCommandFailure(extract)}`);
+  }
+
+  return join(tempDir, 'package');
+}
+
+function packLocalCore(version: string, tempDir: string) {
+  if (corePackageJson.version !== version) {
+    return undefined;
+  }
+
+  console.info(
+    `@mastra/core@${version} is not available from npm; packing local ${relative(repoRoot, corePackageRoot)} because its version matches`,
   );
 
+  const pack = runCommand('npm', ['pack', corePackageRoot, '--pack-destination', tempDir, '--silent'], repoRoot);
+
   if (pack.status !== 0) {
-    throw new Error(`Failed to download @mastra/core@${version}`);
+    throw new Error(`Failed to pack local @mastra/core@${version}${formatCommandFailure(pack)}`);
   }
 
   const tarball = pack.stdout.trim().split('\n').at(-1);
 
   if (!tarball) {
-    throw new Error(`npm pack did not return a tarball for @mastra/core@${version}`);
+    throw new Error(`npm pack did not return a tarball for local @mastra/core@${version}`);
   }
 
-  const tarballPath = join(tempDir, tarball);
-  const extract = runCommand('tar', ['-xzf', tarballPath, '-C', tempDir], repoRoot);
+  return extractTarball(tarball, tempDir);
+}
 
-  if (extract.status !== 0) {
-    throw new Error(`Failed to extract ${tarballPath}`);
+function extractCorePackage(packVersion: string, tempDir: string) {
+  const pack = runCommand(
+    'npm',
+    ['pack', `@mastra/core@${packVersion}`, '--pack-destination', tempDir, '--silent'],
+    repoRoot,
+  );
+
+  if (pack.status === 0) {
+    const tarball = pack.stdout.trim().split('\n').at(-1);
+
+    if (!tarball) {
+      throw new Error(`npm pack did not return a tarball for @mastra/core@${packVersion}`);
+    }
+
+    return extractTarball(tarball, tempDir);
   }
 
-  return join(tempDir, 'package');
+  const localCoreRoot = packLocalCore(packVersion, tempDir);
+
+  if (localCoreRoot) {
+    return localCoreRoot;
+  }
+
+  throw new Error(`Failed to download @mastra/core@${packVersion}${formatCommandFailure(pack)}`);
 }
 
 function getExportTypesTarget(exportValue: unknown): string | undefined {
@@ -238,7 +282,7 @@ let exitCode = 1;
 try {
   const imports = collectCoreValueImports();
   const moduleNames = [...new Set(imports.map(item => item.moduleName))].sort();
-  const floorCoreRoot = extractCorePackage(coreVersion, tempDir);
+  const floorCoreRoot = extractCorePackage(corePackVersion, tempDir);
   const { paths, availablePaths } = createCorePaths(floorCoreRoot, moduleNames);
   const checkFilePath = join(tempDir, 'core-import-check.ts');
   const tsconfigPath = join(tempDir, 'tsconfig.json');
@@ -262,7 +306,7 @@ try {
     ),
   );
 
-  console.info(`Checking @mastra/server value imports against @mastra/core@${coreVersion} (${coreRange})`);
+  console.info(`Checking @mastra/server value imports against @mastra/core@${corePackVersion} (${coreRange})`);
   console.info(
     `Resolved ${availablePaths}/${moduleNames.length} @mastra/core import paths from the peer dependency floor`,
   );

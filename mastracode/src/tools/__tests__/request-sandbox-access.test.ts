@@ -12,28 +12,69 @@ function createMockLocalFilesystem() {
   return { fs, setAllowedPaths: spy };
 }
 
+function createAgentControllerCtx(state: Record<string, unknown> = {}) {
+  const getState = () => ({ sandboxAllowedPaths: [], ...state });
+  const setState = vi.fn();
+  return {
+    getState,
+    setState,
+    session: {
+      state: {
+        get: getState,
+        set: setState,
+      },
+    },
+  };
+}
+
+/**
+ * The tool pauses via the native tool-suspension primitive. The first pass calls
+ * `suspend({ kind, path, reason })` and returns; the host resumes the tool with the
+ * user's answer as `resumeData`. These helpers exercise both passes.
+ */
+function suspendPass(agentControllerCtx: any, fs?: any) {
+  const suspend = vi.fn();
+  const context = {
+    agent: { suspend },
+    requestContext: { get: (key: string) => (key === 'controller' ? agentControllerCtx : undefined) },
+    workspace: fs ? { filesystem: fs } : {},
+  };
+  return { context, suspend };
+}
+
+function resumePass(answer: string, agentControllerCtx: any, fs?: any) {
+  const context = {
+    agent: { resumeData: answer },
+    requestContext: { get: (key: string) => (key === 'controller' ? agentControllerCtx : undefined) },
+    workspace: fs ? { filesystem: fs } : {},
+  };
+  return { context };
+}
+
 describe('request_access', () => {
+  it('suspends with the request payload on the first pass', async () => {
+    const agentControllerCtx = createAgentControllerCtx();
+    const { context, suspend } = suspendPass(agentControllerCtx);
+
+    const result = await (requestSandboxAccessTool as any).execute(
+      { path: '/outside/project/dir', reason: 'need to read config' },
+      context,
+    );
+
+    // Suspending returns no value; the suspend payload carries the request details.
+    expect(result).toBeUndefined();
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(suspend.mock.calls[0]![0]).toEqual({
+      kind: 'sandbox_access_request',
+      path: '/outside/project/dir',
+      reason: 'need to read config',
+    });
+  });
+
   it('calls setAllowedPaths on workspace filesystem when access is approved', async () => {
     const { fs, setAllowedPaths } = createMockLocalFilesystem();
-
-    const mockHarnessCtx = {
-      emitEvent: vi.fn(),
-      registerQuestion: vi.fn(({ resolve }: { questionId: string; resolve: (answer: string) => void }) => {
-        // Simulate immediate user approval
-        resolve('yes');
-      }),
-      getState: () => ({ sandboxAllowedPaths: [] }),
-      setState: vi.fn(),
-    };
-
-    const context = {
-      requestContext: {
-        get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
-      },
-      workspace: {
-        filesystem: fs,
-      },
-    };
+    const agentControllerCtx = createAgentControllerCtx();
+    const { context } = resumePass('yes', agentControllerCtx, fs);
 
     const result = await (requestSandboxAccessTool as any).execute(
       { path: '/outside/project/dir', reason: 'need to read config' },
@@ -42,6 +83,14 @@ describe('request_access', () => {
 
     expect(result.isError).toBe(false);
     expect(result.content).toContain('Access granted');
+
+    // The grant must be persisted to controller state so the workspace factory
+    // re-derives the same allowlist on the next tool call (otherwise the
+    // factory's setAllowedPaths rebuild clobbers the in-turn widen below).
+    expect(agentControllerCtx.setState).toHaveBeenCalledTimes(1);
+    expect(agentControllerCtx.setState).toHaveBeenCalledWith({
+      sandboxAllowedPaths: ['/outside/project/dir'],
+    });
 
     // The key assertion: setAllowedPaths must be called mid-turn
     expect(setAllowedPaths).toHaveBeenCalledTimes(1);
@@ -53,26 +102,48 @@ describe('request_access', () => {
     expect(updater(['/existing'])).toEqual(['/existing', '/outside/project/dir']);
   });
 
+  it('widens the live filesystem via the controller context when tool context has no workspace', async () => {
+    // Regression: in the real runtime the tool-execution context does NOT
+    // expose `workspace` (it is undefined). The live, resolved workspace is
+    // only reachable through the controller request context. Granting access must
+    // widen that filesystem so same-turn `view` calls can read the path.
+    const { fs, setAllowedPaths } = createMockLocalFilesystem();
+    const getState = () => ({ sandboxAllowedPaths: [] });
+    const setState = vi.fn();
+    const agentControllerCtx: any = {
+      getState,
+      setState,
+      session: {
+        state: {
+          get: getState,
+          set: setState,
+        },
+      },
+      workspace: { filesystem: fs },
+    };
+    // Tool context intentionally has NO workspace, matching production.
+    const context = {
+      agent: { resumeData: 'yes' },
+      requestContext: { get: (key: string) => (key === 'controller' ? agentControllerCtx : undefined) },
+    };
+
+    const result = await (requestSandboxAccessTool as any).execute(
+      { path: '/outside/project/dir', reason: 'need to read config' },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.content).toContain('Access granted');
+    // The live filesystem from the controller context must be widened.
+    expect(setAllowedPaths).toHaveBeenCalledTimes(1);
+    const updater = setAllowedPaths.mock.calls[0]![0] as (c: readonly string[]) => string[];
+    expect(updater(['/existing'])).toEqual(['/existing', '/outside/project/dir']);
+  });
+
   it('does not call setAllowedPaths when access is denied', async () => {
     const { fs, setAllowedPaths } = createMockLocalFilesystem();
-
-    const mockHarnessCtx = {
-      emitEvent: vi.fn(),
-      registerQuestion: vi.fn(({ resolve }: { questionId: string; resolve: (answer: string) => void }) => {
-        resolve('no');
-      }),
-      getState: () => ({ sandboxAllowedPaths: [] }),
-      setState: vi.fn(),
-    };
-
-    const context = {
-      requestContext: {
-        get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
-      },
-      workspace: {
-        filesystem: fs,
-      },
-    };
+    const agentControllerCtx = createAgentControllerCtx();
+    const { context } = resumePass('no', agentControllerCtx, fs);
 
     const result = await (requestSandboxAccessTool as any).execute(
       { path: '/outside/project/dir', reason: 'need to read config' },
@@ -84,21 +155,8 @@ describe('request_access', () => {
   });
 
   it('works when workspace has no filesystem', async () => {
-    const mockHarnessCtx = {
-      emitEvent: vi.fn(),
-      registerQuestion: vi.fn(({ resolve }: { questionId: string; resolve: (answer: string) => void }) => {
-        resolve('yes');
-      }),
-      getState: () => ({ sandboxAllowedPaths: [] }),
-      setState: vi.fn(),
-    };
-
-    const context = {
-      requestContext: {
-        get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
-      },
-      workspace: {},
-    };
+    const agentControllerCtx = createAgentControllerCtx();
+    const { context } = resumePass('yes', agentControllerCtx);
 
     const result = await (requestSandboxAccessTool as any).execute(
       { path: '/outside/project/dir', reason: 'testing' },
@@ -112,24 +170,8 @@ describe('request_access', () => {
 
   it('expands tilde paths instead of nesting under project root', async () => {
     const { fs, setAllowedPaths } = createMockLocalFilesystem();
-
-    const mockHarnessCtx = {
-      emitEvent: vi.fn(),
-      registerQuestion: vi.fn(({ resolve }: { questionId: string; resolve: (answer: string) => void }) => {
-        resolve('yes');
-      }),
-      getState: () => ({ sandboxAllowedPaths: [] }),
-      setState: vi.fn(),
-    };
-
-    const context = {
-      requestContext: {
-        get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
-      },
-      workspace: {
-        filesystem: fs,
-      },
-    };
+    const agentControllerCtx = createAgentControllerCtx();
+    const { context } = resumePass('yes', agentControllerCtx, fs);
 
     const result = await (requestSandboxAccessTool as any).execute(
       { path: '~/.config/opencode', reason: 'need config access' },
@@ -151,22 +193,11 @@ describe('request_access', () => {
   });
 
   it('works when filesystem lacks setAllowedPaths method', async () => {
-    const mockHarnessCtx = {
-      emitEvent: vi.fn(),
-      registerQuestion: vi.fn(({ resolve }: { questionId: string; resolve: (answer: string) => void }) => {
-        resolve('yes');
-      }),
-      getState: () => ({ sandboxAllowedPaths: [] }),
-      setState: vi.fn(),
-    };
-
+    const agentControllerCtx = createAgentControllerCtx();
     const context = {
-      requestContext: {
-        get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
-      },
-      workspace: {
-        filesystem: {}, // no setAllowedPaths
-      },
+      agent: { resumeData: 'yes' },
+      requestContext: { get: (key: string) => (key === 'controller' ? agentControllerCtx : undefined) },
+      workspace: { filesystem: {} }, // no setAllowedPaths
     };
 
     const result = await (requestSandboxAccessTool as any).execute(

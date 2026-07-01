@@ -9,8 +9,8 @@
  * - Text wrapping and scrolling
  */
 
-import { Editor, matchesKey } from '@mariozechner/pi-tui';
-import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
+import { Editor, matchesKey } from '@earendil-works/pi-tui';
+import type { EditorTheme, TUI } from '@earendil-works/pi-tui';
 
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
 

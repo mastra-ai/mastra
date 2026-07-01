@@ -1,23 +1,38 @@
 /**
  * Display helpers for the TUI: error messages, info messages, notifications.
  */
-import { Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 
 import { parseError } from '../utils/errors.js';
+import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
+import type { ChatSpacingKind } from './components/chat-spacing.js';
 import type { NotificationMode, NotificationReason } from './notify.js';
 import { sendNotification } from './notify.js';
 import type { TUIState } from './state.js';
 import { theme } from './theme.js';
 
+class InfoMessageComponent extends Container {
+  constructor(lines: Text[]) {
+    super();
+    for (const line of lines) {
+      this.addChild(line);
+    }
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'system';
+  }
+}
+
 export function showError(state: TUIState, message: string): void {
-  state.chatContainer.addChild(new Spacer(1));
-  state.chatContainer.addChild(new Text(theme.fg('error', `Error: ${message}`), 1, 0));
+  const component = new InfoMessageComponent([new Text(theme.fg('error', `Error: ${message}`), 1, 0)]);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   state.ui.requestRender();
 }
 
 export function showInfo(state: TUIState, message: string): void {
-  state.chatContainer.addChild(new Spacer(1));
-  state.chatContainer.addChild(new Text(theme.fg('muted', message), 1, 0));
+  const component = new InfoMessageComponent([new Text(theme.fg('muted', message), 1, 0)]);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   state.ui.requestRender();
 }
 
@@ -34,8 +49,6 @@ export function showFormattedError(
 ): void {
   const error = 'error' in event ? event.error : event;
   const parsed = parseError(error);
-
-  state.chatContainer.addChild(new Spacer(1));
 
   // Show the main error message
   let errorText = `Error: ${parsed.message}`;
@@ -54,14 +67,16 @@ export function showFormattedError(
     errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
   }
 
-  state.chatContainer.addChild(new Text(theme.fg('error', errorText), 1, 0));
+  const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
 
   // Add helpful hints based on error type
   const hint = getErrorHint(parsed.type);
   if (hint) {
-    state.chatContainer.addChild(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
+    lines.push(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
   }
 
+  const component = new InfoMessageComponent(lines);
+  insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   state.ui.requestRender();
 }
 
@@ -83,7 +98,7 @@ function getErrorHint(errorType: string): string | null {
 }
 
 export function notify(state: TUIState, reason: NotificationReason, message?: string): void {
-  const mode = ((state.harness.getState() as any)?.notifications ?? 'off') as NotificationMode;
+  const mode = ((state.session.state.get() as any)?.notifications ?? 'off') as NotificationMode;
   sendNotification(reason, {
     mode,
     message,

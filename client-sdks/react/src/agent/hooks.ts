@@ -5,6 +5,7 @@ import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { TaskItem } from '@mastra/core/signals';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -12,10 +13,15 @@ import {
   accumulateNetworkChunk,
   CLIENT_MESSAGE_ID_KEY,
   finishStreamingAssistantMessage,
-  fromCoreUserMessageToMastraDBMessage,
+  fromCoreUserMessagesToMastraDBMessage,
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
+import {
+  extractLatestTasksFromMessages,
+  extractTasksFromSignalChunk,
+  extractTasksFromToolResultChunk,
+} from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ModelSettings } from './types';
@@ -79,18 +85,22 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
     .map(message => {
       const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
 
-      // A persisted/refetched thread must never show a stuck "sending" bubble:
-      // the pending status and its `clientMessageId` correlation key are
-      // transient UI state, so strip them on reload.
+      // A persisted/refetched thread must never show a stuck "sending" bubble
+      // and must never carry the optimistic correlation key: the pending status
+      // and its `clientMessageId` are transient UI state. The `clientMessageId`
+      // can survive into storage (it is sent to the server with the message), so
+      // strip it on every reload regardless of pending status; the rendered row
+      // key falls back to the stable server `id`.
       const normalizedMessage =
-        metadata?.status === 'pending'
+        metadata && (metadata.status === 'pending' || CLIENT_MESSAGE_ID_KEY in metadata)
           ? (() => {
-              const { status: _omitStatus, [CLIENT_MESSAGE_ID_KEY]: _omitClientMessageId, ...restMetadata } = metadata;
+              const { [CLIENT_MESSAGE_ID_KEY]: _omitClientMessageId, ...rest } = metadata;
+              const { status: _omitStatus, ...restWithoutStatus } = rest;
               return {
                 ...message,
                 content: {
                   ...message.content,
-                  metadata: restMetadata,
+                  metadata: metadata.status === 'pending' ? restWithoutStatus : rest,
                 },
               };
             })()
@@ -286,6 +296,7 @@ export const useChat = ({
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const _threadSignalsUnsupportedRef = useRef(false);
   const [messages, setMessages] = useState<MastraDBMessage[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -301,6 +312,7 @@ export const useChat = ({
   useEffect(() => {
     const formattedMessages = resolveInitialMessages(initialMessages ?? []);
     setMessages(formattedMessages);
+    setTasks(extractLatestTasksFromMessages(formattedMessages));
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
@@ -393,6 +405,11 @@ export const useChat = ({
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+      const signalTasks = extractTasksFromSignalChunk(chunk);
+      if (signalTasks !== undefined) setTasks(signalTasks);
+      const toolTasks = extractTasksFromToolResultChunk(chunk);
+      if (toolTasks !== undefined) setTasks(toolTasks);
 
       if (
         chunk.type === 'data-user-message' &&
@@ -791,7 +808,7 @@ export const useChat = ({
           onSignalEcho?.(resolvedSignalId);
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
-            setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
+            setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
             await streamWithLegacyRoute();
             return;
           }
@@ -884,7 +901,7 @@ export const useChat = ({
     _requestContext.current = undefined;
   };
 
-  const approveToolCall = async (toolCallId: string) => {
+  const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
@@ -902,6 +919,7 @@ export const useChat = ({
           threadId,
           toolCallId,
           approved: true,
+          ...(resumeData !== undefined ? { resumeData } : {}),
           requestContext: _requestContext.current,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);
@@ -1105,37 +1123,31 @@ export const useChat = ({
       coreUserMessages.push(...args.coreUserMessages);
     }
 
-    const dbUserMessages = coreUserMessages.map(fromCoreUserMessageToMastraDBMessage);
-    const signalId =
+    // The whole user turn (text + any attachments) is merged into a single
+    // optimistic message so streaming renders one bubble, matching how
+    // memory/reload resolves the persisted multi-part user message.
+    const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
+    const clientSetId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
-        ? dbUserMessages[0]?.id
+        ? `client-set-${uuid()}`
         : undefined;
-    // Client-generated correlation id for the signal path: stamped on the
-    // optimistic pending bubble and on the outgoing message metadata so the
-    // server echo can reconcile them by id (the server mints its own signal id,
-    // which we cannot pre-seed).
-    const clientMessageId = signalId ? uuid() : undefined;
+    const signalId = clientSetId;
+    const clientMessageId = clientSetId;
+
     if (signalId) {
-      // Signal path: append the user turn optimistically as `pending` so it
-      // renders inline immediately. The server echo (matched by clientMessageId
-      // in the accumulator) clears the status to a normal bubble.
-      // All core user messages are sent as a single signal that echoes back one
-      // `data-user-message`, so only the first bubble carries the correlation id
-      // and pending status. Stamping every bubble with the same id would let one
-      // server echo match (and adopt its id onto) multiple messages.
-      const pendingMessages = dbUserMessages.map((message, index) => {
-        if (index > 0) return message;
-        const metadata: MastraDBMessageMetadata = {
-          ...message.content.metadata,
-          mode: 'stream',
-          status: 'pending',
-          [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
-        };
-        return { ...message, content: { ...message.content, metadata } };
-      });
-      setMessages(s => [...s, ...pendingMessages]);
+      // Signal path: append the user turn optimistically as `pending` with a
+      // visibly client-owned id. The server echo can replace the final message
+      // id while the matching client id reconciles the pending bubble.
+      const metadata: MastraDBMessageMetadata = {
+        ...dbUserMessage.content.metadata,
+        mode: 'stream',
+        status: 'pending',
+        [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
+      };
+      const pendingMessage = { ...dbUserMessage, id: clientSetId, content: { ...dbUserMessage.content, metadata } };
+      setMessages(s => [...s, pendingMessage]);
     } else {
-      setMessages(s => [...s, ...dbUserMessages]);
+      setMessages(s => [...s, dbUserMessage]);
     }
 
     if (mode === 'generate') {
@@ -1153,6 +1165,7 @@ export const useChat = ({
     isRunning,
     isAwaitingToolApproval,
     messages,
+    tasks,
     approveToolCall,
     declineToolCall,
     approveToolCallGenerate,

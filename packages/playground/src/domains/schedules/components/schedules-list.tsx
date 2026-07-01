@@ -1,5 +1,5 @@
 import type { ScheduleResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { useMemo } from 'react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { ScheduleStatusText } from './schedule-status-badge';
@@ -28,7 +28,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
   }
 
   return (
-    <DataList columns={COLUMNS} className="min-w-0">
+    <DataList columns={COLUMNS} variant="striped" className="min-w-0">
       <DataList.Top>
         <DataList.TopCell>Workflow</DataList.TopCell>
         <DataList.TopCell>Schedule ID</DataList.TopCell>

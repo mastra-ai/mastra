@@ -1,5 +1,672 @@
 # @internal/playground
 
+## 1.17.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb)]:
+  - @mastra/core@1.48.1-alpha.0
+  - @mastra/client-js@1.29.1-alpha.0
+  - @mastra/react@1.2.2-alpha.0
+  - @mastra/playground-ui@38.0.1-alpha.0
+
+## 1.17.0
+
+### Patch Changes
+
+- add Studio support for observational memory extractors ([#18655](https://github.com/mastra-ai/mastra/pull/18655))
+
+  Adds `bufferedObservationChunks` and extraction metadata to the buffer-status API and client types so extracted values flow through during live streaming. Renders observational memory indicators from a normalized cycle model that preserves extraction data across streaming, refetch, reload, activation, and failure transitions.
+
+- Fixed Studio Metrics tab not rendering for PostgresStoreVNext users. The dashboard now appears when the observability store is Postgres v-next, with an advisory banner recommending time-range filters for best performance. ([#18598](https://github.com/mastra-ai/mastra/pull/18598))
+
+- Updated dependencies [[`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866), [`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`0ac14ce`](https://github.com/mastra-ai/mastra/commit/0ac14cea48e1b0a7857782153c78f7242fdf7e1a), [`9566d27`](https://github.com/mastra-ai/mastra/commit/9566d27ead3d95bdbe5a69e5a082a68222829cf2), [`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`6a4a466`](https://github.com/mastra-ai/mastra/commit/6a4a466495279c2add2b0fd0afe6989fe7ae352a), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`c9530b7`](https://github.com/mastra-ai/mastra/commit/c9530b760fa04d835967e24288247284889880b2), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c), [`e84e791`](https://github.com/mastra-ai/mastra/commit/e84e79174031d7bc8793ca6c805eb38b06e7cfb1), [`ee7b47a`](https://github.com/mastra-ai/mastra/commit/ee7b47a0331ad78e2297f75617cca56e37095b69), [`c2f0b7f`](https://github.com/mastra-ai/mastra/commit/c2f0b7f1370f4428d165f51f0d1d9a48331cc257), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b), [`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/core@1.48.0
+  - @mastra/client-js@1.29.0
+  - @mastra/schema-compat@1.3.2
+  - @mastra/ai-sdk@1.6.1
+  - @mastra/playground-ui@38.0.0
+  - @mastra/react@1.2.1
+
+## 1.17.0-alpha.10
+
+### Patch Changes
+
+- add Studio support for observational memory extractors ([#18655](https://github.com/mastra-ai/mastra/pull/18655))
+
+  Adds `bufferedObservationChunks` and extraction metadata to the buffer-status API and client types so extracted values flow through during live streaming. Renders observational memory indicators from a normalized cycle model that preserves extraction data across streaming, refetch, reload, activation, and failure transitions.
+
+- Updated dependencies [[`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/core@1.48.0-alpha.10
+  - @mastra/client-js@1.29.0-alpha.10
+  - @mastra/react@1.2.1-alpha.10
+  - @mastra/playground-ui@38.0.0-alpha.10
+
+## 1.17.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`e84e791`](https://github.com/mastra-ai/mastra/commit/e84e79174031d7bc8793ca6c805eb38b06e7cfb1)]:
+  - @mastra/core@1.48.0-alpha.9
+  - @mastra/client-js@1.29.0-alpha.9
+  - @mastra/react@1.2.1-alpha.9
+  - @mastra/playground-ui@38.0.0-alpha.9
+
+## 1.17.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`0ac14ce`](https://github.com/mastra-ai/mastra/commit/0ac14cea48e1b0a7857782153c78f7242fdf7e1a), [`c2f0b7f`](https://github.com/mastra-ai/mastra/commit/c2f0b7f1370f4428d165f51f0d1d9a48331cc257)]:
+  - @mastra/core@1.48.0-alpha.8
+  - @mastra/client-js@1.29.0-alpha.8
+  - @mastra/react@1.2.1-alpha.8
+  - @mastra/playground-ui@38.0.0-alpha.8
+
+## 1.17.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c)]:
+  - @mastra/core@1.48.0-alpha.7
+  - @mastra/client-js@1.29.0-alpha.7
+  - @mastra/react@1.2.1-alpha.7
+  - @mastra/playground-ui@38.0.0-alpha.7
+
+## 1.16.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`6a4a466`](https://github.com/mastra-ai/mastra/commit/6a4a466495279c2add2b0fd0afe6989fe7ae352a), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+  - @mastra/client-js@1.29.0-alpha.6
+  - @mastra/schema-compat@1.3.2-alpha.1
+  - @mastra/react@1.2.1-alpha.6
+  - @mastra/playground-ui@38.0.0-alpha.6
+
+## 1.16.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+  - @mastra/client-js@1.29.0-alpha.5
+  - @mastra/react@1.2.1-alpha.5
+  - @mastra/playground-ui@38.0.0-alpha.5
+
+## 1.16.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`ee7b47a`](https://github.com/mastra-ai/mastra/commit/ee7b47a0331ad78e2297f75617cca56e37095b69), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+  - @mastra/playground-ui@37.1.0-alpha.4
+  - @mastra/client-js@1.28.1-alpha.4
+  - @mastra/react@1.2.1-alpha.4
+
+## 1.16.1-alpha.3
+
+### Patch Changes
+
+- Fixed Studio Metrics tab not rendering for PostgresStoreVNext users. The dashboard now appears when the observability store is Postgres v-next, with an advisory banner recommending time-range filters for best performance. ([#18598](https://github.com/mastra-ai/mastra/pull/18598))
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`c9530b7`](https://github.com/mastra-ai/mastra/commit/c9530b760fa04d835967e24288247284889880b2), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/schema-compat@1.3.2-alpha.0
+  - @mastra/ai-sdk@1.6.1-alpha.0
+  - @mastra/client-js@1.28.1-alpha.3
+  - @mastra/react@1.2.1-alpha.3
+  - @mastra/playground-ui@37.0.1-alpha.3
+
+## 1.16.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+  - @mastra/client-js@1.28.1-alpha.2
+  - @mastra/react@1.2.1-alpha.2
+  - @mastra/playground-ui@37.0.1-alpha.2
+
+## 1.16.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`8e9c0fb`](https://github.com/mastra-ai/mastra/commit/8e9c0fb48fd58da2efcdff2cf1202ee41092c315)]:
+  - @mastra/core@1.48.0-alpha.1
+  - @mastra/client-js@1.28.1-alpha.1
+  - @mastra/react@1.2.1-alpha.1
+  - @mastra/playground-ui@37.0.1-alpha.1
+
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`9566d27`](https://github.com/mastra-ai/mastra/commit/9566d27ead3d95bdbe5a69e5a082a68222829cf2)]:
+  - @mastra/core@1.48.0-alpha.0
+  - @mastra/client-js@1.28.1-alpha.0
+  - @mastra/react@1.2.1-alpha.0
+  - @mastra/playground-ui@37.0.1-alpha.0
+
+## 1.16.0
+
+### Patch Changes
+
+- Fixed Studio dropping a code-defined agent's tools when saving. A code agent that doesn't set an `editor` config is fully editable, but Studio was leaving the tools out of the save request, so tool changes (and description overrides) were silently discarded. Studio now sends the edited tools for these agents, matching the fields the server actually persists. ([#18404](https://github.com/mastra-ai/mastra/pull/18404))
+
+- Move the Memory Studio (timeline, flamegraph, and observational-memory detail) into the agent chat view as an opt-in panel. ([#18272](https://github.com/mastra-ai/mastra/pull/18272))
+  - The standalone Memory nav entry, `/memory` routes, and the separate thread/chat list are removed; the studio is now opened from the chat view and shown inside the Memory sidepanel, with the agent layout's left resizable panel expanding when the detail opens. Clicking the flamegraph timeline drives a replay cursor that highlights the matching observational-memory record. Marker types are imported from `@mastra/memory` instead of being redeclared in the UI so the studio stays in sync with the stream format.
+  - `MemoryStudioPanel` gains an optional `contextWindow` prop so callers can supply authoritative message/observation token counts and thresholds; when provided these take precedence over values re-derived from message markers, keeping the panel's MESSAGES/OBSERVATIONS readout in sync with the observational-memory sidebar (marker-derived values remain the fallback for standalone usage).
+  - `MemoryStudioPanel` now shows both Messages and Observations progress bars, matching the collapsed memory sidebar. The FlameGraph zoom range is lifted into the panel and filters the observation list: collapsing the range hides out-of-range observations and "Reset zoom" restores the full list. `FlameGraph` gains optional controlled `zoomRange`/`onZoomRangeChange` props (uncontrolled usage is unchanged).
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`d763590`](https://github.com/mastra-ai/mastra/commit/d763590cf147273276b485263209f2cf5ff7319b), [`47c5c7b`](https://github.com/mastra-ai/mastra/commit/47c5c7b2b3cd8efc3ecb408029771d6083f5bf6c), [`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`d940bc0`](https://github.com/mastra-ai/mastra/commit/d940bc0fef23a29377e4d731e3abaaa240ea0756), [`06e0d63`](https://github.com/mastra-ai/mastra/commit/06e0d63d42bc2a202e18bc091f3781f409f5e6fb), [`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`438a971`](https://github.com/mastra-ai/mastra/commit/438a9715c8b4398e5eaf8914a1f19dc8a85dc1de), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`77518cc`](https://github.com/mastra-ai/mastra/commit/77518ccb5bb8cc684875081e64213dc85cffdbee), [`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`8a68844`](https://github.com/mastra-ai/mastra/commit/8a688443013816105a09f89c6afa34b5ff13e26d), [`bb2a13b`](https://github.com/mastra-ai/mastra/commit/bb2a13bb4b32e6bb807200fe7b18ae8fa4322118), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`a73cd1a`](https://github.com/mastra-ai/mastra/commit/a73cd1a62a5e4ca023dcc39ba150029f4f1f74c1), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`667be96`](https://github.com/mastra-ai/mastra/commit/667be96ac5ddfc1983afb430cc3b72b89f91051b), [`712e7e0`](https://github.com/mastra-ai/mastra/commit/712e7e01f46504dadaf8025fc0d79a8e2d5f3c75), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`c5df3f1`](https://github.com/mastra-ai/mastra/commit/c5df3f155750c3d78666dc699fd26941dd5d24e7), [`0b5cc47`](https://github.com/mastra-ai/mastra/commit/0b5cc4726dc18d9a685a27520db39ff1b36bb89a), [`87f38a3`](https://github.com/mastra-ai/mastra/commit/87f38a3de03e24731f2dd6f8ed6a60b6722b85a1), [`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98), [`fe98ef2`](https://github.com/mastra-ai/mastra/commit/fe98ef2e66dbfcbd7d645c88c9ee1e67b458a136), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`793ea0f`](https://github.com/mastra-ai/mastra/commit/793ea0f52f831178837f21c83af6af93bf4ce638), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`507a5c4`](https://github.com/mastra-ai/mastra/commit/507a5c461bdc3136ad80744c0efbb55ce1f18f97), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`307573b`](https://github.com/mastra-ai/mastra/commit/307573b9ff3149b70c79540dbc86f1319b180f29), [`79b3626`](https://github.com/mastra-ai/mastra/commit/79b3626f8d647307eb07c8da14c9073c2699719d), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`76e8987`](https://github.com/mastra-ai/mastra/commit/76e89871e8a30eaa43ed64863d10eb6cf52ff9b6), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`2a67d9b`](https://github.com/mastra-ai/mastra/commit/2a67d9bf70e17da28df39de3436d697ca25bf120), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156), [`cd01ee3`](https://github.com/mastra-ai/mastra/commit/cd01ee32dc036e70d70bf164f0d7a608c73d307e), [`a368407`](https://github.com/mastra-ai/mastra/commit/a368407010c8c1b34d349a2ad1506f5b01ed9301), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.47.0
+  - @mastra/client-js@1.28.0
+  - @mastra/react@1.2.0
+  - @mastra/playground-ui@37.0.0
+  - @mastra/schema-compat@1.3.1
+  - @mastra/ai-sdk@1.6.0
+
+## 1.16.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`8a68844`](https://github.com/mastra-ai/mastra/commit/8a688443013816105a09f89c6afa34b5ff13e26d)]:
+  - @mastra/core@1.47.0-alpha.7
+  - @mastra/client-js@1.28.0-alpha.7
+  - @mastra/react@1.2.0-alpha.7
+  - @mastra/playground-ui@37.0.0-alpha.7
+
+## 1.16.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156), [`d940bc0`](https://github.com/mastra-ai/mastra/commit/d940bc0fef23a29377e4d731e3abaaa240ea0756), [`06e0d63`](https://github.com/mastra-ai/mastra/commit/06e0d63d42bc2a202e18bc091f3781f409f5e6fb), [`438a971`](https://github.com/mastra-ai/mastra/commit/438a9715c8b4398e5eaf8914a1f19dc8a85dc1de), [`77518cc`](https://github.com/mastra-ai/mastra/commit/77518ccb5bb8cc684875081e64213dc85cffdbee), [`bb2a13b`](https://github.com/mastra-ai/mastra/commit/bb2a13bb4b32e6bb807200fe7b18ae8fa4322118), [`a73cd1a`](https://github.com/mastra-ai/mastra/commit/a73cd1a62a5e4ca023dcc39ba150029f4f1f74c1), [`0b5cc47`](https://github.com/mastra-ai/mastra/commit/0b5cc4726dc18d9a685a27520db39ff1b36bb89a), [`87f38a3`](https://github.com/mastra-ai/mastra/commit/87f38a3de03e24731f2dd6f8ed6a60b6722b85a1), [`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98), [`fe98ef2`](https://github.com/mastra-ai/mastra/commit/fe98ef2e66dbfcbd7d645c88c9ee1e67b458a136), [`793ea0f`](https://github.com/mastra-ai/mastra/commit/793ea0f52f831178837f21c83af6af93bf4ce638), [`507a5c4`](https://github.com/mastra-ai/mastra/commit/507a5c461bdc3136ad80744c0efbb55ce1f18f97), [`79b3626`](https://github.com/mastra-ai/mastra/commit/79b3626f8d647307eb07c8da14c9073c2699719d), [`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156)]:
+  - @mastra/core@1.47.0-alpha.6
+  - @mastra/client-js@1.28.0-alpha.6
+  - @mastra/react@1.2.0-alpha.6
+  - @mastra/playground-ui@37.0.0-alpha.6
+  - @mastra/schema-compat@1.3.1-alpha.0
+
+## 1.16.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0)]:
+  - @mastra/core@1.47.0-alpha.5
+  - @mastra/client-js@1.28.0-alpha.5
+  - @mastra/react@1.1.2-alpha.5
+  - @mastra/playground-ui@37.0.0-alpha.5
+
+## 1.16.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59), [`cd01ee3`](https://github.com/mastra-ai/mastra/commit/cd01ee32dc036e70d70bf164f0d7a608c73d307e)]:
+  - @mastra/core@1.47.0-alpha.4
+  - @mastra/playground-ui@37.0.0-alpha.4
+  - @mastra/client-js@1.28.0-alpha.4
+  - @mastra/react@1.1.2-alpha.4
+
+## 1.16.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`712e7e0`](https://github.com/mastra-ai/mastra/commit/712e7e01f46504dadaf8025fc0d79a8e2d5f3c75), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`76e8987`](https://github.com/mastra-ai/mastra/commit/76e89871e8a30eaa43ed64863d10eb6cf52ff9b6), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+  - @mastra/playground-ui@37.0.0-alpha.3
+  - @mastra/client-js@1.28.0-alpha.3
+  - @mastra/ai-sdk@1.6.0-alpha.0
+  - @mastra/react@1.1.2-alpha.3
+
+## 1.15.2-alpha.2
+
+### Patch Changes
+
+- Fixed Studio dropping a code-defined agent's tools when saving. A code agent that doesn't set an `editor` config is fully editable, but Studio was leaving the tools out of the save request, so tool changes (and description overrides) were silently discarded. Studio now sends the edited tools for these agents, matching the fields the server actually persists. ([#18404](https://github.com/mastra-ai/mastra/pull/18404))
+
+- Move the Memory Studio (timeline, flamegraph, and observational-memory detail) into the agent chat view as an opt-in panel. ([#18272](https://github.com/mastra-ai/mastra/pull/18272))
+  - The standalone Memory nav entry, `/memory` routes, and the separate thread/chat list are removed; the studio is now opened from the chat view and shown inside the Memory sidepanel, with the agent layout's left resizable panel expanding when the detail opens. Clicking the flamegraph timeline drives a replay cursor that highlights the matching observational-memory record. Marker types are imported from `@mastra/memory` instead of being redeclared in the UI so the studio stays in sync with the stream format.
+  - `MemoryStudioPanel` gains an optional `contextWindow` prop so callers can supply authoritative message/observation token counts and thresholds; when provided these take precedence over values re-derived from message markers, keeping the panel's MESSAGES/OBSERVATIONS readout in sync with the observational-memory sidebar (marker-derived values remain the fallback for standalone usage).
+  - `MemoryStudioPanel` now shows both Messages and Observations progress bars, matching the collapsed memory sidebar. The FlameGraph zoom range is lifted into the panel and filters the observation list: collapsing the range hides out-of-range observations and "Reset zoom" restores the full list. `FlameGraph` gains optional controlled `zoomRange`/`onZoomRangeChange` props (uncontrolled usage is unchanged).
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`d763590`](https://github.com/mastra-ai/mastra/commit/d763590cf147273276b485263209f2cf5ff7319b), [`47c5c7b`](https://github.com/mastra-ai/mastra/commit/47c5c7b2b3cd8efc3ecb408029771d6083f5bf6c), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`c5df3f1`](https://github.com/mastra-ai/mastra/commit/c5df3f155750c3d78666dc699fd26941dd5d24e7), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8), [`a368407`](https://github.com/mastra-ai/mastra/commit/a368407010c8c1b34d349a2ad1506f5b01ed9301)]:
+  - @mastra/core@1.47.0-alpha.2
+  - @mastra/playground-ui@36.1.0-alpha.2
+  - @mastra/client-js@1.27.1-alpha.2
+  - @mastra/react@1.1.2-alpha.2
+
+## 1.15.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`667be96`](https://github.com/mastra-ai/mastra/commit/667be96ac5ddfc1983afb430cc3b72b89f91051b), [`2a67d9b`](https://github.com/mastra-ai/mastra/commit/2a67d9bf70e17da28df39de3436d697ca25bf120), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/playground-ui@36.1.0-alpha.1
+  - @mastra/client-js@1.27.1-alpha.1
+  - @mastra/react@1.1.2-alpha.1
+
+## 1.15.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`307573b`](https://github.com/mastra-ai/mastra/commit/307573b9ff3149b70c79540dbc86f1319b180f29)]:
+  - @mastra/core@1.46.1-alpha.0
+  - @mastra/client-js@1.27.1-alpha.0
+  - @mastra/react@1.1.2-alpha.0
+  - @mastra/playground-ui@36.0.1-alpha.0
+
+## 1.15.1
+
+### Patch Changes
+
+- Fixed Studio clearing a code-defined agent's prompt when saving. A code agent that doesn't set an `editor` config is fully editable, but Studio was sending an empty instructions array on save, so saving wiped the prompt — both inline prompt blocks and referenced prompt blocks. Studio now sends the edited instructions for these agents, matching the fields the server actually persists. ([#18015](https://github.com/mastra-ai/mastra/pull/18015))
+
+- Fixed PDF attachments failing to preview in the Studio chat. When a PDF was attached, the `data:application/pdf;base64,` prefix was added twice, producing a malformed `data:application/pdf;base64,data:application/pdf;base64,...` URL that the browser could not open. PDFs now preview correctly. ([#18071](https://github.com/mastra-ai/mastra/pull/18071))
+
+- Improved Studio mobile navigation by moving search from the drawer to the top bar. ([#18288](https://github.com/mastra-ai/mastra/pull/18288))
+
+- Improved Studio tool call arguments so JSON displays as a static code block instead of an editor. ([#18292](https://github.com/mastra-ai/mastra/pull/18292))
+
+- Fixed the Studio conversation copy button in browsers that block async clipboard writes. ([#18268](https://github.com/mastra-ai/mastra/pull/18268))
+
+- Fixed parallel sub-agent delegations that require approval. When a supervisor agent delegated the same sub-agent twice in a single step (for example, issuing two refunds in parallel), approving them one at a time only ran the first delegation. The second failed to resume with an "AGENT_RESUME_NO_SNAPSHOT_FOUND" error, and on a page refresh the second delegation's approval was lost entirely. ([#18041](https://github.com/mastra-ai/mastra/pull/18041))
+
+  Now each delegation tracks its own suspended run, so approving both parallel delegations runs both of them, both during a live session and after reloading. Studio also resolves each delegation's suspend payload by tool call id, so parallel approvals render the correct payload per delegation.
+
+  **Before**
+
+  ```ts
+  // Supervisor delegates two refunds to the billing agent in one step
+  await supervisor.stream('Refund order A and order B in parallel.');
+
+  // Approving each one by one
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // error: AGENT_RESUME_NO_SNAPSHOT_FOUND, refund B never runs
+  ```
+
+  **After**
+
+  ```ts
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // runs refund B
+  ```
+
+- Added Studio support for authoring and viewing item-level tool mocks on dataset items. ([#18038](https://github.com/mastra-ai/mastra/pull/18038))
+  Added trace-derived mock creation with an editable preview before saving to a new or existing item.
+  Added tool mock propagation when creating new items and creating datasets from items.
+  Improved experiment results with a tool mock report (served, unconsumed, live calls, and mismatch details).
+
+  Author tool mocks on a dataset item as a JSON array:
+
+  ```json
+  [
+    {
+      "toolName": "refundUser",
+      "args": { "user": "YJ", "amount": 100 },
+      "output": { "refundId": "refund_1", "user": "YJ", "amount": 100, "newBalance": 100 }
+    }
+  ]
+  ```
+
+- Updated dependencies [[`5bd72d2`](https://github.com/mastra-ai/mastra/commit/5bd72d255f45b5ea8ab342643bd463814a980a24), [`1cc9ee1`](https://github.com/mastra-ai/mastra/commit/1cc9ee1ba51db53020a735626d33017a60b4b5b3), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`30ebaf0`](https://github.com/mastra-ai/mastra/commit/30ebaf07bed5f4d30f2f257836c15d1bf7e40aae), [`4df8c0b`](https://github.com/mastra-ai/mastra/commit/4df8c0b811113ae5da660f4a2a8b69ca825cf6a6), [`5704634`](https://github.com/mastra-ai/mastra/commit/5704634b22133167dea337a942a34f57aaa3fa14), [`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`d2ab27f`](https://github.com/mastra-ai/mastra/commit/d2ab27fa4a093e45d8d9b313adb5974f21719829), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`b13925b`](https://github.com/mastra-ai/mastra/commit/b13925bfa91aa8700f56fa54a9ce707ee7e4ba62), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`bf94ec6`](https://github.com/mastra-ai/mastra/commit/bf94ec68192d9f16e46ef7e5ac36370aeeddf35d), [`691a61b`](https://github.com/mastra-ai/mastra/commit/691a61b089992e7f7187795adc72d20c82e0557e), [`a29f371`](https://github.com/mastra-ai/mastra/commit/a29f371aef629ac8562661524a497127e93b5131), [`1823575`](https://github.com/mastra-ai/mastra/commit/18235757dac857e1c6620622c4dc3d650ba40cd3), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`da0e991`](https://github.com/mastra-ai/mastra/commit/da0e991ee857d929ea423a9ae0bafffea169b2dc), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`073f910`](https://github.com/mastra-ai/mastra/commit/073f910481e7d94b95ba3830f96531774ae95d33), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`f91235f`](https://github.com/mastra-ai/mastra/commit/f91235fe5a305bfc004afe0ea461abd5b81881e2), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`2f437ef`](https://github.com/mastra-ai/mastra/commit/2f437efa295a9504ac845a8f445fd9542c460c24), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`97eb3ef`](https://github.com/mastra-ai/mastra/commit/97eb3ef37ff5c148106fa68a20ad4773a33cf2cd), [`d1f1abb`](https://github.com/mastra-ai/mastra/commit/d1f1abbb37726cbbc4e63396d560df40f8f85189), [`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be), [`893bb29`](https://github.com/mastra-ai/mastra/commit/893bb29418dd66056c5361053194dd7f245e26b9), [`8edd4f0`](https://github.com/mastra-ai/mastra/commit/8edd4f0e3788a4c11aed584c18322cdefa2792ac), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`1f97ce5`](https://github.com/mastra-ai/mastra/commit/1f97ce5695463bebb4eaacf501da6fb403e20885), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c), [`64f58c0`](https://github.com/mastra-ai/mastra/commit/64f58c04e78b40137497d47f781e897e416f22a5), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`8e25a78`](https://github.com/mastra-ai/mastra/commit/8e25a78e0597575f0b0729bae8c5e190c84869b5), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`2cb3180`](https://github.com/mastra-ai/mastra/commit/2cb318004ba95b3cc6c09a6c3e09cdb49955b18e), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311), [`a5b22d3`](https://github.com/mastra-ai/mastra/commit/a5b22d314d62a68d801886a8d3d0eb6c089473db), [`6581e28`](https://github.com/mastra-ai/mastra/commit/6581e28a65d72cdb5f0e8d8f892220a5c27160fe), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16), [`f3faedc`](https://github.com/mastra-ai/mastra/commit/f3faedc970a4852400a41bb6e53a4c584704ec85), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858)]:
+  - @mastra/core@1.46.0
+  - @mastra/playground-ui@36.0.0
+  - @mastra/ai-sdk@1.5.1
+  - @mastra/client-js@1.27.0
+  - @mastra/react@1.1.1
+
+## 1.15.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be)]:
+  - @mastra/core@1.46.0-alpha.5
+  - @mastra/client-js@1.27.0-alpha.5
+  - @mastra/react@1.1.1-alpha.5
+  - @mastra/playground-ui@36.0.0-alpha.5
+
+## 1.15.1-alpha.4
+
+### Patch Changes
+
+- Fixed parallel sub-agent delegations that require approval. When a supervisor agent delegated the same sub-agent twice in a single step (for example, issuing two refunds in parallel), approving them one at a time only ran the first delegation. The second failed to resume with an "AGENT_RESUME_NO_SNAPSHOT_FOUND" error, and on a page refresh the second delegation's approval was lost entirely. ([#18041](https://github.com/mastra-ai/mastra/pull/18041))
+
+  Now each delegation tracks its own suspended run, so approving both parallel delegations runs both of them, both during a live session and after reloading. Studio also resolves each delegation's suspend payload by tool call id, so parallel approvals render the correct payload per delegation.
+
+  **Before**
+
+  ```ts
+  // Supervisor delegates two refunds to the billing agent in one step
+  await supervisor.stream('Refund order A and order B in parallel.');
+
+  // Approving each one by one
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // error: AGENT_RESUME_NO_SNAPSHOT_FOUND, refund B never runs
+  ```
+
+  **After**
+
+  ```ts
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // runs refund B
+  ```
+
+- Added Studio support for authoring and viewing item-level tool mocks on dataset items. ([#18038](https://github.com/mastra-ai/mastra/pull/18038))
+  Added trace-derived mock creation with an editable preview before saving to a new or existing item.
+  Added tool mock propagation when creating new items and creating datasets from items.
+  Improved experiment results with a tool mock report (served, unconsumed, live calls, and mismatch details).
+
+  Author tool mocks on a dataset item as a JSON array:
+
+  ```json
+  [
+    {
+      "toolName": "refundUser",
+      "args": { "user": "YJ", "amount": 100 },
+      "output": { "refundId": "refund_1", "user": "YJ", "amount": 100, "newBalance": 100 }
+    }
+  ]
+  ```
+
+- Updated dependencies [[`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311), [`6581e28`](https://github.com/mastra-ai/mastra/commit/6581e28a65d72cdb5f0e8d8f892220a5c27160fe), [`f3faedc`](https://github.com/mastra-ai/mastra/commit/f3faedc970a4852400a41bb6e53a4c584704ec85)]:
+  - @mastra/core@1.46.0-alpha.4
+  - @mastra/client-js@1.27.0-alpha.4
+  - @mastra/playground-ui@36.0.0-alpha.4
+  - @mastra/react@1.1.1-alpha.4
+
+## 1.15.1-alpha.3
+
+### Patch Changes
+
+- Improved Studio tool call arguments so JSON displays as a static code block instead of an editor. ([#18292](https://github.com/mastra-ai/mastra/pull/18292))
+
+- Updated dependencies [[`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`691a61b`](https://github.com/mastra-ai/mastra/commit/691a61b089992e7f7187795adc72d20c82e0557e), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`2f437ef`](https://github.com/mastra-ai/mastra/commit/2f437efa295a9504ac845a8f445fd9542c460c24), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16)]:
+  - @mastra/core@1.46.0-alpha.3
+  - @mastra/ai-sdk@1.5.1-alpha.0
+  - @mastra/client-js@1.27.0-alpha.3
+  - @mastra/react@1.1.1-alpha.3
+  - @mastra/playground-ui@36.0.0-alpha.3
+
+## 1.15.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`1823575`](https://github.com/mastra-ai/mastra/commit/18235757dac857e1c6620622c4dc3d650ba40cd3), [`d1f1abb`](https://github.com/mastra-ai/mastra/commit/d1f1abbb37726cbbc4e63396d560df40f8f85189), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+  - @mastra/playground-ui@35.1.0-alpha.2
+  - @mastra/client-js@1.26.1-alpha.2
+  - @mastra/react@1.1.1-alpha.2
+
+## 1.15.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2)]:
+  - @mastra/core@1.46.0-alpha.1
+  - @mastra/client-js@1.26.1-alpha.1
+  - @mastra/react@1.1.1-alpha.1
+  - @mastra/playground-ui@35.1.0-alpha.1
+
+## 1.15.1-alpha.0
+
+### Patch Changes
+
+- Fixed Studio clearing a code-defined agent's prompt when saving. A code agent that doesn't set an `editor` config is fully editable, but Studio was sending an empty instructions array on save, so saving wiped the prompt — both inline prompt blocks and referenced prompt blocks. Studio now sends the edited instructions for these agents, matching the fields the server actually persists. ([#18015](https://github.com/mastra-ai/mastra/pull/18015))
+
+- Fixed PDF attachments failing to preview in the Studio chat. When a PDF was attached, the `data:application/pdf;base64,` prefix was added twice, producing a malformed `data:application/pdf;base64,data:application/pdf;base64,...` URL that the browser could not open. PDFs now preview correctly. ([#18071](https://github.com/mastra-ai/mastra/pull/18071))
+
+- Improved Studio mobile navigation by moving search from the drawer to the top bar. ([#18288](https://github.com/mastra-ai/mastra/pull/18288))
+
+- Fixed the Studio conversation copy button in browsers that block async clipboard writes. ([#18268](https://github.com/mastra-ai/mastra/pull/18268))
+
+- Updated dependencies [[`5bd72d2`](https://github.com/mastra-ai/mastra/commit/5bd72d255f45b5ea8ab342643bd463814a980a24), [`1cc9ee1`](https://github.com/mastra-ai/mastra/commit/1cc9ee1ba51db53020a735626d33017a60b4b5b3), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`30ebaf0`](https://github.com/mastra-ai/mastra/commit/30ebaf07bed5f4d30f2f257836c15d1bf7e40aae), [`4df8c0b`](https://github.com/mastra-ai/mastra/commit/4df8c0b811113ae5da660f4a2a8b69ca825cf6a6), [`5704634`](https://github.com/mastra-ai/mastra/commit/5704634b22133167dea337a942a34f57aaa3fa14), [`d2ab27f`](https://github.com/mastra-ai/mastra/commit/d2ab27fa4a093e45d8d9b313adb5974f21719829), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`b13925b`](https://github.com/mastra-ai/mastra/commit/b13925bfa91aa8700f56fa54a9ce707ee7e4ba62), [`bf94ec6`](https://github.com/mastra-ai/mastra/commit/bf94ec68192d9f16e46ef7e5ac36370aeeddf35d), [`a29f371`](https://github.com/mastra-ai/mastra/commit/a29f371aef629ac8562661524a497127e93b5131), [`da0e991`](https://github.com/mastra-ai/mastra/commit/da0e991ee857d929ea423a9ae0bafffea169b2dc), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`073f910`](https://github.com/mastra-ai/mastra/commit/073f910481e7d94b95ba3830f96531774ae95d33), [`f91235f`](https://github.com/mastra-ai/mastra/commit/f91235fe5a305bfc004afe0ea461abd5b81881e2), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`97eb3ef`](https://github.com/mastra-ai/mastra/commit/97eb3ef37ff5c148106fa68a20ad4773a33cf2cd), [`893bb29`](https://github.com/mastra-ai/mastra/commit/893bb29418dd66056c5361053194dd7f245e26b9), [`8edd4f0`](https://github.com/mastra-ai/mastra/commit/8edd4f0e3788a4c11aed584c18322cdefa2792ac), [`1f97ce5`](https://github.com/mastra-ai/mastra/commit/1f97ce5695463bebb4eaacf501da6fb403e20885), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`64f58c0`](https://github.com/mastra-ai/mastra/commit/64f58c04e78b40137497d47f781e897e416f22a5), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`8e25a78`](https://github.com/mastra-ai/mastra/commit/8e25a78e0597575f0b0729bae8c5e190c84869b5), [`2cb3180`](https://github.com/mastra-ai/mastra/commit/2cb318004ba95b3cc6c09a6c3e09cdb49955b18e), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`a5b22d3`](https://github.com/mastra-ai/mastra/commit/a5b22d314d62a68d801886a8d3d0eb6c089473db), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858)]:
+  - @mastra/core@1.46.0-alpha.0
+  - @mastra/playground-ui@35.1.0-alpha.0
+  - @mastra/client-js@1.26.1-alpha.0
+  - @mastra/react@1.1.1-alpha.0
+
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+- Redesigned the agent page in Studio to separate configuration from usage. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+  **Settings moved out of the side panel.** The right-hand information panel on the agent chat page is gone. Agent configuration (description, model, tools, workflows, skills, scorers, system prompt, memory configuration, and channels) now lives in a full-width Settings view with Overview, Memory, and Channels tabs. Open it from the new Settings button at the top right of the chat — it replaces the chat in place with a smooth transition while the thread sidebar stays visible, and it is deep-linkable at `/agents/:agentId/settings`. Channels moved out of the tool tab bar into this view (old `/channels` links redirect), and the agent header now copies the agent id when you click the title, with an icon-only share button beside the Settings toggle.
+
+  **Run options follow their frequency of use.** Request context lives in a popover beside the model settings in the chat composer, and tracing options moved to the tab bar — adjusting a test run never requires leaving the conversation. Request Context fields now share one accessible label and tooltip pattern, run-option popovers no longer repeat section labels, and model/run-option popovers stay left aligned while avoiding viewport collisions. The per-thread Traces shortcut was removed from the composer; the Traces tab covers it.
+
+  **Left sidebar focuses on usage.** The thread list now ends with a Memory card showing the memory setup at a glance (recent-messages window, semantic recall, working memory, observational memory, plus a live observation progress bar while it streams) and a preview of the working memory. Clicking the card smoothly expands it in place into the full live memory view. Agent pages keep the redesigned shell visible while data loads, thread skeletons match the embedded sidebar chrome, and Memory copy/edit controls have cleaner keyboard and accessibility behavior. The Editor tab shares this same resizable sidebar — only its content changes between routes, so the panel keeps its size. On desktop the sidebar is always visible (resizable, no longer collapsible); on mobile it becomes an edge drawer.
+
+  **Editor test chat uses agent defaults.** The editor test chat now applies the same model settings defaults (max tokens, max steps, provider options) as the main chat page, and activating a skill from a tool call works in the editor test chat instead of being silently ignored.
+
+  **Browser sessions simplified.** Agent browser sessions now display in the centered overlay only — the sidebar display mode was removed.
+
+### Patch Changes
+
+- Added icons to the Studio theme selector. ([#18141](https://github.com/mastra-ai/mastra/pull/18141))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d545337`](https://github.com/mastra-ai/mastra/commit/d545337588d5f1e0b198ef2c4eb1274f143e8319), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be)]:
+  - @mastra/core@1.45.0
+  - @mastra/playground-ui@35.0.0
+  - @mastra/ai-sdk@1.5.0
+  - @mastra/client-js@1.26.0
+  - @mastra/react@1.1.0
+  - @mastra/schema-compat@1.3.0
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+- Redesigned the agent page in Studio to separate configuration from usage. ([#17970](https://github.com/mastra-ai/mastra/pull/17970))
+
+  **Settings moved out of the side panel.** The right-hand information panel on the agent chat page is gone. Agent configuration (description, model, tools, workflows, skills, scorers, system prompt, memory configuration, and channels) now lives in a full-width Settings view with Overview, Memory, and Channels tabs. Open it from the new Settings button at the top right of the chat — it replaces the chat in place with a smooth transition while the thread sidebar stays visible, and it is deep-linkable at `/agents/:agentId/settings`. Channels moved out of the tool tab bar into this view (old `/channels` links redirect), and the agent header now copies the agent id when you click the title, with an icon-only share button beside the Settings toggle.
+
+  **Run options follow their frequency of use.** Request context lives in a popover beside the model settings in the chat composer, and tracing options moved to the tab bar — adjusting a test run never requires leaving the conversation. Request Context fields now share one accessible label and tooltip pattern, run-option popovers no longer repeat section labels, and model/run-option popovers stay left aligned while avoiding viewport collisions. The per-thread Traces shortcut was removed from the composer; the Traces tab covers it.
+
+  **Left sidebar focuses on usage.** The thread list now ends with a Memory card showing the memory setup at a glance (recent-messages window, semantic recall, working memory, observational memory, plus a live observation progress bar while it streams) and a preview of the working memory. Clicking the card smoothly expands it in place into the full live memory view. Agent pages keep the redesigned shell visible while data loads, thread skeletons match the embedded sidebar chrome, and Memory copy/edit controls have cleaner keyboard and accessibility behavior. The Editor tab shares this same resizable sidebar — only its content changes between routes, so the panel keeps its size. On desktop the sidebar is always visible (resizable, no longer collapsible); on mobile it becomes an edge drawer.
+
+  **Editor test chat uses agent defaults.** The editor test chat now applies the same model settings defaults (max tokens, max steps, provider options) as the main chat page, and activating a skill from a tool call works in the editor test chat instead of being silently ignored.
+
+  **Browser sessions simplified.** Agent browser sessions now display in the centered overlay only — the sidebar display mode was removed.
+
+### Patch Changes
+
+- Added icons to the Studio theme selector. ([#18141](https://github.com/mastra-ai/mastra/pull/18141))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d545337`](https://github.com/mastra-ai/mastra/commit/d545337588d5f1e0b198ef2c4eb1274f143e8319), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3), [`fa14f8d`](https://github.com/mastra-ai/mastra/commit/fa14f8db417ef973774404d2c97e848872e785be)]:
+  - @mastra/core@1.45.0-alpha.0
+  - @mastra/playground-ui@35.0.0-alpha.0
+  - @mastra/ai-sdk@1.5.0-alpha.0
+  - @mastra/client-js@1.26.0-alpha.0
+  - @mastra/react@1.1.0-alpha.0
+  - @mastra/schema-compat@1.3.0-alpha.0
+
+## 1.14.1
+
+### Patch Changes
+
+- Updated dependencies [[`339c57c`](https://github.com/mastra-ai/mastra/commit/339c57c5b2c6dbe75a125e138228e0556528976f), [`1dd4117`](https://github.com/mastra-ai/mastra/commit/1dd4117dcbd8e031ede9f0489436bfbc6f0315b8), [`2a2908e`](https://github.com/mastra-ai/mastra/commit/2a2908ebd2f96d74a0009d732895483da183bba7), [`2b11d1f`](https://github.com/mastra-ai/mastra/commit/2b11d1f6ac7024c5dd2b2dd12a48a956ac9d63bd), [`786debd`](https://github.com/mastra-ai/mastra/commit/786debd90ef7e575ff15c5027de937b862b8eb92), [`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d), [`b7dff0a`](https://github.com/mastra-ai/mastra/commit/b7dff0a3d1022eb6868f48dc40a2b1febd5c277f), [`aea0d2d`](https://github.com/mastra-ai/mastra/commit/aea0d2d34f477f13f48607294dcd363253c7f948), [`8990915`](https://github.com/mastra-ai/mastra/commit/89909157413713cd0239687b0a3fee35cfbea3c9), [`02087e1`](https://github.com/mastra-ai/mastra/commit/02087e1fbc54aa07f3071f7a200df1bf5be601a8), [`49af8df`](https://github.com/mastra-ai/mastra/commit/49af8df589c4ff71a5015a4553b377b32704b691), [`30ce559`](https://github.com/mastra-ai/mastra/commit/30ce55902ecf819b8ab8697398dd68b108228063), [`c241b92`](https://github.com/mastra-ai/mastra/commit/c241b929dc8c8d6a7b7219c99ed13ac1f3124a77), [`2a2908e`](https://github.com/mastra-ai/mastra/commit/2a2908ebd2f96d74a0009d732895483da183bba7), [`7d6ff70`](https://github.com/mastra-ai/mastra/commit/7d6ff708727297a0526ca0e26e93eeb5bbaaa187), [`ab975d4`](https://github.com/mastra-ai/mastra/commit/ab975d4dd9488752f05bda7afa03166d207e3e2a), [`2f6b722`](https://github.com/mastra-ai/mastra/commit/2f6b7224bc56b140c55eb1458bd9d8b0804b3fa2), [`9d6aa1b`](https://github.com/mastra-ai/mastra/commit/9d6aa1bae407e2afa6a089abc2a6accbbcb287b8), [`2a2908e`](https://github.com/mastra-ai/mastra/commit/2a2908ebd2f96d74a0009d732895483da183bba7), [`7f255be`](https://github.com/mastra-ai/mastra/commit/7f255be029678f8d4c8d2b4afc1402dbad8e8c5e)]:
+  - @mastra/core@1.44.0
+  - @mastra/playground-ui@34.1.0
+  - @mastra/ai-sdk@1.4.8
+  - @mastra/client-js@1.25.1
+  - @mastra/react@1.0.3
+  - @mastra/schema-compat@1.2.14
+
+## 1.14.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`339c57c`](https://github.com/mastra-ai/mastra/commit/339c57c5b2c6dbe75a125e138228e0556528976f), [`1dd4117`](https://github.com/mastra-ai/mastra/commit/1dd4117dcbd8e031ede9f0489436bfbc6f0315b8), [`2a2908e`](https://github.com/mastra-ai/mastra/commit/2a2908ebd2f96d74a0009d732895483da183bba7), [`2b11d1f`](https://github.com/mastra-ai/mastra/commit/2b11d1f6ac7024c5dd2b2dd12a48a956ac9d63bd), [`786debd`](https://github.com/mastra-ai/mastra/commit/786debd90ef7e575ff15c5027de937b862b8eb92), [`8990915`](https://github.com/mastra-ai/mastra/commit/89909157413713cd0239687b0a3fee35cfbea3c9), [`49af8df`](https://github.com/mastra-ai/mastra/commit/49af8df589c4ff71a5015a4553b377b32704b691), [`30ce559`](https://github.com/mastra-ai/mastra/commit/30ce55902ecf819b8ab8697398dd68b108228063), [`c241b92`](https://github.com/mastra-ai/mastra/commit/c241b929dc8c8d6a7b7219c99ed13ac1f3124a77), [`2a2908e`](https://github.com/mastra-ai/mastra/commit/2a2908ebd2f96d74a0009d732895483da183bba7), [`7d6ff70`](https://github.com/mastra-ai/mastra/commit/7d6ff708727297a0526ca0e26e93eeb5bbaaa187), [`2a2908e`](https://github.com/mastra-ai/mastra/commit/2a2908ebd2f96d74a0009d732895483da183bba7), [`7f255be`](https://github.com/mastra-ai/mastra/commit/7f255be029678f8d4c8d2b4afc1402dbad8e8c5e)]:
+  - @mastra/core@1.44.0-alpha.2
+  - @mastra/playground-ui@34.1.0-alpha.2
+  - @mastra/client-js@1.25.1-alpha.2
+  - @mastra/react@1.0.3-alpha.2
+
+## 1.14.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`b7dff0a`](https://github.com/mastra-ai/mastra/commit/b7dff0a3d1022eb6868f48dc40a2b1febd5c277f), [`aea0d2d`](https://github.com/mastra-ai/mastra/commit/aea0d2d34f477f13f48607294dcd363253c7f948), [`02087e1`](https://github.com/mastra-ai/mastra/commit/02087e1fbc54aa07f3071f7a200df1bf5be601a8), [`ab975d4`](https://github.com/mastra-ai/mastra/commit/ab975d4dd9488752f05bda7afa03166d207e3e2a)]:
+  - @mastra/core@1.44.0-alpha.1
+  - @mastra/playground-ui@34.0.1-alpha.1
+  - @mastra/client-js@1.25.1-alpha.1
+  - @mastra/react@1.0.3-alpha.1
+
+## 1.14.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/ai-sdk@1.4.8-alpha.0
+  - @mastra/client-js@1.25.1-alpha.0
+  - @mastra/core@1.43.1-alpha.0
+  - @mastra/playground-ui@34.0.1-alpha.0
+  - @mastra/react@1.0.3-alpha.0
+  - @mastra/schema-compat@1.2.14-alpha.0
+
+## 1.14.0
+
+### Patch Changes
+
+- Fixed the Edit Dataset dialog in Studio staying stuck on screen after clicking Close, Cancel, Save Changes, or pressing Escape. The dialog now animates out and unmounts correctly, and unsaved edits are discarded the next time it opens. Fixes [#17890](https://github.com/mastra-ai/mastra/issues/17890). ([#17891](https://github.com/mastra-ai/mastra/pull/17891))
+
+- Fixed reactive signals (like `system-reminder`) disappearing from the Studio chat after reloading the page. The signal was always saved correctly and showed up while the assistant was responding, but the chat stopped displaying persisted reactive signals once the conversation was loaded from history. They now render as a signal badge again on read-back, in both the agent chat and the Agent Builder chat. ([#17987](https://github.com/mastra-ai/mastra/pull/17987))
+
+- Updated dependencies [[`de66bb0`](https://github.com/mastra-ai/mastra/commit/de66bb040570444c702ce4d8e1e228a5de2949cb), [`67bf8e2`](https://github.com/mastra-ai/mastra/commit/67bf8e206dfe583954d96015cf0d09f7ac50e45f), [`8216d05`](https://github.com/mastra-ai/mastra/commit/8216d0528d866eb9a07f5d4c87ea3bb1e1139b45), [`d18b23c`](https://github.com/mastra-ai/mastra/commit/d18b23c5e29dfc381e73e3c51fcf6c779afd1823), [`586e49b`](https://github.com/mastra-ai/mastra/commit/586e49b1d7e20270f06a7771b4d47d53a81beafe), [`5eb94eb`](https://github.com/mastra-ai/mastra/commit/5eb94ebcf66d4e28c9e26d5821ac93379bab20a0), [`1fa3e12`](https://github.com/mastra-ai/mastra/commit/1fa3e123582b63cfe49de4ee52dc6a065e8d956a), [`f9ee2ac`](https://github.com/mastra-ai/mastra/commit/f9ee2ac661af584e61bc063ac208c9035cd752ef), [`c853d53`](https://github.com/mastra-ai/mastra/commit/c853d535d2df84ab89db1adb4c28900c54c9a2d2), [`d8df1f8`](https://github.com/mastra-ai/mastra/commit/d8df1f8e947e1966c9d4e54713df56d0d0d65226), [`641d50a`](https://github.com/mastra-ai/mastra/commit/641d50a2b253a84406cae04f1842b9cb2b392ba6), [`9192ddb`](https://github.com/mastra-ai/mastra/commit/9192ddbced8949113b30de444cbe763f075b59f5), [`42b0dba`](https://github.com/mastra-ai/mastra/commit/42b0dba42577bca39c82984354f193404b889db3), [`ae96523`](https://github.com/mastra-ai/mastra/commit/ae965231f562d9766b0c90c49a69fc68acaa031c), [`17d5a92`](https://github.com/mastra-ai/mastra/commit/17d5a9211aa293b4d4418de3de70dc0394d58101), [`db25649`](https://github.com/mastra-ai/mastra/commit/db25649497699ed901494045ec5e2edfe6a97e12), [`5573693`](https://github.com/mastra-ai/mastra/commit/5573693b589822250e20dfe6cf66e9ff3bc96da8), [`ec4da8a`](https://github.com/mastra-ai/mastra/commit/ec4da8a09e0d2ab452c6ee2c786042ea826b77e5), [`adc44e1`](https://github.com/mastra-ai/mastra/commit/adc44e13c7e570b91e86b20ea7556e61d819db31), [`ed346c0`](https://github.com/mastra-ai/mastra/commit/ed346c0bee2d8496690a4e538bfba1e46894660f), [`9b1adf7`](https://github.com/mastra-ai/mastra/commit/9b1adf7f39943c869182106bc4016e793b3304ac), [`5eeb1f0`](https://github.com/mastra-ai/mastra/commit/5eeb1f0a7194c2ddc63109d4f01c488c057b97e1), [`c9ce1b2`](https://github.com/mastra-ai/mastra/commit/c9ce1b28d10871110648f9d7b6d76e880b9fa999), [`3ef01fd`](https://github.com/mastra-ai/mastra/commit/3ef01fd130b53d5bd4f828beb174e516a2eb1158), [`245a9a3`](https://github.com/mastra-ai/mastra/commit/245a9a315705fce17ddd980f78a92504b6615c4a), [`dc0b611`](https://github.com/mastra-ai/mastra/commit/dc0b6119b769bd00ee2c5df9259fb376fe63077a), [`38b5de8`](https://github.com/mastra-ai/mastra/commit/38b5de8e5d1d41a69522addf53d96f4b3a1d5bf0), [`dc0b611`](https://github.com/mastra-ai/mastra/commit/dc0b6119b769bd00ee2c5df9259fb376fe63077a), [`dd6a66e`](https://github.com/mastra-ai/mastra/commit/dd6a66ea0b32e0dea8059aec6b35d151e2c87dc4), [`d785c59`](https://github.com/mastra-ai/mastra/commit/d785c593b67fcb4cdc4fab9fdbde5f3b7665efc0), [`641d50a`](https://github.com/mastra-ai/mastra/commit/641d50a2b253a84406cae04f1842b9cb2b392ba6), [`1fa3e12`](https://github.com/mastra-ai/mastra/commit/1fa3e123582b63cfe49de4ee52dc6a065e8d956a), [`8b984f4`](https://github.com/mastra-ai/mastra/commit/8b984f4361c202270ceb69257185c4756c9a7c56), [`bf08402`](https://github.com/mastra-ai/mastra/commit/bf084022374fa5d06ca70ed67a86dd64e379071b), [`81fe587`](https://github.com/mastra-ai/mastra/commit/81fe587275035715c1720ddf3fee0505cf053036), [`1fa3e12`](https://github.com/mastra-ai/mastra/commit/1fa3e123582b63cfe49de4ee52dc6a065e8d956a), [`403c438`](https://github.com/mastra-ai/mastra/commit/403c438e417278989ce247233d2c465b8d902cdd), [`44123de`](https://github.com/mastra-ai/mastra/commit/44123def4cc81cf1042a77db2c095a47bbf5275e), [`f8ba195`](https://github.com/mastra-ai/mastra/commit/f8ba1954e27ee2b20586cc6cd9cf13c002c232f2)]:
+  - @mastra/core@1.43.0
+  - @mastra/playground-ui@34.0.0
+  - @mastra/client-js@1.25.0
+  - @mastra/schema-compat@1.2.12
+  - @mastra/ai-sdk@1.4.6
+  - @mastra/react@0.7.0
+
+## 1.13.0
+
+### Minor Changes
+
+- Added warnings when deleting or unsharing a referenced agent in Mastra Studio. ([#17184](https://github.com/mastra-ai/mastra/pull/17184))
+
+  The agent-builder now uses the stored-agent dependents lookup endpoint to warn users
+  in two confirm dialogs:
+  - **Delete agent**: shows a warning listing caller-readable dependents by name (truncated
+    to 5 plus "and N more") and a hidden count when the target is public and referenced
+    from other workspaces. The confirm button is briefly disabled while the lookup is in
+    flight.
+  - **Make private**: shows the same warnings on the public → private confirm dialog with
+    softer copy ("may break", "may stop working").
+
+  Both warnings are informational — the user can always proceed.
+
+### Patch Changes
+
+- Fixed Agent Builder setup steps so model and tool pickers match the edit tabs and stay in a loading state until available tools finish loading. ([#17223](https://github.com/mastra-ai/mastra/pull/17223))
+
+- Improved the chat composer in Mastra Studio: the message input now grows with longer messages up to a maximum height, then scrolls with a subtle fade at the clipped edges. ([#17802](https://github.com/mastra-ai/mastra/pull/17802))
+
+- Fixed the Studio Metrics **Latency** card drilldown, which was a silent no-op on all three tabs (Agents, Workflows, Tools). The view-level click guard and the container-level navigation handler both read a `rawTimestamp` field that the hook never produces; the only timestamp on a `LatencyPoint` is `tsMs`. Clicking a chart point now correctly navigates to the Traces page filtered to the 1-hour bucket and the entity type of the active tab. ([#17704](https://github.com/mastra-ai/mastra/pull/17704))
+
+- fix(playground): allow esbuild postinstall in kitchen-sink workspace ([#17574](https://github.com/mastra-ai/mastra/pull/17574))
+
+  esbuild 0.27.2 requires its postinstall script to install the platform-specific binary. When blocked, esbuild is non-functional and the dev server silently fails, causing all e2e-kitchen-sink tests to fail with ERR_CONNECTION_REFUSED.
+
+- Added a bottom border under each step title in the agent builder onboarding flow to better separate the header from the step content. ([#17223](https://github.com/mastra-ai/mastra/pull/17223))
+
+- Refined the agent chat Memory sidebar in Studio. The left Memory panel is now always visible: when the agent has no memory configured it shows an empty state explaining that conversations are only saved as threads when memory is enabled, with a link to the Agent Memory docs, and the Threads/Memory Configuration tabs are hidden until memory is active. Removed the "Memory" title/icon header from the sidebar and the "Agent Memory On/Off" row from the agent Overview metadata. Renamed the "Configuration" tab to "Memory Configuration", widened the sidebar's default width, and tightened the configuration panel's padding for consistent spacing. ([#17667](https://github.com/mastra-ai/mastra/pull/17667))
+
+- Fixed agent experiment typing in the playground so SDK experiment fields stay accurate without requiring newer browser APIs. ([#17607](https://github.com/mastra-ai/mastra/pull/17607))
+
+- Improved Agent Builder defaults so generated agent instructions stay concise while still covering the required operating checklist. Agent Builder chat requests now also use lower OpenAI reasoning effort by default. ([#17604](https://github.com/mastra-ai/mastra/pull/17604))
+
+- Wire request context into dataset experiments in Studio. ([#17597](https://github.com/mastra-ai/mastra/pull/17597))
+
+  You can now define a dataset's `requestContextSchema` when creating or editing a dataset. You can set per-item `requestContext` values on dataset items. You can also provide run-level request context when triggering an experiment.
+
+  The run dialog renders a schema-driven form when the dataset declares a `requestContextSchema`, and falls back to a raw JSON editor otherwise. This lets values like `clinicId` flow from Studio through to agent/workflow experiment runs.
+
+  ```ts
+  // 1. Dataset declares the request context it expects
+  const dataset = await client.createDataset({
+    name: 'patients',
+    requestContextSchema: { type: 'object', properties: { clinicId: { type: 'string' } } },
+  });
+
+  // 2. A dataset item provides per-item request context
+  await client.addDatasetItem({
+    datasetId: dataset.id,
+    input: { patientId: 'p-123' },
+    requestContext: { clinicId: 'clinic-a' },
+  });
+
+  // 3. Triggering an experiment can supply run-level request context
+  await client.triggerDatasetExperiment({
+    datasetId: dataset.id,
+    targetType: 'agent',
+    targetId: 'clinicDirectAgent',
+    requestContext: { clinicId: 'clinic-a' },
+  });
+  ```
+
+- Updated Studio to use Mona Sans for display and body text. ([#17707](https://github.com/mastra-ai/mastra/pull/17707))
+
+- Added tool provider integrations to the Agent Builder: ([#17223](https://github.com/mastra-ai/mastra/pull/17223))
+  - New `/integrations` settings page to view, authorize (via OAuth), and disconnect tool-provider connections, with admin-grouped author rows.
+  - Integration tools now appear in the Builder tool picker with connection badges. Each badge supports inline rename (with autosave) and disconnect (with confirmation). Clicking "Connect" on an unchecked tool auto-checks it and pins the freshly authorized connection.
+  - Builder connection picker is scoped to the current user by default — admins editing their own agents see only their own connections.
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`575f815`](https://github.com/mastra-ai/mastra/commit/575f815c5c3567b71c0b83cbb7fa98c8253a9d9c), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`306909a`](https://github.com/mastra-ai/mastra/commit/306909a693de77d709b38706e2673c9547d24a28), [`5191af8`](https://github.com/mastra-ai/mastra/commit/5191af80c799eea25357c545fc05d91b3883531d), [`4651e65`](https://github.com/mastra-ai/mastra/commit/4651e65b7bc0db68bb8b8d1aa7c60ef470996ef6), [`43bd3d4`](https://github.com/mastra-ai/mastra/commit/43bd3d421987463fdf35386a45199c49499ed069), [`e6fa79e`](https://github.com/mastra-ai/mastra/commit/e6fa79ec72a2ddffdd25e85270398951e9d552a4), [`904bcdf`](https://github.com/mastra-ai/mastra/commit/904bcdf7b8004aa7be823f9f70ca63580e47e470), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`7f5ee1d`](https://github.com/mastra-ai/mastra/commit/7f5ee1dca46daee8d2817f2ebe49e6335da81956), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`18cd9fe`](https://github.com/mastra-ai/mastra/commit/18cd9fe7d4e9cf8510868aac6f9cea64c0d54fc7), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`318cb8e`](https://github.com/mastra-ai/mastra/commit/318cb8edb1855313e4b9a0b4d30b11fc8b64e471), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`3abfa15`](https://github.com/mastra-ai/mastra/commit/3abfa158881ad3b187f69392cc64fe3a5aeed5c3), [`bf8eb6d`](https://github.com/mastra-ai/mastra/commit/bf8eb6d0ec213a403eb9265a594ad283c44ab3dc), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`95482bf`](https://github.com/mastra-ai/mastra/commit/95482bf8a5c2b38022d4e2fee8ee07488c5f6262), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`24df473`](https://github.com/mastra-ai/mastra/commit/24df473a93ca916459bffbc6df9926bcf5f933ba), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`d90a2e5`](https://github.com/mastra-ai/mastra/commit/d90a2e5ecedc0c5b8b94df861e88e5d10a92a2eb), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822), [`e0809c6`](https://github.com/mastra-ai/mastra/commit/e0809c69faec2715163f446264e123776258d09f), [`029a414`](https://github.com/mastra-ai/mastra/commit/029a4141719793bd3e898a39eb5a0466a55f5f3a), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`c64ef80`](https://github.com/mastra-ai/mastra/commit/c64ef80dd90b261d0ade97918d6d0c17c422c4c1), [`3761b5f`](https://github.com/mastra-ai/mastra/commit/3761b5f6a031f2ae43a886e870d0fbc76d2b7b59), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`d371ac1`](https://github.com/mastra-ai/mastra/commit/d371ac1d9820afaaf7cfdbc380a475946a994d8f), [`780f066`](https://github.com/mastra-ai/mastra/commit/780f0669f6fa3b025e330efa354b8f9306c54d07), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`80be2c8`](https://github.com/mastra-ai/mastra/commit/80be2c807f5686c6b18d65aeaadc87d96c54c139), [`946bfe9`](https://github.com/mastra-ai/mastra/commit/946bfe9d26eb145abaf3e548c58ef560ec292be6), [`356e13f`](https://github.com/mastra-ai/mastra/commit/356e13f1df93638306cd0f5eabdbc9a0cbb04164), [`36df947`](https://github.com/mastra-ai/mastra/commit/36df947de2603131fd24652db61af7799a790827), [`b7f5a4d`](https://github.com/mastra-ai/mastra/commit/b7f5a4d38e35d457d616ec2e8a53c2f012cb7f3a), [`cf182b7`](https://github.com/mastra-ai/mastra/commit/cf182b7fb495767946d9840ef29f19cfa906f31f), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`2e6941a`](https://github.com/mastra-ai/mastra/commit/2e6941a39915f00aef0d0bafcbdc652e74281661), [`1bd3830`](https://github.com/mastra-ai/mastra/commit/1bd38306e0d4d36868420b4bdd4db9876811545a), [`a049c2a`](https://github.com/mastra-ai/mastra/commit/a049c2a9dfb41d0ee2e7a28874a88cd64fd5669f), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f), [`80be2c8`](https://github.com/mastra-ai/mastra/commit/80be2c807f5686c6b18d65aeaadc87d96c54c139), [`9360036`](https://github.com/mastra-ai/mastra/commit/9360036b21a47badd530ad38ee76fd01c07e3ba9), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`65d3320`](https://github.com/mastra-ai/mastra/commit/65d3320bade087db166caff07eb461c008590ee8), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`44d2c09`](https://github.com/mastra-ai/mastra/commit/44d2c0989186b7294d624bc6dd17722bdb2dcf72), [`2ea4169`](https://github.com/mastra-ai/mastra/commit/2ea41690134a91169453e422b09de66dc9a6f054), [`61f5491`](https://github.com/mastra-ai/mastra/commit/61f54912e6453cc706bb5d7df9f6c7aad78d428f), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`2ea4169`](https://github.com/mastra-ai/mastra/commit/2ea41690134a91169453e422b09de66dc9a6f054), [`b3e9781`](https://github.com/mastra-ai/mastra/commit/b3e9781a93a18e8e492849040016ddf239c00d9c), [`61f5491`](https://github.com/mastra-ai/mastra/commit/61f54912e6453cc706bb5d7df9f6c7aad78d428f), [`3e051d8`](https://github.com/mastra-ai/mastra/commit/3e051d86fd855888d92a0c8d480f4d1443bf7d09), [`63e3fe1`](https://github.com/mastra-ai/mastra/commit/63e3fe13cc1ea96f91d7c68aea92f400faf9e4da), [`1d4ce8d`](https://github.com/mastra-ai/mastra/commit/1d4ce8daaa54511f325c1b609d31b8e54009d677), [`8c68372`](https://github.com/mastra-ai/mastra/commit/8c68372e85fe0b066ec12c58bd29ffb93e54c552)]:
+  - @mastra/core@1.42.0
+  - @mastra/client-js@1.24.0
+  - @mastra/playground-ui@33.0.0
+  - @mastra/ai-sdk@1.4.5
+  - @mastra/react@0.6.0
+
+## 1.13.0-alpha.4
+
+### Minor Changes
+
+- Added warnings when deleting or unsharing a referenced agent in Mastra Studio. ([#17184](https://github.com/mastra-ai/mastra/pull/17184))
+
+  The agent-builder now uses the stored-agent dependents lookup endpoint to warn users
+  in two confirm dialogs:
+  - **Delete agent**: shows a warning listing caller-readable dependents by name (truncated
+    to 5 plus "and N more") and a hidden count when the target is public and referenced
+    from other workspaces. The confirm button is briefly disabled while the lookup is in
+    flight.
+  - **Make private**: shows the same warnings on the public → private confirm dialog with
+    softer copy ("may break", "may stop working").
+
+  Both warnings are informational — the user can always proceed.
+
+### Patch Changes
+
+- Fixed Agent Builder setup steps so model and tool pickers match the edit tabs and stay in a loading state until available tools finish loading. ([#17223](https://github.com/mastra-ai/mastra/pull/17223))
+
+- Improved the chat composer in Mastra Studio: the message input now grows with longer messages up to a maximum height, then scrolls with a subtle fade at the clipped edges. ([#17802](https://github.com/mastra-ai/mastra/pull/17802))
+
+- Fixed the Studio Metrics **Latency** card drilldown, which was a silent no-op on all three tabs (Agents, Workflows, Tools). The view-level click guard and the container-level navigation handler both read a `rawTimestamp` field that the hook never produces; the only timestamp on a `LatencyPoint` is `tsMs`. Clicking a chart point now correctly navigates to the Traces page filtered to the 1-hour bucket and the entity type of the active tab. ([#17704](https://github.com/mastra-ai/mastra/pull/17704))
+
+- Added a bottom border under each step title in the agent builder onboarding flow to better separate the header from the step content. ([#17223](https://github.com/mastra-ai/mastra/pull/17223))
+
+- Refined the agent chat Memory sidebar in Studio. The left Memory panel is now always visible: when the agent has no memory configured it shows an empty state explaining that conversations are only saved as threads when memory is enabled, with a link to the Agent Memory docs, and the Threads/Memory Configuration tabs are hidden until memory is active. Removed the "Memory" title/icon header from the sidebar and the "Agent Memory On/Off" row from the agent Overview metadata. Renamed the "Configuration" tab to "Memory Configuration", widened the sidebar's default width, and tightened the configuration panel's padding for consistent spacing. ([#17667](https://github.com/mastra-ai/mastra/pull/17667))
+
+- Updated Studio to use Mona Sans for display and body text. ([#17707](https://github.com/mastra-ai/mastra/pull/17707))
+
+- Added tool provider integrations to the Agent Builder: ([#17223](https://github.com/mastra-ai/mastra/pull/17223))
+  - New `/integrations` settings page to view, authorize (via OAuth), and disconnect tool-provider connections, with admin-grouped author rows.
+  - Integration tools now appear in the Builder tool picker with connection badges. Each badge supports inline rename (with autosave) and disconnect (with confirmation). Clicking "Connect" on an unchecked tool auto-checks it and pins the freshly authorized connection.
+  - Builder connection picker is scoped to the current user by default — admins editing their own agents see only their own connections.
+
+- Updated dependencies [[`575f815`](https://github.com/mastra-ai/mastra/commit/575f815c5c3567b71c0b83cbb7fa98c8253a9d9c), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`306909a`](https://github.com/mastra-ai/mastra/commit/306909a693de77d709b38706e2673c9547d24a28), [`5191af8`](https://github.com/mastra-ai/mastra/commit/5191af80c799eea25357c545fc05d91b3883531d), [`4651e65`](https://github.com/mastra-ai/mastra/commit/4651e65b7bc0db68bb8b8d1aa7c60ef470996ef6), [`43bd3d4`](https://github.com/mastra-ai/mastra/commit/43bd3d421987463fdf35386a45199c49499ed069), [`e6fa79e`](https://github.com/mastra-ai/mastra/commit/e6fa79ec72a2ddffdd25e85270398951e9d552a4), [`904bcdf`](https://github.com/mastra-ai/mastra/commit/904bcdf7b8004aa7be823f9f70ca63580e47e470), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`7f5ee1d`](https://github.com/mastra-ai/mastra/commit/7f5ee1dca46daee8d2817f2ebe49e6335da81956), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`18cd9fe`](https://github.com/mastra-ai/mastra/commit/18cd9fe7d4e9cf8510868aac6f9cea64c0d54fc7), [`318cb8e`](https://github.com/mastra-ai/mastra/commit/318cb8edb1855313e4b9a0b4d30b11fc8b64e471), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`3abfa15`](https://github.com/mastra-ai/mastra/commit/3abfa158881ad3b187f69392cc64fe3a5aeed5c3), [`bf8eb6d`](https://github.com/mastra-ai/mastra/commit/bf8eb6d0ec213a403eb9265a594ad283c44ab3dc), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`24df473`](https://github.com/mastra-ai/mastra/commit/24df473a93ca916459bffbc6df9926bcf5f933ba), [`4e790b0`](https://github.com/mastra-ai/mastra/commit/4e790b00c6d58c25922f5bbb5907204daec72e06), [`d90a2e5`](https://github.com/mastra-ai/mastra/commit/d90a2e5ecedc0c5b8b94df861e88e5d10a92a2eb), [`e0809c6`](https://github.com/mastra-ai/mastra/commit/e0809c69faec2715163f446264e123776258d09f), [`029a414`](https://github.com/mastra-ai/mastra/commit/029a4141719793bd3e898a39eb5a0466a55f5f3a), [`c64ef80`](https://github.com/mastra-ai/mastra/commit/c64ef80dd90b261d0ade97918d6d0c17c422c4c1), [`3761b5f`](https://github.com/mastra-ai/mastra/commit/3761b5f6a031f2ae43a886e870d0fbc76d2b7b59), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`d371ac1`](https://github.com/mastra-ai/mastra/commit/d371ac1d9820afaaf7cfdbc380a475946a994d8f), [`780f066`](https://github.com/mastra-ai/mastra/commit/780f0669f6fa3b025e330efa354b8f9306c54d07), [`80be2c8`](https://github.com/mastra-ai/mastra/commit/80be2c807f5686c6b18d65aeaadc87d96c54c139), [`356e13f`](https://github.com/mastra-ai/mastra/commit/356e13f1df93638306cd0f5eabdbc9a0cbb04164), [`36df947`](https://github.com/mastra-ai/mastra/commit/36df947de2603131fd24652db61af7799a790827), [`b7f5a4d`](https://github.com/mastra-ai/mastra/commit/b7f5a4d38e35d457d616ec2e8a53c2f012cb7f3a), [`cf182b7`](https://github.com/mastra-ai/mastra/commit/cf182b7fb495767946d9840ef29f19cfa906f31f), [`2e6941a`](https://github.com/mastra-ai/mastra/commit/2e6941a39915f00aef0d0bafcbdc652e74281661), [`1bd3830`](https://github.com/mastra-ai/mastra/commit/1bd38306e0d4d36868420b4bdd4db9876811545a), [`a049c2a`](https://github.com/mastra-ai/mastra/commit/a049c2a9dfb41d0ee2e7a28874a88cd64fd5669f), [`80be2c8`](https://github.com/mastra-ai/mastra/commit/80be2c807f5686c6b18d65aeaadc87d96c54c139), [`9360036`](https://github.com/mastra-ai/mastra/commit/9360036b21a47badd530ad38ee76fd01c07e3ba9), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`2ea4169`](https://github.com/mastra-ai/mastra/commit/2ea41690134a91169453e422b09de66dc9a6f054), [`61f5491`](https://github.com/mastra-ai/mastra/commit/61f54912e6453cc706bb5d7df9f6c7aad78d428f), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`2ea4169`](https://github.com/mastra-ai/mastra/commit/2ea41690134a91169453e422b09de66dc9a6f054), [`61f5491`](https://github.com/mastra-ai/mastra/commit/61f54912e6453cc706bb5d7df9f6c7aad78d428f), [`63e3fe1`](https://github.com/mastra-ai/mastra/commit/63e3fe13cc1ea96f91d7c68aea92f400faf9e4da), [`1d4ce8d`](https://github.com/mastra-ai/mastra/commit/1d4ce8daaa54511f325c1b609d31b8e54009d677), [`8c68372`](https://github.com/mastra-ai/mastra/commit/8c68372e85fe0b066ec12c58bd29ffb93e54c552)]:
+  - @mastra/core@1.42.0-alpha.4
+  - @mastra/playground-ui@33.0.0-alpha.4
+  - @mastra/react@0.6.0-alpha.4
+  - @mastra/client-js@1.24.0-alpha.4
+
 ## 1.12.3-alpha.3
 
 ### Patch Changes

@@ -1,6 +1,8 @@
 import { format, isToday } from 'date-fns';
 import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
+import { dataListStickyStartStyles } from './shared';
+import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
 
@@ -14,15 +16,21 @@ export type DataListCellProps = {
    * area acts as the click/hover target.
    */
   as?: ElementType;
+  /**
+   * Pins the cell to the horizontal start edge of the list while the list
+   * scrolls sideways.
+   */
+  sticky?: DataListSticky;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>;
 
-export function DataListCell({ children, className, height = 'default', as, ...rest }: DataListCellProps) {
+export function DataListCell({ children, className, height = 'default', as, sticky, ...rest }: DataListCellProps) {
   const Component = as || 'span';
   return (
     <Component
       className={cn(
         'relative grid min-w-0 max-w-full items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:content-["—"] empty:before:text-neutral2',
         height === 'compact' ? 'py-1.5' : 'py-2.5',
+        sticky === 'start' && dataListStickyStartStyles,
         className,
       )}
       {...rest}
@@ -89,6 +97,60 @@ export function DataListDescriptionCell({ children, className }: DataListCellPro
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
+    </DataListCell>
+  );
+}
+
+export type DataListRowHeaderCellProps = Omit<DataListCellProps, 'sticky'>;
+
+export function DataListRowHeaderCell({ children, className, ...rest }: DataListRowHeaderCellProps) {
+  return (
+    <DataListCell
+      sticky="start"
+      className={cn(
+        'data-list-row-header -ml-5 -mr-4 w-auto max-w-none rounded-l-md pl-5 pr-4 text-left text-ui-sm font-semibold tracking-tight text-neutral2',
+        className,
+      )}
+      {...rest}
+    >
+      <span className={cn(dataListTruncateContentStyles, 'relative z-10 w-full')}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
+    </DataListCell>
+  );
+}
+
+export type DataListNumberCellProps = DataListCellProps & {
+  /**
+   * Emphasizes the value with a brighter tone and semibold weight — use for the
+   * primary metric in a row (e.g. a total or headline number).
+   */
+  highlight?: boolean;
+};
+
+/**
+ * Right-aligned numeric cell with tabular figures, for metric and summary
+ * tables. Defaults to `compact` height to match those layouts; pass `highlight`
+ * for the emphasized column.
+ */
+export function DataListNumberCell({
+  children,
+  className,
+  highlight,
+  height = 'compact',
+  ...rest
+}: DataListNumberCellProps) {
+  return (
+    <DataListCell
+      height={height}
+      className={cn(
+        'justify-items-end text-right text-ui-sm tabular-nums',
+        highlight ? 'text-neutral4 font-semibold' : 'text-neutral3',
+        className,
+      )}
+      {...rest}
+    >
+      {children}
     </DataListCell>
   );
 }

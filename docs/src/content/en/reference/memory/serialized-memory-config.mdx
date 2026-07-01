@@ -9,7 +9,7 @@ packages:
 
 `SerializedMemoryConfig` is the JSON-serializable subset of [`Memory`](/reference/memory/memory-class) configuration that lives on a stored agent record. The runtime hydrates it back into a `Memory` instance by resolving the vector and embedder IDs against the configured `Mastra` instance.
 
-It is the type used by [`BuilderAgentDefaults.memory`](/reference/editor/agent-builder/builder-agent-defaults) and by `EditorAgentNamespace.create({ memory })`.
+It's the type used by [`BuilderAgentDefaults.memory`](/reference/editor/agent-builder/builder-agent-defaults) and by `EditorAgentNamespace.create({ memory })`.
 
 ## Usage example
 
@@ -146,7 +146,7 @@ new MastraEditor({
   {
     name: 'retrieval',
     type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
-    description: 'Experimental. Enable retrieval-mode observation groups as durable pointers to raw message history.',
+    description: 'Enable retrieval-mode observation groups as durable pointers to raw message history.',
     isOptional: true,
   },
   {

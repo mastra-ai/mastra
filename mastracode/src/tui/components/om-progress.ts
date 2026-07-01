@@ -2,9 +2,9 @@
  * Observational Memory progress indicator component.
  * Shows when OM is observing or reflecting on conversation history.
  */
-import { Container, Text } from '@mariozechner/pi-tui';
-import { defaultOMProgressState } from '@mastra/core/harness';
-import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/harness';
+import { Container, Text } from '@earendil-works/pi-tui';
+import { defaultOMProgressState } from '@mastra/core/agent-controller';
+import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/agent-controller';
 import chalk from 'chalk';
 import { theme, mastra } from '../theme.js';
 

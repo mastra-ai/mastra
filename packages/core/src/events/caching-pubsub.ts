@@ -1,6 +1,7 @@
 import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
-import { PubSub } from './pubsub';
+import { isLeaseProvider, PubSub } from './pubsub';
+import type { LeaseProvider } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -84,6 +85,23 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Stable key used to deduplicate an event across the cache-replay and
+   * live-delivery paths.
+   *
+   * We cannot dedup on `event.id`: `CachingPubSub.publish` assigns the id and
+   * caches the event with it, but inner PubSub implementations
+   * (EventEmitterPubSub, UnixSocketPubSub, …) regenerate `id` inside their own
+   * `publish`, so the cached copy and the live copy of the SAME publish carry
+   * different ids. The sequential `index` is assigned here and is preserved by
+   * every inner implementation, so it matches across both paths. Events without
+   * an index are never cached (see `publish`), so they can't be replay/live
+   * duplicated — falling back to `id` for them is safe.
+   */
+  private dedupKey(event: Event): string {
+    return event.index !== undefined ? `i:${event.index}` : `id:${event.id}`;
+  }
+
+  /**
    * Get the cache key for a topic's event list
    */
   private getCacheKey(topic: string): string {
@@ -104,7 +122,11 @@ export class CachingPubSub extends PubSub {
    * Uses atomic increment for index assignment to prevent race conditions
    * when multiple events are published concurrently.
    */
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
@@ -138,7 +160,7 @@ export class CachingPubSub extends PubSub {
     }
 
     // Always publish to inner PubSub — cache failure must not block live delivery
-    await this.inner.publish(topic, fullEvent);
+    await this.inner.publish(topic, fullEvent, options);
   }
 
   /**
@@ -169,8 +191,9 @@ export class CachingPubSub extends PubSub {
     // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
     const wrappedCb: EventCallback = (event, ack) => {
       if (seen) {
-        if (!seen.has(event.id)) {
-          seen.add(event.id);
+        const key = this.dedupKey(event);
+        if (!seen.has(key)) {
+          seen.add(key);
           cb(event, ack);
         }
       } else {
@@ -185,8 +208,9 @@ export class CachingPubSub extends PubSub {
     // 2. Fetch and replay cached history
     const history = await this.getHistory(topic);
     for (const event of history) {
-      if (!seen!.has(event.id)) {
-        seen!.add(event.id);
+      const key = this.dedupKey(event);
+      if (!seen!.has(key)) {
+        seen!.add(key);
         cb(event);
       }
     }
@@ -212,8 +236,9 @@ export class CachingPubSub extends PubSub {
     // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
     const wrappedCb: EventCallback = (event, ack) => {
       if (seen) {
-        if (!seen.has(event.id)) {
-          seen.add(event.id);
+        const key = this.dedupKey(event);
+        if (!seen.has(key)) {
+          seen.add(key);
           cb(event, ack);
         }
       } else {
@@ -228,8 +253,9 @@ export class CachingPubSub extends PubSub {
     // 2. Fetch and replay cached history FROM the specified index
     const history = await this.getHistory(topic, offset);
     for (const event of history) {
-      if (!seen!.has(event.id)) {
-        seen!.add(event.id);
+      const key = this.dedupKey(event);
+      if (!seen!.has(key)) {
+        seen!.add(key);
         cb(event);
       }
     }
@@ -261,6 +287,20 @@ export class CachingPubSub extends PubSub {
    */
   async flush(): Promise<void> {
     await this.inner.flush();
+  }
+
+  /**
+   * Expose the inner's {@link LeaseProvider} when it has one, otherwise
+   * `undefined`. Leasing is a capability of the underlying backend
+   * (e.g. Redis), not of the caching decorator itself — so rather than
+   * unconditionally declaring lease methods (which would make
+   * {@link isLeaseProvider} report `true` even when the inner can't
+   * coordinate a lock), we surface the inner's capability directly. The
+   * signals runtime unwraps this so wrapping with caching preserves real
+   * distributed lease semantics without faking them.
+   */
+  getLeaseProvider(): LeaseProvider | undefined {
+    return isLeaseProvider(this.inner) ? this.inner : undefined;
   }
 
   /**

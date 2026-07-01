@@ -498,3 +498,269 @@ describe('WorkflowsPG snapshot sanitization', () => {
     }
   });
 });
+
+/**
+ * Real-Postgres regression for https://github.com/mastra-ai/mastra/issues/17679
+ *
+ * The simulation tests in packages/core prove the architectural shape
+ * of the bug — that MastraCompositeStore.init() broadcasts DDL across
+ * the pool via Promise.all. These tests prove the same bug exhibits on
+ * an actual `pg.Pool` against an actual Postgres instance under
+ * Supabase-shaped constraints (tight pool budget, tight statement
+ * timeout), and that the fix resolves it end-to-end.
+ *
+ * Each test uses a unique `schemaName` so it runs in isolation against
+ * the shared `pg-test-db` container and never interferes with the
+ * baseline `createTestSuite(...)` runs above.
+ */
+describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
+  /** Best-effort isolation: each test runs against its own schema. */
+  async function dropSchema(schemaName: string) {
+    try {
+      const cleanup = new Pool({ connectionString });
+      await cleanup.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await cleanup.end();
+    } catch {}
+  }
+
+  /**
+   * Instruments a Pool to observe init-time fan-out. Tracks:
+   *   - totalQueries / peakInFlight: concurrent `pool.query()` calls
+   *   - totalConnects / peakClientsCheckedOut: concurrent `pool.connect()`
+   *     checkouts (the underlying resource a transaction pooler bills)
+   *
+   * Both metrics are needed because different fixes show up in different
+   * places: per-statement serialization shows up in `pool.query()`, while
+   * pinning all DDL to one backend shows up as a single `pool.connect()`
+   * with zero `pool.query()` traffic.
+   */
+  function instrumentPool(pool: Pool) {
+    const state = {
+      inFlight: 0,
+      peakInFlight: 0,
+      totalQueries: 0,
+      checkedOut: 0,
+      peakClientsCheckedOut: 0,
+      totalConnects: 0,
+    };
+
+    const originalQuery = pool.query.bind(pool);
+    (pool as any).query = async (...args: any[]) => {
+      state.inFlight++;
+      state.totalQueries++;
+      state.peakInFlight = Math.max(state.peakInFlight, state.inFlight);
+      try {
+        return await (originalQuery as any)(...args);
+      } finally {
+        state.inFlight--;
+      }
+    };
+
+    const originalConnect = pool.connect.bind(pool);
+    (pool as any).connect = async () => {
+      const client = await (originalConnect as any)();
+      state.checkedOut++;
+      state.totalConnects++;
+      state.peakClientsCheckedOut = Math.max(state.peakClientsCheckedOut, state.checkedOut);
+      const originalRelease = client.release.bind(client);
+      client.release = (...args: any[]) => {
+        state.checkedOut--;
+        return originalRelease(...args);
+      };
+      return client;
+    };
+
+    return state;
+  }
+
+  it('init() must serialize DDL — peak concurrent pool.query() calls stays at 1', async () => {
+    // This is the strongest, most reliable witness to the bug. Unlike
+    // the symptoms (statement_timeout, connectionTimeoutMillis) which
+    // only surface under Supabase-grade latency amplification and
+    // can't be reproduced reliably against a local Postgres, the
+    // fan-out itself is directly observable on the pg.Pool the moment
+    // init() runs.
+    //
+    // BEFORE THE FIX: every domain's chained `pool.query(...)` calls
+    //   each take their own backend, all concurrently via
+    //   `Promise.all`. peakInFlight on this codebase is ~340 (well
+    //   over the pool's `max: 20`).
+    // AFTER THE FIX: serialized init touches one backend at a time so
+    //   peakInFlight === 1.
+    //
+    // The Supabase production symptom (`canceling statement due to
+    // statement timeout`) follows directly from this: any peakInFlight
+    // > 1 means DDL is racing on the same relation, and on a real
+    // Supabase pooler that race amplifies into the reported timeout.
+    const schemaName = `it17679_fanout_${Date.now()}`;
+    const pool = new Pool({ connectionString, max: 20 });
+    const probe = instrumentPool(pool);
+
+    const store = new PostgresStore({ id: `pg-17679-fanout-${Date.now()}`, pool, schemaName });
+
+    try {
+      await store.init();
+      // Sanity: init actually ran DDL through SOME path (either pooled
+      // queries via pool.query, or a pinned client via pool.connect()).
+      expect(probe.totalQueries + probe.totalConnects).toBeGreaterThan(0);
+      // The real invariant: at most one backend is in use at any moment
+      // during init, whether it's because we serialized per-statement
+      // queries (peakInFlight stays at 1, peakClientsCheckedOut === 0)
+      // or because we pinned every domain's DDL to a single backend
+      // (peakClientsCheckedOut === 1, peakInFlight === 0).
+      const peakBackendsInUse = Math.max(probe.peakInFlight, probe.peakClientsCheckedOut);
+      expect(peakBackendsInUse).toBe(1);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+
+  it('init() must not over-acquire pool slots even when the pool is small (max=2)', async () => {
+    // Complementary check: the bug isn't just about peak concurrency
+    // in a generous pool — it manifests as "every domain is asking for
+    // a connection right now" under any pool size. Here we shrink the
+    // pool to 2 and assert at most one backend is in use.
+    //
+    // BEFORE THE FIX: peakInFlight saturates at 2 (the pool max) and
+    //   the other ~340 calls just queue. The init "succeeds" but the
+    //   pool is a bottleneck and any per-connection latency (real
+    //   Supabase pooler) amplifies that queue into seconds.
+    // AFTER THE FIX (either per-statement serial or single-backend
+    //   pinning): at most one backend in use.
+    const schemaName = `it17679_small_pool_${Date.now()}`;
+    const pool = new Pool({ connectionString, max: 2 });
+    const probe = instrumentPool(pool);
+
+    const store = new PostgresStore({ id: `pg-17679-small-pool-${Date.now()}`, pool, schemaName });
+
+    try {
+      await store.init();
+      const peakBackendsInUse = Math.max(probe.peakInFlight, probe.peakClientsCheckedOut);
+      expect(peakBackendsInUse).toBe(1);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+});
+
+describe('PostgresStore.init() — concurrency & disableInit (issue #18282)', () => {
+  /** Best-effort isolation: each test runs against its own schema. */
+  async function dropSchema(schemaName: string) {
+    try {
+      const cleanup = new Pool({ connectionString });
+      await cleanup.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await cleanup.end();
+    } catch {}
+  }
+
+  /** Counts how many times `pool.connect()` is called (the pinned-init path). */
+  function countConnects(pool: Pool) {
+    const state = { connects: 0 };
+    const originalConnect = pool.connect.bind(pool);
+    // Forward all args (pg's internal pool.query() calls connect with a
+    // callback) so wrapping connect doesn't break ordinary queries.
+    (pool as any).connect = (...args: any[]) => {
+      state.connects++;
+      return (originalConnect as any)(...args);
+    };
+    return state;
+  }
+
+  /** Queries table existence through a fresh pool to avoid the instrumented one. */
+  async function tableExists(schemaName: string): Promise<boolean> {
+    const probePool = new Pool({ connectionString });
+    try {
+      const res = await probePool.query(`SELECT to_regclass($1) AS tbl`, [`"${schemaName}"."${TABLE_THREADS}"`]);
+      return res.rows[0].tbl !== null;
+    } finally {
+      await probePool.end();
+    }
+  }
+
+  it('does not throw "RoutingDbClient already has a pinned client" on concurrent init()', async () => {
+    // Mirrors the reported architecture: one shared PostgresStore whose
+    // init() is triggered by multiple request-scoped Mastra instances at the
+    // same time. Both calls race past the boolean guard and reach pin(),
+    // and the second pin() throws today. After the single-flight fix, both
+    // callers await one shared init promise.
+    const schemaName = `it18282_concurrent_${Date.now()}`;
+    const pool = new Pool({ connectionString });
+    const store = new PostgresStore({ id: `pg-18282-concurrent-${Date.now()}`, pool, schemaName });
+
+    try {
+      // Fire several overlapping init() calls. Should resolve, not reject.
+      await expect(Promise.all([store.init(), store.init(), store.init()])).resolves.toBeDefined();
+
+      // Schema/tables must actually exist afterwards (init really ran once).
+      expect(await tableExists(schemaName)).toBe(true);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+
+  it('init() is a no-op when disableInit is true (skips the pinned-client path)', async () => {
+    // With externally managed schema, init() must not connect/pin/DDL.
+    // The call-site in @mastra/core (mastra/index.ts) asserts init() is
+    // "a no-op when disabled" — this enforces that contract for PG.
+    const schemaName = `it18282_disabled_${Date.now()}`;
+    const pool = new Pool({ connectionString });
+    const probe = countConnects(pool);
+    const store = new PostgresStore({
+      id: `pg-18282-disabled-${Date.now()}`,
+      pool,
+      schemaName,
+      disableInit: true,
+    });
+
+    try {
+      await store.init();
+
+      // No pinned-client connection should have been acquired.
+      expect(probe.connects).toBe(0);
+
+      // And no tables should have been created by init().
+      expect(await tableExists(schemaName)).toBe(false);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+
+  it('retries init() after a transient connect() failure (#initPromise is reset)', async () => {
+    // A failing pool.connect() during boot must not permanently poison the
+    // store: the cached #initPromise is reset on failure so a later init()
+    // can re-run. Reject the first connect(), then fall through to the real one.
+    const schemaName = `it18282_retry_${Date.now()}`;
+    const pool = new Pool({ connectionString });
+    const originalConnect = pool.connect.bind(pool);
+    let failNext = true;
+    (pool as any).connect = (...args: any[]) => {
+      if (failNext) {
+        failNext = false;
+        return Promise.reject(new Error('transient connect failure'));
+      }
+      return (originalConnect as any)(...args);
+    };
+    const store = new PostgresStore({ id: `pg-18282-retry-${Date.now()}`, pool, schemaName });
+
+    try {
+      // First init() hits the failing connect() and must reject.
+      await expect(store.init()).rejects.toThrow();
+
+      // A subsequent init() must succeed (the rejected promise was cleared).
+      await expect(store.init()).resolves.toBeUndefined();
+      expect(await tableExists(schemaName)).toBe(true);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+});
