@@ -4678,6 +4678,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
