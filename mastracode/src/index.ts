@@ -94,6 +94,7 @@ import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import type { MastraCodeRailwayConfig } from './web/workspace.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
@@ -197,6 +198,10 @@ export interface MastraCodeConfig {
   intervalHandlers?: IntervalHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: AgentControllerConfig<MastraCodeState>['workspace'];
+  /** Workspace factory override for entrypoint-specific behavior (for example web vs TUI). */
+  workspaceFactory?: AgentControllerConfig<MastraCodeState>['workspace'];
+  /** Railway sandbox credentials for web workspaces. When set, web sessions provision Railway sandboxes. */
+  railway?: MastraCodeRailwayConfig;
   /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
   configDir?: string;
   /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
@@ -481,6 +486,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
 
+  const workspaceFactory: AgentControllerConfig<MastraCodeState>['workspace'] =
+    config?.workspace ?? config?.workspaceFactory ?? (args => getDynamicWorkspace(args));
+
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
@@ -583,7 +591,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // judge model is configured, keeping the goal step a no-op. Bind the same
       // `settingsPath` used above so the judge model and `maxRuns` come from one
       // config (a custom settings file would otherwise diverge).
-      judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
+      judge: (ctx: { requestContext: RequestContext }) => getGoalJudgeModel(ctx, config?.settingsPath),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
       maxSteps: 1000,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
@@ -592,7 +600,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // find_files, file_stat, lsp_inspect) rather than grading prose alone —
       // restoring the original MastraCode judge's verification ability. Resolved
       // per-request from the active workspace (mirrors `judge`).
-      tools: getGoalJudgeTools,
+      tools: args => getGoalJudgeTools({ ...args, workspaceFactory }),
     },
     inputProcessors: [
       new PlanRejectionAbortProcessor(),
@@ -784,7 +792,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     agent: codeAgent,
     subagents: config?.subagents ?? [],
     gateways: [amazonBedrockGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    workspace: workspaceFactory,
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,

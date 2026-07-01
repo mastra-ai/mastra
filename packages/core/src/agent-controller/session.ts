@@ -2671,6 +2671,14 @@ export class Session<TState = unknown> {
     return { ...this.#tags };
   }
 
+  getBrowser(): MastraBrowser | undefined {
+    return this.browser;
+  }
+
+  getWorkspace(): Workspace | undefined {
+    return this.#workspace;
+  }
+
   // ===========================================================================
   // Event bus
   // ===========================================================================

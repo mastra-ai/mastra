@@ -3,11 +3,11 @@ import os from 'node:os';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { AgentControllerConfig, AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
-import type { LSPConfig } from '@mastra/core/workspace';
+import type { LSPConfig, WorkspaceFilesystem, WorkspaceSandbox } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
@@ -20,7 +20,7 @@ import { GOAL_JUDGE_READONLY_TOOLS, MASTRACODE_WORKSPACE_TOOLS } from './tool-av
 // Sandbox Environment
 // =============================================================================
 
-function buildSandboxEnv(): NodeJS.ProcessEnv {
+export function buildSandboxEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
     // Explicit overrides for non-interactive subprocess execution
@@ -43,13 +43,20 @@ function buildSandboxEnv(): NodeJS.ProcessEnv {
 // 3. Project-local: .agents/skills (Agent Skills spec compatible)
 // 4. Global: ~/<configDir>/skills (user-wide mastracode skills)
 // 5. Global: ~/.claude/skills (user-wide Claude Code skills)
-// 6. Global: ~/.agents/skills (user-wide Agent Skills spec compatible)
+// 6. Global: ~/.agents/skills (Agent Skills spec compatible)
 
 // Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
 // returns false for symlinks. Tools like `npx skills add` install skills as
 // symlinks, so we need to resolve them. For each symlinked skill directory,
 // we add the real (resolved) parent path as an additional skill scan path.
-function collectSkillPaths(skillsDirs: string[]): string[] {
+function collectSkillPaths(skillsDirs: string[], fileSystem?: WorkspaceFilesystem): string[] {
+  if (!fileSystem) {
+    fileSystem = new LocalFilesystem({
+      basePath: dirname(skillsDirs[0] ?? ''),
+      allowedPaths: skillsDirs.map(p => path.resolve(p)),
+    });
+  }
+
   const paths: string[] = [];
   const seen = new Set<string>();
 
@@ -92,6 +99,7 @@ export function buildSkillPaths(
   configDir: string,
   homeDir = os.homedir(),
   pluginSkillPaths: string[] = [],
+  fileSystem?: WorkspaceFilesystem,
 ): string[] {
   const mastraCodeLocalSkillsPath = path.join(projectPath, configDir, 'skills');
   const claudeLocalSkillsPath = path.join(projectPath, '.claude', 'skills');
@@ -100,15 +108,18 @@ export function buildSkillPaths(
   const claudeGlobalSkillsPath = path.join(homeDir, '.claude', 'skills');
   const agentSkillsGlobalPath = path.join(homeDir, '.agents', 'skills');
 
-  return collectSkillPaths([
-    mastraCodeLocalSkillsPath,
-    claudeLocalSkillsPath,
-    agentSkillsLocalPath,
-    mastraCodeGlobalSkillsPath,
-    claudeGlobalSkillsPath,
-    agentSkillsGlobalPath,
-    ...pluginSkillPaths,
-  ]);
+  return collectSkillPaths(
+    [
+      mastraCodeLocalSkillsPath,
+      claudeLocalSkillsPath,
+      agentSkillsLocalPath,
+      mastraCodeGlobalSkillsPath,
+      claudeGlobalSkillsPath,
+      agentSkillsGlobalPath,
+      ...pluginSkillPaths,
+    ],
+    fileSystem,
+  );
 }
 
 /**
@@ -154,19 +165,9 @@ async function getSandboxWorkspace({
   worktreePath?: string;
   mastra?: Mastra;
 }): Promise<Workspace> {
-  // Bind the workspace to the active worktree when one is set, so file tools and
-  // command tools operate inside the feature branch's working tree rather than
-  // the base checkout. Falls back to the repo root when no worktree is active.
   const boundWorkdir = worktreePath || workdir;
-
-  // Include the sandbox id *and* worktree path in the reuse key: a new sandbox
-  // (e.g. the previous one expired) or a different worktree must each get a
-  // fresh Workspace/ProcessManager instead of reusing one bound to a stale
-  // sandbox or the wrong working tree.
   const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}-${boundWorkdir}`;
 
-  // Reuse the existing remote workspace if already registered (preserves the
-  // reattached sandbox + ProcessManager state across re-opens).
   try {
     const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
     if (existing) {
@@ -189,21 +190,89 @@ async function getSandboxWorkspace({
   });
 }
 
-export async function getDynamicWorkspace({
-  requestContext,
-  mastra,
-}: {
+export interface MastraCodeWorkspaceFactoryArgs {
   requestContext: RequestContext;
   mastra?: Mastra;
-}) {
+}
+
+export type MastraCodeWorkspaceFactory = NonNullable<AgentControllerConfig<MastraCodeState>['workspace']>;
+
+interface CreateMastraCodeWorkspaceArgs extends MastraCodeWorkspaceFactoryArgs {
+  projectPath: string;
+  filesystem?: WorkspaceFilesystem;
+  sandbox?: WorkspaceSandbox;
+  prepare?: () => Promise<void>;
+}
+
+export async function createMastraCodeWorkspace({
+  requestContext,
+  mastra,
+  projectPath: rawProjectPath,
+  filesystem,
+  sandbox,
+  prepare,
+}: CreateMastraCodeWorkspaceArgs) {
+  const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  const state = ctx?.getState();
+  const projectPath = path.resolve(rawProjectPath);
+  const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
+  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? [], filesystem);
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
+  const sandboxPaths = state?.sandboxAllowedPaths ?? [];
+  const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
+
+  const workspaceTools = MASTRACODE_WORKSPACE_TOOLS;
+
+  let existing: Workspace | undefined;
+  try {
+    existing = mastra?.getWorkspaceById(workspaceId) as Workspace;
+  } catch {
+    // Not registered yet
+  }
+
+  if (existing) {
+    if (existing.filesystem instanceof LocalFilesystem) {
+      existing.filesystem.setAllowedPaths(allowedPaths);
+    }
+    existing.setToolsConfig(workspaceTools);
+    return existing;
+  }
+
+  await prepare?.();
+
+  const userLsp = loadSettings().lsp ?? {};
+  const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const lspConfig: LSPConfig = {
+    ...userLsp,
+    packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath),
+    searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
+  };
+
+  return new Workspace({
+    id: workspaceId,
+    name: 'Mastra Code Workspace',
+    filesystem:
+      filesystem ??
+      new LocalFilesystem({
+        basePath: projectPath,
+        allowedPaths,
+      }),
+    sandbox:
+      sandbox ??
+      new LocalSandbox({
+        workingDirectory: projectPath,
+        env: buildSandboxEnv(),
+      }),
+    skills: skillPaths,
+    tools: workspaceTools,
+    lsp: lspConfig,
+  });
+}
+
+export async function getDynamicWorkspace({ requestContext, mastra }: MastraCodeWorkspaceFactoryArgs) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
 
-  // GitHub/cloud-sandbox-backed project: the repo lives inside a remote sandbox,
-  // not on the server host. Reattach to the already-provisioned + materialized
-  // sandbox (the SPA called `.../ensure` first, persisting sandboxId/workdir on
-  // controller state) and build a sandbox-backed Workspace. LSP/host skill paths
-  // are skipped for these workspaces (follow-up).
   if (state?.githubProjectId && state.sandboxId && state.sandboxWorkdir) {
     return getSandboxWorkspace({
       githubProjectId: state.githubProjectId,
@@ -220,56 +289,21 @@ export async function getDynamicWorkspace({
     throw new Error('Project path is required');
   }
 
-  const projectPath = path.resolve(rawProjectPath);
-  const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
-  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir, state?.pluginSkillPaths ?? []);
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
-  const sandboxPaths = state?.sandboxAllowedPaths ?? [];
-  const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
+  return createMastraCodeWorkspace({ requestContext, mastra, projectPath: rawProjectPath });
+}
 
-  // All modes share the same workspace tool configuration.  Per-mode tool
-  // visibility is enforced at LLM-call time via `availableTools` /
-  // `activeTools` on the AgentController, not by mutating workspace capabilities.
-  const workspaceTools = MASTRACODE_WORKSPACE_TOOLS;
-
-  // Reuse existing workspace if already registered (preserves ProcessManager state)
-  let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
-  try {
-    existing = mastra?.getWorkspaceById(workspaceId) as Workspace<LocalFilesystem, LocalSandbox>;
-  } catch {
-    // Not registered yet
+async function resolveGoalWorkspace({
+  requestContext,
+  mastra,
+  workspaceFactory,
+}: MastraCodeWorkspaceFactoryArgs & { workspaceFactory?: MastraCodeWorkspaceFactory }): Promise<Workspace> {
+  const workspace = workspaceFactory ?? getDynamicWorkspace;
+  if (typeof workspace === 'function') {
+    const resolved = await workspace({ requestContext, mastra });
+    if (!resolved) throw new Error('Workspace factory returned undefined');
+    return resolved as Workspace;
   }
-
-  if (existing) {
-    existing.filesystem.setAllowedPaths(allowedPaths);
-    existing.setToolsConfig(workspaceTools);
-    return existing;
-  }
-
-  const userLsp = loadSettings().lsp ?? {};
-  const mcModulePath = join(dirname(fileURLToPath(import.meta.url)), '..');
-  const lspConfig: LSPConfig = {
-    ...userLsp,
-    packageRunner: userLsp.packageRunner || detectPackageRunner(projectPath), // Detected runner is the fallback — user's packageRunner always wins
-    searchPaths: [mcModulePath, ...(userLsp.searchPaths ?? [])],
-  };
-
-  // First call for this project — create the workspace
-  return new Workspace({
-    id: workspaceId,
-    name: 'Mastra Code Workspace',
-    filesystem: new LocalFilesystem({
-      basePath: projectPath,
-      allowedPaths,
-    }),
-    sandbox: new LocalSandbox({
-      workingDirectory: projectPath,
-      env: buildSandboxEnv(),
-    }),
-    tools: workspaceTools,
-    ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
-    lsp: lspConfig,
-  });
+  return workspace as Workspace;
 }
 
 /**
@@ -283,13 +317,11 @@ export async function getDynamicWorkspace({
 export async function getGoalJudgeTools({
   requestContext,
   mastra,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-}): Promise<ToolsInput | undefined> {
+  workspaceFactory,
+}: MastraCodeWorkspaceFactoryArgs & { workspaceFactory?: MastraCodeWorkspaceFactory }): Promise<ToolsInput | undefined> {
   let workspace: Workspace;
   try {
-    workspace = await getDynamicWorkspace({ requestContext, mastra });
+    workspace = await resolveGoalWorkspace({ requestContext, mastra, workspaceFactory });
   } catch {
     return undefined;
   }

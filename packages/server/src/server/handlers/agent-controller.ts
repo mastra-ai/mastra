@@ -1,5 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
+import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
 // resolution at runtime goes through mastra.getAgentController?.(), never a
@@ -65,9 +66,16 @@ async function getSession(
   controller: AgentController<any>,
   resourceId: string,
   tags?: Record<string, string>,
+  requestContext?: RequestContext,
 ): Promise<Session<any>> {
   await controller.init();
-  return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id, tags });
+  return controller.createSession({
+    resourceId,
+    id: resourceId,
+    ownerId: controller.id,
+    tags,
+    requestContext,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -80,6 +88,7 @@ const sessionPathParams = z.object({ controllerId: z.string(), resourceId: z.str
 const createSessionBodySchema = z.object({
   resourceId: z.string(),
   tags: z.record(z.string(), z.string()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 const sendMessageBodySchema = z.object({ message: z.string() });
 const steerBodySchema = z.object({ message: z.string() });
@@ -296,10 +305,10 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, tags }) => {
+  handler: async ({ mastra, controllerId, resourceId, tags, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      const session = await getSession(controller, resourceId, tags);
+      const session = await getSession(controller, resourceId, tags, requestContext);
       return {
         controllerId,
         resourceId,

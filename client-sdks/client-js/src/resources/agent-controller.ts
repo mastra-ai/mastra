@@ -342,10 +342,13 @@ export class AgentControllerSession extends BaseResource {
    * using a `{ projectPath }` tag) so each resumes its own thread instead of the
    * most recent thread across the whole resource.
    */
-  create(options?: { tags?: Record<string, string> }): Promise<CreateAgentControllerSessionResponse> {
+  create(options?: {
+    tags?: Record<string, string>;
+    requestContext?: Record<string, unknown>;
+  }): Promise<CreateAgentControllerSessionResponse> {
     return this.request(`/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`, {
       method: 'POST',
-      body: { resourceId: this.resourceId, tags: options?.tags },
+      body: { resourceId: this.resourceId, tags: options?.tags, requestContext: options?.requestContext },
     });
   }
 

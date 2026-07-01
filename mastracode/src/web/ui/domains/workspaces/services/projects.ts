@@ -12,6 +12,8 @@
  * workspace factory reads it to resolve the working directory.
  */
 
+import { getWebGitCloneDirectoryName, getWebGitRepoName, normalizeWebGitUrl } from '../git-clone-context';
+
 const STORAGE_KEY = 'mastracode-projects';
 const ACTIVE_KEY = 'mastracode-active-project';
 
@@ -33,13 +35,16 @@ export interface Project {
   /** Stable local id (localStorage key). Not used for the session. */
   id: string;
   name: string;
-  /** Absolute filesystem path for local projects. Absent for GitHub projects. */
+  /** Absolute filesystem path for local/git projects. Absent for GitHub projects. */
   path?: string;
   /**
    * Project source. Absent (legacy) is treated as `local`. GitHub projects are
-   * materialized into a cloud sandbox on open rather than resolved from a path.
+   * materialized into a cloud sandbox on open; git projects are cloned by the
+   * server workspace factory.
    */
-  source?: 'local' | 'github';
+  source?: 'local' | 'git' | 'github';
+  gitUrl?: string;
+  cloneParentPath?: string;
   /** Server-side GitHub project id; present only when `source === 'github'`. */
   githubProjectId?: string;
   /**
@@ -53,7 +58,7 @@ export interface Project {
    * Workspaces (git worktrees) for a GitHub project. The first entry is the
    * repo root on its default branch; additional entries are feature-branch
    * worktrees created via "New workspace". Each carries its own resourceId so
-   * its threads are isolated. Absent/empty for local projects.
+   * its threads are isolated. Absent/empty for local/git projects.
    */
   worktrees?: Worktree[];
   /**
@@ -115,8 +120,10 @@ export function loadProjects(): Project[] {
         !!p &&
         typeof p === 'object' &&
         typeof (p as Project).id === 'string' &&
-        // Local projects carry a path; GitHub projects carry a githubProjectId.
-        (typeof (p as Project).path === 'string' || typeof (p as Project).githubProjectId === 'string'),
+        // Local/git projects carry a path; GitHub projects carry a githubProjectId.
+        ((typeof (p as Project).path === 'string' &&
+          ((p as Project).source !== 'git' || typeof (p as Project).gitUrl === 'string')) ||
+          typeof (p as Project).githubProjectId === 'string'),
     );
   } catch {
     return [];
@@ -139,8 +146,52 @@ export async function addProject(name: string, path: string): Promise<Project> {
     id: crypto.randomUUID(),
     name: name.trim() || resolved.name,
     path: path.trim(),
+    source: 'local',
     resourceId: resolved.resourceId,
     gitBranch: resolved.gitBranch,
+    createdAt: Date.now(),
+  };
+  projects.push(project);
+  saveProjects(projects);
+  return project;
+}
+
+function shortHash(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = Math.imul(31, hash) + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function joinPath(parentPath: string, childName: string): string {
+  const trimmed = parentPath.trim().replace(/[\\/]+$/, '');
+  if (!trimmed) throw new Error('Clone location is required');
+  return `${trimmed}/${childName}`;
+}
+
+export function addGitProject(gitUrl: string, cloneParentPath?: string): Project {
+  const normalizedGitUrl = normalizeWebGitUrl(gitUrl);
+  const trimmedCloneParentPath = cloneParentPath?.trim();
+  const dirName = getWebGitCloneDirectoryName(normalizedGitUrl);
+
+  const name = getWebGitRepoName(normalizedGitUrl);
+  const resourceId = `${
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'repository'
+  }-${shortHash(normalizedGitUrl)}`;
+  const projects = loadProjects();
+  const project: Project = {
+    id: crypto.randomUUID(),
+    name,
+    path: trimmedCloneParentPath ? joinPath(trimmedCloneParentPath, dirName) : `/workspace/${dirName}`,
+    source: 'git',
+    gitUrl: normalizedGitUrl,
+    ...(trimmedCloneParentPath ? { cloneParentPath: trimmedCloneParentPath } : {}),
+    resourceId,
     createdAt: Date.now(),
   };
   projects.push(project);
@@ -233,9 +284,19 @@ export function selectWorktree(project: Project, worktreePath: string): Project 
  */
 export async function ensureResourceId(project: Project): Promise<Project> {
   if (project.resourceId) return project;
+  if (project.source === 'git' && project.gitUrl) {
+    const updated = addGitProject(project.gitUrl, project.cloneParentPath);
+    removeProject(project.id);
+    return updated;
+  }
   if (!project.path) throw new Error('Cannot resolve a resourceId for a project without a path');
   const resolved = await resolveProjectPath(project.path);
-  const updated: Project = { ...project, resourceId: resolved.resourceId, gitBranch: resolved.gitBranch };
+  const updated: Project = {
+    ...project,
+    source: 'local',
+    resourceId: resolved.resourceId,
+    gitBranch: resolved.gitBranch,
+  };
   const projects = loadProjects().map(p => (p.id === project.id ? updated : p));
   saveProjects(projects);
   return updated;

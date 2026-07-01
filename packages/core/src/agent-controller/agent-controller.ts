@@ -1024,7 +1024,7 @@ export class AgentController<TState = {}> {
     return this.config.modes;
   }
 
-  private propagateRuntimeServicesToAgent(agent: Agent, _session?: Session<TState>): Agent {
+  private propagateRuntimeServicesToAgent(agent: Agent, session?: Session<TState>): Agent {
     if (this.config.memory && !agent.hasOwnMemory()) {
       agent.__setMemory(this.config.memory);
     }
@@ -1044,16 +1044,11 @@ export class AgentController<TState = {}> {
       mastra.addAgent(agent);
     }
 
-    if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {
-      agent.__setWorkspace(this.workspace);
+    if (session?.getWorkspace() && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {
+      agent.__setWorkspace(session.getWorkspace());
     }
-    if (
-      this.browser &&
-      typeof agent.hasOwnBrowser === 'function' &&
-      !agent.hasOwnBrowser() &&
-      typeof this.browser !== 'function'
-    ) {
-      agent.setBrowser(this.browser);
+    if (session?.getBrowser() && typeof agent.hasOwnBrowser === 'function' && !agent.hasOwnBrowser()) {
+      agent.setBrowser(session.getBrowser());
     }
 
     return agent;

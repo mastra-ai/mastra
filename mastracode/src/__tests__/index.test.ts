@@ -62,6 +62,7 @@ const hookManagerConstructorMock = vi.fn();
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
 const getDynamicWorkspaceMock = vi.fn();
+const getGoalJudgeToolsMock = vi.fn();
 let controllerStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
@@ -221,7 +222,7 @@ vi.mock('../agents/tools.js', () => ({
 
 vi.mock('../agents/workspace.js', () => ({
   getDynamicWorkspace: getDynamicWorkspaceMock,
-  getGoalJudgeTools: vi.fn(),
+  getGoalJudgeTools: getGoalJudgeToolsMock,
 }));
 
 vi.mock('../auth/storage.js', () => ({
@@ -487,14 +488,52 @@ describe('createMastraCode', () => {
     expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
   });
 
-  it('uses a workspace factory when no custom workspace is configured', async () => {
+  it('passes custom workspaceFactory config through to the controller', async () => {
+    const customWorkspaceFactory = vi.fn();
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ workspaceFactory: customWorkspaceFactory as any });
+
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
+      | { workspace?: unknown }
+      | undefined;
+    expect(agentControllerConfig?.workspace).toBe(customWorkspaceFactory);
+  });
+
+  it('uses the default workspace factory when no custom workspace is configured', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
+      | { workspace?: (args: Record<string, unknown>) => unknown }
+      | undefined;
     expect(typeof agentControllerConfig?.workspace).toBe('function');
-    expect(agentControllerConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
+
+    const args = { requestContext: 'request-context' };
+    agentControllerConfig?.workspace?.(args);
+
+    expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(args);
+  });
+
+  it('passes the selected workspace factory to goal judge tools', async () => {
+    const customWorkspaceFactory = vi.fn();
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ workspaceFactory: customWorkspaceFactory as any });
+
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(
+        call => call?.[0] as { id?: string; goal?: { tools?: (args: Record<string, unknown>) => unknown } } | undefined,
+      )
+      .find(config => config?.id === 'code-agent');
+
+    codeAgentConfig?.goal?.tools?.({ requestContext: 'request-context' });
+
+    expect(getGoalJudgeToolsMock).toHaveBeenCalledWith({
+      requestContext: 'request-context',
+      workspaceFactory: customWorkspaceFactory,
+    });
   });
 
   it('adds active plugin tool names to mode availableTools allowlists and seeds plugin instructions', async () => {

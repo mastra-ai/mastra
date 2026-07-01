@@ -26,6 +26,8 @@ export default function App() {
     agentControllerId: 'code',
     resourceId,
     projectPath: deriveProjectPath(activeProject),
+    gitUrl: activeProject?.source === 'git' ? activeProject.gitUrl : undefined,
+    cloneParentPath: activeProject?.source === 'git' ? activeProject.cloneParentPath : undefined,
     baseUrl,
     enabled: sessionEnabled,
   });

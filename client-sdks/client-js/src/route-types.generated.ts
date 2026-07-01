@@ -91665,6 +91665,11 @@ export type PostAgentControllerControllerIdSessions_Body = {
         [key: string]: string;
       }
     | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentControllerControllerIdSessions_Response = {

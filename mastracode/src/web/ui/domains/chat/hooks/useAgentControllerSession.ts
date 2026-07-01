@@ -10,6 +10,7 @@ import type {
 } from '@mastra/client-js';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
+import { MASTRACODE_WEB_GIT_CLONE_CONTEXT_KEY } from '../../../../git-clone-context';
 import { initialTranscript, transcriptReducer } from '../services/transcript';
 import type { TranscriptState } from '../services/transcript';
 import {
@@ -45,6 +46,8 @@ interface UseAgentControllerSessionArgs {
    * the same repo. When omitted, all threads for the resource are listed.
    */
   projectPath?: string;
+  gitUrl?: string;
+  cloneParentPath?: string;
   /** Defaults to same-origin (Vite proxies /api → mastra dev). */
   baseUrl?: string;
   /**
@@ -106,6 +109,8 @@ export function useAgentControllerSession({
   agentControllerId,
   resourceId,
   projectPath,
+  gitUrl,
+  cloneParentPath,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSessionArgs): AgentControllerSessionApi {
@@ -239,10 +244,23 @@ export function useAgentControllerSession({
       setQuerySession(session);
 
       try {
+        const sessionCreateOptions = {
+          ...(projectPath ? { tags: { projectPath } } : {}),
+          ...(gitUrl
+            ? {
+                requestContext: {
+                  [MASTRACODE_WEB_GIT_CLONE_CONTEXT_KEY]: {
+                    gitUrl,
+                    ...(cloneParentPath ? { cloneParentPath } : {}),
+                  },
+                },
+              }
+            : {}),
+        };
         const [created, agentControllerModes] = await Promise.all([
           // Scope initial thread selection to the active project so worktrees
           // sharing a resourceId each resume their own thread.
-          session.create({ tags: projectPath ? { projectPath } : undefined }),
+          session.create(sessionCreateOptions),
           controller.listModes(),
         ]);
         if (disposed) return;
@@ -287,7 +305,7 @@ export function useAgentControllerSession({
       unsubscribe?.();
       sessionRef.current = null;
     };
-  }, [agentControllerId, resourceId, baseUrl, projectPath, enabled]);
+  }, [agentControllerId, resourceId, baseUrl, projectPath, gitUrl, cloneParentPath, enabled]);
 
   const send = useCallback(async (text: string) => {
     const session = sessionRef.current;
