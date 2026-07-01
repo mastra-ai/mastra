@@ -609,7 +609,9 @@ describe('Dataset', () => {
       targetId: 'inline',
       totalItems: 0,
     });
-    await expect(ds.deleteExperiment({ experimentId: otherExp.id })).rejects.toThrow(MastraError);
+    await expect(ds.deleteExperiment({ experimentId: otherExp.id })).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
     // Original experiment should still exist under its true dataset
     const stillThere = await experimentsStorage.getExperimentById({ id: otherExp.id });
     expect(stillThere?.id).toBe(otherExp.id);
@@ -624,7 +626,9 @@ describe('Dataset', () => {
       targetId: 'inline',
       totalItems: 0,
     });
-    await expect(ds.listExperimentResults({ experimentId: otherExp.id })).rejects.toThrow(MastraError);
+    await expect(ds.listExperimentResults({ experimentId: otherExp.id })).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
   });
 
   it('updateExperimentResult throws when experiment belongs to a different dataset', async () => {
@@ -638,10 +642,20 @@ describe('Dataset', () => {
     });
     await expect(
       ds.updateExperimentResult({ id: 'any-result-id', experimentId: otherExp.id, status: 'reviewed' }),
-    ).rejects.toThrow(MastraError);
+    ).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
   });
 
   it('updateExperimentResult rejects when called without experimentId', async () => {
-    await expect(ds.updateExperimentResult({ id: 'any-result-id', status: 'reviewed' })).rejects.toThrow(MastraError);
+    await expect(
+      // Runtime guard for JS callers that bypass the type narrowing
+      (ds.updateExperimentResult as (input: { id: string; status: string }) => Promise<unknown>)({
+        id: 'any-result-id',
+        status: 'reviewed',
+      }),
+    ).rejects.toMatchObject({
+      id: 'EXPERIMENT_RESULT_MISSING_EXPERIMENT_ID',
+    });
   });
 });

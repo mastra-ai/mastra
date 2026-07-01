@@ -420,6 +420,7 @@ export class Dataset {
    * rejected.
    */
   async #assertExperimentOwnership(experimentId: string): Promise<void> {
+    await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     const experiment = await experimentsStore.getExperimentById({ id: experimentId });
     if (!experiment || experiment.datasetId !== this.id) {
@@ -458,7 +459,7 @@ export class Dataset {
   /**
    * Update an experiment result's status or tags.
    */
-  async updateExperimentResult(input: UpdateExperimentResultInput) {
+  async updateExperimentResult(input: UpdateExperimentResultInput & { experimentId: string }) {
     // The result's parent experiment must belong to this dataset. If the
     // caller supplied `experimentId`, verify ownership on that; otherwise we
     // cannot bind the update to this dataset and must reject.
