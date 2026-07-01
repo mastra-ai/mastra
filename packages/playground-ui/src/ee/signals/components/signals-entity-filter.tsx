@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ds/components/Select';
-import { useEntities } from '../hooks';
 import type { EntityLearningEntitySummary } from '../services';
 import type { SelectedEntity } from '../types';
 
@@ -45,10 +44,4 @@ export function SignalsEntityFilter({ entities, selected, onChange }: SignalsEnt
       </label>
     </div>
   );
-}
-
-/** Convenience wrapper that loads entities itself. Used where parents don't fetch. */
-export function SignalsEntityFilterContainer({ selected, onChange }: Omit<SignalsEntityFilterProps, 'entities'>) {
-  const { data: entities = [] } = useEntities();
-  return <SignalsEntityFilter entities={entities} selected={selected} onChange={onChange} />;
 }
