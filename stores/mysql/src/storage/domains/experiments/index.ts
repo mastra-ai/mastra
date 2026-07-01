@@ -379,6 +379,22 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         conditions.push(`${quoteIdentifier('datasetId', 'column name')} = ?`);
         params.push(args.datasetId);
       }
+      if (args.targetType) {
+        conditions.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        params.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push(`${quoteIdentifier('targetId', 'column name')} = ?`);
+        params.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push(`${quoteIdentifier('agentVersion', 'column name')} = ?`);
+        params.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
+      }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
