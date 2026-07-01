@@ -6,7 +6,7 @@ goal: true
 
 # Understand PR
 
-Guide a maintainer through understanding a pull request by first building deep historical context, then walking through the changes interactively. The reviewer should genuinely understand the PR before forming opinions or drafting comments.
+Guide a maintainer through understanding a pull request — its goal, whether it meets a quality bar, and then the history and context behind the changes. The reviewer should genuinely understand the PR before forming opinions or drafting comments.
 
 Do not produce walls of text. Every response should be short, dense, and end with lettered options (A/B/C/D) so the user can type a single letter to continue. Minimize fluff. Be direct and information-dense.
 
@@ -37,13 +37,56 @@ If the PR description or commits reference any issues (e.g. "fixes #1234", "clos
 - Understand what was originally reported, by whom, and what the expected fix looks like
 - Check if the issue discussion contains context that the PR description doesn't mention
 
-This is critical context for Phase 1 — the linked issues often explain *why* this PR exists better than the PR description itself.
+This is critical context for the PR Goal — the linked issues often explain *why* this PR exists better than the PR description itself.
 
-Do not begin analysis yet. Move to the History phase.
+Do not begin analysis yet. Move to the PR Goal phase.
 
-## Phase 1: History & Context
+## Phase 1: PR Goal
 
-Before looking at what the PR changes, understand how we got here.
+Orient the user before anything else — they need to know what this PR is trying to do before history or quality checks make sense.
+
+Present a concise summary of the PR's goal: what problem it solves, why it exists, and what the intended outcome is. Ground this in the PR description, commit messages, and linked issues. Be specific — "fixes a bug" is not enough.
+
+If the PR changes any public API, exported interface, CLI command, configuration option, or user-facing behavior, show what the change looks like from a user's perspective — before and after. For example: how would a developer's code change, what new options are available, what would they import differently. Don't just describe the internal implementation; show the impact on someone using the thing that changed.
+
+Then pause:
+
+```
+A) That matches my understanding — continue
+B) I think the goal is actually different — let me explain
+C) I'm not sure what this PR is solving — dig deeper
+```
+
+Only proceed to the quality gate after the user confirms understanding of the PR's purpose.
+
+## Phase 2: Quality Gate
+
+Now that the user understands the PR's goal, check whether this PR meets a minimum bar before investing time in history research. Run `gh pr checks` to get CI status, then evaluate:
+
+- Is CI passing (build, typecheck, tests)? If CI is still running, note it and proceed with caveats.
+- Does the PR add or modify tests? If so, do they look meaningful at a glance? (Deep test quality analysis happens in Phase 3.)
+- Is the diff coherent — a focused change, or a WIP dump with unrelated changes mixed in?
+- **Changeset**: Check whether the PR includes a changeset. If the repo uses changesets (look for a `.changeset/` directory), any PR that changes runtime behavior, fixes a bug, or adds a feature must have one. A missing changeset is a quality gate failure — flag it explicitly.
+- Does it meet other repo requirements (docs updates, AGENTS.md updates, etc.)?
+- **Author verification**: Has the PR author stated that they personally verified the change works? Look for comments like "tested locally", "verified this fixes…", reproduction evidence, screenshots, or test output. If the PR description and comments contain no indication that the author actually ran or tested their change, flag it — this should be raised as a question in the review comment (Phase 7) if the user chooses to draft one.
+- Any obvious red flags — broken patterns, removed safety checks, huge unrelated diffs?
+
+If the PR doesn't meet the bar, tell the user directly:
+
+```
+This PR isn't ready for detailed review yet:
+- [specific reasons]
+
+A) Review it anyway — I want to understand what's here
+B) Help me draft feedback to the author about what needs fixing
+C) Stop here
+```
+
+If the PR passes the bar (or the user chooses to proceed anyway), move to history.
+
+## Phase 3: History & Context
+
+Now that the user knows the PR's goal and it's passed the quality bar, dig into the history to understand how we got here and whether the approach makes sense.
 
 ### Git history
 
@@ -73,6 +116,10 @@ Examine the PR's test changes (or lack thereof) and the existing test patterns i
 - Are there edge cases or failure modes that the tests don't cover?
 - If the PR has no tests, should it?
 
+### Approach
+
+Given the history and the PR's stated goal, does the approach make sense? Is it solving the problem the right way, or is it fighting the existing design? If a simpler or more consistent approach exists given the codebase's history, flag it.
+
 ### Write `.pr-review/HISTORY.md`
 
 Capture what you learned:
@@ -83,6 +130,7 @@ Capture what you learned:
 - Surrounding features and dependencies that could be affected.
 - Any patterns or conventions established by the history and codebase.
 - Test quality assessment — are the tests meaningful?
+- Approach assessment — does the PR's approach fit with the existing design?
 
 Present the history to the user interactively — one file or logical area at a time. After each chunk, offer follow-up options:
 
@@ -95,55 +143,11 @@ D) I understand this part — move on
 
 Tailor the options to what's actually interesting or relevant. Do not use generic options. The point is to help the user fully and deeply understand the change being made and its implications.
 
-Do not move to Phase 2 until the user has seen the history for all major changed areas and indicated they're ready.
-
-## Phase 2: PR Goal
-
-The goal of this phase is to orient the user before the walkthrough — give them the concise context they need so the code changes make sense when they see them.
-
-Present a concise summary of the PR's goal: what problem it solves, why it exists, and what the intended outcome is. Ground this in the PR description, commit messages, and linked issues. Be specific — "fixes a bug" is not enough.
-
-If the PR changes any public API, exported interface, CLI command, configuration option, or user-facing behavior, show what the change looks like from a user's perspective — before and after. For example: how would a developer's code change, what new options are available, what would they import differently. Don't just describe the internal implementation; show the impact on someone using the thing that changed.
-
-Then pause:
-
-```
-A) That matches my understanding — continue
-B) I think the goal is actually different — let me explain
-C) I'm not sure what this PR is solving — dig deeper
-```
-
-Only proceed to the quality gate after the user confirms understanding of the PR's purpose.
-
-## Phase 3: Quality Gate
-
-Now that you understand the history (Phase 1) and the PR's goal (Phase 2), check whether this PR meets a minimum bar. Run `gh pr checks` to get CI status, then evaluate:
-
-- Is CI passing (build, typecheck, tests)? If CI is still running, note it and proceed with caveats.
-- Are the tests meaningful (from your Phase 1 analysis)?
-- Is the diff coherent — a focused change, or a WIP dump with unrelated changes mixed in?
-- **Changeset**: Check whether the PR includes a changeset. If the repo uses changesets (look for a `.changeset/` directory), any PR that changes runtime behavior, fixes a bug, or adds a feature must have one. A missing changeset is a quality gate failure — flag it explicitly.
-- Does it meet other repo requirements (docs updates, AGENTS.md updates, etc.)?
-- **Approach**: Given the history and the PR's stated goal, does the approach make sense? Is it solving the problem the right way, or is it fighting the existing design? If a simpler or more consistent approach exists given the codebase's history, flag it.
-- **Author verification**: Has the PR author stated that they personally verified the change works? Look for comments like "tested locally", "verified this fixes…", reproduction evidence, screenshots, or test output. If the PR description and comments contain no indication that the author actually ran or tested their change, flag it — this should be raised as a question in the review comment (Phase 7) if the user chooses to draft one.
-- Any obvious red flags — broken patterns, removed safety checks, huge unrelated diffs?
-
-If the PR doesn't meet the bar, tell the user directly:
-
-```
-This PR isn't ready for detailed review yet:
-- [specific reasons]
-
-A) Review it anyway — I want to understand what's here
-B) Help me draft feedback to the author about what needs fixing
-C) Stop here
-```
-
-If the PR passes the bar (or the user chooses to proceed anyway), move to the walkthrough.
+Do not move to Phase 4 until the user has seen the history for all major changed areas and indicated they're ready.
 
 ## Phase 4: Walkthrough
 
-Walk through the actual PR diff one piece at a time, grounded in the history context from Phase 1.
+Walk through the actual PR diff one piece at a time, grounded in the history context from Phase 3.
 
 For each chunk:
 - Show what changed (keep it brief — the user can read the diff themselves)
