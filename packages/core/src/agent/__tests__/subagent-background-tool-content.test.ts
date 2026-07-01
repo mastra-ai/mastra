@@ -53,8 +53,17 @@ describe('sub-agent background dispatch tool content', () => {
             stream: convertArrayToReadableStream([
               { type: 'stream-start', warnings: [] },
               { type: 'response-metadata', id: 's1', modelId: 'mock', timestamp: new Date(0) },
-              { type: 'tool-call', toolCallId: 'call-1', toolName: 'agent-helper', input: JSON.stringify({ prompt: 'hi' }) },
-              { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'agent-helper',
+                input: JSON.stringify({ prompt: 'hi' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
             ]),
           };
         }
