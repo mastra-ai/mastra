@@ -25,6 +25,15 @@ export interface BundlerOptions {
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];
+  /**
+   * Packages to force-exclude from the generated `package.json` even if
+   * dependency analysis flagged them as in use. Useful when conditional
+   * dynamic imports (e.g. dev-only `await import('@mastra/libsql')` gated
+   * by `process.env.NODE_ENV`) get picked up by static analysis but are
+   * tree-shaken out of the production bundle. See
+   * https://github.com/mastra-ai/mastra/issues/16645.
+   */
+  excludePackages?: string[];
 }
 
 /**

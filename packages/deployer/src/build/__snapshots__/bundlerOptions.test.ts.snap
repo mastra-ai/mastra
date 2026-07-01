@@ -16,6 +16,15 @@ export { bundler };
 "
 `;
 
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./__fixtures__/with-exclude-packages.js 1`] = `
+"const bundler = {
+  excludePackages: ["@mastra/libsql"]
+};
+
+export { bundler };
+"
+`;
+
 exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic.js 1`] = `
 "const bundler = {};
 
