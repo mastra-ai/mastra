@@ -19,11 +19,9 @@ Debugging Github issues has 3 stages. Each stage must be fully completed before 
 
 ## Stage 1 "Analyze"
 
-1. The issue description and requirements
-2. Any linked PRs or related issues
-3. Comments and discussion threads
-4. Labels and metadata
-5. Update your ISSUE_SUMMARY$1.md with your analysis findings
+Use `.mastracode/shared/issue-debug-context.md` for the context-gathering portion of this analysis. Keep this command responsible for the debug summary, reproduction planning, failing test, fix flow, and user checkpoints.
+
+Update your ISSUE_SUMMARY$1.md with your analysis findings.
 
 ## Stage 2 "Reproduce"
 

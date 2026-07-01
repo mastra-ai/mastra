@@ -99,6 +99,43 @@ describe('createCodingAgent', () => {
     );
     expect(agent).toBeInstanceOf(Agent);
   });
+
+  it('does not include TaskSignalProvider when no memory is configured', () => {
+    const agent = createCodingAgent(baseConfig());
+    const tools = agent.listTools();
+    expect(Object.keys(tools)).not.toContain('task_write');
+    expect(Object.keys(tools)).not.toContain('task_check');
+  });
+
+  it('includes TaskSignalProvider when memory is configured', () => {
+    const memory = {} as any;
+    const agent = createCodingAgent(baseConfig({ memory }));
+    const tools = agent.listTools();
+    expect(Object.keys(tools)).toContain('task_write');
+    expect(Object.keys(tools)).toContain('task_check');
+  });
+
+  it('merges TaskSignalProvider into caller-provided signals when memory is configured', () => {
+    const memory = {} as any;
+    const agent = createCodingAgent(
+      baseConfig({
+        memory,
+        signals: [],
+      }),
+    );
+    const tools = agent.listTools();
+    expect(Object.keys(tools)).toContain('task_write');
+  });
+
+  it('does not add TaskSignalProvider to caller-provided signals when no memory', () => {
+    const agent = createCodingAgent(
+      baseConfig({
+        signals: [],
+      }),
+    );
+    const tools = agent.listTools();
+    expect(Object.keys(tools)).not.toContain('task_write');
+  });
 });
 
 describe('buildBasePrompt', () => {

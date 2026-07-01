@@ -31,7 +31,7 @@ permissions: {}
 jobs:
   unit-test:
     name: UNIT Test (Shard ${{ matrix.shard }})
-    if: inputs.has_code == 'true'
+    if: inputs.has_code == 'true' && inputs.run_full != 'false'
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -147,7 +147,7 @@ jobs:
 
   e2e-test:
     name: E2E Test (${{ matrix.project }})
-    if: inputs.has_code == 'true'
+    if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.test_files != '')
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -220,23 +220,23 @@ jobs:
       contents: read
 
     steps:
-      - name: Skip tests for non-code changes
-        if: inputs.has_code != 'true'
-        run: echo "No code changes detected; skipping unit and E2E tests."
+      - name: Skip tests when no test selection is needed
+        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.test_files == '')
+        run: echo "No unit or E2E tests selected; skipping report merge."
 
       - name: Checkout repo
-        if: inputs.has_code == 'true'
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.test_files != '')
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 1
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true'
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.test_files != '')
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download test results
-        if: inputs.has_code == 'true'
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.test_files != '')
         uses: actions/download-artifact@v6
         with:
           pattern: vitest-blob-*
@@ -244,5 +244,5 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
-        if: inputs.has_code == 'true'
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.test_files != '')
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests

@@ -862,6 +862,17 @@ export class Agent<
   }
 
   /**
+   * Returns the uncombined input processors suitable for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest`; this
+   * method returns them individually so the `ProcessorRunner` can invoke
+   * each processor's `processLLMRequest` method.
+   * @internal — used by `DurableAgent` preparation to populate the registry.
+   */
+  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext);
+  }
+
+  /**
    * Set the durable objective for a thread. The objective is judged in the
    * execution loop until complete or the run budget is exhausted. Requires a
    * memory-backed thread and a Mastra storage instance; no-ops otherwise.
