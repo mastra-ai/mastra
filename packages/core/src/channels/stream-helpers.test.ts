@@ -2,15 +2,24 @@
  * Tests for packages/core/src/channels/stream-helpers.ts
  *
  * `extractErrorMessage`, `chunkToFallbackMessage`, and `renderBuiltInToolEvent`
- * are pure functions — no I/O, no async behaviour, no mocking required.
- * `renderBuiltInToolEvent` delegates to the already-tested `formatTool*`
- * helpers in `./formatting`, so these tests verify correct routing rather
- * than re-testing the formatting output itself.
+ * are pure functions. `renderBuiltInToolEvent` delegates to the already-tested
+ * `formatTool*` helpers in `./formatting`, so these tests verify correct routing
+ * rather than re-testing the formatting output itself.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import type { ToolDisplayEvent } from './types';
+vi.mock('./chat-lazy', () => ({
+  chatModule: () => ({
+    Actions: (props: unknown) => ({ type: 'Actions', props }),
+    Button: (props: unknown) => ({ type: 'Button', props }),
+    Card: (props: unknown) => ({ type: 'Card', props }),
+    CardText: (text: string, options?: unknown) => ({ type: 'CardText', text, options }),
+  }),
+}));
+
+import { formatToolApproval, formatToolResult, formatToolRunning } from './formatting';
 import { chunkToFallbackMessage, extractErrorMessage, renderBuiltInToolEvent } from './stream-helpers';
+import type { ToolDisplayEvent } from './types';
 
 // ---------------------------------------------------------------------------
 // extractErrorMessage
@@ -184,38 +193,28 @@ describe('renderBuiltInToolEvent', () => {
     args: { code: 'print()' },
   };
 
-  it('renders a "running" event in text mode', () => {
-    const result = renderBuiltInToolEvent(runningEvent, 'text') as string;
-    expect(result).toContain('search');
-    expect(result).toContain('cats');
+  it('routes a "running" event to the text formatter in text mode', () => {
+    const result = renderBuiltInToolEvent(runningEvent, 'text');
+    expect(result).toBe(formatToolRunning('search', 'cats', false));
   });
 
-  it('renders a "result" event in text mode', () => {
-    const result = renderBuiltInToolEvent(resultEvent, 'text') as string;
-    expect(result).toContain('search');
-    expect(result).toContain('5 results');
+  it('routes a "result" event to the text formatter', () => {
+    const result = renderBuiltInToolEvent(resultEvent, 'text');
+    expect(result).toBe(formatToolResult('search', 'cats', '5 results', false, 120, false));
   });
 
-  it('renders an "error" event in text mode using errorText', () => {
-    const result = renderBuiltInToolEvent(errorEvent, 'text') as string;
-    expect(result).toContain('timeout');
+  it('routes an "error" event using errorText and isError=true', () => {
+    const result = renderBuiltInToolEvent(errorEvent, 'text');
+    expect(result).toBe(formatToolResult('search', 'cats', 'timeout', true, 50, false));
   });
 
-  it('passes isError=true for error events regardless of mode', () => {
-    const result = renderBuiltInToolEvent(errorEvent, 'text') as string;
-    expect(result).toContain('✗');
-  });
-
-  it('always renders approval events as cards-eligible even in text mode', () => {
-    // formatToolApproval is called with useCards=true unconditionally
+  it('routes approval events to the card formatter even in text mode', () => {
     const result = renderBuiltInToolEvent(approvalEvent, 'text');
-    expect(result).toBeDefined();
+    expect(result).toEqual(formatToolApproval('run_code', 'print()', 'call-1', true));
   });
 
-  it('renders a "running" event identically in shape across modes', () => {
-    const textResult = renderBuiltInToolEvent(runningEvent, 'text');
-    const cardsResult = renderBuiltInToolEvent(runningEvent, 'cards');
-    expect(textResult).toBeDefined();
-    expect(cardsResult).toBeDefined();
+  it('routes a "running" event to mode-specific formatters', () => {
+    expect(renderBuiltInToolEvent(runningEvent, 'text')).toBe(formatToolRunning('search', 'cats', false));
+    expect(renderBuiltInToolEvent(runningEvent, 'cards')).toEqual(formatToolRunning('search', 'cats', true));
   });
 });
