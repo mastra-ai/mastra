@@ -237,7 +237,7 @@ export class RailwaySandbox extends MastraSandbox {
       }
 
       await this.restart();
-      return operation();
+      return await operation();
     } finally {
       this._scheduleCheckpointRefresh();
     }
