@@ -520,7 +520,10 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
         void agentOptions?.onFinish?.(result);
       };
 
-      if ((await params.getModel()).specificationVersion === 'v1' && typeof params.streamLegacy === 'function') {
+      if (
+        (await params.getModel({ requestContext })).specificationVersion === 'v1' &&
+        typeof params.streamLegacy === 'function'
+      ) {
         const { fullStream } = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...agentOptions,
           requestContext,
@@ -538,7 +541,17 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
           abortSignal,
         });
 
-        void modelOutput.text.then(streamPromise.resolve, streamPromise.reject);
+        // handleFinish (the agent's onFinish) is the sole source of truth for the
+        // final text — the success side of .text is intentionally a no-op.
+        // `modelOutput.text` can resolve with '' if a downstream output-processor
+        // throws inside the base output's try/catch (see output.ts:970-973,978-981)
+        // and it fires BEFORE handleFinish, so racing here would poison
+        // streamPromise. Only the rejection channel below is wired up so genuine
+        // stream errors still propagate.
+        void modelOutput.text.then(
+          () => {},
+          err => streamPromise.reject(err),
+        );
         stream = modelOutput.fullStream as ReadableStream<ChunkType>;
       }
 

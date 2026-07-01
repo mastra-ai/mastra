@@ -79514,6 +79514,179 @@ export interface DeleteStoredAgentsStoredAgentIdFavorite_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /stored/workflows
+// ============================================================================
+export type GetStoredWorkflows_QueryParams = {
+  /** Filter stored workflows by status (defaults to active when omitted by the handler) */
+  status?: ('active' | 'archived') | undefined;
+  /** Filter stored workflows by author identifier */
+  authorId?: string | undefined;
+};
+
+export type GetStoredWorkflows_Response = {
+  workflows: {
+    id: string;
+    description?: string | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    inputSchema: any;
+    outputSchema: any;
+    stateSchema?: any | undefined;
+    requestContextSchema?: any | undefined;
+    graph: any[];
+    status: 'active' | 'archived';
+    source: 'storage';
+    authorId?: string | undefined;
+    createdAt: Date | string;
+    updatedAt: Date | string;
+  }[];
+  total: number;
+};
+
+export type GetStoredWorkflows_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetStoredWorkflows_QueryParams extends never
+      ? {}
+      : {} extends GetStoredWorkflows_QueryParams
+        ? { query?: GetStoredWorkflows_QueryParams }
+        : { query: GetStoredWorkflows_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetStoredWorkflows_RouteContract {
+  pathParams: never;
+  queryParams: GetStoredWorkflows_QueryParams;
+  body: never;
+  request: GetStoredWorkflows_Request;
+  response: GetStoredWorkflows_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /stored/workflows
+// ============================================================================
+export type PostStoredWorkflows_Body = {
+  /** Workflow id — kebab-case, descriptive */
+  id: string;
+  description?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** JSON Schema (Draft 2020-12) for the workflow input */
+  inputSchema: any;
+  /** JSON Schema (Draft 2020-12) for the workflow output */
+  outputSchema: any;
+  stateSchema?: any | undefined;
+  requestContextSchema?: any | undefined;
+  /** Static workflow graph — SerializedStepFlowEntry[] with all refs as ids */
+  graph: any[];
+};
+
+export type PostStoredWorkflows_Response = {
+  ok: true;
+  id: string;
+};
+
+export type PostStoredWorkflows_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostStoredWorkflows_Body extends never
+      ? {}
+      : {} extends PostStoredWorkflows_Body
+        ? { body?: PostStoredWorkflows_Body }
+        : { body: PostStoredWorkflows_Body })
+>;
+
+export interface PostStoredWorkflows_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostStoredWorkflows_Body;
+  request: PostStoredWorkflows_Request;
+  response: PostStoredWorkflows_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /stored/workflows/:storedWorkflowId
+// ============================================================================
+export type GetStoredWorkflowsStoredWorkflowId_PathParams = {
+  /** Unique identifier for the stored workflow definition */
+  storedWorkflowId: string;
+};
+
+export type GetStoredWorkflowsStoredWorkflowId_Response = {
+  id: string;
+  description?: string | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  inputSchema: any;
+  outputSchema: any;
+  stateSchema?: any | undefined;
+  requestContextSchema?: any | undefined;
+  graph: any[];
+  status: 'active' | 'archived';
+  source: 'storage';
+  authorId?: string | undefined;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+export type GetStoredWorkflowsStoredWorkflowId_Request = Simplify<
+  (GetStoredWorkflowsStoredWorkflowId_PathParams extends never
+    ? {}
+    : { params: GetStoredWorkflowsStoredWorkflowId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetStoredWorkflowsStoredWorkflowId_RouteContract {
+  pathParams: GetStoredWorkflowsStoredWorkflowId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetStoredWorkflowsStoredWorkflowId_Request;
+  response: GetStoredWorkflowsStoredWorkflowId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /stored/workflows/:storedWorkflowId
+// ============================================================================
+export type DeleteStoredWorkflowsStoredWorkflowId_PathParams = {
+  /** Unique identifier for the stored workflow definition */
+  storedWorkflowId: string;
+};
+
+export type DeleteStoredWorkflowsStoredWorkflowId_Response = {
+  success: true;
+  message: string;
+};
+
+export type DeleteStoredWorkflowsStoredWorkflowId_Request = Simplify<
+  (DeleteStoredWorkflowsStoredWorkflowId_PathParams extends never
+    ? {}
+    : { params: DeleteStoredWorkflowsStoredWorkflowId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteStoredWorkflowsStoredWorkflowId_RouteContract {
+  pathParams: DeleteStoredWorkflowsStoredWorkflowId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteStoredWorkflowsStoredWorkflowId_Request;
+  response: DeleteStoredWorkflowsStoredWorkflowId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /stored/mcp-clients
 // ============================================================================
 export type GetStoredMcpClients_QueryParams = {
@@ -91860,6 +92033,10 @@ export interface RouteTypes {
   'DELETE /stored/agents/:agentId/versions/:versionId': DeleteStoredAgentsAgentIdVersionsVersionId_RouteContract;
   'PUT /stored/agents/:storedAgentId/favorite': PutStoredAgentsStoredAgentIdFavorite_RouteContract;
   'DELETE /stored/agents/:storedAgentId/favorite': DeleteStoredAgentsStoredAgentIdFavorite_RouteContract;
+  'GET /stored/workflows': GetStoredWorkflows_RouteContract;
+  'POST /stored/workflows': PostStoredWorkflows_RouteContract;
+  'GET /stored/workflows/:storedWorkflowId': GetStoredWorkflowsStoredWorkflowId_RouteContract;
+  'DELETE /stored/workflows/:storedWorkflowId': DeleteStoredWorkflowsStoredWorkflowId_RouteContract;
   'GET /stored/mcp-clients': GetStoredMcpClients_RouteContract;
   'GET /stored/mcp-clients/:storedMCPClientId': GetStoredMcpClientsStoredMCPClientId_RouteContract;
   'POST /stored/mcp-clients': PostStoredMcpClients_RouteContract;
@@ -92843,6 +93020,14 @@ export interface Client {
   };
   '/stored/skills/:storedSkillId/publish': {
     POST: PostStoredSkillsStoredSkillIdPublish_RouteContract;
+  };
+  '/stored/workflows': {
+    GET: GetStoredWorkflows_RouteContract;
+    POST: PostStoredWorkflows_RouteContract;
+  };
+  '/stored/workflows/:storedWorkflowId': {
+    DELETE: DeleteStoredWorkflowsStoredWorkflowId_RouteContract;
+    GET: GetStoredWorkflowsStoredWorkflowId_RouteContract;
   };
   '/stored/workspaces': {
     GET: GetStoredWorkspaces_RouteContract;

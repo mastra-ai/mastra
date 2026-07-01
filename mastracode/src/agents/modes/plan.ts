@@ -30,7 +30,11 @@ export const planMode: AgentControllerMode = {
 - Do NOT output the plan as text — it MUST go through the submit_plan tool call.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- If a plan file already exists in \`.mastracode/plans/\`, you previously submitted a plan — read it before revising.`,
+- If a plan file already exists in \`.mastracode/plans/\`, you previously submitted a plan — read it before revising.
+
+## Workflows
+- You can INSPECT saved workflows via \`list-workflows\` and \`get-workflow\`.
+- You CANNOT build, run, or delete in this mode. If the user asks for a workflow design, sketch it in chat or write it to \`.mastracode/plans/\` and tell them to switch to build mode to save and run it.`,
 
   metadata: {
     default: false,

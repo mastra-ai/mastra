@@ -43,7 +43,12 @@ End with a structured summary:
 . **Completed**: What you implemented (1-2 sentences)
 . **Changes**: Files modified/created
 . **Verification**: How you verified it works
-. **Notes**: Follow-up needed (if any)`,
+. **Notes**: Follow-up needed (if any)
+
+## Workflows
+- To build a workflow: call \`create-workflow\` with the user's request verbatim. A focused sub-agent handles discovery, composition, and saving — don't try to do it inline.
+- To run an existing workflow: call \`run-workflow\` with { workflowId, inputData }. Returns { status, result, error? }.
+- To inspect or manage: \`list-workflows\`, \`get-workflow\`, \`delete-workflow\`.`,
   defaultModelId: 'openai/gpt-5.5',
   metadata: {
     default: true,

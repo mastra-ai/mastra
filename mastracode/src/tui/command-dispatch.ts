@@ -43,6 +43,7 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
+  handleWorkflowsCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -158,6 +159,10 @@ export async function dispatchSlashCommand(
       return true;
     case 'sandbox':
       await handleSandboxCmd(ctx, args);
+      return true;
+    case 'workflows':
+    case 'workflow':
+      await handleWorkflowsCommand(ctx, args);
       return true;
     case 'mode':
       await handleModeCommand(ctx, args);

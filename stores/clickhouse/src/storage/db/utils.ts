@@ -34,6 +34,7 @@ import {
   TABLE_NOTIFICATIONS,
   TABLE_HARNESS_SESSIONS,
   TABLE_THREAD_STATE,
+  TABLE_WORKFLOW_DEFINITIONS,
 } from '@mastra/core/storage';
 import type { ClickhouseReplicationConfig } from './replication';
 
@@ -78,6 +79,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
   [TABLE_THREAD_STATE]: `ReplacingMergeTree()`,
+  [TABLE_WORKFLOW_DEFINITIONS]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {

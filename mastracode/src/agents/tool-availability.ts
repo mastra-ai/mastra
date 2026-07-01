@@ -27,6 +27,9 @@ export const PLAN_MODE_AVAILABLE_TOOLS: readonly string[] = [
   'task_check',
   // Notification access
   MC_TOOLS.NOTIFICATION_INBOX,
+  // Read-only workflow inspection (no create/run/delete in plan mode).
+  'list-workflows',
+  'get-workflow',
 ];
 
 export const EXPLORE_MODE_AVAILABLE_TOOLS: readonly string[] = [
@@ -36,6 +39,9 @@ export const EXPLORE_MODE_AVAILABLE_TOOLS: readonly string[] = [
   MC_TOOLS.FILE_STAT,
   MC_TOOLS.LSP_INSPECT,
   'ask_user',
+  // Read-only workflow inspection (no create/run/delete in fast mode either).
+  'list-workflows',
+  'get-workflow',
 ];
 
 export const GOAL_JUDGE_READONLY_TOOLS: readonly string[] = [

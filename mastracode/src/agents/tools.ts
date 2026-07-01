@@ -16,13 +16,18 @@ import type { McpManager } from '../mcp';
 import type { MastraCodeComposedState } from '../schema';
 import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
+import { createWorkflowTool } from '../tools/workflows/create-workflow.js';
+import { deleteWorkflowTool } from '../tools/workflows/delete-workflow.js';
+import { getWorkflowTool } from '../tools/workflows/get-workflow.js';
+import { listWorkflowsTool } from '../tools/workflows/list-workflows.js';
+import { runWorkflowTool } from '../tools/workflows/run-workflow.js';
 
 /** Minimal shape for tools passed to createDynamicTools. */
 export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
-class LazyNotificationsStorage extends NotificationsStorage {
+export class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
     super();
   }
@@ -107,6 +112,15 @@ export function createDynamicTools(
     // Only tools without a workspace equivalent remain here.
     const tools: Record<string, ToolLike> = {
       request_access: requestSandboxAccessTool,
+      // Workflow surface. `create-workflow` delegates to the workflow-builder
+      // sub-agent; the other four are simple management ops over the stored
+      // workflows the user has built. Permission categories live in
+      // permissions.ts (TOOL_CATEGORY_MAP).
+      'create-workflow': createWorkflowTool,
+      'list-workflows': listWorkflowsTool,
+      'get-workflow': getWorkflowTool,
+      'run-workflow': runWorkflowTool,
+      'delete-workflow': deleteWorkflowTool,
     };
 
     if (storage) {

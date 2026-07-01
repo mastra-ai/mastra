@@ -90,6 +90,7 @@ import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
+import { registerWorkflowBuilderPrimitives } from './workflows/register-primitives.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
@@ -811,6 +812,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,
     ownerId,
+    // Surface the project root so boot/mount paths can wire workflow tools
+    // against a workspace anchored at it without re-running detectProject().
+    projectPath: project.rootPath,
+    // Surface the Agent instance so registerWorkflowBuilderPrimitives can add
+    // it as a plain agent on the Mastra registry. Workflows then compose it
+    // as an agent step (agentId: 'code-agent') and delegate open-ended tool
+    // orchestration to it — code-agent already has full workspace / MCP / web
+    // access via its dynamic tool factory.
+    codeAgent,
     // Lets the composition layer publish the created session back into the
     // config closures (e.g. notification stream options read it lazily).
     setActiveSession: (session: Session<MastraCodeState>) => {
@@ -894,10 +904,16 @@ export async function wireSessionConcerns(
  */
 export async function bootLocalAgentController(config?: MastraCodeConfig) {
   const base = await createMastraCodeAgentController(config);
-  const { controller, sessionId, ownerId } = base;
+  const { controller, sessionId, ownerId, projectPath, codeAgent, mcpManager } = base;
 
   await controller.init();
-  await controller.getMastra()?.startWorkers();
+  // Register workflow primitives (sub-agent + workspace tools + code-agent
+  // + web + notification_inbox + snapshot of MCP tools) on the controller's
+  // Mastra so the loadStoredWorkflows() hook in startWorkers() can rehydrate
+  // any saved workflows against the right tool/agent registry.
+  const mastra = controller.getMastra();
+  if (mastra) await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
+  await mastra?.startWorkers();
   const session = await controller.createSession({ id: sessionId, ownerId });
   await wireSessionConcerns(base, session);
 
@@ -925,7 +941,7 @@ export async function mountAgentControllerOnMastra(
   config?: MastraCodeConfig & { mastra?: Mastra; controllerId?: string },
 ): Promise<MountedMastraCode> {
   const base = await createMastraCodeAgentController(config);
-  const { controller, storage } = base;
+  const { controller, storage, projectPath, codeAgent, mcpManager } = base;
   const controllerId = config?.controllerId ?? controller.id;
 
   // Construct (or reuse) the Mastra and register the controller on it BEFORE init.
@@ -933,6 +949,7 @@ export async function mountAgentControllerOnMastra(
   // subsequent init() takes the "inherit parent storage" branch rather than
   // building a duplicate internal Mastra.
   let mastra: Mastra;
+  const weOwnTheMastra = !config?.mastra;
   if (config?.mastra) {
     // Mounting onto a Mastra the caller already built. Ensure the controller's
     // back-reference points at it (idempotent — only sets #externalMastra).
@@ -943,6 +960,11 @@ export async function mountAgentControllerOnMastra(
   }
 
   await controller.init();
+  // Only register workflow primitives when we own the Mastra. If the caller
+  // brought their own, they're responsible for what's registered on it.
+  if (weOwnTheMastra) {
+    await registerWorkflowBuilderPrimitives(mastra, { projectPath, codeAgent, mcpManager });
+  }
   await controller.getMastra()?.startWorkers();
 
   return { ...base, mastra };
