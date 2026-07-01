@@ -17,94 +17,147 @@ import { RailwaySandbox } from './index';
 // Mock the Railway SDK
 // =============================================================================
 
-const { mockSandbox, mockForkedSandbox, mockTemplate, mockCreate, mockConnect, mockTemplateFactory, makeExecHandle } =
-  vi.hoisted(() => {
-    /**
-     * Build a fake ExecHandle: a Promise that resolves to an ExecResult and
-     * exposes `kill`. Invokes onStdout/onStderr asynchronously to mimic the
-     * real SDK, which streams chunks after the handle is returned.
-     */
-    const makeExecHandle = (
-      result: { exitCode: number | null; stdout?: string; stderr?: string; timedOut?: boolean; truncated?: boolean },
-      opts?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void },
-    ) => {
-      queueMicrotask(() => {
-        if (result.stdout) opts?.onStdout?.(result.stdout);
-        if (result.stderr) opts?.onStderr?.(result.stderr);
-      });
-      const execResult = {
-        exitCode: result.exitCode,
-        stdout: result.stdout ?? '',
-        stderr: result.stderr ?? '',
-        truncated: result.truncated ?? false,
-        timedOut: result.timedOut ?? false,
-      };
-      const promise = Promise.resolve(execResult) as Promise<typeof execResult> & {
-        kill: ReturnType<typeof vi.fn>;
-      };
-      promise.kill = vi.fn().mockResolvedValue(true);
-      return promise;
+const {
+  mockSandbox,
+  mockForkedSandbox,
+  mockTemplate,
+  mockCreate,
+  mockConnect,
+  mockCheckpoints,
+  mockDeleteCheckpoint,
+  mockTemplateFactory,
+  makeExecHandle,
+  MockSandboxNotFoundError,
+  MockSandboxFailedError,
+  MockRailwayConnectionError,
+  MockRailwayGraphQLError,
+  MockSandboxTimeoutError,
+} = vi.hoisted(() => {
+  /**
+   * Build a fake ExecHandle: a Promise that resolves to an ExecResult and
+   * exposes `kill`. Invokes onStdout/onStderr asynchronously to mimic the
+   * real SDK, which streams chunks after the handle is returned.
+   */
+  const makeExecHandle = (
+    result: { exitCode: number | null; stdout?: string; stderr?: string; timedOut?: boolean; truncated?: boolean },
+    opts?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void },
+  ) => {
+    queueMicrotask(() => {
+      if (result.stdout) opts?.onStdout?.(result.stdout);
+      if (result.stderr) opts?.onStderr?.(result.stderr);
+    });
+    const execResult = {
+      exitCode: result.exitCode,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
+      truncated: result.truncated ?? false,
+      timedOut: result.timedOut ?? false,
     };
-
-    const mockForkedSandbox = {
-      id: 'rw-forked-456',
-      status: 'RUNNING',
-      environmentId: 'env-1',
-      region: 'us-west',
-      networkIsolation: 'ISOLATED',
-      idleTimeoutMinutes: 30,
-      createdAt: '2026-01-02T00:00:00.000Z',
-      exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
-        makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
-      ),
-      destroy: vi.fn().mockResolvedValue(undefined),
+    const promise = Promise.resolve(execResult) as Promise<typeof execResult> & {
+      kill: ReturnType<typeof vi.fn>;
     };
+    promise.kill = vi.fn().mockResolvedValue(true);
+    return promise;
+  };
 
-    const mockSandbox = {
-      id: 'rw-sandbox-123',
-      status: 'RUNNING',
-      environmentId: 'env-1',
-      region: 'us-west',
-      networkIsolation: 'ISOLATED',
-      idleTimeoutMinutes: 30,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
-        makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
-      ),
-      fork: vi.fn().mockResolvedValue(mockForkedSandbox),
-      destroy: vi.fn().mockResolvedValue(undefined),
-    };
+  const mockForkedSandbox = {
+    id: 'rw-forked-456',
+    status: 'RUNNING',
+    environmentId: 'env-1',
+    region: 'us-west',
+    networkIsolation: 'ISOLATED',
+    idleTimeoutMinutes: 30,
+    createdAt: '2026-01-02T00:00:00.000Z',
+    exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
+      makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
+    ),
+    destroy: vi.fn().mockResolvedValue(undefined),
+  };
 
-    // Chainable template builder mock.
-    const mockTemplate = {
-      run: vi.fn(() => mockTemplate),
-      withPackages: vi.fn(() => mockTemplate),
-      withEnv: vi.fn(() => mockTemplate),
-      workdir: vi.fn(() => mockTemplate),
-      build: vi.fn(() => Promise.resolve(mockTemplate)),
-    };
+  const mockSandbox = {
+    id: 'rw-sandbox-123',
+    status: 'RUNNING',
+    environmentId: 'env-1',
+    region: 'us-west',
+    networkIsolation: 'ISOLATED',
+    idleTimeoutMinutes: 30,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
+      makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
+    ),
+    fork: vi.fn().mockResolvedValue(mockForkedSandbox),
+    checkpoint: vi.fn().mockResolvedValue({ id: 'checkpoint-1', key: 'checkpoint-1', environmentId: 'env-1' }),
+    destroy: vi.fn().mockResolvedValue(undefined),
+  };
 
-    const mockCreate = vi.fn().mockResolvedValue(mockSandbox);
-    const mockConnect = vi.fn().mockResolvedValue(mockSandbox);
-    const mockTemplateFactory = vi.fn(() => mockTemplate);
+  // Chainable template builder mock.
+  const mockTemplate = {
+    run: vi.fn(() => mockTemplate),
+    withPackages: vi.fn(() => mockTemplate),
+    withEnv: vi.fn(() => mockTemplate),
+    workdir: vi.fn(() => mockTemplate),
+    build: vi.fn(() => Promise.resolve(mockTemplate)),
+    compile: vi.fn(() => ({ instructions: ['echo setup1', 'echo setup2'] })),
+  };
 
-    return {
-      mockSandbox,
-      mockForkedSandbox,
-      mockTemplate,
-      mockCreate,
-      mockConnect,
-      mockTemplateFactory,
-      makeExecHandle,
-    };
-  });
+  const mockCreate = vi.fn().mockResolvedValue(mockSandbox);
+  const mockConnect = vi.fn().mockResolvedValue(mockSandbox);
+  const mockCheckpoints = vi.fn().mockResolvedValue([]);
+  const mockDeleteCheckpoint = vi.fn().mockResolvedValue(undefined);
+  const mockTemplateFactory = vi.fn(() => mockTemplate);
+
+  class MockSandboxNotFoundError extends Error {
+    name = 'SandboxNotFoundError';
+  }
+
+  class MockSandboxFailedError extends Error {
+    name = 'SandboxFailedError';
+  }
+
+  class MockRailwayConnectionError extends Error {
+    name = 'RailwayConnectionError';
+  }
+
+  class MockRailwayGraphQLError extends Error {
+    name = 'RailwayGraphQLError';
+  }
+
+  class MockSandboxTimeoutError extends Error {
+    name = 'SandboxTimeoutError';
+    resource = 'sandbox';
+  }
+
+  return {
+    mockSandbox,
+    mockForkedSandbox,
+    mockTemplate,
+    mockCreate,
+    mockConnect,
+    mockCheckpoints,
+    mockDeleteCheckpoint,
+    mockTemplateFactory,
+    makeExecHandle,
+    MockSandboxNotFoundError,
+    MockSandboxFailedError,
+    MockRailwayConnectionError,
+    MockRailwayGraphQLError,
+    MockSandboxTimeoutError,
+  };
+});
 
 vi.mock('railway', () => ({
   Sandbox: {
     create: mockCreate,
     connect: mockConnect,
+    checkpoints: mockCheckpoints,
+    deleteCheckpoint: mockDeleteCheckpoint,
     template: mockTemplateFactory,
   },
+  SandboxNotFoundError: MockSandboxNotFoundError,
+  SandboxFailedError: MockSandboxFailedError,
+  RailwayConnectionError: MockRailwayConnectionError,
+  RailwayGraphQLError: MockRailwayGraphQLError,
+  SandboxTimeoutError: MockSandboxTimeoutError,
 }));
 
 // =============================================================================
@@ -113,17 +166,25 @@ vi.mock('railway', () => ({
 
 describe('RailwaySandbox', () => {
   beforeEach(() => {
-    mockCreate.mockClear().mockResolvedValue(mockSandbox);
-    mockConnect.mockClear().mockResolvedValue(mockSandbox);
-    mockTemplateFactory.mockClear().mockReturnValue(mockTemplate);
-    mockTemplate.run.mockClear().mockReturnValue(mockTemplate);
-    mockTemplate.withPackages.mockClear().mockReturnValue(mockTemplate);
-    mockTemplate.withEnv.mockClear().mockReturnValue(mockTemplate);
-    mockTemplate.workdir.mockClear().mockReturnValue(mockTemplate);
-    mockTemplate.build.mockClear().mockResolvedValue(mockTemplate);
-    mockSandbox.exec.mockClear();
-    mockSandbox.fork.mockClear().mockResolvedValue(mockForkedSandbox);
-    mockSandbox.destroy.mockClear().mockResolvedValue(undefined);
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+    mockCreate.mockReset().mockResolvedValue(mockSandbox);
+    mockConnect.mockReset().mockResolvedValue(mockSandbox);
+    mockCheckpoints.mockReset().mockResolvedValue([]);
+    mockDeleteCheckpoint.mockReset().mockResolvedValue(undefined);
+    mockTemplateFactory.mockReset().mockReturnValue(mockTemplate);
+    mockTemplate.run.mockReset().mockReturnValue(mockTemplate);
+    mockTemplate.withPackages.mockReset().mockReturnValue(mockTemplate);
+    mockTemplate.withEnv.mockReset().mockReturnValue(mockTemplate);
+    mockTemplate.workdir.mockReset().mockReturnValue(mockTemplate);
+    mockTemplate.build.mockReset().mockResolvedValue(mockTemplate);
+    mockTemplate.compile.mockReset().mockReturnValue({ instructions: ['echo setup1', 'echo setup2'] });
+    mockSandbox.exec.mockReset();
+    mockSandbox.fork.mockReset().mockResolvedValue(mockForkedSandbox);
+    mockSandbox.checkpoint
+      .mockReset()
+      .mockResolvedValue({ id: 'checkpoint-1', key: 'checkpoint-1', environmentId: 'env-1' });
+    mockSandbox.destroy.mockReset().mockResolvedValue(undefined);
     mockSandbox.exec.mockImplementation((_command: string, options?: { onStdout?: (c: string) => void }) =>
       makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
     );
@@ -229,6 +290,63 @@ describe('RailwaySandbox', () => {
       expect(mockTemplate.build).not.toHaveBeenCalled();
       expect(mockCreate).not.toHaveBeenCalled();
     });
+
+    it('restores from a saved checkpoint without deleting it', async () => {
+      mockCheckpoints.mockResolvedValueOnce([
+        { id: 'checkpoint-id', key: 'mastracode-repo-abc123', environmentId: 'env-1' },
+      ]);
+      const sandbox = new RailwaySandbox({ token: 'tok', checkpointName: 'mastracode-repo-abc123' });
+      await sandbox._start();
+
+      expect(mockCreate).toHaveBeenCalledWith('mastracode-repo-abc123', expect.objectContaining({ token: 'tok' }));
+      expect(mockDeleteCheckpoint).not.toHaveBeenCalled();
+      expect(mockTemplateFactory).not.toHaveBeenCalled();
+      expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
+      expect(sandbox.status).toBe('running');
+    });
+
+    it('creates from template and captures a checkpoint when the checkpoint is missing', async () => {
+      mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
+
+      const sandbox = new RailwaySandbox({
+        token: 'tok',
+        checkpointName: 'mastracode-repo-abc123',
+        template: t => t.run('npm i -g pnpm'),
+      });
+      await sandbox._start();
+
+      expect(mockCreate).toHaveBeenNthCalledWith(
+        1,
+        'mastracode-repo-abc123',
+        expect.objectContaining({ token: 'tok' }),
+      );
+      expect(mockCreate).toHaveBeenNthCalledWith(2, mockTemplate, expect.objectContaining({ token: 'tok' }));
+      expect(mockSandbox.checkpoint).toHaveBeenCalledWith('mastracode-repo-abc123');
+      expect(sandbox.status).toBe('running');
+    });
+
+    it('refreshes the checkpoint shortly before the sandbox idle timeout', async () => {
+      vi.useFakeTimers();
+      mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
+      mockCheckpoints
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: 'old-checkpoint', key: 'mastracode-repo-abc123', environmentId: 'env-1' }]);
+
+      const sandbox = new RailwaySandbox({
+        token: 'tok',
+        checkpointName: 'mastracode-repo-abc123',
+        idleTimeoutMinutes: 1,
+        template: t => t.run('npm i -g pnpm'),
+      });
+      await sandbox._start();
+      expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(50_000);
+
+      expect(mockDeleteCheckpoint).toHaveBeenCalledWith('old-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(2);
+      expect(mockSandbox.checkpoint).toHaveBeenLastCalledWith('mastracode-repo-abc123');
+    });
   });
 
   describe('fork', () => {
@@ -289,6 +407,142 @@ describe('RailwaySandbox', () => {
 
       const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { timeoutSec?: number };
       expect(sentOptions.timeoutSec).toBe(5);
+    });
+
+    it('reconnects and retries when the sandbox is unavailable', async () => {
+      const reconnectedSandbox = {
+        ...mockSandbox,
+        id: 'rw-sandbox-123',
+        exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void }) =>
+          makeExecHandle({ exitCode: 0, stdout: 'after reconnect' }, options),
+        ),
+      };
+      mockSandbox.exec.mockRejectedValueOnce(new MockSandboxNotFoundError('sandbox destroyed'));
+      mockConnect.mockResolvedValueOnce(reconnectedSandbox);
+
+      const sandbox = new RailwaySandbox({ token: 't' });
+      const result = await sandbox.executeCommand!('echo hello');
+
+      expect(mockConnect).toHaveBeenCalledWith('rw-sandbox-123', expect.objectContaining({ token: 't' }));
+      expect(mockSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(reconnectedSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('after reconnect');
+    });
+
+    it('reconnects and retries when the SDK wraps a connection error in cause', async () => {
+      const reconnectedSandbox = {
+        ...mockSandbox,
+        id: 'rw-sandbox-123',
+        exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void }) =>
+          makeExecHandle({ exitCode: 0, stdout: 'after reconnect' }, options),
+        ),
+      };
+      const wrappedError = Object.assign(new Error('tool execution failed'), {
+        cause: new MockRailwayConnectionError(
+          'tcp-proxy files WebSocket closed (code 1008: Sandbox is not running (status: DESTROYED).)',
+        ),
+      });
+      mockSandbox.exec.mockRejectedValueOnce(wrappedError);
+      mockConnect.mockResolvedValueOnce(reconnectedSandbox);
+
+      const sandbox = new RailwaySandbox({ token: 't' });
+      const result = await sandbox.executeCommand!('echo hello');
+
+      expect(mockConnect).toHaveBeenCalledWith('rw-sandbox-123', expect.objectContaining({ token: 't' }));
+      expect(mockSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(reconnectedSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('after reconnect');
+    });
+
+    it('reconnects and retries when the SDK wraps a serialized connection error in cause', async () => {
+      const reconnectedSandbox = {
+        ...mockSandbox,
+        id: 'rw-sandbox-123',
+        exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void }) =>
+          makeExecHandle({ exitCode: 0, stdout: 'after reconnect' }, options),
+        ),
+      };
+      const wrappedError = Object.assign(new Error('tool execution failed'), {
+        cause: {
+          name: 'RailwayConnectionError',
+          message: 'tcp-proxy files WebSocket closed (code 1008: Sandbox is not running (status: DESTROYED).)',
+          closeCode: 1008,
+        },
+      });
+      mockSandbox.exec.mockRejectedValueOnce(wrappedError);
+      mockConnect.mockResolvedValueOnce(reconnectedSandbox);
+
+      const sandbox = new RailwaySandbox({ token: 't' });
+      const result = await sandbox.executeCommand!('echo hello');
+
+      expect(mockConnect).toHaveBeenCalledWith('rw-sandbox-123', expect.objectContaining({ token: 't' }));
+      expect(mockSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(reconnectedSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('after reconnect');
+    });
+
+    it('creates a new sandbox when reconnect returns a destroyed sandbox', async () => {
+      const destroyedSandbox = { ...mockSandbox, status: 'DESTROYED' };
+      const recreatedSandbox = {
+        ...mockSandbox,
+        id: 'rw-sandbox-new',
+        exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void }) =>
+          makeExecHandle({ exitCode: 0, stdout: 'after recreate' }, options),
+        ),
+      };
+      mockSandbox.exec.mockRejectedValueOnce(new MockSandboxNotFoundError('sandbox destroyed'));
+      mockConnect.mockResolvedValueOnce(destroyedSandbox);
+      mockCreate.mockResolvedValueOnce(mockSandbox).mockResolvedValueOnce(recreatedSandbox);
+
+      const sandbox = new RailwaySandbox({ token: 't' });
+      const result = await sandbox.executeCommand!('echo hello');
+
+      expect(mockConnect).toHaveBeenCalledWith('rw-sandbox-123', expect.objectContaining({ token: 't' }));
+      expect(mockCreate).toHaveBeenCalledTimes(2);
+      expect(recreatedSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('after recreate');
+    });
+
+    it('creates a new sandbox when reconnect after an unavailable operation fails', async () => {
+      const recreatedSandbox = {
+        ...mockSandbox,
+        id: 'rw-sandbox-new',
+        exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void }) =>
+          makeExecHandle({ exitCode: 0, stdout: 'after recreate' }, options),
+        ),
+      };
+      mockSandbox.exec.mockRejectedValueOnce(new MockSandboxNotFoundError('sandbox destroyed'));
+      mockConnect.mockRejectedValueOnce(new MockSandboxNotFoundError('sandbox gone'));
+      mockCreate.mockResolvedValueOnce(mockSandbox).mockResolvedValueOnce(recreatedSandbox);
+
+      const sandbox = new RailwaySandbox({ token: 't' });
+      const result = await sandbox.executeCommand!('echo hello');
+
+      expect(mockConnect).toHaveBeenCalledWith('rw-sandbox-123', expect.objectContaining({ token: 't' }));
+      expect(mockCreate).toHaveBeenCalledTimes(2);
+      expect(recreatedSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('after recreate');
+    });
+
+    it('throws when the retry after restart fails again', async () => {
+      const reconnectedSandbox = {
+        ...mockSandbox,
+        id: 'rw-sandbox-123',
+        exec: vi.fn().mockRejectedValue(new MockSandboxNotFoundError('still gone')),
+      };
+      mockSandbox.exec.mockRejectedValueOnce(new MockSandboxNotFoundError('sandbox destroyed'));
+      mockConnect.mockResolvedValueOnce(reconnectedSandbox);
+
+      const sandbox = new RailwaySandbox({ token: 't' });
+      await expect(sandbox.executeCommand!('echo hello')).rejects.toThrow('still gone');
+
+      expect(mockSandbox.exec).toHaveBeenCalledTimes(1);
+      expect(reconnectedSandbox.exec).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -375,8 +629,8 @@ describe('RailwaySandbox', () => {
 
 describe('exec cwd/env passthrough', () => {
   beforeEach(() => {
-    mockCreate.mockClear().mockResolvedValue(mockSandbox);
-    mockSandbox.exec.mockClear();
+    mockCreate.mockReset().mockResolvedValue(mockSandbox);
+    mockSandbox.exec.mockReset();
     mockSandbox.exec.mockImplementation((_command: string, options?: { onStdout?: (c: string) => void }) =>
       makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
     );
