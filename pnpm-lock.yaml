@@ -2346,6 +2346,9 @@ importers:
       typescript-eslint:
         specifier: ^8.57.0
         version: 8.59.2(eslint@10.5.0(jiti@2.7.0))(typescript@6.0.3)
+      varlock:
+        specifier: ^1.9.0
+        version: 1.9.0
       vite:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0)
@@ -28501,6 +28504,11 @@ packages:
   value-equal@1.0.1:
     resolution: {integrity: sha512-NOJ6JZCAWr0zlxZt+xqCHNTEKOsrks2HQd4MqhP1qy4z1SkbEP467eNx6TgDKXMvUOb+OENfJCZwM+16n7fRfw==}
 
+  varlock@1.9.0:
+    resolution: {integrity: sha512-9/V6ov8DGxElKKmhzdXiR0sq3wmMDLf4Gh2kgihzy+wNKZcn6GR8ciuoCTkKWgidup2ntzfvpRY4wHfaxZr9Sw==}
+    engines: {bun: '>=1.3.3', node: '>=22'}
+    hasBin: true
+
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
@@ -53147,6 +53155,8 @@ snapshots:
   validator@13.15.26: {}
 
   value-equal@1.0.1: {}
+
+  varlock@1.9.0: {}
 
   vary@1.1.2: {}
 

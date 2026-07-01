@@ -12,7 +12,6 @@ import type { MastraCodeWorkspaceFactory, MastraCodeWorkspaceFactoryArgs } from 
 import type { MastraCodeState } from '../schema.js';
 import { detectProject } from '../utils/project.js';
 
-import { debugRailwayCreation, envSummary, errorInfo } from './debug-railway-creation.js';
 import {
   getWebGitCloneDirectoryName,
   getWebGitRepoName,
@@ -64,25 +63,8 @@ export async function getWebWorkspace(
 
   const railwayEnvironmentId = railway?.environmentId ?? process.env.RAILWAY_ENVIRONMENT_ID;
 
-  debugRailwayCreation('webWorkspace.enter', {
-    ...envSummary(),
-    hasMastra: Boolean(mastra),
-    hasHarnessContext: Boolean(ctx),
-    stateProjectPath: state?.projectPath,
-    hasGitClone: Boolean(gitClone),
-    gitHost: gitClone ? safeGitUrlHost(gitClone.gitUrl) : undefined,
-    gitCloneParentPath: gitClone?.cloneParentPath,
-    hasRailwayConfig: Boolean(railway),
-    railwayEnvironmentId: railwayEnvironmentId?.slice(-8),
-  });
-
   if (railwayEnvironmentId) {
     const projectPath = getRailwayProjectPath(gitClone, state?.projectPath);
-    debugRailwayCreation('webWorkspace.railwayBranch', {
-      projectPath,
-      hasGitClone: Boolean(gitClone),
-      gitHost: gitClone ? safeGitUrlHost(gitClone.gitUrl) : undefined,
-    });
     const sandbox = createRailwaySandbox({
       gitClone,
       workdir: projectPath,
@@ -92,10 +74,6 @@ export async function getWebWorkspace(
 
     if (gitClone) {
       await ctx?.setState({ projectPath, projectName: getWebGitRepoName(gitClone.gitUrl), gitBranch: 'main' });
-      debugRailwayCreation('webWorkspace.gitStateSet', {
-        projectPath,
-        projectName: getWebGitRepoName(gitClone.gitUrl),
-      });
     }
 
     const workspace = await createMastraCodeWorkspace({
@@ -105,31 +83,8 @@ export async function getWebWorkspace(
       filesystem,
       sandbox,
       prepare: async () => {
-        debugRailwayCreation('webWorkspace.beforeSandboxStart', { projectPath, sandboxId: sandbox.id });
-        try {
-          await sandbox.start();
-          debugRailwayCreation('webWorkspace.afterSandboxStart', {
-            projectPath,
-            sandboxId: sandbox.id,
-            railwaySandboxId: tryGetRailwaySandboxId(sandbox),
-          });
-        } catch (error) {
-          debugRailwayCreation('webWorkspace.sandboxStartError', {
-            projectPath,
-            sandboxId: sandbox.id,
-            error: errorInfo(error),
-          });
-          throw error;
-        }
-
-        debugRailwayCreation('webWorkspace.beforeFilesystemInit', { projectPath });
-        try {
-          await filesystem._init();
-          debugRailwayCreation('webWorkspace.afterFilesystemInit', { projectPath });
-        } catch (error) {
-          debugRailwayCreation('webWorkspace.filesystemInitError', { projectPath, error: errorInfo(error) });
-          throw error;
-        }
+        await sandbox.start();
+        await filesystem._init();
       },
     });
 
@@ -140,10 +95,6 @@ export async function getWebWorkspace(
     return workspace;
   }
 
-  debugRailwayCreation('webWorkspace.localBranch', {
-    stateProjectPath: state?.projectPath,
-    hasGitClone: Boolean(gitClone),
-  });
   let rawProjectPath = state?.projectPath;
 
   if (gitClone) {
@@ -188,14 +139,6 @@ function createRailwaySandbox({
 }): RailwaySandbox {
   const normalizedGitUrl = gitClone ? normalizeWebGitUrl(gitClone.gitUrl) : undefined;
   const checkpointName = normalizedGitUrl ? getRailwayCheckpointName(normalizedGitUrl) : undefined;
-  debugRailwayCreation('webWorkspace.createRailwaySandbox', {
-    workdir,
-    hasGitClone: Boolean(gitClone),
-    gitHost: normalizedGitUrl ? safeGitUrlHost(normalizedGitUrl) : undefined,
-    checkpointName,
-    hasRailwayToken: Boolean(railway?.token),
-    hasRailwayEnvironmentId: Boolean(railway?.environmentId),
-  });
 
   return new RailwaySandbox({
     sandboxId: railway?.sandboxId,
@@ -204,7 +147,6 @@ function createRailwaySandbox({
     environmentId: railway?.environmentId,
     idleTimeoutMinutes: 3,
     template: (template: RailwayTemplateBuilder) => {
-      debugRailwayCreation('webWorkspace.templateBuild', { workdir, hasGitClone: Boolean(normalizedGitUrl) });
       let configured = template.workdir(workdir).withPackages('git', 'curl').run('npm i -g pnpm');
       if (normalizedGitUrl) {
         configured = configured.run(`git clone --depth 1 ${shellQuote(normalizedGitUrl)} ${shellQuote(workdir)}`);
@@ -243,22 +185,4 @@ function getRailwayCheckpointName(normalizedGitUrl: string): string {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function safeGitUrlHost(gitUrl: string): string | undefined {
-  try {
-    if (gitUrl.includes('://')) return new URL(gitUrl).host;
-    const scpLike = gitUrl.match(/^[^@]+@([^:]+):/);
-    return scpLike?.[1];
-  } catch {
-    return undefined;
-  }
-}
-
-function tryGetRailwaySandboxId(sandbox: RailwaySandbox): string | undefined {
-  try {
-    return sandbox.railway.id;
-  } catch {
-    return undefined;
-  }
 }

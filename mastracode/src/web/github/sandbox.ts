@@ -416,6 +416,7 @@ export async function materializeRepo(
   }
 
   const authUrl = tokenUrl(repo, token);
+  let gitDirReady = Boolean(sandboxRow.materializedAt);
 
   try {
     if (!sandboxRow.materializedAt) {
@@ -433,6 +434,7 @@ export async function materializeRepo(
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
       }
+      gitDirReady = true;
     } else {
       // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
       reportProgress(onProgress, { phase: 'pulling', message: `Updating ${repo} to the latest changes…` });
@@ -450,7 +452,7 @@ export async function materializeRepo(
     // git config, even when the clone/pull above failed partway through. This
     // is best-effort on the failure path (the workdir may not exist yet after a
     // failed clone); on the success path the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, Boolean(sandboxRow.materializedAt));
+    await scrubRemote(sandbox, workdir, repo, gitDirReady);
   }
 
   // 4. Mark materialized.
@@ -751,10 +753,17 @@ export interface EnsureWorktreeResult {
  * @param branch       the feature branch (ref-validated server-side)
  * @param baseBranch   the branch to fork from (ref-validated; default's repo branch)
  */
+export interface EnsureWorktreeOptions {
+  branch: string;
+  baseBranch: string;
+  token?: string;
+  repoFullName?: string;
+}
+
 export async function ensureWorktree(
   sandbox: MaterializationSandbox,
   repoWorkdir: string,
-  { branch, baseBranch }: { branch: string; baseBranch: string },
+  { branch, baseBranch, token, repoFullName }: EnsureWorktreeOptions,
 ): Promise<EnsureWorktreeResult> {
   if (!isValidGitRef(branch)) {
     throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
@@ -772,19 +781,30 @@ export async function ensureWorktree(
     return { worktreePath, branch, baseBranch, reused: true };
   }
 
-  // Make sure the base ref is present locally before forking from it.
-  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(baseBranch)}`);
+  const createWorktree = async () => {
+    // Make sure the base ref is present locally before forking from it.
+    const fetch = await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(baseBranch)}`);
+    if (fetch.exitCode !== 0) {
+      throw new WorktreeError(`git fetch failed: ${fetch.stderr.trim() || fetch.stdout.trim()}`, 'worktree-failed');
+    }
 
-  // Create the worktree. If the branch already exists, check it out into the
-  // worktree; otherwise create it from the base branch. `git worktree add -B`
-  // creates-or-resets the branch to the base, which keeps this idempotent for a
-  // fresh worktree while still working when the branch already exists remotely.
-  const add = await sh(
-    sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree add -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseBranch)}`,
-  );
-  if (add.exitCode !== 0) {
-    throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
+    // Create the worktree. If the branch already exists, check it out into the
+    // worktree; otherwise create it from the base branch. `git worktree add -B`
+    // creates-or-resets the branch to the base, which keeps this idempotent for a
+    // fresh worktree while still working when the branch already exists remotely.
+    const add = await sh(
+      sandbox,
+      `git -C ${shellQuote(repoWorkdir)} worktree add -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseBranch)}`,
+    );
+    if (add.exitCode !== 0) {
+      throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
+    }
+  };
+
+  if (token && repoFullName) {
+    await withInstallToken(sandbox, repoWorkdir, repoFullName, token, createWorktree);
+  } else {
+    await createWorktree();
   }
 
   return { worktreePath, branch, baseBranch, reused: false };

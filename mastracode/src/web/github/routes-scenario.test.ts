@@ -319,6 +319,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(ensureRes.status).toBe(200);
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
+    expect((materializeRepo.mock.calls[0] as unknown as any[])[3]).toBe('install-token-1');
 
     // 3. Worktree → persists a github_worktrees row for feat/x.
     const wtRes = await postJson(app, `/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
@@ -331,6 +332,10 @@ describe('S1: full write-back journey through the real route handlers', () => {
       githubProjectId: projectId,
       branch: 'feat/x',
       baseBranch: 'main',
+    });
+    expect((ensureWorktree.mock.calls[0] as unknown as any[])[2]).toMatchObject({
+      token: 'install-token-2',
+      repoFullName: 'octo/hello',
     });
     const persistedWorktreePath = wtJson.worktreePath as string;
     expect(tables.worktrees[0].worktreePath).toBe(persistedWorktreePath);

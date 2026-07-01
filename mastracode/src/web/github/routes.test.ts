@@ -335,6 +335,34 @@ describe('connect + callback', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
+    expect(res.headers.get('set-cookie')).toContain('mastracode_github_install_state=state.org1.u1');
+  });
+
+  it('persists installations when the callback omits state but has the install state cookie', async () => {
+    const connect = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
+    const cookie = connect.headers.get('set-cookie')?.split(';')[0];
+    expect(cookie).toBeTruthy();
+
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?code=abc', {
+      headers: { cookie: cookie! },
+    });
+
+    expect(res.headers.get('location')).toBe('/?github=connected');
+    expect(res.headers.get('set-cookie')).toContain('Max-Age=0');
+    expect(tables.installations).toHaveLength(1);
+  });
+
+  it('rejects an invalid callback state even when a valid install state cookie exists', async () => {
+    const connect = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
+    const cookie = connect.headers.get('set-cookie')?.split(';')[0];
+    expect(cookie).toBeTruthy();
+
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=invalid&code=abc', {
+      headers: { cookie: cookie! },
+    });
+
+    expect(res.headers.get('location')).toBe('/?github=error');
+    expect(tables.installations).toHaveLength(0);
   });
 
   it('resolves the session cookie on a cookie-only connect navigation (gate skips /auth/*)', async () => {
@@ -365,6 +393,22 @@ describe('connect + callback', () => {
     const res = await buildApp({ workosId: 'u1' }).request(
       '/auth/github/callback?state=state.org1.someone-else&code=x',
     );
+    expect(res.headers.get('location')).toBe('/?github=error');
+    expect(tables.installations).toHaveLength(0);
+  });
+
+  it('does not override a valid mismatched callback state with the install state cookie', async () => {
+    const connect = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
+    const cookie = connect.headers.get('set-cookie')?.split(';')[0];
+    expect(cookie).toBeTruthy();
+
+    const res = await buildApp({ workosId: 'u1' }).request(
+      '/auth/github/callback?state=state.org1.someone-else&code=x',
+      {
+        headers: { cookie: cookie! },
+      },
+    );
+
     expect(res.headers.get('location')).toBe('/?github=error');
     expect(tables.installations).toHaveLength(0);
   });
@@ -507,6 +551,8 @@ describe('ensure (materialize)', () => {
     expect(await res.json()).toMatchObject({ resourceId: 'p1', githubProjectId: 'p1' });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
+    const materializeCall = materializeRepo.mock.calls[0] as unknown as any[];
+    expect(materializeCall[3]).toBe('install-token');
     // A per-user sandbox binding row was created for the caller.
     expect(tables.sandboxes).toHaveLength(1);
     expect(tables.sandboxes[0]).toMatchObject({ githubProjectId: 'p1', userId: 'u1' });
@@ -623,6 +669,16 @@ describe('worktree route', () => {
     expect(json.resourceId).toBe('p1');
     expect(reattachProjectSandbox).toHaveBeenCalledWith('sb-1');
     expect(ensureWorktree).toHaveBeenCalledOnce();
+    expect(ensureWorktree).toHaveBeenCalledWith(
+      { id: 'sb' },
+      '/workspace/hello',
+      expect.objectContaining({
+        branch: 'feat/x',
+        baseBranch: 'main',
+        token: 'install-token',
+        repoFullName: 'octo/hello',
+      }),
+    );
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({ githubProjectId: 'p1', branch: 'feat/x', userId: 'u1' });
   });

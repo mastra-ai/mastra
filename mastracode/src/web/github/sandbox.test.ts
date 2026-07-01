@@ -268,6 +268,24 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('surfaces a scrub failure after a successful first clone', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote set-url origin') && script.includes('github.com/octocat/hello.git')) {
+        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
+      }
+      return OK;
+    });
+
+    const err = await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-first').catch(
+      e => e,
+    );
+
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('pull-failed');
+    expect(String(err.message)).toContain('scrub');
+    expect(dbUpdates.some(u => 'materializedAt' in u)).toBe(false);
+  });
+
   it('pulls (not clones) on re-open', async () => {
     const sandbox = new FakeSandbox();
     await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-xyz');
@@ -601,6 +619,23 @@ describe('ensureWorktree', () => {
     expect(joined).toContain(
       "git -C '/workspace/hello' worktree add -B 'feat/x' '/workspace/worktrees/feat-x-79b4cc55' 'main'",
     );
+  });
+
+  it('uses a short-lived installation token for private repo worktree fetches', async () => {
+    const sandbox = new FakeSandbox(notExisting);
+    await ensureWorktree(sandbox, '/workspace/hello', {
+      branch: 'feat/x',
+      baseBranch: 'main',
+      token: 'install-token',
+      repoFullName: 'octocat/hello',
+    });
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).toContain(
+      "git -C '/workspace/hello' remote set-url origin 'https://x-access-token:install-token@github.com/octocat/hello.git'",
+    );
+    expect(joined).toContain("git -C '/workspace/hello' fetch origin 'main'");
+    expect(joined).toContain("git -C '/workspace/hello' remote set-url origin 'https://github.com/octocat/hello.git'");
   });
 
   it('reuses an existing worktree without running git worktree add', async () => {

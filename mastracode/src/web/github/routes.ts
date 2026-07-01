@@ -90,6 +90,38 @@ function isValidGitRef(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
 }
 
+const GITHUB_INSTALL_STATE_COOKIE = 'mastracode_github_install_state';
+const GITHUB_INSTALL_STATE_MAX_AGE_SECONDS = 10 * 60;
+
+function readCookie(c: Context, name: string): string | undefined {
+  const header = c.req.header('cookie');
+  if (!header) return undefined;
+  for (const part of header.split(';')) {
+    const [rawKey, ...rawValue] = part.trim().split('=');
+    if (rawKey !== name) continue;
+    try {
+      return decodeURIComponent(rawValue.join('='));
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function setInstallStateCookie(c: Context, state: string): void {
+  c.header(
+    'Set-Cookie',
+    `${GITHUB_INSTALL_STATE_COOKIE}=${encodeURIComponent(state)}; Path=/auth/github; HttpOnly; SameSite=Lax; Max-Age=${GITHUB_INSTALL_STATE_MAX_AGE_SECONDS}`,
+    { append: true },
+  );
+}
+
+function clearInstallStateCookie(c: Context): void {
+  c.header('Set-Cookie', `${GITHUB_INSTALL_STATE_COOKIE}=; Path=/auth/github; HttpOnly; SameSite=Lax; Max-Age=0`, {
+    append: true,
+  });
+}
+
 /**
  * Resolve the org-scoped tenant for a GitHub request. GitHub project features
  * are org-owned, so they require both a signed-in user and a WorkOS
@@ -195,6 +227,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const resolved = resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
+        setInstallStateCookie(loose(c), state);
         return c.redirect(buildInstallUrl(state));
       },
     }),
@@ -215,19 +248,25 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
         const state = c.req.query('state');
         const stateTenant = verifyState(state);
-        if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
+        const cookieState = state ? undefined : readCookie(loose(c), GITHUB_INSTALL_STATE_COOKIE);
+        const cookieStateTenant = stateTenant ? null : verifyState(cookieState);
+        const verifiedStateTenant = stateTenant ?? cookieStateTenant;
+        if (!verifiedStateTenant || verifiedStateTenant.userId !== userId || verifiedStateTenant.orgId !== orgId) {
           // CSRF / cross-user/org linking protection: the signed state must belong
           // to the same logged-in user *and* their current org.
           console.warn(
             '[GitHub] Install callback rejected: state/tenant mismatch.',
             JSON.stringify({
-              stateValid: Boolean(stateTenant),
-              stateOrgId: stateTenant?.orgId,
-              stateUserId: stateTenant?.userId,
+              statePresent: Boolean(state),
+              cookieStatePresent: Boolean(cookieState),
+              stateValid: Boolean(verifiedStateTenant),
+              stateOrgId: verifiedStateTenant?.orgId,
+              stateUserId: verifiedStateTenant?.userId,
               sessionOrgId: orgId,
               sessionUserId: userId,
             }),
           );
+          clearInstallStateCookie(loose(c));
           return c.redirect('/?github=error');
         }
 
@@ -238,7 +277,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         // an arbitrary id — so when no code is present we bounce through the OAuth
         // identify flow to obtain a verified user token first.
         if (!code) {
-          return c.redirect(buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+          const oauthState = signState(orgId, userId);
+          setInstallStateCookie(loose(c), oauthState);
+          return c.redirect(buildOAuthIdentifyUrl(oauthState, redirectUri));
         }
 
         try {
@@ -265,9 +306,11 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             `[GitHub] Install callback failed to persist installations for org ${orgId} / user ${userId}.`,
             error,
           );
+          clearInstallStateCookie(loose(c));
           return c.redirect('/?github=error');
         }
 
+        clearInstallStateCookie(loose(c));
         return c.redirect('/?github=connected');
       },
     }),
@@ -616,7 +659,13 @@ function buildProjectGitRoutes(): ApiRoute[] {
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
-            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, { branch, baseBranch });
+            const token = await mintInstallationToken(project.installationId);
+            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, {
+              branch,
+              baseBranch,
+              token,
+              repoFullName: project.repoFullName,
+            });
 
             await getAppDb()
               .insert(githubWorktrees)
