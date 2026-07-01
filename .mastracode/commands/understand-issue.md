@@ -34,7 +34,7 @@ Identify everyone involved and gauge their context depth:
 
 ### Issue summary
 
-Present a brief summary:
+Note (internally, don't pause here):
 - What's the reported problem?
 - Reproduction steps (if any)
 - Expected vs actual behavior
