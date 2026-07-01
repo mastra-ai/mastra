@@ -16,7 +16,18 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '../../types';
+
+function matchesTenancy(
+  record: { organizationId?: string | null; projectId?: string | null },
+  filters: DatasetTenancyFilters | undefined,
+): boolean {
+  if (!filters) return true;
+  if (filters.organizationId !== undefined && record.organizationId !== filters.organizationId) return false;
+  if (filters.projectId !== undefined && record.projectId !== filters.projectId) return false;
+  return true;
+}
 import type { InMemoryDB } from '../inmemory-db';
 import { DatasetsStorage } from './base';
 
@@ -98,9 +109,17 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetRecord(dataset);
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     const record = this.db.datasets.get(id);
-    return record ? toDatasetRecord(record) : null;
+    if (!record) return null;
+    if (!matchesTenancy(record, filters)) return null;
+    return toDatasetRecord(record);
   }
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
@@ -129,7 +148,11 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetRecord(updated);
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+    const existing = this.db.datasets.get(id);
+    if (!existing) return;
+    if (!matchesTenancy(existing, filters)) return;
+
     // Cascade: delete items and versions
     for (const [itemId, rows] of this.db.datasetItems) {
       if (rows.length > 0 && rows[0]!.datasetId === id) {

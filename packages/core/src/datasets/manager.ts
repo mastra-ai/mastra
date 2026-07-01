@@ -4,9 +4,25 @@ import { MastraError } from '../error/index.js';
 import type { Mastra } from '../mastra/index.js';
 import type { DatasetsStorage } from '../storage/domains/datasets/base.js';
 import type { ExperimentsStorage } from '../storage/domains/experiments/base.js';
-import type { TargetType } from '../storage/types.js';
+import type { DatasetTenancyFilters, TargetType } from '../storage/types.js';
 import { Dataset } from './dataset.js';
 import { compareExperiments as compareExperimentsInternal } from './experiment/analytics/compare.js';
+
+/**
+ * Build a {@link DatasetTenancyFilters} from public manager args. Returns
+ * `undefined` when neither field is set (preserves legacy unscoped behavior).
+ * Null values are coerced away — `DatasetTenancyFilters` is `string | undefined`
+ * only, matching the existing `listDatasets` filter contract.
+ */
+function scopeFromArgs(args: {
+  organizationId?: string | null;
+  projectId?: string | null;
+}): DatasetTenancyFilters | undefined {
+  const scope: DatasetTenancyFilters = {};
+  if (typeof args.organizationId === 'string') scope.organizationId = args.organizationId;
+  if (typeof args.projectId === 'string') scope.projectId = args.projectId;
+  return scope.organizationId === undefined && scope.projectId === undefined ? undefined : scope;
+}
 
 /**
  * Public API for managing datasets.
@@ -126,16 +142,25 @@ export class DatasetsManager {
       groundTruthSchema: groundTruthSchema as Record<string, unknown> | undefined,
     });
 
-    return new Dataset(result.id, this.#mastra);
+    // Preserve the tenancy the caller created the dataset under so subsequent
+    // reads/updates on the returned handle stay bound to the same tenant.
+    const createScope = scopeFromArgs(input);
+    return new Dataset(result.id, this.#mastra, createScope);
   }
 
   /**
-   * Get an existing dataset by ID.
-   * Throws if the dataset does not exist.
+   * Get an existing dataset by ID, optionally scoped to a tenant.
+   *
+   * When `organizationId` / `projectId` are provided, the read is scoped to
+   * that tenancy: a dataset row that exists but belongs to a different tenant
+   * returns NOT_FOUND (same 404 as a truly missing row) rather than leaking
+   * cross-tenant existence. The returned {@link Dataset} handle carries the
+   * scope forward on all subsequent reads and item mutations.
    */
-  async get(args: { id: string }): Promise<Dataset> {
+  async get(args: { id: string; organizationId?: string; projectId?: string }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();
-    const record = await store.getDatasetById({ id: args.id });
+    const scope = scopeFromArgs(args);
+    const record = await store.getDatasetById({ id: args.id, filters: scope });
     if (!record) {
       throw new MastraError({
         id: 'DATASET_NOT_FOUND',
@@ -144,7 +169,7 @@ export class DatasetsManager {
         category: 'USER',
       });
     }
-    return new Dataset(args.id, this.#mastra);
+    return new Dataset(args.id, this.#mastra, scope);
   }
 
   /**
@@ -171,11 +196,15 @@ export class DatasetsManager {
   }
 
   /**
-   * Delete a dataset by ID.
+   * Delete a dataset by ID, optionally scoped to a tenant.
+   *
+   * When `organizationId` / `projectId` are provided, the delete is scoped to
+   * that tenancy: a dataset row in another tenant is a silent no-op (no error)
+   * so cross-tenant existence is not leaked via error timing/text.
    */
-  async delete(args: { id: string }) {
+  async delete(args: { id: string; organizationId?: string; projectId?: string }) {
     const store = await this.#getDatasetsStore();
-    return store.deleteDataset({ id: args.id });
+    return store.deleteDataset({ id: args.id, filters: scopeFromArgs(args) });
   }
 
   // ---------------------------------------------------------------------------

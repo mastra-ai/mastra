@@ -22,6 +22,7 @@ import type {
   DatasetItem,
   DatasetItemRow,
   DatasetRecord,
+  DatasetTenancyFilters,
   DatasetVersion,
   ListDatasetItemsInput,
   ListDatasetItemsOutput,
@@ -259,9 +260,29 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async getDatasetById(args: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null> {
     try {
-      const row = await this.db.load<Record<string, any>>({ tableName: TABLE_DATASETS, keys: { id: args.id } });
+      const hasTenancy = args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined;
+      if (!hasTenancy) {
+        const row = await this.db.load<Record<string, any>>({ tableName: TABLE_DATASETS, keys: { id: args.id } });
+        return row ? rowToDataset(row) : null;
+      }
+      const conditions: string[] = [`${quoteIdent('id', 'column name')} = @id`];
+      const params: Record<string, any> = { id: args.id };
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        params.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.projectId !== undefined) {
+        conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        params.projectId = args.filters.projectId;
+      }
+      const [rows] = await this.database.run({
+        sql: `SELECT * FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${conditions.join(' AND ')} LIMIT 1`,
+        params,
+        json: true,
+      });
+      const row = (rows as Array<Record<string, any>>)[0];
       return row ? rowToDataset(row) : null;
     } catch (error) {
       throw new MastraError(
@@ -293,7 +314,7 @@ export class DatasetsSpanner extends DatasetsStorage {
 
       await this.db.update({ tableName: TABLE_DATASETS, keys: { id: args.id }, data });
 
-      const updated = await this.getDatasetById({ id: args.id });
+      const updated = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('SPANNER', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -318,8 +339,14 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async deleteDataset(args: { id: string }): Promise<void> {
+  async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op on mismatch or missing dataset. Never throws
+      // so we don't leak cross-tenant existence via error timing/text. Cascade
+      // deletes below are datasetId-scoped, so gating the parent is sufficient.
+      const gate = await this.getDatasetById({ id: args.id, filters: args.filters });
+      if (!gate) return;
+
       // Best-effort detach of experiments referencing this dataset. These tables
       // may not exist when datasets is used standalone, so failures are swallowed.
       try {

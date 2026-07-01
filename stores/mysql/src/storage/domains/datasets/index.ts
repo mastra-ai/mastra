@@ -32,6 +32,7 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
@@ -288,11 +289,23 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<Record<string, any>>({
         tableName: TABLE_DATASETS,
-        keys: { id },
+        keys: {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        },
       });
       return row ? this.mapDataset(row) : null;
     } catch (error) {
@@ -309,7 +322,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: 'MYSQL_UPDATE_DATASET_NOT_FOUND',
@@ -358,7 +371,20 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+    // Tenancy gate: silent no-op on mismatch or missing row. Never throws so we don't
+    // leak dataset existence across tenants via error timing/text. The cascade DELETEs
+    // below are already datasetId-scoped by FK, so gating at the parent is sufficient.
+    const existing = await this.operations.load<{ id: string }>({
+      tableName: TABLE_DATASETS,
+      keys: {
+        id,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      },
+    });
+    if (!existing) return;
+
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();

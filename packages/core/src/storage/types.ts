@@ -2538,9 +2538,14 @@ export interface CreateDatasetInput {
  * Update input for a dataset. Tenancy ({@link CreateDatasetInput.organizationId},
  * {@link CreateDatasetInput.projectId}) and candidate identity
  * ({@link CreateDatasetInput.candidateKey}, {@link CreateDatasetInput.candidateId})
- * are intentionally omitted: they are set once at create time and must remain immutable
- * so item SCD-2 history (which inherits these fields per-write from the parent dataset)
- * stays consistent across the dataset's lifetime.
+ * are intentionally omitted from the payload: they are set once at create time and must
+ * remain immutable so item SCD-2 history (which inherits these fields per-write from the
+ * parent dataset) stays consistent across the dataset's lifetime.
+ *
+ * The optional `filters` field is a *read scope*, not a payload update — when provided,
+ * the update is only applied if the target dataset row also matches the tenancy filters.
+ * Callers that know the tenant should pass this to prevent cross-tenant updates via a
+ * leaked dataset ID.
  */
 export interface UpdateDatasetInput {
   id: string;
@@ -2554,6 +2559,8 @@ export interface UpdateDatasetInput {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
+  /** Tenancy read-scope. When set, the update is a no-op if the row does not match. */
+  filters?: DatasetTenancyFilters;
 }
 
 /**
@@ -2579,15 +2586,25 @@ export interface DatasetItemPayload {
 
 export interface AddDatasetItemInput extends DatasetItemPayload {
   datasetId: string;
+  /**
+   * Tenancy read-scope for the parent dataset. When set, the insert is rejected
+   * (NOT_FOUND) if the parent dataset row does not match the tenancy filters —
+   * prevents adding items to a dataset in another tenant via a leaked datasetId.
+   */
+  filters?: DatasetTenancyFilters;
 }
 
 /**
  * Update input for a dataset item. All payload fields are optional; only the
  * provided fields are patched.
+ *
+ * The optional `filters` field is a tenancy read-scope for the parent dataset;
+ * see {@link AddDatasetItemInput.filters}.
  */
 export interface UpdateDatasetItemInput extends Partial<DatasetItemPayload> {
   id: string;
   datasetId: string;
+  filters?: DatasetTenancyFilters;
 }
 
 export interface DatasetTenancyFilters {
@@ -2636,11 +2653,15 @@ export interface ListDatasetVersionsOutput {
 export interface BatchInsertItemsInput {
   datasetId: string;
   items: DatasetItemPayload[];
+  /** Tenancy read-scope for the parent dataset; see {@link AddDatasetItemInput.filters}. */
+  filters?: DatasetTenancyFilters;
 }
 
 export interface BatchDeleteItemsInput {
   datasetId: string;
   itemIds: string[];
+  /** Tenancy read-scope for the parent dataset; see {@link AddDatasetItemInput.filters}. */
+  filters?: DatasetTenancyFilters;
 }
 
 // ============================================

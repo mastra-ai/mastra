@@ -2,7 +2,7 @@ import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
-import type { TargetType, ExperimentStatus } from '../../storage/types';
+import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
 import type { ItemToolMock, ToolMockReport } from './tool-mocks';
 
 /**
@@ -109,6 +109,14 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   agentVersion?: string;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
+  /**
+   * Tenancy read-scope for the parent dataset. When set, the storage-backed
+   * dataset load is scoped to this tenant — a cross-tenant `datasetId` fails
+   * NOT_FOUND rather than leaking the dataset contents. Ignored for the inline
+   * `data` path (no dataset lookup happens). Not exposed on
+   * {@link StartExperimentConfig}; injected by the {@link Dataset} handle.
+   */
+  filters?: DatasetTenancyFilters;
 }
 
 /**
@@ -117,7 +125,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
  */
 export type StartExperimentConfig<I = unknown, O = unknown, E = unknown> = Omit<
   ExperimentConfig<I, O, E>,
-  'datasetId' | 'data' | 'experimentId'
+  'datasetId' | 'data' | 'experimentId' | 'filters'
 >;
 
 /**

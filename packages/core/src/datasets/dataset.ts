@@ -9,6 +9,7 @@ import type {
   DatasetItem,
   DatasetItemPayload,
   DatasetItemRow,
+  DatasetTenancyFilters,
   DatasetVersion,
   UpdateDatasetInput,
   UpdateExperimentResultInput,
@@ -27,10 +28,19 @@ export class Dataset {
   #mastra: Mastra;
   #datasetsStore?: DatasetsStorage;
   #experimentsStore?: ExperimentsStorage;
+  /**
+   * Tenancy read-scope carried by the handle. When set, all internal reads
+   * ({@link Dataset.getDetails}, {@link Dataset.startExperimentAsync}) and item
+   * mutations forward these filters to storage so cross-tenant reads/mutations
+   * over a leaked dataset id are rejected as NOT_FOUND (or silent no-op for
+   * deletes) rather than succeeding.
+   */
+  #scope?: DatasetTenancyFilters;
 
-  constructor(id: string, mastra: Mastra) {
+  constructor(id: string, mastra: Mastra, scope?: DatasetTenancyFilters) {
     this.id = id;
     this.#mastra = mastra;
+    this.#scope = scope;
   }
 
   // ---------------------------------------------------------------------------
@@ -100,7 +110,7 @@ export class Dataset {
    */
   async getDetails(): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
-    const record = await store.getDatasetById({ id: this.id });
+    const record = await store.getDatasetById({ id: this.id, filters: this.#scope });
     if (!record) {
       throw new MastraError({
         id: 'DATASET_NOT_FOUND',
@@ -143,6 +153,7 @@ export class Dataset {
       ...rest,
       inputSchema: inputSchema as Record<string, unknown> | null | undefined,
       groundTruthSchema: groundTruthSchema as Record<string, unknown> | null | undefined,
+      filters: this.#scope,
     });
   }
 
@@ -155,7 +166,7 @@ export class Dataset {
    */
   async addItem(input: DatasetItemPayload): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
-    return store.addItem({ datasetId: this.id, ...input });
+    return store.addItem({ datasetId: this.id, ...input, filters: this.#scope });
   }
 
   /**
@@ -166,6 +177,7 @@ export class Dataset {
     return store.batchInsertItems({
       datasetId: this.id,
       items: input.items,
+      filters: this.#scope,
     });
   }
 
@@ -207,7 +219,7 @@ export class Dataset {
   async updateItem(input: { itemId: string } & Partial<DatasetItemPayload>): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     const { itemId, ...rest } = input;
-    return store.updateItem({ id: itemId, datasetId: this.id, ...rest });
+    return store.updateItem({ id: itemId, datasetId: this.id, ...rest, filters: this.#scope });
   }
 
   /**
@@ -223,7 +235,7 @@ export class Dataset {
    */
   async deleteItems(args: { itemIds: string[] }): Promise<void> {
     const store = await this.#getDatasetsStore();
-    return store.batchDeleteItems({ datasetId: this.id, itemIds: args.itemIds });
+    return store.batchDeleteItems({ datasetId: this.id, itemIds: args.itemIds, filters: this.#scope });
   }
 
   // ---------------------------------------------------------------------------
@@ -262,7 +274,11 @@ export class Dataset {
   async startExperiment<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
   ): Promise<ExperimentSummary> {
-    return runExperiment(this.#mastra, { datasetId: this.id, ...config } as ExperimentConfig);
+    return runExperiment(this.#mastra, {
+      datasetId: this.id,
+      ...config,
+      filters: this.#scope,
+    } as ExperimentConfig);
   }
 
   /**
@@ -275,7 +291,7 @@ export class Dataset {
     const experimentsStore = await this.#getExperimentsStore();
     const datasetsStore = await this.#getDatasetsStore();
 
-    const dataset = await datasetsStore.getDatasetById({ id: this.id });
+    const dataset = await datasetsStore.getDatasetById({ id: this.id, filters: this.#scope });
     if (!dataset) {
       throw new MastraError({
         id: 'DATASET_NOT_FOUND',
@@ -322,6 +338,7 @@ export class Dataset {
       experimentId,
       ...config,
       version: targetVersion,
+      filters: this.#scope,
     } as ExperimentConfig).catch(async err => {
       await experimentsStore
         .updateExperiment({
