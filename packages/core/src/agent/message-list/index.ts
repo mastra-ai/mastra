@@ -77,3 +77,13 @@ export { CacheKeyGenerator } from './cache';
 
 // Merge exports
 export { MessageMerger } from './merge';
+
+// Image resize exports
+export {
+  getImageDimensions,
+  isOversized,
+  resizeImageIfNeeded,
+  computeTargetDimensions,
+  MAX_IMAGE_DIMENSION,
+} from './prompt/image-resize';
+export type { ImageDimensions, ResizeResult } from './prompt/image-resize';

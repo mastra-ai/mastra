@@ -7,6 +7,12 @@ import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
+import {
+  getImageDimensions,
+  isOversized,
+  resizeImageIfNeeded,
+  MAX_IMAGE_DIMENSION,
+} from '@mastra/core/agent/message-list';
 import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
@@ -340,9 +346,10 @@ export class MastraTUI {
           continue;
         }
 
-        const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
+        const { content, images: rawImages } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
+        const images = rawImages?.map(img => this.resizeImageIfNeeded(img));
         const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
@@ -363,10 +370,36 @@ export class MastraTUI {
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
     this.clearStatusTimingTicker();
-    const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
+    const files = images?.map(img => {
+      const result = this.resizeImageIfNeeded(img);
+      return { data: result.data, mediaType: result.mimeType };
+    });
     this.state.session.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
+  }
+
+  private resizeImageIfNeeded(img: { data: string; mimeType: string }): { data: string; mimeType: string } {
+    try {
+      const bytes = new Uint8Array(Buffer.from(img.data, 'base64'));
+      const dims = getImageDimensions(bytes);
+      if (!dims || !isOversized(dims)) return img;
+
+      const result = resizeImageIfNeeded(bytes, img.mimeType, MAX_IMAGE_DIMENSION);
+      if (!result || !result.resized) return img;
+
+      showInfo(
+        this.state,
+        `Image resized from ${dims.width}×${dims.height} to ${result.newDimensions!.width}×${result.newDimensions!.height} (model limit: ${MAX_IMAGE_DIMENSION}px)`,
+      );
+
+      return {
+        data: Buffer.from(result.data).toString('base64'),
+        mimeType: result.mediaType,
+      };
+    } catch {
+      return img;
+    }
   }
 
   private createUserSignalMessage(
