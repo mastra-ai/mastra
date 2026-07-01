@@ -131,6 +131,91 @@ describe('ModelPacksSection', () => {
     });
   });
 
+  describe('when a custom pack is edited', () => {
+    it('pre-fills the form and POSTs the update on Save', async () => {
+      const custom: ModelPackInfo = {
+        ...builtinPack,
+        id: 'custom:my-pack',
+        name: 'my-pack',
+        custom: true,
+        models: { build: 'openai/gpt-x', plan: 'openai/gpt-x', fast: 'openai/gpt-x' },
+      };
+      const packs: ModelPackInfo[] = [custom];
+      let postBody: unknown;
+      server.use(
+        http.get(PACKS_URL, () => packsResponse(packs)),
+        http.post(PACKS_URL, async ({ request }) => {
+          postBody = await request.json();
+          packs[0] = {
+            ...custom,
+            models: { build: 'openai/gpt-x', plan: 'anthropic/claude-x', fast: 'openai/gpt-x' },
+          };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
+
+      const row = (await screen.findByText('my-pack')).closest('.provider-row') as HTMLElement;
+      await user.click(within(row).getByRole('button', { name: 'Edit' }));
+
+      // The form should be pre-filled with existing values.
+      expect(screen.getByPlaceholderText('e.g. my-pack')).toHaveValue('my-pack');
+      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+
+      // Change the plan model.
+      const selects = screen.getAllByRole('combobox');
+      await user.selectOptions(selects[1]!, 'anthropic/claude-x');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() =>
+        expect(postBody).toEqual({
+          name: 'my-pack',
+          models: { build: 'openai/gpt-x', plan: 'anthropic/claude-x', fast: 'openai/gpt-x' },
+        }),
+      );
+    });
+
+    it('removes the old pack when the name is changed', async () => {
+      const custom: ModelPackInfo = {
+        ...builtinPack,
+        id: 'custom:old-name',
+        name: 'old-name',
+        custom: true,
+      };
+      const packs: ModelPackInfo[] = [custom];
+      let deleteId: string | null = null;
+      let postBody: unknown;
+      server.use(
+        http.get(PACKS_URL, () => packsResponse(packs)),
+        http.delete(`${PACKS_URL}/:id`, ({ params }) => {
+          deleteId = decodeURIComponent(params.id as string);
+          return HttpResponse.json({ ok: true });
+        }),
+        http.post(PACKS_URL, async ({ request }) => {
+          postBody = await request.json();
+          packs[0] = { ...custom, id: 'custom:new-name', name: 'new-name' };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
+
+      const row = (await screen.findByText('old-name')).closest('.provider-row') as HTMLElement;
+      await user.click(within(row).getByRole('button', { name: 'Edit' }));
+
+      const nameInput = screen.getByPlaceholderText('e.g. my-pack');
+      await user.clear(nameInput);
+      await user.type(nameInput, 'new-name');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(deleteId).toBe('custom:old-name'));
+      await waitFor(() => expect((postBody as Record<string, unknown>).name).toBe('new-name'));
+    });
+  });
+
   describe('when a custom pack is removed', () => {
     it('DELETEs it and refetches so it drops out', async () => {
       const custom: ModelPackInfo = { ...builtinPack, id: 'mine', name: 'My Pack', custom: true };

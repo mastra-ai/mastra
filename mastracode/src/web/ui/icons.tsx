@@ -212,6 +212,16 @@ export const SearchIcon = ({ size = 15, className }: IconProps) =>
 
 export const CheckIcon = ({ size = 15, className }: IconProps) => svg(<path d="M20 6L9 17l-5-5" />, size, className);
 
+export const EditIcon = ({ size = 15, className }: IconProps) =>
+  svg(
+    <>
+      <path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5Z" />
+      <path d="M15 5l4 4" />
+    </>,
+    size,
+    className,
+  );
+
 export const KeyIcon = ({ size = 15, className }: IconProps) =>
   svg(
     <>

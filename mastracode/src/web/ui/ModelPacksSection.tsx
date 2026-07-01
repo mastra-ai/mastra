@@ -7,7 +7,7 @@ import {
   useRemoveModelPack,
   useSaveModelPack,
 } from '../../shared/hooks/use-model-packs';
-import { CheckIcon, PlusIcon } from './icons';
+import { CheckIcon, EditIcon, PlusIcon } from './icons';
 
 interface DraftPack {
   name: string;
@@ -38,6 +38,8 @@ export function ModelPacksSection({
 
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftPack | null>(null);
+  /** When editing an existing custom pack, holds the original pack id so we can remove it on rename. */
+  const [editingPackId, setEditingPackId] = useState<string | null>(null);
 
   const packs = packsQuery.data?.packs ?? [];
   const loading = packsQuery.isPending;
@@ -76,11 +78,22 @@ export function ModelPacksSection({
     }
     setDraftError(null);
     try {
+      // If we renamed the pack during edit, remove the old one first.
+      if (editingPackId && `custom:${name}` !== editingPackId) {
+        await removeMutation.mutateAsync({ id: editingPackId });
+      }
       await saveMutation.mutateAsync({ name, models: { build: draft.build, plan: draft.plan, fast: draft.fast } });
       setDraft(null);
+      setEditingPackId(null);
     } catch (e) {
       setDraftError(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const startEditing = (p: { id: string; name: string; models: { build: string; plan: string; fast: string } }) => {
+    setDraftError(null);
+    setEditingPackId(p.id);
+    setDraft({ name: p.name, build: p.models.build, plan: p.models.plan, fast: p.models.fast });
   };
 
   const modelOptions = models.map(m => m.id);
@@ -104,7 +117,14 @@ export function ModelPacksSection({
           A pack sets a model for each mode (build / plan / fast). Mirrors the TUI <code>/models-pack</code> command.
         </p>
         {!draft && (
-          <button className="btn btn-sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              setEditingPackId(null);
+              setDraft({ ...EMPTY_DRAFT });
+            }}
+            disabled={busy}
+          >
             <PlusIcon size={13} /> New pack
           </button>
         )}
@@ -139,9 +159,16 @@ export function ModelPacksSection({
           </label>
           <div className="cprov-form-actions">
             <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void saveDraft()}>
-              Add
+              {editingPackId ? 'Save' : 'Add'}
             </button>
-            <button className="btn btn-sm" disabled={busy} onClick={() => setDraft(null)}>
+            <button
+              className="btn btn-sm"
+              disabled={busy}
+              onClick={() => {
+                setDraft(null);
+                setEditingPackId(null);
+              }}
+            >
               Cancel
             </button>
           </div>
@@ -171,6 +198,11 @@ export function ModelPacksSection({
                 {!p.active && (
                   <button className="btn btn-sm" disabled={busy || !resourceId} onClick={() => void activate(p.id)}>
                     Activate
+                  </button>
+                )}
+                {p.custom && (
+                  <button className="btn btn-sm" disabled={busy} onClick={() => startEditing(p)}>
+                    <EditIcon size={13} /> Edit
                   </button>
                 )}
                 {p.custom && (
