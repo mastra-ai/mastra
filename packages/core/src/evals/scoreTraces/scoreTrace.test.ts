@@ -7,7 +7,8 @@ vi.mock('./utils', () => ({
   transformTraceToScorerInputAndOutput: vi.fn(() => ({ input: 'test', output: 'test' })),
 }));
 
-import { scoreTrace } from './scoreTracesWorkflow';
+import type { ScoreTraceBatchTarget, ScoreTraceTarget } from './scoreTracesWorkflow';
+import { scoreTrace, scoreTraceBatch } from './scoreTracesWorkflow';
 
 type MockObservabilityStore = {
   getTrace: ReturnType<typeof vi.fn>;
@@ -42,12 +43,67 @@ function createMockSpanRecord(overrides: Partial<SpanRecord> = {}): SpanRecord {
   } as SpanRecord;
 }
 
+function createMockTraceRecord({
+  traceId = 'trace-1',
+  spanId,
+  rootSpanOverrides = {},
+  childSpanOverrides = {},
+}: {
+  traceId?: string;
+  spanId?: string;
+  rootSpanOverrides?: Partial<SpanRecord>;
+  childSpanOverrides?: Partial<SpanRecord>;
+} = {}): TraceRecord {
+  const rootSpan = createMockSpanRecord({
+    spanId: 'span-1',
+    traceId,
+    parentSpanId: null,
+    name: 'root-span',
+    entityId: 'root-span',
+    spanType: SpanType.AGENT_RUN,
+    ...rootSpanOverrides,
+  });
+
+  if (!spanId) {
+    return {
+      traceId,
+      spans: [rootSpan],
+    };
+  }
+
+  return {
+    traceId,
+    spans: [
+      rootSpan,
+      createMockSpanRecord({
+        spanId,
+        traceId,
+        parentSpanId: rootSpan.spanId,
+        name: 'child-span',
+        entityId: 'child-span',
+        spanType: SpanType.MODEL_GENERATION,
+        ...childSpanOverrides,
+      }),
+    ],
+  };
+}
+
 function createMockScorerResult(overrides: Record<string, unknown> = {}) {
   return {
     runId: 'run-123',
     score: 0.85,
     result: { test: 'result' },
     prompt: 'Test prompt',
+    ...overrides,
+  };
+}
+
+function createMockSavedScore(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'score-123',
+    score: 0.85,
+    scorer: { name: 'test-scorer' },
+    createdAt: new Date('2025-01-01T00:02:00Z'),
     ...overrides,
   };
 }
@@ -89,39 +145,17 @@ class TestContext {
     } as unknown as MastraScorer;
   }
 
+  setupSaveScorePassthrough() {
+    this.mockScoresStore.saveScore.mockImplementation(async (payload: Record<string, unknown>) => ({
+      score: createMockSavedScore({
+        ...payload,
+        id: `score-${String(payload.traceId ?? 'unknown')}-${String(payload.spanId ?? 'unknown')}`,
+      }),
+    }));
+  }
+
   async setupSuccessfulScenario(target: { traceId: string; spanId?: string } = { traceId: 'trace-1' }) {
-    const mockTrace: TraceRecord = {
-      traceId: target.traceId,
-      spans: target.spanId
-        ? [
-            createMockSpanRecord({
-              spanId: 'span-1',
-              traceId: target.traceId,
-              parentSpanId: null,
-              name: 'root-span',
-              entityId: 'root-span',
-              spanType: SpanType.AGENT_RUN,
-            }),
-            createMockSpanRecord({
-              spanId: target.spanId,
-              traceId: target.traceId,
-              parentSpanId: 'span-1',
-              name: 'child-span',
-              entityId: 'child-span',
-              spanType: SpanType.MODEL_GENERATION,
-            }),
-          ]
-        : [
-            createMockSpanRecord({
-              spanId: 'span-1',
-              traceId: target.traceId,
-              parentSpanId: null,
-              name: 'root-span',
-              entityId: 'root-span',
-              spanType: SpanType.AGENT_RUN,
-            }),
-          ],
-    };
+    const mockTrace = createMockTraceRecord({ traceId: target.traceId, spanId: target.spanId });
 
     this.mockObservabilityStore.getTrace.mockResolvedValue(mockTrace);
     this.mockScorerRun.mockResolvedValue(
@@ -131,17 +165,34 @@ class TestContext {
         output: { test: 'output' },
       }),
     );
-    this.mockScoresStore.saveScore.mockResolvedValue({
-      score: {
-        id: 'score-123',
-        score: 0.85,
-        scorer: { name: 'test-scorer' },
-        createdAt: new Date(),
-      },
-    });
+    this.setupSaveScorePassthrough();
     this.mockObservabilityStore.updateSpan.mockResolvedValue(undefined);
 
-    return this;
+    return { mockTrace };
+  }
+
+  async setupSuccessfulBatchScenario(targets: ScoreTraceBatchTarget[]) {
+    const tracesById = new Map(
+      targets.map(target => [
+        target.traceId,
+        createMockTraceRecord({ traceId: target.traceId, spanId: target.spanId }),
+      ]),
+    );
+
+    this.mockObservabilityStore.getTrace.mockImplementation(async ({ traceId }: { traceId: string }) => {
+      return tracesById.get(traceId) ?? null;
+    });
+    this.mockScorerRun.mockResolvedValue(
+      createMockScorerResult({
+        runId: 'run-123',
+        input: { test: 'input' },
+        output: { test: 'output' },
+      }),
+    );
+    this.setupSaveScorePassthrough();
+    this.mockObservabilityStore.updateSpan.mockResolvedValue(undefined);
+
+    return { tracesById };
   }
 
   async setupErrorScenario(
@@ -154,18 +205,7 @@ class TestContext {
         break;
 
       case 'span-not-found': {
-        const mockTrace: TraceRecord = {
-          traceId: errorDetails?.traceId || 'trace-1',
-          spans: [
-            createMockSpanRecord({
-              spanId: 'span-1',
-              traceId: errorDetails?.traceId || 'trace-1',
-              parentSpanId: null,
-              name: 'root-span',
-              spanType: SpanType.AGENT_RUN,
-            }),
-          ],
-        };
+        const mockTrace = createMockTraceRecord({ traceId: errorDetails?.traceId || 'trace-1' });
         this.mockObservabilityStore.getTrace.mockResolvedValue(mockTrace);
         break;
       }
@@ -201,13 +241,25 @@ class TestContext {
   }
 
   async scoreTraceTarget(
-    target: { traceId: string; spanId?: string },
+    target: ScoreTraceTarget,
     overrides: { batchId?: string; datasetId?: string; datasetItemId?: string } = {},
   ) {
     return scoreTrace({
       storage: this.mockStorage,
       scorer: this.mockScorer,
       target,
+      ...overrides,
+    });
+  }
+
+  async scoreTraceBatchTargets(
+    targets: ScoreTraceBatchTarget[],
+    overrides: { batchId?: string; datasetId?: string; concurrency?: number } = {},
+  ) {
+    return scoreTraceBatch({
+      storage: this.mockStorage,
+      scorer: this.mockScorer,
+      targets,
       ...overrides,
     });
   }
@@ -245,6 +297,51 @@ describe('scoreTrace', () => {
         }),
       );
       expect(testContext.mockObservabilityStore.updateSpan).toHaveBeenCalled();
+    });
+
+    it('returns the persisted score row from scoresStore.saveScore', async () => {
+      const target = { traceId: 'trace-1' };
+      await testContext.setupSuccessfulScenario(target);
+
+      const savedScore = await testContext.scoreTraceTarget(target);
+
+      expect(savedScore).toEqual(
+        expect.objectContaining({
+          id: 'score-trace-1-span-1',
+          traceId: 'trace-1',
+          spanId: 'span-1',
+          scorerId: 'test-scorer',
+        }),
+      );
+    });
+
+    it('uses a preloaded trace target without rereading the trace from storage', async () => {
+      const preloadedTrace = createMockTraceRecord({ traceId: 'trace-1', spanId: 'span-2' });
+      testContext.mockScorerRun.mockResolvedValue(
+        createMockScorerResult({
+          runId: 'run-123',
+          input: { test: 'input' },
+          output: { test: 'output' },
+        }),
+      );
+      testContext.setupSaveScorePassthrough();
+      testContext.mockObservabilityStore.updateSpan.mockResolvedValue(undefined);
+
+      const savedScore = await testContext.scoreTraceTarget({ trace: preloadedTrace, spanId: 'span-2' });
+
+      expect(testContext.mockObservabilityStore.getTrace).not.toHaveBeenCalled();
+      expect(savedScore).toEqual(
+        expect.objectContaining({
+          traceId: 'trace-1',
+          spanId: 'span-2',
+        }),
+      );
+      expect(testContext.mockObservabilityStore.updateSpan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          traceId: 'trace-1',
+          spanId: 'span-2',
+        }),
+      );
     });
   });
 
@@ -407,21 +504,13 @@ describe('scoreTrace', () => {
       const target = { traceId: 'trace-1' };
       await testContext.setupSuccessfulScenario(target);
 
-      const taggedTrace: TraceRecord = {
+      const taggedTrace = createMockTraceRecord({
         traceId: 'trace-1',
-        spans: [
-          createMockSpanRecord({
-            spanId: 'span-1',
-            traceId: 'trace-1',
-            parentSpanId: null,
-            name: 'root-span',
-            entityId: 'root-span',
-            spanType: SpanType.AGENT_RUN,
-            organizationId: 'org-1',
-            resourceId: 'project-1',
-          }),
-        ],
-      };
+        rootSpanOverrides: {
+          organizationId: 'org-1',
+          resourceId: 'project-1',
+        },
+      });
       testContext.mockObservabilityStore.getTrace.mockResolvedValue(taggedTrace);
 
       await testContext.scoreTraceTarget(target);
@@ -446,5 +535,136 @@ describe('scoreTrace', () => {
         }),
       );
     });
+  });
+});
+
+describe('scoreTraceBatch', () => {
+  let testContext: TestContext;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    testContext = new TestContext();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('scores all targets and returns ordered results with shared and per-target provenance', async () => {
+    const targets: ScoreTraceBatchTarget[] = [
+      { traceId: 'trace-1', datasetItemId: 'dataset-item-1' },
+      { traceId: 'trace-2', spanId: 'span-2', datasetItemId: 'dataset-item-2' },
+    ];
+    await testContext.setupSuccessfulBatchScenario(targets);
+
+    const result = await testContext.scoreTraceBatchTargets(targets, {
+      batchId: 'batch-1',
+      datasetId: 'dataset-1',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        batchId: 'batch-1',
+        datasetId: 'dataset-1',
+        scoredCount: 2,
+        failedCount: 0,
+      }),
+    );
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        ok: true,
+        index: 0,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        datasetItemId: 'dataset-item-1',
+        score: expect.objectContaining({
+          batchId: 'batch-1',
+          datasetId: 'dataset-1',
+          datasetItemId: 'dataset-item-1',
+          traceId: 'trace-1',
+          spanId: 'span-1',
+        }),
+      }),
+      expect.objectContaining({
+        ok: true,
+        index: 1,
+        traceId: 'trace-2',
+        spanId: 'span-2',
+        datasetItemId: 'dataset-item-2',
+        score: expect.objectContaining({
+          batchId: 'batch-1',
+          datasetId: 'dataset-1',
+          datasetItemId: 'dataset-item-2',
+          traceId: 'trace-2',
+          spanId: 'span-2',
+        }),
+      }),
+    ]);
+  });
+
+  it('returns mixed success and failure results without aborting sibling targets', async () => {
+    const targets: ScoreTraceBatchTarget[] = [
+      { traceId: 'trace-1', datasetItemId: 'dataset-item-1' },
+      { traceId: 'trace-2', spanId: 'missing-span', datasetItemId: 'dataset-item-2' },
+      { traceId: 'trace-3', spanId: 'span-3', datasetItemId: 'dataset-item-3' },
+    ];
+
+    testContext.mockObservabilityStore.getTrace.mockImplementation(async ({ traceId }: { traceId: string }) => {
+      if (traceId === 'trace-2') {
+        return createMockTraceRecord({ traceId });
+      }
+
+      if (traceId === 'trace-3') {
+        return createMockTraceRecord({ traceId, spanId: 'span-3' });
+      }
+
+      return createMockTraceRecord({ traceId });
+    });
+    testContext.mockScorerRun.mockResolvedValue(
+      createMockScorerResult({
+        runId: 'run-123',
+        input: { test: 'input' },
+        output: { test: 'output' },
+      }),
+    );
+    testContext.setupSaveScorePassthrough();
+    testContext.mockObservabilityStore.updateSpan.mockResolvedValue(undefined);
+
+    const result = await testContext.scoreTraceBatchTargets(targets, {
+      batchId: 'batch-1',
+      datasetId: 'dataset-1',
+    });
+
+    expect(result.scoredCount).toBe(2);
+    expect(result.failedCount).toBe(1);
+    expect(result.results).toEqual([
+      expect.objectContaining({
+        ok: true,
+        index: 0,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        datasetItemId: 'dataset-item-1',
+      }),
+      expect.objectContaining({
+        ok: false,
+        index: 1,
+        traceId: 'trace-2',
+        spanId: 'missing-span',
+        datasetItemId: 'dataset-item-2',
+        error: expect.any(Error),
+      }),
+      expect.objectContaining({
+        ok: true,
+        index: 2,
+        traceId: 'trace-3',
+        spanId: 'span-3',
+        datasetItemId: 'dataset-item-3',
+      }),
+    ]);
+    expect(result.results[1]?.ok).toBe(false);
+    if (result.results[1]?.ok === false) {
+      expect(result.results[1].error.message).toContain('Span not found for scoring');
+    }
+    expect(testContext.mockScoresStore.saveScore).toHaveBeenCalledTimes(2);
   });
 });

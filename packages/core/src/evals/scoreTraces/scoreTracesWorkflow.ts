@@ -112,14 +112,65 @@ function getSpanTenancy(span: SpanRecord): ScoreTenancy {
   return tenancy;
 }
 
+export type ScoreTraceTarget = { traceId: string; spanId?: string } | { trace: TraceRecord; spanId?: string };
+
+export type ScoreTraceBatchTarget = {
+  traceId: string;
+  spanId?: string;
+  datasetItemId?: string;
+};
+
+export type ScoreTraceBatchResult =
+  | {
+      ok: true;
+      index: number;
+      traceId: string;
+      spanId: string;
+      datasetItemId?: string;
+      score: ScoreRowData;
+    }
+  | {
+      ok: false;
+      index: number;
+      traceId: string;
+      spanId?: string;
+      datasetItemId?: string;
+      error: Error;
+    };
+
+type ScoreTraceReferenceTarget = { traceId: string; spanId?: string };
+
+function isScoreTraceReferenceTarget(target: ScoreTraceTarget): target is ScoreTraceReferenceTarget {
+  return 'traceId' in target;
+}
+
+function resolveTargetSpan({ trace, spanId }: { trace: TraceRecord; spanId?: string }): SpanRecord {
+  const span = spanId
+    ? trace.spans.find(candidateSpan => candidateSpan.spanId === spanId)
+    : trace.spans.find(candidateSpan => candidateSpan.parentSpanId === null);
+
+  if (!span) {
+    throw new Error(`Span not found for scoring, traceId: ${trace.traceId}, spanId: ${spanId ?? 'Not provided'}`);
+  }
+
+  return span;
+}
+
 /** Resolve the target span for a trace/target pair. */
 async function resolveTraceAndSpan({
   storage,
   target,
 }: {
   storage: MastraStorage;
-  target: { traceId: string; spanId?: string };
+  target: ScoreTraceTarget;
 }): Promise<{ trace: TraceRecord; span: SpanRecord }> {
+  if (!isScoreTraceReferenceTarget(target)) {
+    return {
+      trace: target.trace,
+      span: resolveTargetSpan({ trace: target.trace, spanId: target.spanId }),
+    };
+  }
+
   // TODO: add storage api to get a single span
   const observabilityStore = await storage.getStore('observability');
   if (!observabilityStore) {
@@ -135,20 +186,7 @@ async function resolveTraceAndSpan({
     throw new Error(`Trace not found for scoring, traceId: ${target.traceId}`);
   }
 
-  let span: SpanRecord | undefined;
-  if (target.spanId) {
-    span = trace.spans.find(span => span.spanId === target.spanId);
-  } else {
-    span = trace.spans.find(span => span.parentSpanId === null);
-  }
-
-  if (!span) {
-    throw new Error(
-      `Span not found for scoring, traceId: ${target.traceId}, spanId: ${target.spanId ?? 'Not provided'}`,
-    );
-  }
-
-  return { trace, span };
+  return { trace, span: resolveTargetSpan({ trace, spanId: target.spanId }) };
 }
 
 type TraceScoreResult = Awaited<ReturnType<MastraScorer['run']>>;
@@ -209,7 +247,7 @@ export async function scoreTrace({
 }: {
   storage: MastraStorage;
   scorer: MastraScorer;
-  target: { traceId: string; spanId?: string };
+  target: ScoreTraceTarget;
   /** Optional batch handle stamped on the persisted score so all scores from one
    * batch scoring call share a `batchId` (each keeps its own per-execution `runId`). */
   batchId?: string;
@@ -218,7 +256,7 @@ export async function scoreTrace({
    * independent of how the trace is resolved. */
   datasetId?: string;
   datasetItemId?: string;
-}) {
+}): Promise<ScoreRowData> {
   const { trace, span } = await resolveTraceAndSpan({ storage, target });
   const tenancy = getSpanTenancy(span);
 
@@ -232,7 +270,7 @@ export async function scoreTrace({
       description: scorer.description,
       hasJudge: !!scorer.judge,
     },
-    traceId: target.traceId,
+    traceId: trace.traceId,
     spanId: span.spanId,
     entityId: span.entityId || span.entityName || 'unknown',
     entityType: span.spanType,
@@ -249,6 +287,87 @@ export async function scoreTrace({
   // Legacy score-store emission. This path is being deprecated.
   const savedScoreRecord = await validateAndSaveScore({ storage, scorerResult });
   await attachScoreToSpan({ storage, span, scoreRecord: savedScoreRecord });
+  return savedScoreRecord;
+}
+
+function toBatchResultError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(typeof error === 'string' ? error : 'Unknown scoreTraceBatch error');
+}
+
+export async function scoreTraceBatch({
+  storage,
+  scorer,
+  targets,
+  batchId,
+  datasetId,
+  concurrency = 3,
+}: {
+  storage: MastraStorage;
+  scorer: MastraScorer;
+  targets: ScoreTraceBatchTarget[];
+  batchId?: string;
+  datasetId?: string;
+  concurrency?: number;
+}): Promise<{
+  batchId?: string;
+  datasetId?: string;
+  scoredCount: number;
+  failedCount: number;
+  results: ScoreTraceBatchResult[];
+}> {
+  const results = await pMap(
+    targets,
+    async (target, index): Promise<ScoreTraceBatchResult> => {
+      try {
+        const score = await scoreTrace({
+          storage,
+          scorer,
+          target,
+          batchId,
+          datasetId,
+          datasetItemId: target.datasetItemId,
+        });
+        const spanId = score.spanId ?? target.spanId;
+
+        if (!spanId) {
+          throw new Error(`Persisted score is missing spanId for traceId: ${target.traceId}`);
+        }
+
+        return {
+          ok: true,
+          index,
+          traceId: score.traceId ?? target.traceId,
+          spanId,
+          ...(target.datasetItemId ? { datasetItemId: target.datasetItemId } : {}),
+          score,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          index,
+          traceId: target.traceId,
+          ...(target.spanId ? { spanId: target.spanId } : {}),
+          ...(target.datasetItemId ? { datasetItemId: target.datasetItemId } : {}),
+          error: toBatchResultError(error),
+        };
+      }
+    },
+    { concurrency },
+  );
+
+  const scoredCount = results.filter(result => result.ok).length;
+
+  return {
+    ...(batchId ? { batchId } : {}),
+    ...(datasetId ? { datasetId } : {}),
+    scoredCount,
+    failedCount: results.length - scoredCount,
+    results,
+  };
 }
 
 /**
