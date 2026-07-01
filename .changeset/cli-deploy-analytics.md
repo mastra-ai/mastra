@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Track CLI deploy commands in PostHog analytics. `mastra deploy`, `mastra studio deploy`, and `mastra server deploy` now emit `cli_command` events with timing, success/error status, and non-PII flag properties (env name, flag presence, headless mode, target API host). This lets us measure adoption of the unified `mastra deploy` entry point relative to the legacy `studio deploy` / `server deploy` paths. Telemetry continues to respect `MASTRA_TELEMETRY_DISABLED`.
+Improved anonymous telemetry for `mastra deploy`, `mastra studio deploy`, and `mastra server deploy` so we can spot regressions and measure adoption of the unified deploy path. Events include timing, success/failure, and non-PII flag properties (e.g. whether `--org`, `--project`, or `--env-file` were passed, and whether the command was run in headless mode). The Mastra platform API host is now reported as a coarse label (`cloud` / `staging` / `localhost` / `custom` / `unknown`) instead of the raw hostname, so self-hosted deployments never leak their API URL. Telemetry continues to honor `MASTRA_TELEMETRY_DISABLED`.

@@ -6,16 +6,17 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import { config } from 'dotenv';
+
+import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
+import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
-import { MASTRA_STUDIO_URL } from '../auth/client.js';
+import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL  } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
-import { MASTRA_PLATFORM_API_URL } from '../auth/client.js';
-import { getAnalytics, type CLI_ORIGIN } from '../../analytics/index.js';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -352,7 +353,7 @@ export async function serverDeployAction(dir: string | undefined, opts: ServerDe
       hasConfig: Boolean(opts.config),
       debug: Boolean(opts.debug),
       headless: Boolean(process.env.MASTRA_API_TOKEN),
-      targetApi: new URL(MASTRA_PLATFORM_API_URL).host,
+      targetApi: bucketApiHost(MASTRA_PLATFORM_API_URL),
     },
     execution: () => runServerDeploy(dir, opts),
     origin: process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN | undefined,

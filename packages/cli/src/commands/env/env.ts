@@ -1,5 +1,5 @@
-import { Command } from 'commander';
 import * as p from '@clack/prompts';
+import type { Command } from 'commander';
 import { getToken } from '../auth/credentials.js';
 import { resolveCurrentOrg } from '../auth/orgs.js';
 import { fetchProjects, fetchEnvironments, createEnvironment, deleteEnvironment } from './platform-api.js';
@@ -62,7 +62,7 @@ async function listEnvironmentsAction(projectArg: string, options?: { json?: boo
   const environments = await fetchEnvironments(token, orgId, project.id);
 
   if (options?.json) {
-    console.log(JSON.stringify({ environments }, null, 2));
+    process.stdout.write(`${JSON.stringify({ environments }, null, 2)}\n`);
     return;
   }
 
@@ -105,7 +105,7 @@ async function createEnvironmentAction(
   });
 
   if (options.json) {
-    console.log(JSON.stringify({ environment }, null, 2));
+    process.stdout.write(`${JSON.stringify({ environment }, null, 2)}\n`);
     return;
   }
 

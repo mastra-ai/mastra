@@ -10,33 +10,39 @@
  */
 
 import { execSync } from 'node:child_process';
-import { createWriteStream, readFileSync } from 'node:fs';
+import { createWriteStream } from 'node:fs';
 import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import archiver from 'archiver';
+import type { Archiver } from 'archiver';
 import pc from 'picocolors';
 
+import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
+import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { writeBarLine } from '../../utils/clack-bar.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
+import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
+import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
+import type { Environment } from '../env/platform-api.js';
+import { loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
-import { fetchProjects } from '../env/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
-import {
-  loadDeployEnvFromDotenv,
-  readEnvVars,
-  getMastraVersion,
-  parseEnvFile,
-} from '../studio/deploy.js';
-import { fetchEnvironments, createEnvironment, type Environment } from '../env/platform-api.js';
-import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
-import { getAnalytics, type CLI_ORIGIN } from '../../analytics/index.js';
+
+// Load `archiver` via createRequire. `@types/archiver` uses `export = archiver`
+// (CJS), which the CI TS build config rejects as a default import (TS1192)
+// during declaration emit. Using createRequire keeps runtime behavior identical
+// while sidestepping the ambient type shape mismatch.
+const requireCjs = createRequire(import.meta.url);
+const archiver = requireCjs('archiver') as (
+  format: 'zip' | 'tar',
+  options?: { zlib?: { level?: number } },
+) => Archiver;
 
 
 /**
@@ -548,7 +554,7 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
       hasConfig: Boolean(opts.config),
       debug: Boolean(opts.debug),
       headless: Boolean(process.env.MASTRA_API_TOKEN),
-      targetApi: new URL(MASTRA_PLATFORM_API_URL).host,
+      targetApi: bucketApiHost(MASTRA_PLATFORM_API_URL),
     },
     execution: () => runUnifiedDeploy(dir, opts),
     origin: process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN | undefined,
