@@ -37,7 +37,7 @@
 /packages/core/src/error/ @wardpeet @NikAiyer
 /packages/core/src/evals/ @epinzur @intojhanurag
 /packages/core/src/events/ @rase- @TylerBarnes
-/packages/core/src/features/ @TylerBarnes @epinzur
+/packages/core/src/features/ @TylerBarnes @NikAiyer
 /packages/core/src/harness/ @TylerBarnes @abhiaiyer91
 /packages/core/src/hooks/ @NikAiyer @abhiaiyer91
 /packages/core/src/integration/ @abhiaiyer91 @wardpeet
@@ -53,16 +53,16 @@
 /packages/core/src/memory/ @TylerBarnes @DanielSLew
 /packages/core/src/notifications/ @TylerBarnes @CalebBarnes
 /packages/core/src/observability/ @epinzur @intojhanurag
-/packages/core/src/processor-provider/ @wardpeet @epinzur
+/packages/core/src/processor-provider/ @wardpeet @DanielSLew
 /packages/core/src/processors/ @TylerBarnes @wardpeet
 /packages/core/src/relevance/ @CalebBarnes @NikAiyer
 /packages/core/src/request-context/ @DanielSLew @abhiaiyer91
-/packages/core/src/run/ @epinzur @intojhanurag
-/packages/core/src/schema/ @wardpeet @epinzur
+/packages/core/src/run/ @TheIsrael1 @abhiaiyer91
+/packages/core/src/schema/ @wardpeet @DanielSLew
 /packages/core/src/server/ @rphansen91 @intojhanurag
 /packages/core/src/signals/ @TylerBarnes @abhiaiyer91
 /packages/core/src/skills/ @abhiaiyer91 @wardpeet
-/packages/core/src/storage/ @DanielSLew @epinzur
+/packages/core/src/storage/ @DanielSLew @NikAiyer
 /packages/core/src/storage/domains/background-tasks/ @taofeeq-deru @wardpeet
 /packages/core/src/storage/domains/blobs/ @DanielSLew @NikAiyer
 /packages/core/src/storage/domains/channels/ @CalebBarnes @intojhanurag
@@ -179,8 +179,8 @@
 /stores/pg/ @NikAiyer @DanielSLew
 /stores/libsql/ @NikAiyer @DanielSLew
 /stores/mongodb/ @NikAiyer @DanielSLew
-/stores/clickhouse/ @NikAiyer @epinzur
-/stores/duckdb/ @NikAiyer @epinzur
+/stores/clickhouse/ @NikAiyer @wardpeet
+/stores/duckdb/ @NikAiyer @wardpeet
 /stores/dsql/ @NikAiyer @TylerBarnes
 
 # ============================================================================
