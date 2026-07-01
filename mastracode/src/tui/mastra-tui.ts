@@ -349,7 +349,7 @@ export class MastraTUI {
         const { content, images: rawImages } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
-        const images = rawImages?.map(img => this.resizeImageIfNeeded(img));
+        const images = rawImages ? await Promise.all(rawImages.map(img => this.resizeImageIfNeeded(img))) : undefined;
         const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
@@ -368,24 +368,31 @@ export class MastraTUI {
    * Fire off a message without blocking the main loop.
    * Errors are handled via controller events.
    */
-  private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
+  private async fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): Promise<void> {
     this.clearStatusTimingTicker();
-    const files = images?.map(img => {
-      const result = this.resizeImageIfNeeded(img);
-      return { data: result.data, mediaType: result.mimeType };
-    });
+    const files = images
+      ? await Promise.all(
+          images.map(async img => {
+            const result = await this.resizeImageIfNeeded(img);
+            return { data: result.data, mediaType: result.mimeType };
+          }),
+        )
+      : undefined;
     this.state.session.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
 
-  private resizeImageIfNeeded(img: { data: string; mimeType: string }): { data: string; mimeType: string } {
+  private async resizeImageIfNeeded(img: {
+    data: string;
+    mimeType: string;
+  }): Promise<{ data: string; mimeType: string }> {
     try {
       const bytes = new Uint8Array(Buffer.from(img.data, 'base64'));
       const dims = getImageDimensions(bytes);
       if (!dims || !isOversized(dims)) return img;
 
-      const result = resizeImageIfNeeded(bytes, img.mimeType, MAX_IMAGE_DIMENSION);
+      const result = await resizeImageIfNeeded(bytes, img.mimeType, MAX_IMAGE_DIMENSION);
       if (!result || !result.resized) return img;
 
       showInfo(

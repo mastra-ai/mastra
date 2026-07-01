@@ -2,15 +2,11 @@
  * Image dimension detection and resizing utilities.
  *
  * Detects oversized images (exceeding provider limits like Anthropic's 8000px)
- * and resizes them to fit within bounds. Uses:
- * - Pure JS header parsing for dimension detection (PNG, JPEG, WebP, GIF)
- * - `jpeg-js` (already in core) for JPEG decode/encode
- * - `pngjs` for PNG decode/encode
- * - Simple bilinear downsampling for the resize step
+ * and resizes them to fit within bounds using sharp (native libvips bindings).
+ * Dimension detection uses pure-JS header parsing to avoid full decode overhead.
  */
 
-import { decode as decodeJpeg, encode as encodeJpeg } from 'jpeg-js';
-import { PNG } from 'pngjs';
+import type sharp from 'sharp';
 
 /** Maximum image dimension (px) accepted by most LLM providers (Anthropic = 8000). */
 export const MAX_IMAGE_DIMENSION = 8000;
@@ -74,21 +70,30 @@ export function isOversized(dimensions: ImageDimensions, maxDimension = MAX_IMAG
 }
 
 // ---------------------------------------------------------------------------
-// Resize logic
+// Resize logic (sharp)
 // ---------------------------------------------------------------------------
+
+let _sharp: typeof sharp | undefined;
+
+async function getSharp(): Promise<typeof sharp> {
+  if (!_sharp) {
+    _sharp = (await import('sharp')).default;
+  }
+  return _sharp;
+}
 
 /**
  * Resizes an image if any dimension exceeds `maxDimension`.
  * Returns the (possibly resized) image data and metadata.
  *
- * Supports PNG and JPEG. For unsupported formats, returns null to signal
- * the caller should handle it (e.g. skip or replace with text).
+ * Uses sharp for high-performance native resizing with lanczos3 interpolation.
+ * Supports PNG, JPEG, WebP, and GIF. For truly unsupported formats, returns null.
  */
-export function resizeImageIfNeeded(
+export async function resizeImageIfNeeded(
   data: Uint8Array,
   mediaType: string,
   maxDimension = MAX_IMAGE_DIMENSION,
-): ResizeResult | null {
+): Promise<ResizeResult | null> {
   const dimensions = getImageDimensions(data);
   if (!dimensions) return null;
 
@@ -98,18 +103,39 @@ export function resizeImageIfNeeded(
 
   const { width: targetWidth, height: targetHeight } = computeTargetDimensions(dimensions, maxDimension);
 
-  const normalizedType = mediaType.toLowerCase();
+  try {
+    const sharpFn = await getSharp();
+    const pipeline = sharpFn(Buffer.from(data)).resize(targetWidth, targetHeight, {
+      fit: 'fill',
+      kernel: 'lanczos3',
+    });
 
-  if (normalizedType.includes('png')) {
-    return resizePng(data, dimensions, targetWidth, targetHeight, mediaType);
+    const normalizedType = mediaType.toLowerCase();
+    let outputBuffer: Buffer;
+
+    if (normalizedType.includes('png')) {
+      outputBuffer = await pipeline.png().toBuffer();
+    } else if (normalizedType.includes('jpeg') || normalizedType.includes('jpg')) {
+      outputBuffer = await pipeline.jpeg({ quality: 85 }).toBuffer();
+    } else if (normalizedType.includes('webp')) {
+      outputBuffer = await pipeline.webp({ quality: 85 }).toBuffer();
+    } else if (normalizedType.includes('gif')) {
+      outputBuffer = await pipeline.gif().toBuffer();
+    } else {
+      // Try PNG as safe fallback
+      outputBuffer = await pipeline.png().toBuffer();
+    }
+
+    return {
+      data: new Uint8Array(outputBuffer),
+      mediaType,
+      resized: true,
+      originalDimensions: dimensions,
+      newDimensions: { width: targetWidth, height: targetHeight },
+    };
+  } catch {
+    return null;
   }
-
-  if (normalizedType.includes('jpeg') || normalizedType.includes('jpg')) {
-    return resizeJpeg(data, dimensions, targetWidth, targetHeight, mediaType);
-  }
-
-  // Unsupported format for resize
-  return null;
 }
 
 /**
@@ -122,114 +148,6 @@ export function computeTargetDimensions(dimensions: ImageDimensions, maxDimensio
     width: Math.round(width * scale),
     height: Math.round(height * scale),
   };
-}
-
-// ---------------------------------------------------------------------------
-// Format-specific resize implementations
-// ---------------------------------------------------------------------------
-
-function resizePng(
-  data: Uint8Array,
-  originalDimensions: ImageDimensions,
-  targetWidth: number,
-  targetHeight: number,
-  mediaType: string,
-): ResizeResult {
-  const png = PNG.sync.read(Buffer.from(data));
-  const resizedPixels = bilinearResize(png.data, png.width, png.height, targetWidth, targetHeight);
-
-  const outPng = new PNG({ width: targetWidth, height: targetHeight });
-  outPng.data = resizedPixels;
-  const encoded = PNG.sync.write(outPng);
-
-  return {
-    data: new Uint8Array(encoded),
-    mediaType,
-    resized: true,
-    originalDimensions,
-    newDimensions: { width: targetWidth, height: targetHeight },
-  };
-}
-
-function resizeJpeg(
-  data: Uint8Array,
-  originalDimensions: ImageDimensions,
-  targetWidth: number,
-  targetHeight: number,
-  mediaType: string,
-): ResizeResult {
-  const decoded = decodeJpeg(data, { useTArray: true, formatAsRGBA: true });
-  const resizedPixels = bilinearResize(
-    Buffer.from(decoded.data),
-    decoded.width,
-    decoded.height,
-    targetWidth,
-    targetHeight,
-  );
-
-  const encoded = encodeJpeg({ data: resizedPixels, width: targetWidth, height: targetHeight }, 85);
-
-  return {
-    data: new Uint8Array(encoded.data),
-    mediaType,
-    resized: true,
-    originalDimensions,
-    newDimensions: { width: targetWidth, height: targetHeight },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Bilinear interpolation downsampler
-// ---------------------------------------------------------------------------
-
-/**
- * Resizes RGBA pixel data using bilinear interpolation.
- * Input and output are both flat RGBA buffers (4 bytes per pixel).
- */
-export function bilinearResize(
-  srcPixels: Buffer,
-  srcWidth: number,
-  srcHeight: number,
-  dstWidth: number,
-  dstHeight: number,
-): Buffer {
-  const dst = Buffer.alloc(dstWidth * dstHeight * 4);
-
-  const xRatio = srcWidth / dstWidth;
-  const yRatio = srcHeight / dstHeight;
-
-  for (let dstY = 0; dstY < dstHeight; dstY++) {
-    const srcYf = dstY * yRatio;
-    const srcY0 = Math.floor(srcYf);
-    const srcY1 = Math.min(srcY0 + 1, srcHeight - 1);
-    const yFrac = srcYf - srcY0;
-
-    for (let dstX = 0; dstX < dstWidth; dstX++) {
-      const srcXf = dstX * xRatio;
-      const srcX0 = Math.floor(srcXf);
-      const srcX1 = Math.min(srcX0 + 1, srcWidth - 1);
-      const xFrac = srcXf - srcX0;
-
-      const idx00 = (srcY0 * srcWidth + srcX0) * 4;
-      const idx10 = (srcY0 * srcWidth + srcX1) * 4;
-      const idx01 = (srcY1 * srcWidth + srcX0) * 4;
-      const idx11 = (srcY1 * srcWidth + srcX1) * 4;
-      const dstIdx = (dstY * dstWidth + dstX) * 4;
-
-      for (let c = 0; c < 4; c++) {
-        const v00 = srcPixels[idx00 + c]!;
-        const v10 = srcPixels[idx10 + c]!;
-        const v01 = srcPixels[idx01 + c]!;
-        const v11 = srcPixels[idx11 + c]!;
-
-        const top = v00 + (v10 - v00) * xFrac;
-        const bottom = v01 + (v11 - v01) * xFrac;
-        dst[dstIdx + c] = Math.round(top + (bottom - top) * yFrac);
-      }
-    }
-  }
-
-  return dst;
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +190,6 @@ function isGif(data: Uint8Array): boolean {
 // ---------------------------------------------------------------------------
 
 function getJpegDimensions(data: Uint8Array): ImageDimensions | null {
-  // Scan for SOF markers (0xFF 0xC0 through 0xFF 0xCF, excluding 0xC4 and 0xCC)
   let offset = 2; // skip SOI marker
   while (offset < data.length - 9) {
     if (data[offset] !== 0xff) {
@@ -289,7 +206,6 @@ function getJpegDimensions(data: Uint8Array): ImageDimensions | null {
       return { width, height };
     }
 
-    // Skip to next marker using segment length
     const segLength = readUint16BE(data, offset + 2);
     offset += 2 + segLength;
   }
@@ -306,8 +222,6 @@ function getWebPDimensions(data: Uint8Array): ImageDimensions | null {
 
   // VP8 (lossy)
   if (data[12] === 0x56 && data[13] === 0x50 && data[14] === 0x38 && data[15] === 0x20) {
-    // VP8 bitstream starts at offset 20 (after chunk header)
-    // Frame tag at offset 23 (after 3-byte frame tag)
     const offset = 26;
     if (offset + 4 > data.length) return null;
     const width = (data[offset]! | (data[offset + 1]! << 8)) & 0x3fff;

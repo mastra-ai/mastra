@@ -702,7 +702,7 @@ export class MessageList {
             const dims = getImageDimensions(bytes);
             if (!dims || !isOversized(dims)) continue;
 
-            const result = resizeImageIfNeeded(bytes, filePart.mediaType, MAX_IMAGE_DIMENSION);
+            const result = await resizeImageIfNeeded(bytes, filePart.mediaType, MAX_IMAGE_DIMENSION);
             if (!result || !result.resized) continue;
 
             this.logger?.debug?.(

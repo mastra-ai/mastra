@@ -1,45 +1,35 @@
-import { encode as encodeJpeg } from 'jpeg-js';
-import { PNG } from 'pngjs';
+import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
 
-import {
-  getImageDimensions,
-  isOversized,
-  resizeImageIfNeeded,
-  computeTargetDimensions,
-  bilinearResize,
-} from './image-resize';
+import { getImageDimensions, isOversized, resizeImageIfNeeded, computeTargetDimensions } from './image-resize';
 
 // ---------------------------------------------------------------------------
-// Test helpers: create minimal valid image buffers
+// Test helpers: create minimal valid image buffers using sharp
 // ---------------------------------------------------------------------------
 
-function createPngBuffer(width: number, height: number): Uint8Array {
-  const png = new PNG({ width, height });
-  // Fill with solid red
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (width * y + x) * 4;
-      png.data[idx] = 255; // R
-      png.data[idx + 1] = 0; // G
-      png.data[idx + 2] = 0; // B
-      png.data[idx + 3] = 255; // A
-    }
+async function createPngBuffer(width: number, height: number): Promise<Uint8Array> {
+  const channels = 4;
+  const pixels = Buffer.alloc(width * height * channels);
+  for (let i = 0; i < width * height; i++) {
+    pixels[i * channels] = 255; // R
+    pixels[i * channels + 1] = 0; // G
+    pixels[i * channels + 2] = 0; // B
+    pixels[i * channels + 3] = 255; // A
   }
-  return new Uint8Array(PNG.sync.write(png));
+  const buf = await sharp(pixels, { raw: { width, height, channels } }).png().toBuffer();
+  return new Uint8Array(buf);
 }
 
-function createJpegBuffer(width: number, height: number): Uint8Array {
-  const data = Buffer.alloc(width * height * 4);
-  // Fill with solid blue
+async function createJpegBuffer(width: number, height: number): Promise<Uint8Array> {
+  const channels = 3;
+  const pixels = Buffer.alloc(width * height * channels);
   for (let i = 0; i < width * height; i++) {
-    data[i * 4] = 0; // R
-    data[i * 4 + 1] = 0; // G
-    data[i * 4 + 2] = 255; // B
-    data[i * 4 + 3] = 255; // A
+    pixels[i * channels] = 0; // R
+    pixels[i * channels + 1] = 0; // G
+    pixels[i * channels + 2] = 255; // B
   }
-  const encoded = encodeJpeg({ data, width, height }, 80);
-  return new Uint8Array(encoded.data);
+  const buf = await sharp(pixels, { raw: { width, height, channels } }).jpeg({ quality: 80 }).toBuffer();
+  return new Uint8Array(buf);
 }
 
 // ---------------------------------------------------------------------------
@@ -47,22 +37,20 @@ function createJpegBuffer(width: number, height: number): Uint8Array {
 // ---------------------------------------------------------------------------
 
 describe('getImageDimensions', () => {
-  it('reads PNG dimensions from header', () => {
-    const buf = createPngBuffer(100, 200);
+  it('reads PNG dimensions from header', async () => {
+    const buf = await createPngBuffer(100, 200);
     const dims = getImageDimensions(buf);
     expect(dims).toEqual({ width: 100, height: 200 });
   });
 
-  it('reads JPEG dimensions', () => {
-    const buf = createJpegBuffer(300, 150);
+  it('reads JPEG dimensions', async () => {
+    const buf = await createJpegBuffer(300, 150);
     const dims = getImageDimensions(buf);
     expect(dims).toEqual({ width: 300, height: 150 });
   });
 
   it('returns null for unrecognized format', () => {
-    const buf = new Uint8Array([
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-    ]);
+    const buf = new Uint8Array(25);
     expect(getImageDimensions(buf)).toBeNull();
   });
 
@@ -115,40 +103,8 @@ describe('computeTargetDimensions', () => {
 
   it('uses the smaller scale factor when both exceed', () => {
     const result = computeTargetDimensions({ width: 10000, height: 20000 }, 8000);
-    // scale = min(8000/10000, 8000/20000) = min(0.8, 0.4) = 0.4
     expect(result.width).toBe(4000);
     expect(result.height).toBe(8000);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// bilinearResize
-// ---------------------------------------------------------------------------
-
-describe('bilinearResize', () => {
-  it('produces output buffer with correct size', () => {
-    const src = Buffer.alloc(10 * 10 * 4, 128);
-    const dst = bilinearResize(src, 10, 10, 5, 5);
-    expect(dst.length).toBe(5 * 5 * 4);
-  });
-
-  it('preserves solid color', () => {
-    const src = Buffer.alloc(4 * 4 * 4);
-    // Fill with solid green
-    for (let i = 0; i < 4 * 4; i++) {
-      src[i * 4] = 0;
-      src[i * 4 + 1] = 255;
-      src[i * 4 + 2] = 0;
-      src[i * 4 + 3] = 255;
-    }
-    const dst = bilinearResize(src, 4, 4, 2, 2);
-    // All pixels should be green
-    for (let i = 0; i < 2 * 2; i++) {
-      expect(dst[i * 4]).toBe(0);
-      expect(dst[i * 4 + 1]).toBe(255);
-      expect(dst[i * 4 + 2]).toBe(0);
-      expect(dst[i * 4 + 3]).toBe(255);
-    }
   });
 });
 
@@ -157,43 +113,40 @@ describe('bilinearResize', () => {
 // ---------------------------------------------------------------------------
 
 describe('resizeImageIfNeeded', () => {
-  it('returns unchanged for images within limit', () => {
-    const buf = createPngBuffer(100, 100);
-    const result = resizeImageIfNeeded(buf, 'image/png');
+  it('returns unchanged for images within limit', async () => {
+    const buf = await createPngBuffer(100, 100);
+    const result = await resizeImageIfNeeded(buf, 'image/png');
     expect(result).not.toBeNull();
     expect(result!.resized).toBe(false);
     expect(result!.data).toBe(buf);
   });
 
-  it('resizes oversized PNG images', () => {
-    // Create a PNG that exceeds the limit (use a small custom limit for testing)
-    const buf = createPngBuffer(200, 100);
-    const result = resizeImageIfNeeded(buf, 'image/png', 150);
+  it('resizes oversized PNG images', async () => {
+    const buf = await createPngBuffer(200, 100);
+    const result = await resizeImageIfNeeded(buf, 'image/png', 150);
     expect(result).not.toBeNull();
     expect(result!.resized).toBe(true);
     expect(result!.newDimensions!.width).toBe(150);
     expect(result!.newDimensions!.height).toBe(75);
     expect(result!.originalDimensions).toEqual({ width: 200, height: 100 });
 
-    // Verify the result is a valid PNG
     const resizedDims = getImageDimensions(result!.data);
     expect(resizedDims).toEqual({ width: 150, height: 75 });
   });
 
-  it('resizes oversized JPEG images', () => {
-    const buf = createJpegBuffer(200, 100);
-    const result = resizeImageIfNeeded(buf, 'image/jpeg', 150);
+  it('resizes oversized JPEG images', async () => {
+    const buf = await createJpegBuffer(200, 100);
+    const result = await resizeImageIfNeeded(buf, 'image/jpeg', 150);
     expect(result).not.toBeNull();
     expect(result!.resized).toBe(true);
     expect(result!.newDimensions!.width).toBe(150);
     expect(result!.newDimensions!.height).toBe(75);
 
-    // Verify the result is a valid JPEG
     const resizedDims = getImageDimensions(result!.data);
     expect(resizedDims).toEqual({ width: 150, height: 75 });
   });
 
-  it('returns null for unsupported formats', () => {
+  it('returns null for unsupported formats', async () => {
     // Create a fake buffer that looks like a GIF but exceeds limits
     const buf = new Uint8Array(100);
     buf[0] = 0x47; // G
@@ -207,19 +160,17 @@ describe('resizeImageIfNeeded', () => {
     buf[7] = 0x90; // width high byte = 0x90 -> 0x9001 = 36865
     buf[8] = 0x01; // height low byte
     buf[9] = 0x90; // height high byte
-    const result = resizeImageIfNeeded(buf, 'image/gif', 8000);
-    expect(result).toBeNull(); // GIF resize not supported
+    // GIF resize should fail because this isn't a valid GIF (no actual image data)
+    const result = await resizeImageIfNeeded(buf, 'image/gif', 8000);
+    expect(result).toBeNull();
   });
 
-  it('handles the 8000px limit correctly', () => {
-    // Create a small image with custom max dimension to simulate
-    const buf = createPngBuffer(50, 100);
-    // Should not resize when within limit
-    const result1 = resizeImageIfNeeded(buf, 'image/png', 100);
+  it('handles the 8000px limit correctly', async () => {
+    const buf = await createPngBuffer(50, 100);
+    const result1 = await resizeImageIfNeeded(buf, 'image/png', 100);
     expect(result1!.resized).toBe(false);
 
-    // Should resize when exceeding limit
-    const result2 = resizeImageIfNeeded(buf, 'image/png', 80);
+    const result2 = await resizeImageIfNeeded(buf, 'image/png', 80);
     expect(result2!.resized).toBe(true);
     expect(result2!.newDimensions!.height).toBeLessThanOrEqual(80);
     expect(result2!.newDimensions!.width).toBeLessThanOrEqual(80);
