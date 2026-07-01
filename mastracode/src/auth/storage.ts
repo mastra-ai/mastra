@@ -22,7 +22,7 @@ import type {
  * Used when auto-selecting a model after login.
  */
 export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
-  anthropic: 'anthropic/claude-opus-4-6',
+  anthropic: 'anthropic/claude-opus-4-8',
   'openai-codex': 'openai/gpt-5.5',
   // gpt-4.1 routes through `/chat/completions` (which our OpenAI-compatible
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)

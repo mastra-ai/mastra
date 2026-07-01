@@ -60,7 +60,7 @@ export function getAvailableModePacks(
 
   const openaiCodex = 'openai/gpt-5.5';
   const openaiFast = 'openai/gpt-5.4-mini';
-  const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-7' : 'anthropic/claude-sonnet-4-6';
+  const anthropicBuild = access.anthropic === 'oauth' ? 'anthropic/claude-opus-4-8' : 'anthropic/claude-sonnet-5';
 
   if (access.anthropic) {
     packs.push({
