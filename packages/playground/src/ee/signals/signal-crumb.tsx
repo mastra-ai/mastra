@@ -1,11 +1,11 @@
-import { getSignalName } from '@mastra/playground-ui/ee/signals/components/signal-details-utils';
+import { getSignalCatalogEntry } from '@mastra/playground-ui/ee/signals/signals-data';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 export function SignalCrumb() {
   const { signalId } = useParams<{ signalId: string }>();
   if (!signalId) return null;
 
-  return getSignalName(signalId);
+  return getSignalCatalogEntry(signalId).name;
 }
 
 /**
@@ -22,7 +22,7 @@ export function SignalDetailsCrumb() {
   const search = searchParams.toString();
   const to = `/signals/${encodeURIComponent(signalId)}${search ? `?${search}` : ''}`;
 
-  return <Link to={to}>{getSignalName(signalId)}</Link>;
+  return <Link to={to}>{getSignalCatalogEntry(signalId).name}</Link>;
 }
 
 /**
