@@ -143,7 +143,15 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.alterTable({
       tableName: TABLE_DATASETS,
       schema: TABLE_SCHEMAS[TABLE_DATASETS],
-      ifNotExists: ['organizationId', 'projectId', 'candidateKey', 'candidateId'],
+      ifNotExists: [
+        'organizationId',
+        'projectId',
+        'candidateKey',
+        'candidateId',
+        'targetType',
+        'targetIds',
+        'scorerIds',
+      ],
     });
     await this.db.alterTable({
       tableName: TABLE_DATASET_ITEMS,
