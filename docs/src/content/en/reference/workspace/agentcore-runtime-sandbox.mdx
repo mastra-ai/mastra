@@ -47,6 +47,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'dev-agent',
   name: 'dev-agent',
   model: 'anthropic/claude-sonnet-4-6',
   instructions: 'You are a helpful development assistant.',
