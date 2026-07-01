@@ -419,45 +419,6 @@ export class ScoresMySQL extends ScoresStorage {
       pagination,
     );
   }
-
-  async listScoresByBatchId({
-    batchId,
-    pagination,
-    filters,
-  }: {
-    batchId: string;
-    pagination: StoragePagination;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResult> {
-    return this.fetchScores(
-      this.buildWhereClause({
-        batchId,
-        organizationId: filters?.organizationId,
-        projectId: filters?.projectId,
-      }),
-      pagination,
-    );
-  }
-
-  async listScoresByDatasetId({
-    datasetId,
-    pagination,
-    filters,
-  }: {
-    datasetId: string;
-    pagination: StoragePagination;
-    filters?: ScoreTenancyFilters;
-  }): Promise<ListScoresResult> {
-    return this.fetchScores(
-      this.buildWhereClause({
-        datasetId,
-        organizationId: filters?.organizationId,
-        projectId: filters?.projectId,
-      }),
-      pagination,
-    );
-  }
-
   async listScoresBySpan({
     traceId,
     spanId,

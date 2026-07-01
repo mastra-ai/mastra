@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { SaveScorePayload } from '../../../evals/types';
 import { InMemoryDB } from '../inmemory-db';
 import { ScoresInMemory } from './inmemory';
@@ -27,8 +27,9 @@ describe('ScoresInMemory tenancy', () => {
     scores = new ScoresInMemory({ db });
   });
 
-  it('persists projectId and organizationId on saved scores', async () => {
+  it('persists organizationId and projectId on saved scores', async () => {
     const { score } = await scores.saveScore(basePayload({ organizationId: 'org-a', projectId: 'proj-1' }));
+
     expect(score.organizationId).toBe('org-a');
     expect(score.projectId).toBe('proj-1');
   });
@@ -65,6 +66,7 @@ describe('ScoresInMemory tenancy', () => {
       pagination: { page: 0, perPage: 10 },
       filters: { organizationId: 'org-b' },
     });
+
     expect(result.scores).toHaveLength(1);
     expect(result.scores[0]?.organizationId).toBe('org-b');
   });
@@ -77,11 +79,12 @@ describe('ScoresInMemory tenancy', () => {
       scorerId: 'scorer-1',
       pagination: { page: 0, perPage: 10 },
     });
+
     expect(result.scores).toHaveLength(2);
   });
 });
 
-describe('ScoresInMemory batchId', () => {
+describe('ScoresInMemory score provenance', () => {
   let db: InMemoryDB;
   let scores: ScoresInMemory;
 
@@ -90,108 +93,17 @@ describe('ScoresInMemory batchId', () => {
     scores = new ScoresInMemory({ db });
   });
 
-  it('persists batchId on saved scores', async () => {
-    const { score } = await scores.saveScore(basePayload({ batchId: 'batch-1' }));
+  it('persists batchId, datasetId, and datasetItemId on saved scores', async () => {
+    const { score } = await scores.saveScore(
+      basePayload({
+        batchId: 'batch-1',
+        datasetId: 'dataset-1',
+        datasetItemId: 'item-1',
+      }),
+    );
+
     expect(score.batchId).toBe('batch-1');
-  });
-
-  it('groups scores by batchId while each keeps its own runId', async () => {
-    await scores.saveScore(basePayload({ batchId: 'batch-1', runId: 'run-1' }));
-    await scores.saveScore(basePayload({ batchId: 'batch-1', runId: 'run-2' }));
-    await scores.saveScore(basePayload({ batchId: 'batch-2', runId: 'run-3' }));
-
-    const batch1 = await scores.listScoresByBatchId({
-      batchId: 'batch-1',
-      pagination: { page: 0, perPage: 10 },
-    });
-    expect(batch1.scores).toHaveLength(2);
-    expect(new Set(batch1.scores.map(s => s.runId))).toEqual(new Set(['run-1', 'run-2']));
-
-    const batch2 = await scores.listScoresByBatchId({
-      batchId: 'batch-2',
-      pagination: { page: 0, perPage: 10 },
-    });
-    expect(batch2.scores).toHaveLength(1);
-  });
-
-  it('scopes listScoresByBatchId by tenancy', async () => {
-    await scores.saveScore(basePayload({ batchId: 'batch-1', organizationId: 'org-a', projectId: 'proj-1' }));
-    await scores.saveScore(basePayload({ batchId: 'batch-1', organizationId: 'org-b', projectId: 'proj-1' }));
-
-    const result = await scores.listScoresByBatchId({
-      batchId: 'batch-1',
-      pagination: { page: 0, perPage: 10 },
-      filters: { organizationId: 'org-a', projectId: 'proj-1' },
-    });
-    expect(result.scores).toHaveLength(1);
-    expect(result.scores[0]?.organizationId).toBe('org-a');
-  });
-
-  it('does not return scores without a matching batchId', async () => {
-    await scores.saveScore(basePayload({ runId: 'run-1' }));
-
-    const result = await scores.listScoresByBatchId({
-      batchId: 'batch-1',
-      pagination: { page: 0, perPage: 10 },
-    });
-    expect(result.scores).toHaveLength(0);
-  });
-});
-
-describe('ScoresInMemory datasetId', () => {
-  let db: InMemoryDB;
-  let scores: ScoresInMemory;
-
-  beforeEach(() => {
-    db = new InMemoryDB();
-    scores = new ScoresInMemory({ db });
-  });
-
-  it('persists datasetId and datasetItemId on saved scores', async () => {
-    const { score } = await scores.saveScore(basePayload({ datasetId: 'ds-1', datasetItemId: 'item-1' }));
-    expect(score.datasetId).toBe('ds-1');
+    expect(score.datasetId).toBe('dataset-1');
     expect(score.datasetItemId).toBe('item-1');
-  });
-
-  it('groups scores by datasetId', async () => {
-    await scores.saveScore(basePayload({ datasetId: 'ds-1', datasetItemId: 'item-1', runId: 'run-1' }));
-    await scores.saveScore(basePayload({ datasetId: 'ds-1', datasetItemId: 'item-2', runId: 'run-2' }));
-    await scores.saveScore(basePayload({ datasetId: 'ds-2', datasetItemId: 'item-3', runId: 'run-3' }));
-
-    const ds1 = await scores.listScoresByDatasetId({
-      datasetId: 'ds-1',
-      pagination: { page: 0, perPage: 10 },
-    });
-    expect(ds1.scores).toHaveLength(2);
-    expect(new Set(ds1.scores.map(s => s.datasetItemId))).toEqual(new Set(['item-1', 'item-2']));
-
-    const ds2 = await scores.listScoresByDatasetId({
-      datasetId: 'ds-2',
-      pagination: { page: 0, perPage: 10 },
-    });
-    expect(ds2.scores).toHaveLength(1);
-  });
-
-  it('scopes listScoresByDatasetId by tenancy', async () => {
-    await scores.saveScore(basePayload({ datasetId: 'ds-1', organizationId: 'org-a', projectId: 'proj-1' }));
-    await scores.saveScore(basePayload({ datasetId: 'ds-1', organizationId: 'org-b', projectId: 'proj-1' }));
-
-    const result = await scores.listScoresByDatasetId({
-      datasetId: 'ds-1',
-      pagination: { page: 0, perPage: 10 },
-      filters: { organizationId: 'org-a', projectId: 'proj-1' },
-    });
-    expect(result.scores).toHaveLength(1);
-    expect(result.scores[0]?.organizationId).toBe('org-a');
-  });
-
-  it('does not return scores without a matching datasetId', async () => {
-    await scores.saveScore(basePayload({ runId: 'run-1' }));
-
-    const result = await scores.listScoresByDatasetId({
-      datasetId: 'ds-1',
-      pagination: { page: 0, perPage: 10 },
-    });
-    expect(result.scores).toHaveLength(0);
   });
 });

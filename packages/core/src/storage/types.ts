@@ -2843,18 +2843,6 @@ export interface ListScoresBySpanInput {
   filters?: ScoreTenancyFilters;
 }
 
-export interface ListScoresByBatchIdInput {
-  batchId: string;
-  pagination: StoragePagination;
-  filters?: ScoreTenancyFilters;
-}
-
-export interface ListScoresByDatasetIdInput {
-  datasetId: string;
-  pagination: StoragePagination;
-  filters?: ScoreTenancyFilters;
-}
-
 export interface ListExperimentsInput {
   datasetId?: string;
   targetType?: TargetType;

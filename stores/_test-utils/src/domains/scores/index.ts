@@ -367,6 +367,24 @@ export function createScoresTest({
         expect(saved.projectId).toBe('proj-1');
       });
 
+      it('round-trips batch and dataset provenance fields', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const { score: saved } = await scoresStorage.saveScore(
+          createSampleScore({
+            scorerId,
+            batchId: 'batch-1',
+            datasetId: 'dataset-1',
+            datasetItemId: 'item-1',
+          }),
+        );
+
+        const loaded = await scoresStorage.getScoreById({ id: saved.id });
+
+        expect(loaded?.batchId).toBe('batch-1');
+        expect(loaded?.datasetId).toBe('dataset-1');
+        expect(loaded?.datasetItemId).toBe('item-1');
+      });
+
       it('filters listScoresByScorerId by organizationId and projectId', async () => {
         const scorerId = `scorer-${randomUUID()}`;
         await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-1' }));
@@ -404,97 +422,6 @@ export function createScoresTest({
         });
         expect(result.scores).toHaveLength(1);
         expect(result.scores[0]?.organizationId).toBe('org-b');
-      });
-    });
-
-    describe('batchId grouping', () => {
-      it('persists batchId on saved scores', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const { score: saved } = await scoresStorage.saveScore(createSampleScore({ scorerId, batchId: 'batch-1' }));
-        expect(saved.batchId).toBe('batch-1');
-      });
-
-      it('groups scores by batchId while each keeps its own runId', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const batchId = `batch-${randomUUID()}`;
-        await scoresStorage.saveScore(createSampleScore({ scorerId, batchId, runId: 'run-1' }));
-        await scoresStorage.saveScore(createSampleScore({ scorerId, batchId, runId: 'run-2' }));
-        await scoresStorage.saveScore(
-          createSampleScore({ scorerId, batchId: `other-${randomUUID()}`, runId: 'run-3' }),
-        );
-
-        const result = await scoresStorage.listScoresByBatchId({
-          batchId,
-          pagination: { page: 0, perPage: 10 },
-        });
-        expect(result.scores).toHaveLength(2);
-        expect(new Set(result.scores.map(s => s.runId))).toEqual(new Set(['run-1', 'run-2']));
-      });
-
-      it('scopes listScoresByBatchId by tenancy', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const batchId = `batch-${randomUUID()}`;
-        await scoresStorage.saveScore(
-          createSampleScore({ scorerId, batchId, organizationId: 'org-a', projectId: 'proj-1' }),
-        );
-        await scoresStorage.saveScore(
-          createSampleScore({ scorerId, batchId, organizationId: 'org-b', projectId: 'proj-1' }),
-        );
-
-        const result = await scoresStorage.listScoresByBatchId({
-          batchId,
-          pagination: { page: 0, perPage: 10 },
-          filters: { organizationId: 'org-a', projectId: 'proj-1' },
-        });
-        expect(result.scores).toHaveLength(1);
-        expect(result.scores[0]?.organizationId).toBe('org-a');
-      });
-    });
-
-    describe('datasetId grouping', () => {
-      it('persists datasetId and datasetItemId on saved scores', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const { score: saved } = await scoresStorage.saveScore(
-          createSampleScore({ scorerId, datasetId: 'ds-1', datasetItemId: 'item-1' }),
-        );
-        expect(saved.datasetId).toBe('ds-1');
-        expect(saved.datasetItemId).toBe('item-1');
-      });
-
-      it('groups scores by datasetId', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const datasetId = `ds-${randomUUID()}`;
-        await scoresStorage.saveScore(createSampleScore({ scorerId, datasetId, datasetItemId: 'item-1' }));
-        await scoresStorage.saveScore(createSampleScore({ scorerId, datasetId, datasetItemId: 'item-2' }));
-        await scoresStorage.saveScore(
-          createSampleScore({ scorerId, datasetId: `other-${randomUUID()}`, datasetItemId: 'item-3' }),
-        );
-
-        const result = await scoresStorage.listScoresByDatasetId({
-          datasetId,
-          pagination: { page: 0, perPage: 10 },
-        });
-        expect(result.scores).toHaveLength(2);
-        expect(new Set(result.scores.map(s => s.datasetItemId))).toEqual(new Set(['item-1', 'item-2']));
-      });
-
-      it('scopes listScoresByDatasetId by tenancy', async () => {
-        const scorerId = `scorer-${randomUUID()}`;
-        const datasetId = `ds-${randomUUID()}`;
-        await scoresStorage.saveScore(
-          createSampleScore({ scorerId, datasetId, organizationId: 'org-a', projectId: 'proj-1' }),
-        );
-        await scoresStorage.saveScore(
-          createSampleScore({ scorerId, datasetId, organizationId: 'org-b', projectId: 'proj-1' }),
-        );
-
-        const result = await scoresStorage.listScoresByDatasetId({
-          datasetId,
-          pagination: { page: 0, perPage: 10 },
-          filters: { organizationId: 'org-a', projectId: 'proj-1' },
-        });
-        expect(result.scores).toHaveLength(1);
-        expect(result.scores[0]?.organizationId).toBe('org-a');
       });
     });
   });

@@ -68,7 +68,7 @@ const getTraceStep = createStep({
       inputData.targets,
       async target => {
         try {
-          await runScorerOnTarget({ storage, scorer, target });
+          await scoreTrace({ storage, scorer, target });
         } catch (error) {
           const mastraError = new MastraError(
             {
@@ -151,18 +151,15 @@ async function resolveTraceAndSpan({
   return { trace, span };
 }
 
-/** Full result returned by {@link scoreTarget} / {@link scoreTargets}. */
-export type ScoreTargetResult = Awaited<ReturnType<MastraScorer['run']>>;
+type TraceScoreResult = Awaited<ReturnType<MastraScorer['run']>>;
 
 /**
- * Run a scorer against an already-resolved trace + span and return the scorer
- * result. Does NOT persist to the scores store — callers that want to return
- * score/reason in an HTTP response (e.g. ad-hoc/per-candidate scorers) use this.
+ * Run a scorer against an already-resolved trace + span.
  *
  * Span tenancy (`organizationId`, `resourceId` → `projectId`) is threaded into
  * the scorer run so any score the scorer emits is correctly multi-tenant.
  */
-export async function scoreTarget({
+async function runScorerForTrace({
   scorer,
   trace,
   span,
@@ -170,7 +167,7 @@ export async function scoreTarget({
   scorer: MastraScorer;
   trace: TraceRecord;
   span: SpanRecord;
-}): Promise<ScoreTargetResult> {
+}): Promise<TraceScoreResult> {
   const tenancy = getSpanTenancy(span);
 
   const scorerRun = buildScorerRun({
@@ -200,32 +197,9 @@ export async function scoreTarget({
 }
 
 /**
- * Resolve each target's trace/span from storage and run the scorer, returning
- * the scorer results WITHOUT persisting them. Throws on the first failure so
- * callers can surface errors in their response.
+ * Resolve a trace/span target, run the scorer, and persist the resulting score.
  */
-export async function scoreTargets({
-  storage,
-  scorer,
-  targets,
-  concurrency = 3,
-}: {
-  storage: MastraStorage;
-  scorer: MastraScorer;
-  targets: { traceId: string; spanId?: string }[];
-  concurrency?: number;
-}): Promise<ScoreTargetResult[]> {
-  return pMap(
-    targets,
-    async target => {
-      const { trace, span } = await resolveTraceAndSpan({ storage, target });
-      return scoreTarget({ scorer, trace, span });
-    },
-    { concurrency },
-  );
-}
-
-export async function runScorerOnTarget({
+export async function scoreTrace({
   storage,
   scorer,
   target,
@@ -248,7 +222,7 @@ export async function runScorerOnTarget({
   const { trace, span } = await resolveTraceAndSpan({ storage, target });
   const tenancy = getSpanTenancy(span);
 
-  const result = await scoreTarget({ scorer, trace, span });
+  const result = await runScorerForTrace({ scorer, trace, span });
 
   const scorerResult = {
     ...result,
@@ -295,7 +269,7 @@ async function validateAndSaveScore({ storage, scorerResult }: { storage: Mastra
   return result.score;
 }
 
-export function buildScorerRun({
+function buildScorerRun({
   scorerType,
   trace,
   targetSpan,

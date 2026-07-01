@@ -2,16 +2,14 @@
 '@mastra/core': minor
 ---
 
-Exposed reusable trace-scoring primitives from `@mastra/core/evals/scoreTraces` so you can run scorers against traces outside the internal batch-scoring workflow.
-
-`scoreTargets` (and the single-target `scoreTarget`) resolve a trace and span from storage, run a scorer against them, and return the results **without** persisting them — useful for previewing or computing scores on demand. `buildScorerRun`, `runScorerOnTarget`, and the `ScoreTargetResult` type are also exported. Scores are now tenant-aware: a span's organization and project are carried through the scorer run and into any saved score.
+Add `scoreTrace()` to `@mastra/core/evals/scoreTraces` for scoring a stored trace or span without re-running the agent. It resolves the target from storage, runs the scorer, and persists the resulting score.
 
 ```ts
-import { scoreTargets } from '@mastra/core/evals/scoreTraces';
+import { scoreTrace } from '@mastra/core/evals/scoreTraces';
 
-const results = await scoreTargets({
+await scoreTrace({
   storage,
   scorer,
-  targets: [{ traceId, spanId }],
+  target: { traceId, spanId },
 });
 ```
