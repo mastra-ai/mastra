@@ -28,7 +28,7 @@ If it's unclear which issue or what the bug is, ask the user to clarify. Don't g
 
 Identify everyone involved and gauge their context depth:
 
-- **Issue author**: Who opened it? Check their merged PR count (`gh pr list --author <user> --state merged --json number --jq length`) and issue count (`gh issue list --author <user> --state all --json number --jq length`). A first-time reporter vs a core contributor frames how you read the issue — a contributor likely knows the internals, a new user may be describing symptoms of a different root cause.
+- **Issue author**: Who opened it? Check their merged PR count (`gh pr list --author <user> --state merged --limit 100 --json number --jq length`) and issue count (`gh issue list --author <user> --state all --limit 100 --json number --jq length`). A first-time reporter vs a core contributor frames how you read the issue — a contributor likely knows the internals, a new user may be describing symptoms of a different root cause.
 - **Commenters**: Read all comments on the issue thread. For anyone who suggested a cause, workaround, or diagnosis, check their merged PR count too. A maintainer's "I think this is related to X" is a strong lead worth tracing. A user's "me too" with a slightly different repro might reveal a broader pattern.
 - **Assignees**: Note who (if anyone) is assigned and whether they've commented.
 

@@ -26,7 +26,7 @@ Figure out who's involved:
 - **Current reviewer** (you, the user running this command) — are you the PR author (self-review) or someone else?
 - **Linked issue author(s)** — if the PR references issues, who opened them? Same person as the PR author, or someone else reporting a problem that this PR claims to fix?
 
-For each person discovered, check their merged PR count on this repo: `gh pr list --author <login> --state merged --json number --jq length`. For linked issue authors, also check their issue count: `gh issue list --author <login> --state all --json number --jq length`. This tells you how much context each person has — a first-time contributor needs different review attention than someone with 50+ merged PRs, and a prolific issue reporter's bug reports carry different weight than a first-time filer.
+For each person discovered, check their merged PR count on this repo: `gh pr list --author <login> --state merged --limit 100 --json number --jq length`. For linked issue authors, also check their issue count: `gh issue list --author <login> --state all --limit 100 --json number --jq length`. This tells you how much context each person has — a first-time contributor needs different review attention than someone with 50+ merged PRs, and a prolific issue reporter's bug reports carry different weight than a first-time filer.
 
 Note these relationships briefly — they inform how to read the PR. A maintainer fixing their own bug is different from a community member's first contribution addressing someone else's issue.
 
