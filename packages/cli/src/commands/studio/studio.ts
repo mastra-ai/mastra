@@ -103,6 +103,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
   const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
   const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
+  const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
   const organizationId = process.env.MASTRA_ORGANIZATION_ID || '';
   const platformProjectId = process.env.MASTRA_PLATFORM_PROJECT_ID || '';
   const platformObservabilityEndpoint = process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '';
@@ -121,6 +122,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))
     .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', experimentalUI)
     .replaceAll('%%MASTRA_AGENT_SIGNALS%%', agentSignals)
+    .replaceAll('%%MASTRA_SIGNALS_UI%%', signalsUI)
     .replaceAll('%%MASTRA_ORGANIZATION_ID%%', organizationId)
     .replaceAll('%%MASTRA_PLATFORM_PROJECT_ID%%', platformProjectId)
     .replaceAll('%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%', platformObservabilityEndpoint);

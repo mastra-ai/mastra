@@ -105,6 +105,46 @@ function SignalTraceListSkeleton({ rows = 8 }: { rows?: number }) {
   );
 }
 
+function SignalClusterSidebarSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4" aria-hidden="true">
+      <ul className="space-y-1">
+        {Array.from({ length: rows }).map((_, index) => (
+          <li key={index} className="flex items-start gap-2 px-3 py-2">
+            <Skeleton className="mt-1.5 h-2 w-2 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-3 w-full" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+
+function SignalDetailsSkeleton() {
+  return (
+    <section className="flex h-full min-w-0 flex-col gap-4" aria-label="Loading signal" aria-busy="true">
+      <header className="space-y-2">
+        <Skeleton className="h-7 w-48" />
+        <Skeleton className="h-4 w-64" />
+      </header>
+      <div className="flex gap-6 border-b border-border1/60">
+        <Skeleton className="mb-2 h-5 w-20" />
+        <Skeleton className="mb-2 h-5 w-16" />
+      </div>
+      <div className="flex min-h-0 flex-1 gap-6 overflow-hidden">
+        <SignalClusterSidebarSkeleton />
+        <div className="min-w-0 flex-1 space-y-4 py-4">
+          <Skeleton className="h-9 w-full rounded-lg" />
+          <SignalTraceListSkeleton />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function SignalTraceListTab({
   examples,
   selectedTraceId,
@@ -141,7 +181,10 @@ export function SignalTraceListTab({
         }}
       />
 
-      <DataList columns="minmax(12rem,1fr)" className="min-h-0 flex-1">
+      <DataList
+        columns="minmax(12rem,1fr)"
+        className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border1/60"
+      >
         <DataList.Top>
           <DataList.TopCells>
             <DataList.TopCell>Trace summary</DataList.TopCell>
@@ -357,7 +400,7 @@ export function SignalDetailsPage({
   if (entitiesLoading || topicsLoading) {
     return (
       <SignalsLayout sidebar={null}>
-        <p className="text-ui-md text-neutral3">Loading signal…</p>
+        <SignalDetailsSkeleton />
       </SignalsLayout>
     );
   }

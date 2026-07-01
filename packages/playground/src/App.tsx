@@ -131,6 +131,7 @@ declare global {
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
     MASTRA_AGENT_SIGNALS?: string;
+    MASTRA_SIGNALS_UI?: string;
     MASTRA_ORGANIZATION_ID?: string;
     MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
   }
@@ -217,16 +218,6 @@ const MinimalRootLayout = () => {
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
-
-// Signals reads from the platform Entity-Learning API, which requires the
-// observability endpoint plus the organization and project ids to build every
-// request. It is gated on the presence of all three server-injected values,
-// mirroring the nav-items gate so the route is not directly routable with a
-// partial platform config.
-const isSignalsEnabled =
-  Boolean(window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT) &&
-  Boolean(window.MASTRA_ORGANIZATION_ID) &&
-  Boolean(window.MASTRA_PLATFORM_PROJECT_ID);
 
 const agentCmsChildRoutes = [
   { index: true, element: <CmsAgentInformationPage /> },
@@ -389,48 +380,43 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      ...(isSignalsEnabled
-        ? [
+      {
+        path: '/signals',
+        handle: {
+          ...navHandle('/signals'),
+          crumbs: [
             {
-              path: '/signals',
-              handle: {
-                ...navHandle('/signals'),
-                crumbs: [
-                  {
-                    id: 'nav:/signals',
-                    Component: SignalsRootCrumb,
-                    heading: 'Signals',
-                    icon: findNavItem('/signals')?.Icon,
-                  },
-                ],
-              },
-              children: [
-                { index: true, element: <SignalsOverviewPage /> },
+              id: 'nav:/signals',
+              Component: SignalsRootCrumb,
+              heading: 'Signals',
+              icon: findNavItem('/signals')?.Icon,
+            },
+          ],
+        },
+        children: [
+          { index: true, element: <SignalsOverviewPage /> },
+          {
+            path: ':signalId',
+            element: <SignalDetailsPage />,
+            handle: {
+              crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
+            } satisfies RouteHeaderHandle,
+          },
+          {
+            path: ':signalId/traces/:traceId',
+            element: <SignalTraceIdPage />,
+            handle: {
+              crumbs: [
                 {
-                  path: ':signalId',
-                  element: <SignalDetailsPage />,
-                  handle: {
-                    crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
-                  } satisfies RouteHeaderHandle,
-                },
-                {
-                  path: ':signalId/traces/:traceId',
-                  element: <SignalTraceIdPage />,
-                  handle: {
-                    crumbs: [
-                      {
-                        id: 'signal',
-                        Component: SignalDetailsCrumb,
-                        heading: 'Signal',
-                      },
-                      { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
-                    ],
-                  } satisfies RouteHeaderHandle,
+                  id: 'signal',
+                  Component: SignalDetailsCrumb,
+                  heading: 'Signal',
                 },
               ],
-            },
-          ]
-        : []),
+            } satisfies RouteHeaderHandle,
+          },
+        ],
+      },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',

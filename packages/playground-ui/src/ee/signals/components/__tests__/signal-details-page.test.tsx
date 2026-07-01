@@ -224,12 +224,12 @@ describe('SignalDetailsPage', () => {
   });
 
   describe('when entities are still loading', () => {
-    it('shows the loading copy', () => {
+    it('shows the details skeleton', () => {
       server.use(http.get(`${ROOT}/entities`, () => new Promise(() => {})));
 
       renderSignalDetailsPage();
 
-      expect(screen.getByText('Loading signal…')).not.toBeNull();
+      expect(screen.getByLabelText('Loading signal')).not.toBeNull();
     });
   });
 

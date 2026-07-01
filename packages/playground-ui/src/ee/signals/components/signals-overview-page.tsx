@@ -183,15 +183,16 @@ export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSe
 
   const entity = selectedEntity ? entities.find(item => item.entityId === selectedEntity.entityId) : undefined;
 
-  // When entities exist but none is selected, hide the filter bar and surface a
-  // centered empty state whose CTA is the agent picker itself, so selecting an
-  // agent is the primary action. The bar returns once an agent is selected.
-  const showEntityPrompt = !isLoading && !isError && entities.length > 0 && !entity;
+  // Only show the pinned filter bar once an agent is selected. While entities
+  // are loading/erroring/empty, or when none is selected, the picker is surfaced
+  // through the centered empty state instead, so the skeleton/loading view never
+  // shows the top bar with an empty agent dropdown.
+  const showFilterBar = Boolean(entity);
 
   return (
     <TopicsLayout sidebar={null} contentPadding={false}>
       <div className="flex h-full min-w-0 flex-col" aria-label="Signals">
-        {!showEntityPrompt && (
+        {showFilterBar && (
           <div className="border-b border-border1/70 px-6 py-4">
             <SignalsEntityFilter entities={entities} selected={selectedEntity} onChange={onEntityChange} />
           </div>

@@ -273,6 +273,7 @@ export interface StudioInjectionConfig {
   requestContextPresets: string;
   experimentalUI: string;
   agentSignals: string;
+  signalsUI: string;
   organizationId: string;
   platformProjectId: string;
   platformObservabilityEndpoint: string;
@@ -301,6 +302,7 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
   html = html.replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
   html = html.replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
+  html = html.replace(`'%%MASTRA_SIGNALS_UI%%'`, config.signalsUI);
   html = html.replace(`'%%MASTRA_ORGANIZATION_ID%%'`, config.organizationId);
   html = html.replace(`'%%MASTRA_PLATFORM_PROJECT_ID%%'`, config.platformProjectId);
   html = html.replace(`'%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%'`, config.platformObservabilityEndpoint);
