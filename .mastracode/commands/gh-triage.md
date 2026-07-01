@@ -60,7 +60,7 @@ Use this compact lifecycle template and update it after each major step with con
 
 ### Confidence basis
 
-<For PR branches: what supports the score, and what keeps it below 5/5.>
+<For PR branches: 1-2 bullets supporting the score, then 1-3 explicit confidence limits. Each limit must name the missing evidence or unresolved risk, explain why it matters for merge readiness, and say blocking or non-blocking.>
 
 ### Evidence
 
@@ -81,7 +81,7 @@ Use this compact lifecycle template and update it after each major step with con
 ### Comment style, only when preparing comments
 
 - Author pre-review: tag the PR author when known, be concise/action-oriented, and request only concrete changes the author needs to make. Do not ask authors to confirm tests, verification, or maintainer review readiness.
-- Maintainer notes: start with `## 🟠 High: Maintainer notes`, then `Merge confidence - <x>/5`. Keep the usual concise `Scope`, `Context`, `Confidence basis`, `Evidence checked`, and `Observations` sections; confidence basis should add supports/limits, not replace the rest. Do not count missing human approval or unapproved remote CI checks as confidence limits; mention approval/review/remote-check status separately only if useful. If maintainer notes already exist, update that comment instead of preparing a new one.
+- Maintainer notes: start with `## 🟠 High: Maintainer notes`, then `Merge confidence - <x>/5`. Keep the usual concise `Scope`, `Context`, `Confidence basis`, `Evidence checked`, and `Observations` sections; confidence basis should use short bullets with explicit reasons, not vague caveats. For each confidence limit, state: `Limit: <specific missing evidence or unresolved risk> — Why it matters: <merge-readiness impact> — Blocking: <yes/no>`. Do not count missing human approval or unapproved remote CI checks as confidence limits; mention approval/review/remote-check status separately only if useful. If maintainer notes already exist, update that comment instead of preparing a new one.
 - For PR branches, always prepare or update maintainer notes. Do not write `Maintainer notes: Not needed.` for Branch B or Branch C.
 - Do not present maintainer notes as final approval or rejection.
 
@@ -158,7 +158,8 @@ For Branch B/C PRs, assign a merge confidence score after reviewing context. Thi
 - [ ] Base the score on: problem/solution fit, regression risk, test quality, changed-code correctness, integration with existing patterns, unresolved review comments, local verification, approved/required remote checks that actually ran, and release/user impact.
 - [ ] Do not include unapproved remote CI checks in the score. Treat them as neutral and list them separately only if useful.
 - [ ] Save the score, confidence basis, confidence gaps, and required-to-merge actions in the triage file before preparing comments.
-- [ ] Explain what prevents full confidence and whether each gap is blocking or non-blocking.
+- [ ] Confidence gaps must be concise and explicit: name the missing evidence or unresolved risk, explain why it matters for merge readiness, and mark it blocking or non-blocking.
+- [ ] Do not write generic limits like "needs maintainer review" or "tests not run" without saying which evidence is missing, why that evidence matters for this PR, and whether it changes the merge recommendation.
 - [ ] If author action is needed to raise confidence, prepare an author pre-review comment with concrete requested changes.
 
 ### Repo/history context
