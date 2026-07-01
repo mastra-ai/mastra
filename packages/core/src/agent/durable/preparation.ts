@@ -590,6 +590,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           model: entry.model,
           maxRetries: entry.maxRetries ?? 0,
           enabled: entry.enabled ?? true,
+          headers: entry.headers,
         }))
       : undefined,
     workspace,
@@ -620,6 +621,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Agent-level goal config (judge resolver, tools resolver, scorer).
     // Non-serializable — cross-process engines skip goal evaluation.
     goal: agent.__getGoalConfig(),
+    // Call-time headers from modelSettings.headers. Kept off the serialized
+    // workflow input so they never reach durable storage; the durable
+    // llm-execution step reads them from this registry slot instead.
+    callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
     cleanup: () => {},
   };
 
@@ -632,4 +637,22 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     threadId,
     resourceId,
   };
+}
+
+/**
+ * Extract string-valued headers from `modelSettings.headers` for storage on the
+ * in-process `RunRegistryEntry`. Returns `undefined` when no valid headers are
+ * present so the registry slot stays empty rather than carrying an empty object.
+ */
+function extractCallTimeHeaders(
+  modelSettings: Record<string, unknown> | undefined,
+): Record<string, string> | undefined {
+  const raw = (modelSettings as Record<string, unknown> | undefined)?.headers;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string') headers[key] = value;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
 }
