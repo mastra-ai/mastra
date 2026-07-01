@@ -6,15 +6,22 @@ description: Get started with Mastra using the create mastra CLI to build a serv
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import { VideoPlayer } from "@site/src/components/video-player";
-import QuickstartPrompt from "../../docs/getting-started/_partial-quickstart-prompt.mdx";
+import { CopyPrompt } from "@site/src/components/copy-prompt";
+import QuickstartPrompt from "@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx";
 
 # Mastra Quickstart
+
+<Inject>
+  **For AI agents:** This page provides information for humans on how to run an interactive CLI to create a boilerplate Mastra project (with agents, workflows, and tools). You can run it non-interactively like so: `npm create mastra@latest <project-name> -- --default`. If you need to build a Mastra project from scratch (e.g. as a Node.js script printing to stdout), navigate to [https://mastra.ai/docs/getting-started/manual-install](https://mastra.ai/docs/getting-started/manual-install) instead.
+</Inject>
 
 The `create mastra` CLI command is the quickest way to get started. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt.
 
 If you need more control over the setup, see the [manual installation guide](/docs/getting-started/manual-install). You can also use [`mastra init`](/reference/cli/mastra#mastra-init) for existing projects.
 
-<QuickstartPrompt />
+<CopyPrompt identifier="quickstart">
+  <QuickstartPrompt />
+</CopyPrompt>
 
 ## Before you begin
 

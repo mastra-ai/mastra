@@ -101,6 +101,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/mcp`              | Show/reload MCP server connections                                          |
 | `/sandbox`          | Manage allowed paths (add/remove dirs)                                      |
 | `/permissions`      | View/manage tool approval permissions                                       |
+| `/plugins`          | Install and manage trusted Mastra Code plugins                              |
 | `/settings`         | General settings (notifications, YOLO, etc.)                                |
 | `/yolo`             | Toggle YOLO mode (auto-approve all tools)                                   |
 | `/resource`         | Show/switch resource ID (tag for sharing)                                   |
@@ -110,6 +111,10 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/setup`            | Re-run the interactive setup wizard                                         |
 | `/help`             | Show available commands                                                     |
 | `/exit`             | Exit the TUI                                                                |
+
+### Plugins
+
+Use `/plugins` to install and manage trusted local or GitHub plugins. Plugins can add tools, commands, skills, and system instructions. Because plugins execute code inside Mastra Code and their instructions are appended to the agent prompt, only install plugins from sources you trust.
 
 ### Goals
 
@@ -331,12 +336,25 @@ client-supplied paths); users without an org fall back to a user-only key.
 # Local files (default): one isolated DB dir per tenant under this root
 export MASTRACODE_TENANT_DB_ROOT=~/.mastracode/web/tenants    # optional
 
-# Or remote libSQL/Turso per tenant ({id} = hashed (orgId, userId))
+# Or remote libSQL/Turso per tenant ({id} = hashed (orgId, userId)). This mode
+# assumes each tenant DB already exists at the templated URL.
 export MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io        # optional
 export MASTRACODE_TENANT_VECTOR_URL_TEMPLATE=libsql://{id}-vec-org.turso.io # optional
 export MASTRACODE_TENANT_DB_AUTH_TOKEN=...                                  # optional
 export MASTRACODE_TENANT_VECTOR_AUTH_TOKEN=...                              # optional
+
+# Or auto-provision a Turso database per tenant on first access via the Turso
+# Platform API (no pre-created DBs needed). Requires APP_DATABASE_URL: the
+# stable db-name/hostname mapping is persisted there so replicas converge on
+# one DB and cold starts don't re-create it. A scoped token is minted fresh per
+# resolution, so no long-lived credential is stored.
+export MASTRACODE_TURSO_PLATFORM_TOKEN=...    # optional
+export MASTRACODE_TURSO_ORG=my-org            # optional
+export MASTRACODE_TURSO_GROUP=default         # optional (default "default")
 ```
+
+Resolution priority: explicit `MASTRACODE_TENANT_DB_URL_TEMPLATE` → Turso
+auto-provisioning (when the platform token + org are set) → local libSQL files.
 
 When web auth is disabled the server uses a single shared store, exactly as before.
 
@@ -356,7 +374,8 @@ export GITHUB_APP_WEBHOOK_SECRET=...
 export MASTRACODE_DISTRIBUTED_LOCK=1
 
 # Persist/share tenant DBs across replicas — fail/warn at startup if no remote
-# tenant DB template is set (local-file DBs don't survive restarts or sharing).
+# tenant DB backend (URL template OR Turso auto-provisioning) is configured
+# (local-file DBs don't survive restarts or sharing).
 export MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1
 
 # Bound in-memory tenant caches as the team grows.
@@ -403,15 +422,67 @@ export MASTRACODE_MAX_SANDBOXES=50
 
 ## Development
 
+Mastra Code lives inside the [mastra monorepo](https://github.com/mastra-ai/mastra). All commands below assume you have cloned the repo and are in the repository root.
+
+### Setup
+
 ```bash
-# Run in development mode (with watch)
-pnpm dev
+# Install dependencies (from repo root)
+pnpm i
 
-# Type check
-pnpm typecheck
-
-# Build
+# Build all packages (required before first run)
 pnpm build
+```
+
+### Running from source
+
+```bash
+# Run the TUI directly via tsx (from repo root)
+pnpx tsx mastracode/src/main.ts
+```
+
+### Building
+
+```bash
+# Build only the mastracode package (and its dependencies)
+pnpm build:mastracode
+
+# Build the library bundle (from mastracode/)
+pnpm --filter ./mastracode run build:lib
+```
+
+### Type checking
+
+```bash
+# Type-check mastracode
+pnpm --filter ./mastracode run check
+```
+
+### Linting
+
+```bash
+# Lint mastracode
+pnpm --filter ./mastracode run lint
+```
+
+### Testing
+
+```bash
+# Run unit tests
+pnpm --filter ./mastracode test
+
+# Run e2e smoke tests
+pnpm --filter ./mastracode run e2e:smoke
+```
+
+### Web UI development
+
+```bash
+# Start the web UI dev server (API + Vite)
+pnpm --filter ./mastracode run web:dev
+
+# With GitHub App integration (starts Postgres first)
+pnpm --filter ./mastracode run web:dev:github
 ```
 
 ## Credits

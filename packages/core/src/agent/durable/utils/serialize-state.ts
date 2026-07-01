@@ -315,6 +315,7 @@ export function createWorkflowInput(params: {
   messageId: string;
   agentSpanData?: unknown;
   modelSpanData?: unknown;
+  requestContextEntries?: Record<string, unknown>;
 }): DurableAgenticWorkflowInput {
   return {
     __workflowKind: 'durable-agent',
@@ -331,6 +332,7 @@ export function createWorkflowInput(params: {
     messageId: params.messageId,
     agentSpanData: params.agentSpanData,
     modelSpanData: params.modelSpanData,
+    requestContextEntries: params.requestContextEntries,
   };
 }
 

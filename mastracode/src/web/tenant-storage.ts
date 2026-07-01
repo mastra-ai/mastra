@@ -20,7 +20,12 @@
  *      tenant key. Auth token from `MASTRACODE_TENANT_DB_AUTH_TOKEN`. The vector
  *      DB url comes from `MASTRACODE_TENANT_VECTOR_URL_TEMPLATE` (same `{id}`),
  *      falling back to the storage template when absent.
- *   2. Local libSQL files under `MASTRACODE_TENANT_DB_ROOT` (default
+ *   2. Turso auto-provisioning — when `MASTRACODE_TURSO_PLATFORM_TOKEN` and
+ *      `MASTRACODE_TURSO_ORG` are set, the tenant's own Turso database is
+ *      created (and a scoped token minted) on first access via the Turso
+ *      Platform API, then the stable mapping is persisted in the app Postgres.
+ *      See `tenant-provisioner.ts`.
+ *   3. Local libSQL files under `MASTRACODE_TENANT_DB_ROOT` (default
  *      `~/.mastracode/web/tenants/<sha256(orgId\0userId)>/`), with `storage.db`
  *      + `vectors.db`.
  *
@@ -35,6 +40,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { LibSQLStorageConfig } from '../utils/project.js';
+import { isTursoProvisioningEnabled, provisionTursoTenant } from './tenant-provisioner.js';
 
 /**
  * A resolved per-tenant storage descriptor. This is a `StorageConfig`-shaped
@@ -87,7 +93,7 @@ function applyTemplate(template: string, tenantKey: string): string {
  * ensuring the local directory exists) so it is easy to unit test. Use
  * {@link getUserStorage} for the cached entry point.
  */
-export function resolveTenantStorage(identity: TenantIdentity): TenantStorage {
+export async function resolveTenantStorage(identity: TenantIdentity): Promise<TenantStorage> {
   if (!identity.userId) {
     throw new Error('resolveTenantStorage requires a non-empty userId');
   }
@@ -114,7 +120,23 @@ export function resolveTenantStorage(identity: TenantIdentity): TenantStorage {
     };
   }
 
-  // 2. Local libSQL files under a hashed per-tenant directory.
+  // 2. Turso auto-provisioning via the Turso Platform API.
+  if (isTursoProvisioningEnabled()) {
+    const provisioned = await provisionTursoTenant(tenantKey);
+    return {
+      tenantKey,
+      storageConfig: {
+        backend: 'libsql',
+        url: provisioned.url,
+        authToken: provisioned.authToken,
+        isRemote: true,
+        vectorUrl: provisioned.vectorUrl,
+        vectorAuthToken: provisioned.vectorAuthToken,
+      },
+    };
+  }
+
+  // 3. Local libSQL files under a hashed per-tenant directory.
   const dir = path.join(tenantDbRoot(), tenantKey);
   mkdirSync(dir, { recursive: true });
   return {
@@ -132,42 +154,67 @@ export function resolveTenantStorage(identity: TenantIdentity): TenantStorage {
 const tenantCache = new Map<string, TenantStorage>();
 
 /**
+ * In-flight resolution promises, keyed by tenant key. Guards against duplicate
+ * concurrent provisioning when several requests for the same brand-new tenant
+ * arrive before the first resolution finishes.
+ */
+const inFlight = new Map<string, Promise<TenantStorage>>();
+
+/**
  * Get-or-create the cached tenant storage descriptor for an `(org, user)`
  * identity. Same identity → same cached descriptor; distinct identities →
- * distinct descriptors backed by distinct databases.
+ * distinct descriptors backed by distinct databases. Concurrent first-hits for
+ * the same tenant share a single resolution (and thus a single provision call).
  */
-export function getUserStorage(identity: TenantIdentity): TenantStorage {
+export async function getUserStorage(identity: TenantIdentity): Promise<TenantStorage> {
   const tenantKey = tenantKeyFor(identity);
   const cached = tenantCache.get(tenantKey);
   if (cached) return cached;
-  const resolved = resolveTenantStorage(identity);
-  tenantCache.set(resolved.tenantKey, resolved);
-  return resolved;
+
+  const pending = inFlight.get(tenantKey);
+  if (pending) return pending;
+
+  const promise = resolveTenantStorage(identity)
+    .then(resolved => {
+      tenantCache.set(resolved.tenantKey, resolved);
+      return resolved;
+    })
+    .finally(() => {
+      inFlight.delete(tenantKey);
+    });
+  inFlight.set(tenantKey, promise);
+  return promise;
 }
 
-/** True when a remote (network-backed) tenant DB template is configured. */
+/**
+ * True when a remote (network-backed) tenant DB backend is configured — either
+ * an explicit URL template or Turso auto-provisioning.
+ */
 export function hasRemoteTenantDb(): boolean {
-  return Boolean(process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE);
+  return Boolean(process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE) || isTursoProvisioningEnabled();
 }
 
 /**
  * Fail loud at startup when a remote tenant DB is required but not configured.
  * Local-file tenant DBs do not survive container restarts and are not shared
- * across replicas, so a multi-replica/ephemeral deploy must set
- * `MASTRACODE_TENANT_DB_URL_TEMPLATE`. Gated behind
+ * across replicas, so a multi-replica/ephemeral deploy must set either
+ * `MASTRACODE_TENANT_DB_URL_TEMPLATE` or Turso auto-provisioning
+ * (`MASTRACODE_TURSO_PLATFORM_TOKEN` + `MASTRACODE_TURSO_ORG`). Gated behind
  * `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1` so local dev is unaffected.
  */
 export function assertRemoteTenantDbIfRequired(): void {
   if (process.env.MASTRACODE_REQUIRE_REMOTE_TENANT_DB !== '1') return;
   if (hasRemoteTenantDb()) return;
   throw new Error(
-    'MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1 but no MASTRACODE_TENANT_DB_URL_TEMPLATE is set. ' +
+    'MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1 but no remote tenant DB backend is configured. ' +
       'Local-file tenant databases do not persist across container restarts and are not ' +
-      'shared across replicas. Set MASTRACODE_TENANT_DB_URL_TEMPLATE to a remote libSQL/Turso URL.',
+      'shared across replicas. Set MASTRACODE_TENANT_DB_URL_TEMPLATE to a remote libSQL/Turso URL, ' +
+      'or set MASTRACODE_TURSO_PLATFORM_TOKEN + MASTRACODE_TURSO_ORG to auto-provision Turso databases.',
   );
 }
 
 /** Clear the in-process tenant cache (test helper). */
 export function __clearTenantStorageCache(): void {
   tenantCache.clear();
+  inFlight.clear();
 }

@@ -279,7 +279,7 @@ export interface SerializedAgent {
   /** Serialized JSON schema for request context validation */
   requestContextSchema?: string;
 
-  source?: 'code' | 'stored';
+  source?: 'code' | 'stored' | 'fs';
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;

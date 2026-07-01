@@ -142,9 +142,9 @@ export class TenantDispatcher {
   }
 
   /** Get-or-create the tenant app for an `(org, user)` identity. */
-  private getTenantApp(identity: TenantIdentity): Promise<TenantApp> {
+  private async getTenantApp(identity: TenantIdentity): Promise<TenantApp> {
     this.sweepIdle();
-    const { tenantKey, storageConfig } = getUserStorage(identity);
+    const { tenantKey, storageConfig } = await getUserStorage(identity);
     const existing = this.apps.get(tenantKey);
     if (existing) {
       existing.lastUsed = this.now();

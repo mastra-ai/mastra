@@ -2,6 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
+import { assembleAgentFromFsEntry } from '../../../agent/fs-routing';
 import { createDurableAgent } from '../../../agent/durable';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
@@ -113,6 +114,7 @@ async function buildScenarioAgent({
   pubsub,
   engine,
   inputProcessors,
+  fsRouted,
 }: Pick<
   RunLoopScenarioOptions,
   | 'llm'
@@ -132,6 +134,7 @@ async function buildScenarioAgent({
   | 'pubsub'
   | 'engine'
   | 'inputProcessors'
+  | 'fsRouted'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -145,37 +148,81 @@ async function buildScenarioAgent({
   // Use dynamic model function if provided, otherwise use default AIMock-backed model
   const modelConfig = model ?? openai(SCENARIO_MODEL_ID);
 
-  const agent = new Agent({
-    id: agentId,
-    name: 'AIMock Loop Scenario Agent',
-    instructions: instructions ?? 'You are a test agent driven by scripted AIMock responses.',
-    model: modelConfig,
-    ...(tools ? { tools } : {}),
-    ...(signals ? { signals } : {}),
-    ...(memory ? { memory } : {}),
-    ...(workspace ? { workspace } : {}),
-    ...(agents ? { agents } : {}),
-    ...(workflows ? { workflows } : {}),
-    ...(agentBackgroundTasks ? { backgroundTasks: agentBackgroundTasks } : {}),
-    ...(goal ? { goal } : {}),
-    ...(errorProcessors ? { errorProcessors } : {}),
-    ...(defaultOptions ? { defaultOptions } : {}),
-    // For durable engine, inputProcessors must be on the agent constructor
-    ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
-  });
+  const defaultInstructions = 'You are a test agent driven by scripted AIMock responses.';
+
+  // The `'fs'` variant assembles the agent via file-system routing; the explicit
+  // `fsRouted` flag is kept as an alias so a single scenario can opt in without
+  // running across the whole engine matrix.
+  const isFs = engine === 'fs' || fsRouted === true;
+
+  let agent: any;
+  if (isFs) {
+    // Build the agent exactly as the bundler would for an `agents/<name>/`
+    // directory: a partial `config.ts` plus `instructions.md` and `tools/*`.
+    // This proves a file-routed agent runs identically through the real loop.
+    if (typeof instructions === 'function') {
+      throw new Error("the 'fs' agent variant requires a static `instructions` string (the instructions.md body).");
+    }
+    const fsTools = tools
+      ? Object.entries(tools as Record<string, any>).map(([key, tool]) => ({ key, tool }))
+      : undefined;
+    agent = assembleAgentFromFsEntry({
+      name: agentId,
+      config: {
+        model: modelConfig,
+        ...(signals ? { signals } : {}),
+        ...(memory ? { memory } : {}),
+        ...(workspace ? { workspace } : {}),
+        ...(agents ? { agents } : {}),
+        ...(workflows ? { workflows } : {}),
+        ...(agentBackgroundTasks ? { backgroundTasks: agentBackgroundTasks } : {}),
+        ...(goal ? { goal } : {}),
+        ...(errorProcessors ? { errorProcessors } : {}),
+        ...(defaultOptions ? { defaultOptions } : {}),
+      },
+      instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
+      ...(fsTools ? { tools: fsTools } : {}),
+    });
+  } else {
+    agent = new Agent({
+      id: agentId,
+      name: 'AIMock Loop Scenario Agent',
+      instructions: instructions ?? defaultInstructions,
+      model: modelConfig,
+      ...(tools ? { tools } : {}),
+      ...(signals ? { signals } : {}),
+      ...(memory ? { memory } : {}),
+      ...(workspace ? { workspace } : {}),
+      ...(agents ? { agents } : {}),
+      ...(workflows ? { workflows } : {}),
+      ...(agentBackgroundTasks ? { backgroundTasks: agentBackgroundTasks } : {}),
+      ...(goal ? { goal } : {}),
+      ...(errorProcessors ? { errorProcessors } : {}),
+      ...(defaultOptions ? { defaultOptions } : {}),
+      // For durable engine, inputProcessors must be on the agent constructor
+      ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
+    });
+  }
 
   // Wrap with DurableAgent for the durable engine variant
   const registrableAgent = engine === 'durable' ? createDurableAgent({ agent }) : agent;
 
   // Registering the agent on a Mastra instance with storage is required for the
   // suspended snapshot rows that approveToolCall/declineToolCall resume from.
+  // For the fs variant, register through the real file-routing path
+  // (`__registerFsAgents`) instead of the constructor map, so the scenario
+  // exercises exactly how the bundler injects file-based agents.
   const mastra = new Mastra({
-    agents: { [agentId]: registrableAgent as any },
+    agents: isFs ? {} : { [agentId]: registrableAgent as any },
     logger: false,
     storage: new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
     ...(pubsub ? { pubsub } : {}),
   });
+
+  if (isFs) {
+    mastra.__registerFsAgents({ [agentId]: registrableAgent as any });
+  }
 
   // Start workers if background tasks are enabled
   if (backgroundTasks?.enabled) {
@@ -247,6 +294,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     sharedAgent,
     pubsub,
     engine = 'normal',
+    fsRouted,
   } = opts;
 
   fixtures(llm);
@@ -282,6 +330,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       pubsub,
       engine,
       inputProcessors,
+      fsRouted,
     });
     agent = built.agent;
     mastra = built.mastra;
@@ -304,11 +353,12 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       : {};
 
   // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor; stopWhen is not supported.
+  // inputProcessors are on the agent constructor; stopWhen/delegation/onIterationComplete
+  // are now supported by durable and forwarded below.
   const isDurable = engine === 'durable';
 
   const streamOptions = {
-    ...(stopWhen && !isDurable ? { stopWhen } : {}),
+    ...(stopWhen ? { stopWhen } : {}),
     ...(maxSteps ? { maxSteps } : {}),
     // Durable needs maxSteps as a fallback when stopWhen was the only bound
     ...(!maxSteps && stopWhen && isDurable ? { maxSteps: 10 } : {}),
@@ -317,10 +367,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors && !isDurable ? { outputProcessors } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
-    ...(prepareStep && !isDurable ? { prepareStep } : {}),
+    ...(prepareStep ? { prepareStep } : {}),
     ...(requestContext ? { requestContext } : {}),
-    ...(delegation && !isDurable ? { delegation } : {}),
-    ...(onIterationComplete && !isDurable ? { onIterationComplete } : {}),
+    ...(delegation ? { delegation } : {}),
+    ...(onIterationComplete ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
     ...(onError ? { onError } : {}),

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.48.0-alpha.6",
+  "version": "1.48.1-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -159,6 +159,16 @@
       "require": {
         "types": "./dist/channels/index.d.ts",
         "default": "./dist/channels/index.cjs"
+      }
+    },
+    "./coding-agent": {
+      "import": {
+        "types": "./dist/coding-agent/index.d.ts",
+        "default": "./dist/coding-agent/index.js"
+      },
+      "require": {
+        "types": "./dist/coding-agent/index.d.ts",
+        "default": "./dist/coding-agent/index.cjs"
       }
     },
     "./datasets": {

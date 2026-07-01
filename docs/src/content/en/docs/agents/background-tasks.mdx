@@ -10,7 +10,7 @@ packages:
 
 **Added in:** `@mastra/core@1.29.0`
 
-Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and if you use `stream()` with the [`untilIdle`](/reference/agents/agent#stream) option the agent is re-invoked automatically so the result is processed in the same call.
+Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement, the LLM continues responding, and the task runs to completion in the background. When it finishes, its result is written to memory and if you use `stream()` with the [`untilIdle`](/reference/streaming/agents/stream) option the agent is re-invoked automatically so the result is processed in the same call.
 
 ## When to use background tasks
 
@@ -184,7 +184,7 @@ const stream = await agent.stream('Research solana for me', {
 
 :::note
 
-Visit [`Agent.stream()`](/reference/agents/agent#stream) for the full API.
+Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
 
 :::
 
@@ -396,7 +396,7 @@ These read from storage rather than the pubsub stream, so they're suitable for p
 
 ## Related
 
-- [`Agent.stream()` reference](/reference/agents/agent#stream)
+- [`Agent.stream()` reference](/reference/streaming/agents/stream)
 - [backgroundTasks configuration reference](/reference/configuration#backgroundtasks)
 - [Durable agents](./durable-agents)
 - [Supervisor agents](./supervisor-agents)

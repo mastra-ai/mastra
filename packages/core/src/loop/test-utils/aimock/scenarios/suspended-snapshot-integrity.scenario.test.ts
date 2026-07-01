@@ -437,5 +437,5 @@ describeForAllEngines(
       }
     });
   },
-  { skip: ['durable', 'evented'] },
+  { skip: ['durable', 'evented', 'fs'] },
 );
