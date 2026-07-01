@@ -20,7 +20,6 @@ const result = await runEvals({
   target: weatherAgent,
   data: [
     {
-      input: '',
       inputs: [
         'What is the weather in Brooklyn?',
         'What about tomorrow?',

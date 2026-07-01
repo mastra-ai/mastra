@@ -41,12 +41,12 @@ console.log(`Processed ${result.summary.totalItems} items`)
 ```typescript
 import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
+import { weatherAgent } from './agents/weather-agent'
 
 const result = await runEvals({
   target: weatherAgent,
   data: [
     {
-      input: '',
       inputs: [
         'What is the weather in Brooklyn?',
         'What about tomorrow?',
@@ -138,14 +138,15 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
   {
     name: 'input',
     type: 'string | string[] | CoreMessage[] | any',
-    description: 'Input data for the target. For agents: messages or strings. For workflows: workflow input data.',
-    isOptional: false,
+    description:
+      'Input data for the target. For agents: messages or strings. For workflows: workflow input data. Optional when `inputs` is provided.',
+    isOptional: true,
   },
   {
     name: 'inputs',
     type: 'string[]',
     description:
-      'Multi-turn inputs. Each entry is sent sequentially to the agent on the same thread. Scorers see the accumulated output from all turns. Only supported for Agent targets.',
+      'Multi-turn inputs. Each entry is sent sequentially to the agent on the same thread. Scorers see the accumulated output from all turns. Only supported for Agent targets. When provided, `input` can be omitted.',
     isOptional: true,
   },
   {
@@ -500,7 +501,6 @@ const result = await runEvals({
   target: chatAgent,
   data: [
     {
-      input: '',
       inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
     },
   ],
@@ -511,7 +511,7 @@ const result = await runEvals({
 // result.verdict: 'passed' | 'scored' | 'failed'
 ```
 
-Each turn runs `agent.generate()` with the same `threadId`, so the agent sees the full conversation history. Mix single-turn (`input`) and multi-turn (`inputs`) items in the same `data` array.
+Each turn runs `agent.generate()` with the same `threadId`, so the agent sees the full conversation history. Mix single-turn (`input`) and multi-turn (`inputs`) items in the same `data` array. When using `inputs`, `input` can be omitted.
 
 ## Related
 

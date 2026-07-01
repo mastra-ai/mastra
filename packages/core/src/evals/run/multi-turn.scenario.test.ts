@@ -103,7 +103,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
         data: [
           {
             inputs: ['What is the weather?', 'What about tomorrow?', 'Compare them.'],
-            input: '',
           },
         ],
         scorers: [outputCountScorer(3)],
@@ -131,7 +130,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
         data: [
           {
             inputs: ['Turn 1', 'Turn 2'],
-            input: '',
           },
         ],
         scorers: [countingScorer],
@@ -140,6 +138,10 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
 
       // Scorer called once per data item, not per turn
       expect(scorerCallCount).toBe(1);
+
+      // Verify both turns were actually sent to the mock server
+      const requests = mock.getRequests();
+      expect(requests.length).toBe(2);
     });
   });
 
@@ -151,7 +153,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
         data: [
           {
             inputs: ['Weather?', 'Tomorrow?'],
-            input: '',
           },
         ],
         scorers: [outputContains('sunny')],
@@ -176,7 +177,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
         data: [
           {
             inputs: ['Question 1', 'Follow-up'],
-            input: '',
           },
         ],
         scorers: [outputCountScorer(2)],
@@ -202,7 +202,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
         data: [
           {
             inputs: ['Turn 1', 'Turn 2'],
-            input: '',
           },
         ],
         scorers: [outputCountScorer(2)],
@@ -227,7 +226,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
         data: [
           {
             inputs: ['Turn 1', 'Turn 2', 'Turn 3'],
-            input: '',
           },
         ],
         scorers: [{ scorer: qualityScorer, threshold: 0.7 }],
@@ -249,7 +247,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
           data: [
             {
               inputs: [],
-              input: '',
             },
           ],
           scorers: [outputCountScorer(1)],
@@ -268,7 +265,6 @@ describe('Multi-turn — scenario tests via runEvals + AIMock', () => {
           { input: 'Single turn question' },
           {
             inputs: ['Multi turn 1', 'Multi turn 2'],
-            input: '',
           },
         ],
         scorers: [

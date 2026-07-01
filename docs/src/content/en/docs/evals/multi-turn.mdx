@@ -26,7 +26,6 @@ import { weatherAgent } from '../agents'
 const result = await runEvals({
   data: [
     {
-      input: '',
       inputs: [
         'What is the weather in Brooklyn?',
         'What about tomorrow?',
@@ -64,7 +63,6 @@ import { faithfulnessScorer } from '../scorers'
 const result = await runEvals({
   data: [
     {
-      input: '',
       inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
     },
   ],
@@ -85,7 +83,6 @@ const result = await runEvals({
   data: [
     { input: 'What is the weather in Brooklyn?' },
     {
-      input: '',
       inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
     },
   ],
@@ -94,7 +91,7 @@ const result = await runEvals({
 })
 ```
 
-Single-turn items use `input` as usual. Multi-turn items use `inputs` and ignore `input` (set it to an empty string).
+Single-turn items use `input` as usual. Multi-turn items use `inputs` — `input` can be omitted entirely.
 
 ## Validation
 
@@ -103,7 +100,7 @@ Single-turn items use `input` as usual. Multi-turn items use `inputs` and ignore
 ```typescript
 // Throws: 'inputs' must be a non-empty array
 await runEvals({
-  data: [{ input: '', inputs: [] }],
+  data: [{ inputs: [] }],
   target: myAgent,
   scorers: [myScorer],
 })
