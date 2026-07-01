@@ -12,11 +12,10 @@
 import { execSync } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import type { Archiver } from 'archiver';
+import archiver from 'archiver';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
@@ -33,17 +32,6 @@ import type { Environment } from '../env/platform-api.js';
 import { loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
-
-// Load `archiver` via createRequire. `@types/archiver` uses `export = archiver`
-// (CJS), which the CI TS build config rejects as a default import (TS1192)
-// during declaration emit. Using createRequire keeps runtime behavior identical
-// while sidestepping the ambient type shape mismatch.
-const requireCjs = createRequire(import.meta.url);
-const archiver = requireCjs('archiver') as (
-  format: 'zip' | 'tar',
-  options?: { zlib?: { level?: number } },
-) => Archiver;
-
 
 /**
  * Derive the public studio/server URLs from the environment slug.
