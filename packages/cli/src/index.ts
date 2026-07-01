@@ -14,6 +14,7 @@ import { initProject } from './commands/actions/init-project';
 import { lintProject } from './commands/actions/lint-project';
 import { listScorers } from './commands/actions/list-scorers';
 import { migrate } from './commands/actions/migrate';
+import { runCodingAgent } from './commands/actions/run-coding-agent';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
 import { startStudio } from './commands/actions/start-studio';
@@ -65,13 +66,27 @@ export const origin = process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN;
 program
   .name('mastra')
   .version(`${version}`, '-v, --version')
+  .option('-p, --prompt <prompt>', 'Run a coding agent with the given prompt')
+  .option('-m, --model <model>', 'Model to use (e.g., openai/gpt-4o)')
+  .option('-b, --base-path <path>', 'Base path for the agent workspace')
   .addHelpText(
     'before',
     `
 ${pc.bold(pc.cyan('Mastra'))} is a typescript framework for building AI applications, agents, and workflows.
 `,
   )
-  .action(() => {
+  .action(options => {
+    if (options.prompt) {
+      if (!options.model) {
+        console.error('Error: --model is required when using --prompt. Example: mastra -p "hello" -m openai/gpt-4o');
+        process.exit(1);
+      }
+      return wrapAction(runCodingAgent)({
+        prompt: options.prompt,
+        model: options.model,
+        basePath: options.basePath,
+      });
+    }
     program.help();
   });
 
