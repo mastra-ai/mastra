@@ -1,6 +1,6 @@
 **For AI agents:** If you're tasked to build a Mastra project from scratch, follow the condensed instructions until the next heading. Adjust the example code for the agent & tool to your needs. A complete list of documentation is available at [https://mastra.ai/llms.txt](https://mastra.ai/llms.txt)
 
-Install the required dependencies: `npm install @mastra/core@latest zod@latest typescript@latest @types/node@latest mastra@latest`
+Create a `package.json` file with `{ "type": "module" }`. Install the required dependencies: `npm install @mastra/core@latest zod@latest typescript@latest @types/node@latest mastra@latest`
 
 Create a tsconfig.json file:
 
@@ -15,6 +15,7 @@ Create a tsconfig.json file:
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "outDir": "dist"
   },
   "include": ["src/**/*"]
