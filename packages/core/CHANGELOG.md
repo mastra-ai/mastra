@@ -1,5 +1,67 @@
 # @mastra/core
 
+## 1.49.0-alpha.1
+
+### Minor Changes
+
+- Agents using models that dropped support for `temperature`, `topP`, or `topK` (such as `claude-opus-4-7` or `gpt-5-pro`) no longer crash with a 400 error. The model router now automatically strips unsupported sampling parameters before the request is sent — no configuration or processors needed. ([#18622](https://github.com/mastra-ai/mastra/pull/18622))
+
+  ```ts
+  const agent = new Agent({
+    model: 'anthropic/claude-opus-4-7',
+    instructions: 'You are a helpful assistant.',
+  });
+
+  // temperature is stripped automatically — no 400 error
+  await agent.generate('hello', { modelSettings: { temperature: 0.7 } });
+  ```
+
+### Patch Changes
+
+- Fixed replay ordering on pull-mode transports (e.g. Redis Streams): history events are now delivered before live events, offsets are enforced on the live path, suppressed duplicates are acknowledged so persistent transports stop redelivering them, and ack/nack handles are preserved for buffered events. ([#18479](https://github.com/mastra-ai/mastra/pull/18479))
+
+- Fixed five DurableAgent behavioral parity gaps with the regular Agent loop: ([#18712](https://github.com/mastra-ai/mastra/pull/18712))
+  - **Goal step**: Durable agents now honor goal-aware stop semantics. The `goalStep` has been ported into the durable workflow, reading goal config, running completion scorers, and emitting goal chunks — matching the regular agent's behavior.
+  - **Output processors for tool chunks**: Tool-result and tool-error chunks on durable agents now pass through output processors before emission, enabling content moderation and redaction workflows.
+  - **Cached response replay**: Input processors that return a cached response via `processLLMRequest` now work on durable agents, short-circuiting the model call and replaying cached chunks.
+  - **toModelOutput normalization**: Durable agents now call `toModelOutput` on successful tool results under a MAPPING observability span and normalize the output to AI SDK format, matching the regular agent's behavior.
+  - **Client-tool observability**: `onInputStart` and `onInputDelta` callbacks on tool definitions are now invoked during durable agent streaming, and client-tool observability spans are created for tool input streaming.
+
+- `DurableAgent` now matches `Agent` for several per-step behaviors that were silently degraded on the durable path: ([#18693](https://github.com/mastra-ai/mastra/pull/18693))
+  - Tools suspended for human-in-the-loop now receive the same auto-resume system-message rewrite when `autoResumeSuspendedTools` is enabled.
+  - Agents wired to a `BackgroundTaskManager` get the background-task guidance prompt injected before each LLM call.
+  - Model `supportedUrls` (including async resolvers) is honored consistently for both regular and durable runs.
+  - HTTP headers attached to LLM calls (memory routing, model-config, call-time `modelSettings.headers`) merge in a single documented order and are case-normalized so call-time values reliably override.
+  - `prepareStep` and input-processor overrides — including `model`, `tools`, `activeTools`, `providerOptions`, `modelSettings`, `structuredOutput`, and `workspace` — apply identically on both paths.
+
+- Durable agents now honor `onIterationComplete` callback return values and delegation bail signals in the loop predicate, closing three behavioral parity gaps with the regular agent: ([#18707](https://github.com/mastra-ai/mastra/pull/18707))
+  - **Delegation bail** — When an `onDelegationComplete` hook calls `ctx.bail()`, the durable loop now stops at the next predicate evaluation instead of continuing indefinitely. The `delegationBailed` flag propagates through `DurableAgenticExecutionOutput` and `baseIterationStateSchema`.
+  - **`onIterationComplete` callback dispatch** — The durable predicate now calls `onIterationComplete` directly (read from `globalRunRegistry`) and honors its return value: `{ continue: false }` stops the loop, `{ continue: true }` forces continuation when `maxSteps` allows, and `{ feedback }` injects a user message for the next LLM turn.
+  - **Two-phase stop (`pendingFeedbackStop`)** — `onIterationComplete` returning `{ continue: false, feedback: '...' }` now schedules exactly one more LLM turn before stopping, matching the regular agent's behavior. The `pendingFeedbackStop` flag is persisted in `baseIterationStateSchema` across iterations.
+
+  Signal drain (bugs 5 and 11) is deferred — `DurableAgent` does not yet participate in `agentThreadStreamRuntime` and has no `sendMessage` / signal infrastructure.
+
+  Scenario tests `delegation-complete-bail` and `stop-condition-long-loop` now run on the durable engine. The `aimock-scenario` harness no longer drops `stopWhen`, `delegation`, or `onIterationComplete` for durable runs.
+
+- Background-dispatched sub-agent delegations no longer send null tool-message content ([#17791](https://github.com/mastra-ai/mastra/pull/17791))
+
+  When a sub-agent invocation (an `agent-<name>` tool) is dispatched as a background task, the agentic loop hands the sub-agent tool's `toModelOutput` the placeholder string from `tool-call-step.ts` ("Background task started...") instead of the `agentOutputSchema` object. `toModelOutput` read `output.text`, which is undefined for that string, so the supervisor's next request carried a `role: "tool"` message with null content. Providers that validate tool content (e.g. Anthropic) reject that with a 500, breaking the supervisor turn whenever it backgrounds a sub-agent (`backgroundTasks.tools: { someSubAgent: { enabled: true } }`).
+
+  `toModelOutput` now uses the placeholder string directly when the output is a string, so the tool message always carries non-empty content and the supervisor can acknowledge the dispatch and continue while the sub-agent runs in the background.
+
+- `createCodingAgent` now only includes the default `TaskSignalProvider` when `memory` is configured. Previously it always wired `TaskSignalProvider`, whose `TaskStateProcessor` requires a memory-backed thread — causing a hard error in memoryless contexts. The provider is merged into caller-provided signals when memory is present, so custom signal providers don't drop task tracking. ([#18728](https://github.com/mastra-ai/mastra/pull/18728))
+
+- Fixed reasoning text being lost in AIV4Adapter and stream-chunk assembly at the end of the turn ([#18534](https://github.com/mastra-ai/mastra/pull/18534))
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3-alpha.0
+
+## 1.48.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb))
+
 ## 1.48.0
 
 ### Minor Changes

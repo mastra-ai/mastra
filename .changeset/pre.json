@@ -161,7 +161,27 @@
     "@mastra/modal": "0.3.0",
     "@mastra/railway": "0.2.1",
     "@mastra/s3": "0.6.0",
-    "@mastra/vercel": "1.2.0"
+    "@mastra/vercel": "1.2.0",
+    "@mastra/apple-container": "0.1.0",
+    "@mastra/mesa": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "apple-container-sandbox",
+    "automated-provider-registry-20260701-011902",
+    "calm-bags-agree",
+    "dry-turkeys-pump",
+    "durable-agent-parity-phase-2",
+    "durable-agent-parity-phase-3",
+    "few-planets-invite",
+    "fine-lights-hear",
+    "fix-deployer-studio-config-dollar",
+    "fix-schema-compat-v4-nullable-inner-type",
+    "fix-subagent-background-null-tool-content",
+    "four-parks-change",
+    "good-bobcats-ring",
+    "green-birds-knock",
+    "late-crabs-like",
+    "mcp-client-iserror-tool-result",
+    "twelve-candles-love"
+  ]
 }

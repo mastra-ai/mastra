@@ -15,6 +15,11 @@ Use this file as the default writing guide for Mastra's documentation.
 
 - When adding a model name or ID to docs, use a placeholder token from docs/src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time)
 
+## Accuracy
+
+- Ensure that code examples are validated against the available source code
+- When defining an agent through `new Agent()`, ensure that the agent at least has: `id`, `name`, `instructions`, and `model` properties
+
 ## Scope
 
 - Document how to use technologies with Mastra.
@@ -48,6 +53,7 @@ Use this file as the default writing guide for Mastra's documentation.
 - When an instruction is opinionated, separate the required action from the opinionated choice used in the example.
 - Use `Ensure`, not `make sure`.
 - Use exclamation points rarely.
+- Do not use "Alpha" to mark early-stage features. Only use "Beta" (this also applies to the sidebars)
 
 ## Links and references
 

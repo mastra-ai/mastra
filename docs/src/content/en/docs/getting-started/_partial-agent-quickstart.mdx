@@ -1,0 +1,103 @@
+**For AI agents:** If you're tasked to build a Mastra project from scratch, follow the condensed instructions until the next heading. Adjust the example code for the agent & tool to your needs. A complete list of documentation is available at [https://mastra.ai/llms.txt](https://mastra.ai/llms.txt)
+
+Create a `package.json` file with `{ "type": "module" }`. Install the required dependencies: `npm install @mastra/core@latest zod@latest typescript@latest @types/node@latest mastra@latest`
+
+Create a tsconfig.json file:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"]
+}
+```
+
+If you need to add a tool to the agent, create a new file and use `import { createTool } from "@mastra/core/tools"`. Plain object tool definitions silently fail to execute; tools MUST be defined via createTool() with id, description, inputSchema (zod), execute.
+
+Example:
+
+```ts
+// src/mastra/tools/weather-tool.ts
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'get-weather',
+  description: 'Get current weather for a location',
+  inputSchema: z.object({
+    location: z.string().describe('City name'),
+  }),
+  outputSchema: z.object({
+    output: z.string(),
+  }),
+  execute: async ({ location }) => {
+    return {
+      output: `The weather in ${location} is sunny`,
+    }
+  },
+})
+```
+
+If you need to create an agent, create a new file and use `import { Agent } from "@mastra/core/agent"`. Constructor takes `{ id, name, instructions, model: '__GATEWAY_OPENAI_MODEL__' }`. The model string is Mastra's model router format ('provider/model'; use / and not : to separate provider and model). Do not install any ai-sdk package unless Mastra's documentation says otherwise.
+
+Add a tool an agent by importing the tool and passing it to the agent constructor as a tools object.
+
+Example:
+
+```ts
+// src/mastra/agents/weather-agent.ts
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool.ts'
+
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: `
+      You are a helpful weather assistant that provides accurate weather information.
+
+      Your primary function is to help users get weather details for specific locations. When responding:
+      - Include relevant details like humidity, wind conditions, and precipitation
+      - Keep responses concise but informative
+
+      Use the weatherTool to fetch current weather data.
+`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { weatherTool },
+})
+```
+
+The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`. Go to [https://mastra.ai/models/environment-variables](https://mastra.ai/models/environment-variables) for a full list of supported providers and their environment variable names.
+
+Create a Mastra entry point at `src/mastra/index.ts` and register the agent:
+
+```ts
+import { Mastra } from '@mastra/core'
+import { weatherAgent } from './agents/weather-agent.ts'
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+})
+```
+
+You're now able to run the agent directly. For this, import the Mastra instance and call the agent.generate() after retrieving the agent by its id. Node.js 22.18.0 and later are able to run TypeScript files directly. Make sure to add file extensions when importing local files. Example:
+
+```ts
+// run.mjs
+import { mastra } from './src/mastra/index.ts'
+
+const agent = mastra.getAgentById('weather-agent')
+const response = await agent.generate('Weather in SF')
+console.log(response.text)
+```
+
+If your tasks requires to add other features, refer to the full list of docs at [https://mastra.ai/llms.txt](https://mastra.ai/llms.txt)
