@@ -103,7 +103,7 @@
 /packages/cli/ @LekoArts @wardpeet
 /packages/create-mastra/ @wardpeet @TheIsrael1
 /packages/memory/ @TylerBarnes @CalebBarnes @abhiaiyer91
-/packages/memory/src/processors/observational-memory/ @TylerBarnes @rase- @abhiaiyer91
+/packages/memory/src/processors/observational-memory/ @TylerBarnes @CalebBarnes @abhiaiyer91
 /packages/memory/src/processors/working-memory-state/ @CalebBarnes @TylerBarnes @abhiaiyer91
 /packages/evals/ @YujohnNattrass @DanielSLew @abhiaiyer91
 /packages/evals/src/scorers/ @YujohnNattrass @wardpeet
