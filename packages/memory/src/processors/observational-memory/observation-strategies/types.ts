@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
+import type { Extractor } from '../extractor';
 import type { ObservationModelContext, ObserveHooks } from '../types';
 
 /** Parameters for running an observation via a strategy. */
@@ -37,6 +38,7 @@ export interface ObserverOutput {
   threadTitle?: string;
   extractedValues?: Record<string, unknown>;
   extractionFailures?: Array<{ slug: string; error: string }>;
+  extractors?: readonly Extractor<any>[];
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   providerMetadata?: ProviderMetadata;
 }
@@ -63,6 +65,7 @@ export interface ProcessedObservation {
     threadTitle?: string;
     extracted?: Record<string, unknown>;
     extractionFailures?: Array<{ slug: string; error: string }>;
+    extractors?: readonly Extractor<any>[];
     lastObservedMessageCursor?: { createdAt: string; id: string };
   }>;
   suggestedContinuation?: string;
@@ -70,4 +73,5 @@ export interface ProcessedObservation {
   threadTitle?: string;
   extractedValues?: Record<string, unknown>;
   extractionFailures?: Array<{ slug: string; error: string }>;
+  extractors?: readonly Extractor<any>[];
 }

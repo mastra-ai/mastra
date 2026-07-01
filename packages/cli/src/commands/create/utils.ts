@@ -356,6 +356,8 @@ onlyBuiltDependencies:
       await exec(`echo *.db-* >> .gitignore`);
       await exec(`echo .netlify >> .gitignore`);
       await exec(`echo .vercel >> .gitignore`);
+      await exec(`echo *.duckdb >> .gitignore`);
+      await exec(`echo *.duckdb.wal >> .gitignore`);
     } catch (error) {
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

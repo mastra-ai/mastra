@@ -3499,7 +3499,7 @@ ${formattedMessages}
     try {
       const thread = await this.storage.getThreadById({ threadId });
       const previousOmMetadata = getThreadOMMetadata(thread?.metadata);
-      const priorExtractedValues = getPriorExtractedValues(previousOmMetadata);
+      const priorExtractedValues = getPriorExtractedValues(previousOmMetadata, this.reflectionConfig.extractors);
       const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
         record.activeObservations,
@@ -3523,7 +3523,10 @@ ${formattedMessages}
       });
 
       if (thread && reflectResult.extractedValues) {
-        const metadataUpdate = buildThreadMetadataFromExtractedValues(reflectResult.extractedValues);
+        const metadataUpdate = buildThreadMetadataFromExtractedValues(
+          this.reflectionConfig.extractors,
+          reflectResult.extractedValues,
+        );
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           currentTask: metadataUpdate.currentTask ?? previousOmMetadata?.currentTask,
           suggestedResponse: metadataUpdate.suggestedResponse ?? previousOmMetadata?.suggestedResponse,

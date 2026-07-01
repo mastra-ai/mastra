@@ -1,3 +1,4 @@
 {
-  "attachment": ["gemma4-31b", "kimi-k2-6", "llama3-3-70b"]
+  "attachment": ["gemma4-31b", "kimi-k2-6", "llama3-3-70b"],
+  "temperature": ["gemma4-31b", "glm-5-2", "gpt-oss-120b", "gpt-oss-safeguard-120b", "kimi-k2-6", "llama3-3-70b"]
 }

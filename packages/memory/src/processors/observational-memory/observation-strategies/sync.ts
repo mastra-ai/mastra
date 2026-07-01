@@ -2,7 +2,11 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { applyExtractorHooks, filterUserExtractedValues, getPriorExtractedValues } from '../extracted-values';
+import {
+  applyExtractorHooks,
+  buildThreadMetadataFromExtractedValues,
+  getPriorExtractedValues,
+} from '../extracted-values';
 import {
   createObservationEndMarker,
   createObservationFailedMarker,
@@ -100,7 +104,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     // Fetch prior thread metadata for observer prompt continuity
     const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
     const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
-    this.priorExtractedValues = getPriorExtractedValues(omMeta);
+    this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
 
     const result = await this.deps.observer.call(existingObservations, messages, this.opts.abortSignal, {
       requestContext: this.opts.requestContext,
@@ -114,7 +118,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',
-      extractors: this.observationConfig.extractors,
+      extractors: result.extractors ?? this.observationConfig.extractors,
       values: result.extractedValues,
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
@@ -179,6 +183,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       threadTitle: output.threadTitle,
       extractedValues: output.extractedValues,
       extractionFailures: output.extractionFailures,
+      extractors: output.extractors,
     };
   }
 
@@ -193,13 +198,17 @@ export class SyncObservationStrategy extends ObservationStrategy {
       const newTitle = processed.threadTitle?.trim();
       const shouldUpdateThreadTitle = !!newTitle && newTitle.length >= 3 && newTitle !== oldTitle;
       const previousOmMetadata = getThreadOMMetadata(thread.metadata);
+      const metadataUpdate = buildThreadMetadataFromExtractedValues(
+        processed.extractors ?? this.observationConfig.extractors,
+        processed.extractedValues,
+      );
       const newMetadata = setThreadOMMetadata(thread.metadata, {
-        suggestedResponse: processed.suggestedContinuation,
-        currentTask: processed.currentTask,
-        threadTitle: processed.threadTitle,
+        suggestedResponse: metadataUpdate.suggestedResponse ?? processed.suggestedContinuation,
+        currentTask: metadataUpdate.currentTask ?? processed.currentTask,
+        threadTitle: metadataUpdate.threadTitle ?? processed.threadTitle,
         extracted: {
           ...(previousOmMetadata?.extracted ?? {}),
-          ...(filterUserExtractedValues(processed.extractedValues) ?? {}),
+          ...(metadataUpdate.extracted ?? {}),
         },
         lastObservedMessageCursor: getLastObservedMessageCursor(messages),
       });

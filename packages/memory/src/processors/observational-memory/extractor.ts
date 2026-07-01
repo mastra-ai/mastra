@@ -36,6 +36,8 @@ export interface ExtractorConfig<T = unknown> {
   schema?: ExtractorConfigValue<z.ZodType<T> | undefined>;
   /** Whether the previous extraction should be shown to the extractor prompt. Defaults to true. */
   includePreviousExtraction?: boolean;
+  /** Dot-separated OM metadata path for persistence. Defaults to `extracted.<slug>`. Set false to skip OM metadata persistence. */
+  metadataKeyPath?: string | false;
   /** Optional lifecycle hook invoked after a value is parsed and before it is persisted. */
   onExtracted?: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
 }
@@ -116,6 +118,7 @@ export class Extractor<T = unknown> {
   readonly schema: z.ZodType<T>;
   readonly mode: ExtractorMode;
   readonly includePreviousExtraction: boolean;
+  readonly metadataKeyPath: string | false;
   readonly onExtracted?: ExtractorConfig<T>['onExtracted'];
   /** @internal */
   readonly internal: boolean;
@@ -146,6 +149,7 @@ export class Extractor<T = unknown> {
     this.schema = (typeof config.schema === 'function' ? z.string() : (config.schema ?? z.string())) as z.ZodType<T>;
     this.mode = internal || !config.schema ? 'inline' : 'structured';
     this.includePreviousExtraction = config.includePreviousExtraction ?? true;
+    this.metadataKeyPath = config.metadataKeyPath ?? `extracted.${slug}`;
     this.onExtracted = config.onExtracted;
     this.internal = internal;
   }
@@ -166,6 +170,7 @@ export class Extractor<T = unknown> {
         instructions,
         ...(schema ? { schema } : {}),
         includePreviousExtraction: this.includePreviousExtraction,
+        metadataKeyPath: this.metadataKeyPath,
         onExtracted: this.onExtracted,
       },
       this.internal,
