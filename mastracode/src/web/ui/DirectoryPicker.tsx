@@ -1,5 +1,5 @@
-import { Button, Txt } from '@mastra/playground-ui';
-import { ArrowUp, Folder } from 'lucide-react';
+import { Breadcrumb, Button, Crumb, Txt } from '@mastra/playground-ui';
+import { Folder } from 'lucide-react';
 import { useState } from 'react';
 
 import { useDirectoryListing } from '../../shared/hooks/use-fs';
@@ -33,7 +33,7 @@ function basename(path: string): string {
 /** Split an absolute path into clickable breadcrumb segments. */
 function crumbs(path: string): { label: string; path: string }[] {
   const parts = path.split('/').filter(Boolean);
-  const out: { label: string; path: string }[] = [{ label: '/', path: '/' }];
+  const out: { label: string; path: string }[] = [{ label: 'root', path: '/' }];
   let acc = '';
   for (const part of parts) {
     acc += `/${part}`;
@@ -60,26 +60,23 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
   return (
     <div className="flex flex-col gap-3">
       {listing && (
-        <nav className="flex flex-wrap items-center gap-1" aria-label="Path">
-          {crumbs(listing.path).map((c, i, arr) => (
-            <span key={c.path} className="flex items-center gap-1">
-              <button
-                type="button"
-                className="rounded-sm px-1 text-ui-sm text-icon3 transition-colors hover:text-icon5 disabled:cursor-default disabled:text-icon5"
-                disabled={i === arr.length - 1}
-                onClick={() => void browse(c.path)}
-                title={c.path}
+        <Breadcrumb label="Path">
+          {crumbs(listing.path).map((c, i, arr) => {
+            const isCurrent = i === arr.length - 1;
+            return (
+              <Crumb
+                key={c.path}
+                as={isCurrent ? 'span' : 'button'}
+                isCurrent={isCurrent}
+                {...(isCurrent
+                  ? { title: c.path }
+                  : { type: 'button', title: c.path, onClick: () => void browse(c.path) })}
               >
                 {c.label}
-              </button>
-              {i < arr.length - 1 && (
-                <Txt as="span" variant="ui-sm" className="text-icon2">
-                  /
-                </Txt>
-              )}
-            </span>
-          ))}
-        </nav>
+              </Crumb>
+            );
+          })}
+        </Breadcrumb>
       )}
 
       <div className="flex max-h-72 min-h-40 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border1 bg-surface-overlay-soft p-1.5">
@@ -95,12 +92,6 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
         )}
         {!loading && !error && listing && (
           <>
-            {listing.parent && (
-              <button type="button" className={ENTRY_CLASS} onClick={() => void browse(listing.parent!)}>
-                <ArrowUp size={14} className="text-icon3" />
-                <span>Up a level</span>
-              </button>
-            )}
             {listing.entries.length === 0 && (
               <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-icon3">
                 No subfolders here
@@ -111,9 +102,8 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
                 key={entry.path}
                 type="button"
                 className={ENTRY_CLASS}
-                onDoubleClick={() => onPick(entry.path, basename(entry.path))}
                 onClick={() => void browse(entry.path)}
-                title={`Open ${entry.name} (double-click to use)`}
+                title={`Open ${entry.name}`}
               >
                 <Folder size={15} className="text-accent1" />
                 <span className="truncate">{entry.name}</span>
@@ -129,10 +119,7 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
         </Txt>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          Double-click a folder to use it, or pick the one you're in.
-        </Txt>
+      <div className="flex items-center justify-end gap-3">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
             Cancel
