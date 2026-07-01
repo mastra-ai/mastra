@@ -274,6 +274,11 @@ describe('MastraVoiceAgent reply generator seam', () => {
   it('throws when neither agent nor generate is provided', () => {
     expect(() => new MastraVoiceAgent({})).toThrow(/requires `agent` or `generate`/);
   });
+
+  it('throws when both agent and generate are provided', () => {
+    const { agent } = fakeMastraAgent([]);
+    expect(() => new MastraVoiceAgent({ agent, generate: vi.fn() })).toThrow(/not both/);
+  });
 });
 
 describe('MastraVoiceAgent llm placeholder', () => {

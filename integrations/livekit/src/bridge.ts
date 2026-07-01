@@ -272,6 +272,11 @@ export class MastraVoiceAgent extends voice.Agent {
   private readonly replyGenerator: VoiceReplyGenerator;
 
   constructor(options: MastraVoiceAgentOptions) {
+    if (options.agent && options.generate) {
+      throw new Error(
+        '@mastra/livekit: MastraVoiceAgent requires `agent` or `generate`, not both — they are mutually exclusive reply sources.',
+      );
+    }
     super({
       id: options.id,
       instructions: options.instructions ?? DEFAULT_INSTRUCTIONS,
