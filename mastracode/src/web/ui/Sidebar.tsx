@@ -7,7 +7,6 @@ import type { Project } from './projects';
 
 const MAX_THREADS = 5;
 
-/** Compact relative time, e.g. "just now", "5m", "3h", "2d", or a date. */
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
@@ -25,9 +24,7 @@ function relativeTime(iso: string): string {
 interface SidebarProps {
   projects: Project[];
   activeProjectId: string | null;
-  /** Open the app-level Projects modal (add / manage / switch). */
   onManageProjects: () => void;
-  /** Open the Settings modal. */
   onOpenSettings: () => void;
   threads: AgentControllerThreadInfo[];
   activeThreadId?: string;
@@ -36,7 +33,6 @@ interface SidebarProps {
   onDeleteThread: (threadId: string) => void;
   onRenameThread: (threadId: string, title: string) => void;
   onCloneThread: (threadId: string) => void;
-  /** Whether the off-canvas drawer is open on narrow screens. */
   open?: boolean;
 }
 
@@ -54,13 +50,101 @@ export function Sidebar({
   onCloneThread,
   open = false,
 }: SidebarProps) {
-  // Per-thread action menu (⋯): which thread's menu is open, and inline-rename state.
+  const activeProject = projects.find(p => p.id === activeProjectId);
+
+  return (
+    <div
+      className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
+    >
+      <ProjectSwitcher activeProject={activeProject} onManageProjects={onManageProjects} />
+
+      {activeProject && (
+        <ThreadList
+          threads={threads}
+          activeThreadId={activeThreadId}
+          onSwitchThread={onSwitchThread}
+          onCreateThread={onCreateThread}
+          onDeleteThread={onDeleteThread}
+          onRenameThread={onRenameThread}
+          onCloneThread={onCloneThread}
+        />
+      )}
+
+      <SidebarFooter onOpenSettings={onOpenSettings} />
+    </div>
+  );
+}
+
+function ProjectSwitcher({
+  activeProject,
+  onManageProjects,
+}: {
+  activeProject?: Project;
+  onManageProjects: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between px-1">
+        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
+          Project
+        </Txt>
+        <Button variant="ghost" size="icon-sm" aria-label="Manage projects" onClick={onManageProjects}>
+          <Plus size={15} />
+        </Button>
+      </div>
+
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded-md border border-border1 bg-surface3 px-2.5 py-2 text-left transition-colors hover:bg-surface4"
+        onClick={onManageProjects}
+        title={activeProject ? activeProject.path : 'Select a project'}
+      >
+        <Folder size={16} className="shrink-0 text-icon3" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          {activeProject ? (
+            <>
+              <Txt as="span" variant="ui-sm" className="truncate text-icon6">
+                {activeProject.name}
+              </Txt>
+              <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+                {activeProject.path}
+              </Txt>
+            </>
+          ) : (
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              Select a project…
+            </Txt>
+          )}
+        </span>
+        <ChevronsUpDown size={13} className="shrink-0 text-icon3" />
+      </button>
+    </div>
+  );
+}
+
+function ThreadList({
+  threads,
+  activeThreadId,
+  onSwitchThread,
+  onCreateThread,
+  onDeleteThread,
+  onRenameThread,
+  onCloneThread,
+}: Pick<
+  SidebarProps,
+  | 'threads'
+  | 'activeThreadId'
+  | 'onSwitchThread'
+  | 'onCreateThread'
+  | 'onDeleteThread'
+  | 'onRenameThread'
+  | 'onCloneThread'
+>) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  // Close the action menu on outside click / Escape.
   useEffect(() => {
     if (!menuFor) return;
     const onDown = (e: MouseEvent) => {
@@ -77,10 +161,10 @@ export function Sidebar({
     };
   }, [menuFor]);
 
-  const startRename = (t: AgentControllerThreadInfo) => {
+  const startRename = (thread: AgentControllerThreadInfo) => {
     setMenuFor(null);
-    setRenamingId(t.id);
-    setRenameDraft(t.title ?? '');
+    setRenamingId(thread.id);
+    setRenameDraft(thread.title ?? '');
   };
 
   const commitRename = (threadId: string) => {
@@ -89,7 +173,6 @@ export function Sidebar({
     setRenamingId(null);
     setRenameDraft('');
   };
-  // ── Threads: sorted by most recent, limited to 5 ─────────────────────
 
   const sortedThreads = [...threads]
     .sort((a, b) => {
@@ -99,197 +182,211 @@ export function Sidebar({
     })
     .slice(0, MAX_THREADS);
 
-  const activeProject = projects.find(p => p.id === activeProjectId);
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <ThreadListHeader threadCount={threads.length} onCreateThread={onCreateThread} />
 
+      <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+        {sortedThreads.length === 0 && (
+          <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
+            No threads yet
+          </Txt>
+        )}
+        {sortedThreads.map(thread =>
+          renamingId === thread.id ? (
+            <RenameThreadRow
+              key={thread.id}
+              draft={renameDraft}
+              onDraftChange={setRenameDraft}
+              onCommit={() => commitRename(thread.id)}
+              onCancel={() => {
+                setRenamingId(null);
+                setRenameDraft('');
+              }}
+            />
+          ) : (
+            <ThreadRow
+              key={thread.id}
+              thread={thread}
+              active={thread.id === activeThreadId}
+              menuOpen={menuFor === thread.id}
+              menuRef={menuFor === thread.id ? menuRef : undefined}
+              onSwitch={() => onSwitchThread(thread.id)}
+              onToggleMenu={() => setMenuFor(prev => (prev === thread.id ? null : thread.id))}
+              onRename={() => startRename(thread)}
+              onClone={() => {
+                setMenuFor(null);
+                onCloneThread(thread.id);
+              }}
+              onDelete={() => {
+                setMenuFor(null);
+                onDeleteThread(thread.id);
+              }}
+            />
+          ),
+        )}
+        {threads.length > MAX_THREADS && (
+          <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">
+            +{threads.length - MAX_THREADS} more
+          </Txt>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ThreadListHeader({
+  threadCount,
+  onCreateThread,
+}: {
+  threadCount: number;
+  onCreateThread: (title?: string) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between px-1">
+      <Txt as="span" variant="ui-xs" className="flex items-center gap-1.5 text-icon3 uppercase tracking-wide">
+        Threads
+        {threadCount > 0 && (
+          <Badge variant="default" size="xs">
+            {threadCount}
+          </Badge>
+        )}
+      </Txt>
+      <Button variant="ghost" size="icon-sm" aria-label="New thread" onClick={() => onCreateThread()}>
+        <Plus size={15} />
+      </Button>
+    </div>
+  );
+}
+
+function RenameThreadRow({
+  draft,
+  onDraftChange,
+  onCommit,
+  onCancel,
+}: {
+  draft: string;
+  onDraftChange: (draft: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div role="listitem" className="px-1 py-0.5">
+      <Input
+        aria-label="Thread title"
+        autoFocus
+        value={draft}
+        placeholder="Thread title"
+        onChange={e => onDraftChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') onCommit();
+          if (e.key === 'Escape') onCancel();
+        }}
+        onBlur={onCommit}
+      />
+    </div>
+  );
+}
+
+function ThreadRow({
+  thread,
+  active,
+  menuOpen,
+  menuRef,
+  onSwitch,
+  onToggleMenu,
+  onRename,
+  onClone,
+  onDelete,
+}: {
+  thread: AgentControllerThreadInfo;
+  active: boolean;
+  menuOpen: boolean;
+  menuRef?: React.RefObject<HTMLDivElement | null>;
+  onSwitch: () => void;
+  onToggleMenu: () => void;
+  onRename: () => void;
+  onClone: () => void;
+  onDelete: () => void;
+}) {
   return (
     <div
-      className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      role="listitem"
+      className={`group flex items-center rounded-md transition-colors hover:bg-surface4 ${active ? 'bg-surface4' : ''}`}
     >
-      {/* ── Project switcher (opens the app-level Projects modal) ─────── */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between px-1">
-          <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
-            Project
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-1.5 text-left"
+        onClick={onSwitch}
+      >
+        <Txt as="span" variant="ui-sm" className={`truncate ${thread.title ? 'text-icon6' : 'text-icon3 italic'}`}>
+          {thread.title || 'Untitled'}
+        </Txt>
+        {thread.updatedAt && (
+          <Txt as="span" variant="ui-xs" className="shrink-0 text-icon3">
+            {relativeTime(thread.updatedAt)}
           </Txt>
-          <Button variant="ghost" size="icon-sm" aria-label="Manage projects" onClick={onManageProjects}>
-            <Plus size={15} />
-          </Button>
-        </div>
-
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 rounded-md border border-border1 bg-surface3 px-2.5 py-2 text-left transition-colors hover:bg-surface4"
-          onClick={onManageProjects}
-          title={activeProject ? activeProject.path : 'Select a project'}
-        >
-          <Folder size={16} className="shrink-0 text-icon3" />
-          <span className="flex min-w-0 flex-1 flex-col">
-            {activeProject ? (
-              <>
-                <Txt as="span" variant="ui-sm" className="truncate text-icon6">
-                  {activeProject.name}
-                </Txt>
-                <Txt as="span" variant="ui-xs" className="truncate text-icon3">
-                  {activeProject.path}
-                </Txt>
-              </>
-            ) : (
-              <Txt as="span" variant="ui-sm" className="text-icon3">
-                Select a project…
-              </Txt>
-            )}
-          </span>
-          <ChevronsUpDown size={13} className="shrink-0 text-icon3" />
-        </button>
-      </div>
-
-      {/* ── Threads (scoped to active project) ────────────────────────── */}
-      {activeProject && (
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <div className="flex items-center justify-between px-1">
-            <Txt as="span" variant="ui-xs" className="flex items-center gap-1.5 text-icon3 uppercase tracking-wide">
-              Threads
-              {threads.length > 0 && (
-                <Badge variant="default" size="xs">
-                  {threads.length}
-                </Badge>
-              )}
-            </Txt>
-            <Button variant="ghost" size="icon-sm" aria-label="New thread" onClick={() => onCreateThread()}>
-              <Plus size={15} />
-            </Button>
-          </div>
-
-          <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-            {sortedThreads.length === 0 && (
-              <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
-                No threads yet
-              </Txt>
-            )}
-            {sortedThreads.map(t =>
-              renamingId === t.id ? (
-                <div key={t.id} role="listitem" className="px-1 py-0.5">
-                  <Input
-                    aria-label="Thread title"
-                    autoFocus
-                    value={renameDraft}
-                    placeholder="Thread title"
-                    onChange={e => setRenameDraft(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') commitRename(t.id);
-                      if (e.key === 'Escape') {
-                        setRenamingId(null);
-                        setRenameDraft('');
-                      }
-                    }}
-                    onBlur={() => commitRename(t.id)}
-                  />
-                </div>
-              ) : (
-                <div
-                  key={t.id}
-                  role="listitem"
-                  className={`group flex items-center rounded-md transition-colors hover:bg-surface4 ${
-                    t.id === activeThreadId ? 'bg-surface4' : ''
-                  }`}
-                >
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-1.5 text-left"
-                    onClick={() => onSwitchThread(t.id)}
-                  >
-                    <Txt
-                      as="span"
-                      variant="ui-sm"
-                      className={`truncate ${t.title ? 'text-icon6' : 'text-icon3 italic'}`}
-                    >
-                      {t.title || 'Untitled'}
-                    </Txt>
-                    {t.updatedAt && (
-                      <Txt as="span" variant="ui-xs" className="shrink-0 text-icon3">
-                        {relativeTime(t.updatedAt)}
-                      </Txt>
-                    )}
-                  </button>
-                  <div className="relative pr-1" ref={menuFor === t.id ? menuRef : undefined}>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Thread actions"
-                      aria-haspopup="menu"
-                      aria-expanded={menuFor === t.id}
-                      onClick={e => {
-                        e.stopPropagation();
-                        setMenuFor(prev => (prev === t.id ? null : t.id));
-                      }}
-                    >
-                      <MoreHorizontal size={15} />
-                    </Button>
-                    {menuFor === t.id && (
-                      <div
-                        role="menu"
-                        className="absolute right-0 top-full z-10 mt-1 flex min-w-32 flex-col rounded-md border border-border1 bg-surface4 p-1 shadow-lg"
-                      >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          role="menuitem"
-                          className="justify-start"
-                          onClick={() => startRename(t)}
-                        >
-                          Rename
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          role="menuitem"
-                          className="justify-start"
-                          onClick={() => {
-                            setMenuFor(null);
-                            onCloneThread(t.id);
-                          }}
-                        >
-                          Clone
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          role="menuitem"
-                          className="justify-start text-accent2"
-                          onClick={() => {
-                            setMenuFor(null);
-                            onDeleteThread(t.id);
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ),
-            )}
-            {threads.length > MAX_THREADS && (
-              <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">
-                +{threads.length - MAX_THREADS} more
-              </Txt>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Footer: Settings ──────────────────────────────────────────── */}
-      <div className="mt-auto border-t border-border1 pt-2">
+        )}
+      </button>
+      <div className="relative pr-1" ref={menuRef}>
         <Button
           variant="ghost"
-          size="sm"
-          className="w-full justify-start gap-2"
-          onClick={onOpenSettings}
-          aria-label="Open settings"
+          size="icon-sm"
+          aria-label="Thread actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={e => {
+            e.stopPropagation();
+            onToggleMenu();
+          }}
         >
-          <Settings size={15} /> Settings
+          <MoreHorizontal size={15} />
         </Button>
+        {menuOpen && <ThreadActionsMenu onRename={onRename} onClone={onClone} onDelete={onDelete} />}
       </div>
+    </div>
+  );
+}
+
+function ThreadActionsMenu({
+  onRename,
+  onClone,
+  onDelete,
+}: {
+  onRename: () => void;
+  onClone: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      role="menu"
+      className="absolute right-0 top-full z-10 mt-1 flex min-w-32 flex-col rounded-md border border-border1 bg-surface4 p-1 shadow-lg"
+    >
+      <Button variant="ghost" size="sm" role="menuitem" className="justify-start" onClick={onRename}>
+        Rename
+      </Button>
+      <Button variant="ghost" size="sm" role="menuitem" className="justify-start" onClick={onClone}>
+        Clone
+      </Button>
+      <Button variant="ghost" size="sm" role="menuitem" className="justify-start text-accent2" onClick={onDelete}>
+        Delete
+      </Button>
+    </div>
+  );
+}
+
+function SidebarFooter({ onOpenSettings }: { onOpenSettings: () => void }) {
+  return (
+    <div className="mt-auto border-t border-border1 pt-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full justify-start gap-2"
+        onClick={onOpenSettings}
+        aria-label="Open settings"
+      >
+        <Settings size={15} /> Settings
+      </Button>
     </div>
   );
 }
