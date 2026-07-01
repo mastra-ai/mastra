@@ -2,6 +2,4 @@
 "@mastra/memory": patch
 ---
 
-- Reduced redundant observational-memory row reads within a single loop step by reusing a turn-scoped OM record across step status checks and processor progress/tokens persistence.
-- Updated step/turn plumbing to pass preloaded records into status reads and keep buffered-state updates aligned in-memory.
-- Added a focused regression for cloned DB-row behavior, including buffering progress emission and pending token persistence when `processInputStep` runs.
+Observational memory loop-step execution is faster because the processor now avoids redundant record reads that contributed 2-4s latency per step in the reported workflow. Cached observational-memory records are reused within a loop step while preserving buffering progress updates and pending-token persistence.
