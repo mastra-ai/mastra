@@ -15,6 +15,7 @@ import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
 import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
 import { loadSettings } from '../onboarding/settings.js';
+import type { PluginManager } from '../plugins/manager.js';
 import { detectProject } from '../utils/project.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
@@ -110,6 +111,9 @@ export interface MastraTUIOptions {
   /** MCP manager for server status and reload */
   mcpManager?: McpManager;
 
+  /** Plugin manager for /plugins. */
+  pluginManager?: PluginManager;
+
   /**
    * @deprecated Workspace is now obtained from the AgentController.
    * Configure workspace via AgentControllerConfig.workspace instead.
@@ -152,6 +156,7 @@ export interface TUIState {
   analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
   mcpManager?: McpManager;
+  pluginManager?: PluginManager;
   workspace?: Workspace;
 
   // ── TUI framework (set once) ──────────────────────────────────────────
@@ -159,7 +164,6 @@ export interface TUIState {
   chatContainer: Container;
   editorContainer: Container;
   idleCounter?: IdleCounterComponent;
-  idleStartedAt?: number;
   lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
@@ -251,6 +255,16 @@ export interface TUIState {
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;
+  /** Timestamp (ms) when the current agent run started. */
+  agentRunStartedAt?: number;
+  /** Timestamp (ms) when the current agent run last received streamed content. */
+  agentRunLastStreamPartAt?: number;
+  /** Duration (ms) of the most recently completed agent run. */
+  lastAgentRunDurationMs?: number;
+  /** Timestamp (ms) when the most recent agent run ended. */
+  lastAgentRunEndedAt?: number;
+  /** End state of the most recent agent run. */
+  lastAgentRunEndReason?: 'done' | 'aborted' | 'error';
 
   // ── Tokens/sec tracking ────────────────────────────────────────────────
   /**
@@ -340,6 +354,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     analytics: options.analytics,
     authStorage: options.authStorage,
     mcpManager: options.mcpManager,
+    pluginManager: options.pluginManager,
     workspace: options.workspace,
 
     // TUI framework

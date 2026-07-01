@@ -857,7 +857,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private formatQuietGenericResultPreview(): string {
-    if (!this.result || this.isPartial) return '';
+    if (!this.result) return '';
     const output = this.stripAnsi(this.getFormattedOutput()).trim();
     if (!output) return '';
 
@@ -866,12 +866,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const argsSummary = this.stripAnsi(this.formatArgsSummary()).trim();
     if (argsSummary && preview === argsSummary) return '';
 
-    return preview
+    const lines = preview
       .split('\n')
       .map(line => line.trimEnd())
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('\n');
+      .filter(Boolean);
+
+    return (this.isPartial ? lines : lines.slice(0, this.quietPreviewLineLimit)).join('\n');
   }
 
   private formatCompactJsonResult(output: string): string {
@@ -2394,8 +2394,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const footerText = `${theme.bold(theme.fg('toolTitle', this.toolName))}${argsSummary}${status}`;
 
     if (!this.result || this.isPartial) {
-      // Pending: show bordered header with args preview
-      const preview = this.formatArgsPreview();
+      const partialOutput = this.result ? this.getFormattedOutput() : '';
+      const preview = partialOutput ? partialOutput.split('\n') : this.formatArgsPreview();
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
       if (preview.length > 0) {
         const previewLines = preview.map(line => border('│') + ' ' + theme.fg('toolOutput', line));

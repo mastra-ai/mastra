@@ -15,6 +15,7 @@ import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { ToolApprovalDialogComponent } from '../components/tool-approval-dialog.js';
 import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
@@ -43,6 +44,104 @@ function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolEx
 
 function reconcileToolBoundaries(ctx: EventHandlerContext): void {
   reconcileChatBoundarySpacers(ctx.state.chatContainer);
+}
+
+const pluginSubagentToolCallIds = new Set<string>();
+
+type SubagentProgressEvent =
+  | { event: 'text'; text: string }
+  | { event: 'tool_start'; toolName: string; args?: unknown }
+  | { event: 'tool_end'; toolName: string; result?: unknown; isError?: boolean }
+  | { event: 'finish'; isError?: boolean; durationMs?: number; result?: string };
+
+function isSubagentProgressEvent(value: unknown): value is SubagentProgressEvent {
+  if (!value || typeof value !== 'object') return false;
+  const event = (value as Record<string, unknown>).event;
+  return event === 'text' || event === 'tool_start' || event === 'tool_end' || event === 'finish';
+}
+
+function getTaskFromArgs(args: unknown, fallback: string): string {
+  if (args && typeof args === 'object') {
+    const question = (args as Record<string, unknown>).question;
+    if (typeof question === 'string' && question.trim()) return question;
+    const task = (args as Record<string, unknown>).task;
+    if (typeof task === 'string' && task.trim()) return task;
+  }
+  return fallback;
+}
+
+export function createStaticSubagentComponent(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  toolName: string,
+  args: unknown,
+): SubagentExecutionComponent | undefined {
+  const renderConfig = ctx.state.pluginManager?.getToolRenderConfig(toolName);
+  if (renderConfig?.type !== 'subagent') return undefined;
+
+  const { state } = ctx;
+  const existing = state.pendingSubagents.get(toolCallId);
+  if (existing) {
+    existing.setTask(getTaskFromArgs(args, toolName));
+    return existing;
+  }
+
+  const component = new SubagentExecutionComponent(
+    renderConfig.agentType ?? 'plugin',
+    getTaskFromArgs(args, toolName),
+    state.ui,
+    renderConfig.modelId,
+    {
+      collapseOnComplete: false,
+      expandOnComplete: state.quietMode,
+      forked: renderConfig.forked,
+      label: renderConfig.label,
+      maxActivityLines: renderConfig.maxActivityLines,
+      collapsedLines: renderConfig.collapsedLines,
+      colors: renderConfig.colors,
+      icons: renderConfig.icons,
+    },
+  );
+  state.pendingSubagents.set(toolCallId, component);
+  pluginSubagentToolCallIds.add(toolCallId);
+  state.allToolComponents.push(component as any);
+  ctx.addChildBeforeFollowUps(component);
+
+  state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+  ctx.addChildBeforeFollowUps(state.streamingComponent);
+
+  reconcileToolBoundaries(ctx);
+  state.ui.requestRender();
+  return component;
+}
+
+function handleSubagentProgress(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  progress: SubagentProgressEvent,
+): boolean {
+  const { state } = ctx;
+  const component = state.pendingSubagents.get(toolCallId);
+  if (!component || !pluginSubagentToolCallIds.has(toolCallId)) return false;
+
+  switch (progress.event) {
+    case 'text':
+      component.setText(progress.text);
+      break;
+    case 'tool_start':
+      component.addToolStart(progress.toolName, progress.args);
+      break;
+    case 'tool_end':
+      component.addToolEnd(progress.toolName, progress.result, progress.isError ?? false);
+      break;
+    case 'finish':
+      component.finish(progress.isError ?? false, progress.durationMs ?? 0, progress.result);
+      break;
+  }
+
+  reconcileToolBoundaries(ctx);
+  state.ui.requestRender();
+  return true;
 }
 
 function insertTaskToolErrorComponent(ctx: EventHandlerContext, component: unknown): void {
@@ -176,6 +275,11 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
   const existingComponent = state.pendingTools.get(toolCallId);
   const existingSubmitPlanComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
 
+  if (state.pendingSubagents.has(toolCallId) && pluginSubagentToolCallIds.has(toolCallId)) {
+    createStaticSubagentComponent(ctx, toolCallId, toolName, args);
+    return;
+  }
+
   if (existingComponent) {
     // Component was created during input streaming — update with final args
     existingComponent.updateArgs(args);
@@ -188,6 +292,10 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     // Skip creating the regular tool component for subagent calls
     // The SubagentExecutionComponent will handle all the rendering
     if (toolName === 'subagent') {
+      return;
+    }
+
+    if (createStaticSubagentComponent(ctx, toolCallId, toolName, args)) {
       return;
     }
 
@@ -244,6 +352,10 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 }
 
 export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, partialResult: unknown): void {
+  if (isSubagentProgressEvent(partialResult) && handleSubagentProgress(ctx, toolCallId, partialResult)) {
+    return;
+  }
+
   const { state } = ctx;
   const component = state.pendingTools.get(toolCallId);
   if (component) {
@@ -336,6 +448,10 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     ctx.addChildBeforeFollowUps(state.streamingComponent);
     state.ui.requestRender();
   } else if (toolName !== 'subagent') {
+    if (createStaticSubagentComponent(ctx, toolCallId, toolName, {})) {
+      return;
+    }
+
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
@@ -451,11 +567,17 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   // If this is a subagent tool, store the result in the SubagentExecutionComponent
   const subagentComponent = state.pendingSubagents.get(toolCallId);
   if (subagentComponent) {
-    // The final result is available here
     const resultText = formatToolResult(result);
-    // We'll need to wait for subagent_end to set this
-    // Store it temporarily
-    (subagentComponent as any)._pendingResult = resultText;
+    if (pluginSubagentToolCallIds.has(toolCallId)) {
+      subagentComponent.finish(isError, 0, resultText);
+      state.pendingSubagents.delete(toolCallId);
+      pluginSubagentToolCallIds.delete(toolCallId);
+      state.ui.requestRender();
+    } else {
+      // We'll need to wait for subagent_end to set this
+      // Store it temporarily
+      (subagentComponent as any)._pendingResult = resultText;
+    }
   }
 
   // File modification tracking is handled by the AgentController display state
