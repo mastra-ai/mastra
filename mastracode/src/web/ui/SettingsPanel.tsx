@@ -5,25 +5,32 @@ import type {
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
+import {
+  Badge,
+  Button,
+  ButtonsGroup,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Switch,
+  Tab,
+  TabContent,
+  TabList,
+  Tabs,
+  Txt,
+} from '@mastra/playground-ui';
+import type { Theme } from '@mastra/playground-ui';
+import { Brain, Check, Key, Layers, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactElement } from 'react';
 
 import { CustomProvidersSection } from './CustomProvidersSection';
-import {
-  BrainIcon,
-  CheckIcon,
-  CloseIcon,
-  KeyIcon,
-  LayersIcon,
-  PaletteIcon,
-  SearchIcon,
-  ServerIcon,
-  SlidersIcon,
-} from './icons';
 import { ModelPacksSection } from './ModelPacksSection';
 import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
-import type { Density, Theme } from './theme';
+import type { Density } from './theme';
 
 type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
 type NotificationMode = AgentControllerSessionSettings['notifications'];
@@ -63,14 +70,14 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-const TABS: { id: Tab; label: string; icon: (p: { size?: number }) => ReactElement }[] = [
-  { id: 'general', label: 'General', icon: PaletteIcon },
-  { id: 'model', label: 'Model', icon: SearchIcon },
-  { id: 'packs', label: 'Packs', icon: LayersIcon },
-  { id: 'memory', label: 'Memory', icon: BrainIcon },
-  { id: 'behavior', label: 'Behavior', icon: SlidersIcon },
-  { id: 'providers', label: 'API Keys', icon: KeyIcon },
-  { id: 'custom-providers', label: 'Custom', icon: ServerIcon },
+const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
+  { id: 'general', label: 'General', icon: Palette },
+  { id: 'model', label: 'Model', icon: Search },
+  { id: 'packs', label: 'Packs', icon: Layers },
+  { id: 'memory', label: 'Memory', icon: Brain },
+  { id: 'behavior', label: 'Behavior', icon: SlidersHorizontal },
+  { id: 'providers', label: 'API Keys', icon: Key },
+  { id: 'custom-providers', label: 'Custom', icon: Server },
 ];
 
 /**
@@ -98,46 +105,32 @@ export function SettingsPanel({
   const [tab, setTab] = useState<Tab>('general');
 
   return (
-    <div className="palette-overlay" onClick={onClose}>
-      <div
-        className="settings-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Settings"
-        onClick={e => e.stopPropagation()}
-      >
-        <header className="settings-modal-head">
-          <h2 className="settings-modal-title">Settings</h2>
-          <button className="settings-modal-close" onClick={onClose} aria-label="Close settings">
-            <CloseIcon size={16} />
-          </button>
-        </header>
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent className="w-full max-w-4xl h-[80vh]" aria-label="Settings">
+        <DialogHeader className="px-5 pt-4 pb-2">
+          <DialogTitle>Settings</DialogTitle>
+        </DialogHeader>
 
-        <div className="settings-modal-body">
-          <nav className="settings-nav" aria-label="Settings sections">
+        <Tabs<Tab> defaultTab="general" value={tab} onValueChange={setTab} className="flex flex-col min-h-0">
+          <TabList className="px-5">
             {TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                className={`settings-nav-item ${tab === id ? 'active' : ''}`}
-                aria-current={tab === id}
-                onClick={() => setTab(id)}
-              >
+              <Tab key={id} value={id}>
                 <Icon size={15} />
                 <span>{label}</span>
-              </button>
+              </Tab>
             ))}
-          </nav>
+          </TabList>
 
-          <div className="settings-pane">
-            {tab === 'general' && (
+          <div className="min-h-0 overflow-y-auto px-5">
+            <TabContent value="general">
               <GeneralTab
                 theme={theme}
                 density={density}
                 onThemeChange={onThemeChange}
                 onDensityChange={onDensityChange}
               />
-            )}
-            {tab === 'model' && (
+            </TabContent>
+            <TabContent value="model">
               <ModelTab
                 models={models}
                 currentModelId={currentModelId}
@@ -145,23 +138,31 @@ export function SettingsPanel({
                 onModelChange={onModelChange}
                 onBehaviorChange={onBehaviorChange}
               />
-            )}
-            {tab === 'packs' && <ModelPacksSection resourceId={resourceId} models={models} />}
-            {tab === 'memory' && <OMSection resourceId={resourceId} models={models} />}
-            {tab === 'behavior' && (
+            </TabContent>
+            <TabContent value="packs">
+              <ModelPacksSection resourceId={resourceId} models={models} />
+            </TabContent>
+            <TabContent value="memory">
+              <OMSection resourceId={resourceId} models={models} />
+            </TabContent>
+            <TabContent value="behavior">
               <BehaviorTab
                 settings={settings}
                 onBehaviorChange={onBehaviorChange}
                 getPermissions={getPermissions}
                 setPermissionForCategory={setPermissionForCategory}
               />
-            )}
-            {tab === 'providers' && <ProvidersSection />}
-            {tab === 'custom-providers' && <CustomProvidersSection />}
+            </TabContent>
+            <TabContent value="providers">
+              <ProvidersSection />
+            </TabContent>
+            <TabContent value="custom-providers">
+              <CustomProvidersSection />
+            </TabContent>
           </div>
-        </div>
-      </div>
-    </div>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -175,11 +176,12 @@ function GeneralTab({
 }: Pick<SettingsPanelProps, 'theme' | 'density' | 'onThemeChange' | 'onDensityChange'>) {
   return (
     <>
-      <FieldRow label="Theme" hint="Color scheme for the interface" first>
+      <FieldRow label="Theme" hint="Color scheme for the interface">
         <Segmented
           ariaLabel="Theme"
           value={theme}
           options={[
+            { value: 'system', label: 'System' },
             { value: 'light', label: 'Light' },
             { value: 'dark', label: 'Dark' },
           ]}
@@ -210,10 +212,14 @@ function ModelTab({
 }: Pick<SettingsPanelProps, 'models' | 'currentModelId' | 'settings' | 'onModelChange' | 'onBehaviorChange'>) {
   return (
     <>
-      <div className="settings-field first">
-        <div className="settings-field-label">
-          <span>Model</span>
-          <span className="settings-hint">Default model for this session</span>
+      <div className="flex flex-col gap-2 py-3 border-b border-border1/40">
+        <div className="flex flex-col gap-0.5">
+          <Txt variant="ui-md" className="text-icon5">
+            Model
+          </Txt>
+          <Txt variant="ui-sm" className="text-icon3">
+            Default model for this session
+          </Txt>
         </div>
         <ModelPicker models={models} currentModelId={currentModelId} onModelChange={onModelChange} />
       </div>
@@ -239,7 +245,7 @@ function BehaviorTab({
 }: Pick<SettingsPanelProps, 'settings' | 'onBehaviorChange' | 'getPermissions' | 'setPermissionForCategory'>) {
   return (
     <>
-      <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)" first>
+      <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
         <Toggle
           ariaLabel="Auto-approve tools"
           checked={!!settings?.yolo}
@@ -318,14 +324,16 @@ function PermissionsSection({
   };
 
   return (
-    <div className="settings-subsection">
-      <div className="settings-subsection-title">Tool permissions</div>
-      <p className="settings-subsection-hint">
+    <div className="mt-6 pt-4 border-t border-border1/40">
+      <Txt variant="ui-lg" className="text-icon6 font-medium">
+        Tool permissions
+      </Txt>
+      <Txt variant="ui-sm" as="p" className="mt-1 mb-2 text-icon3">
         Choose how each tool category is approved. “Allow” runs without asking, “Ask” prompts you, “Deny” blocks it.
         Turning on “Auto-approve tools” above sets every category to Allow.
-      </p>
-      {TOOL_CATEGORIES.map(({ value, label, hint }, i) => (
-        <FieldRow key={value} label={label} hint={hint} first={i === 0}>
+      </Txt>
+      {TOOL_CATEGORIES.map(({ value, label, hint }) => (
+        <FieldRow key={value} label={label} hint={hint}>
           <Segmented
             ariaLabel={`${label} permission`}
             value={rules?.categories?.[value] ?? 'ask'}
@@ -422,31 +430,36 @@ function ModelPicker({
   };
 
   if (models.length === 0) {
-    return <div className="model-empty">No models available.</div>;
+    return (
+      <Txt variant="ui-sm" className="text-icon3">
+        No models available.
+      </Txt>
+    );
   }
 
   return (
-    <div className="model-picker" ref={rootRef}>
-      <button
-        type="button"
-        className="model-trigger"
+    <div className="relative" ref={rootRef}>
+      <Button
+        variant="outline"
+        size="md"
+        className="w-full justify-between"
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}
       >
-        <span className="model-trigger-label">{currentLabel}</span>
-        <span className="model-trigger-caret" aria-hidden>
-          ▾
-        </span>
-      </button>
+        <span className="truncate">{currentLabel}</span>
+        <span aria-hidden>▾</span>
+      </Button>
 
       {open && (
-        <div className="model-popover" role="dialog" aria-label="Choose a model">
-          <div className="model-search">
-            <SearchIcon size={14} className="model-search-icon" />
-            <input
+        <div
+          className="absolute z-50 mt-1 w-full rounded-lg border border-border1/60 bg-surface3 shadow-dialog"
+          role="dialog"
+          aria-label="Choose a model"
+        >
+          <div className="p-2 border-b border-border1/40">
+            <Input
               ref={inputRef}
-              className="model-search-input"
               placeholder="Search models or providers…"
               value={query}
               onChange={e => setQuery(e.target.value)}
@@ -454,27 +467,37 @@ function ModelPicker({
               aria-label="Search models"
             />
           </div>
-          <ul className="model-list" role="listbox" aria-label="Models">
-            {filtered.length === 0 && <li className="model-list-empty">No models match “{query}”.</li>}
+          <ul className="max-h-72 overflow-y-auto p-1" role="listbox" aria-label="Models">
+            {filtered.length === 0 && (
+              <li className="px-3 py-2">
+                <Txt variant="ui-sm" className="text-icon3">
+                  No models match “{query}”.
+                </Txt>
+              </li>
+            )}
             {filtered.slice(0, 100).map((m, i) => (
               <li key={m.id}>
                 <button
                   type="button"
                   role="option"
                   aria-selected={m.id === currentModelId}
-                  className={`model-option ${i === active ? 'active' : ''} ${m.hasApiKey ? '' : 'locked'}`}
+                  className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left ${i === active ? 'bg-surface4' : ''} ${m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
                   disabled={!m.hasApiKey}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(m)}
                 >
-                  <span className="model-option-main">
-                    <span className="model-option-name">{m.modelName}</span>
-                    <span className="model-option-provider">{m.provider}</span>
+                  <span className="flex flex-col gap-0.5 min-w-0">
+                    <Txt variant="ui-md" className="text-icon6 truncate">
+                      {m.modelName}
+                    </Txt>
+                    <Txt variant="ui-sm" className="text-icon3 truncate">
+                      {m.provider}
+                    </Txt>
                   </span>
                   {m.id === currentModelId ? (
-                    <CheckIcon size={14} className="model-option-check" />
+                    <Check size={14} />
                   ) : m.hasApiKey ? null : (
-                    <span className="model-option-tag">no key</span>
+                    <Badge variant="default">no key</Badge>
                   )}
                 </button>
               </li>
@@ -488,22 +511,18 @@ function ModelPicker({
 
 /* ── Small presentational primitives ───────────────────────────────────── */
 
-function FieldRow({
-  label,
-  hint,
-  first,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  first?: boolean;
-  children: React.ReactNode;
-}) {
+function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className={`settings-field ${first ? 'first' : ''}`}>
-      <div className="settings-field-label">
-        <span>{label}</span>
-        {hint && <span className="settings-hint">{hint}</span>}
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-border1/40">
+      <div className="flex flex-col gap-0.5">
+        <Txt variant="ui-md" className="text-icon5">
+          {label}
+        </Txt>
+        {hint && (
+          <Txt variant="ui-sm" className="text-icon3">
+            {hint}
+          </Txt>
+        )}
       </div>
       {children}
     </div>
@@ -524,19 +543,20 @@ function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="seg" role="group" aria-label={ariaLabel}>
+    <ButtonsGroup spacing="close" role="group" aria-label={ariaLabel}>
       {options.map(o => (
-        <button
+        <Button
           key={o.value}
-          className={`seg-btn ${value === o.value ? 'active' : ''}`}
+          variant={value === o.value ? 'primary' : 'outline'}
+          size="sm"
           aria-pressed={value === o.value}
           disabled={disabled}
           onClick={() => onChange(o.value)}
         >
           {o.label}
-        </button>
+        </Button>
       ))}
-    </div>
+    </ButtonsGroup>
   );
 }
 
@@ -552,15 +572,6 @@ function Toggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <button
-      className={`toggle ${checked ? 'on' : ''}`}
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-    >
-      <span className="toggle-knob" />
-    </button>
+    <Switch aria-label={ariaLabel} checked={checked} disabled={disabled} onCheckedChange={value => onChange(value)} />
   );
 }

@@ -1,7 +1,8 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
+import { Badge, Button, Input, Txt } from '@mastra/playground-ui';
+import { ChevronsUpDown, Folder, MoreHorizontal, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { CloseIcon, EllipsisIcon, FolderIcon, PlusIcon, Wordmark } from './icons';
 import type { Project } from './projects';
 
 const MAX_THREADS = 5;
@@ -33,6 +34,8 @@ interface SidebarProps {
   onDeleteThread: (threadId: string) => void;
   onRenameThread: (threadId: string, title: string) => void;
   onCloneThread: (threadId: string) => void;
+  /** Whether the off-canvas drawer is open on narrow screens. */
+  open?: boolean;
 }
 
 export function Sidebar({
@@ -46,6 +49,7 @@ export function Sidebar({
   onDeleteThread,
   onRenameThread,
   onCloneThread,
+  open = false,
 }: SidebarProps) {
   // Per-thread action menu (⋯): which thread's menu is open, and inline-rename state.
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -95,70 +99,75 @@ export function Sidebar({
   const activeProject = projects.find(p => p.id === activeProjectId);
 
   return (
-    <div className="sidebar">
-      {/* ── Brand ─────────────────────────────────────────────────────── */}
-      <div className="sidebar-brand">
-        <Wordmark compact className="sidebar-wordmark" />
-      </div>
-
+    <div
+      className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
+    >
       {/* ── Project switcher (opens the app-level Projects modal) ─────── */}
-      <div className="sidebar-section">
-        <div className="sidebar-section-header">
-          <span className="sidebar-section-title">Project</span>
-          <button
-            className="sidebar-icon-btn"
-            title="Manage projects"
-            aria-label="Manage projects"
-            onClick={onManageProjects}
-          >
-            <PlusIcon size={15} />
-          </button>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
+            Project
+          </Txt>
+          <Button variant="ghost" size="icon-sm" aria-label="Manage projects" onClick={onManageProjects}>
+            <Plus size={15} />
+          </Button>
         </div>
 
         <button
-          className={`project-switcher ${activeProject ? '' : 'empty'}`}
+          type="button"
+          className="flex w-full items-center gap-2 rounded-md border border-border1 bg-surface3 px-2.5 py-2 text-left transition-colors hover:bg-surface4"
           onClick={onManageProjects}
           title={activeProject ? activeProject.path : 'Select a project'}
         >
-          <FolderIcon size={16} className="project-switcher-icon" />
-          <span className="project-switcher-text">
+          <Folder size={16} className="shrink-0 text-icon3" />
+          <span className="flex min-w-0 flex-1 flex-col">
             {activeProject ? (
               <>
-                <span className="project-switcher-name">{activeProject.name}</span>
-                <span className="project-switcher-path">{activeProject.path}</span>
+                <Txt as="span" variant="ui-sm" className="truncate text-icon6">
+                  {activeProject.name}
+                </Txt>
+                <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+                  {activeProject.path}
+                </Txt>
               </>
             ) : (
-              <span className="project-switcher-name">Select a project…</span>
+              <Txt as="span" variant="ui-sm" className="text-icon3">
+                Select a project…
+              </Txt>
             )}
           </span>
-          <CloseIcon size={13} className="project-switcher-chevron" />
+          <ChevronsUpDown size={13} className="shrink-0 text-icon3" />
         </button>
       </div>
 
       {/* ── Threads (scoped to active project) ────────────────────────── */}
       {activeProject && (
-        <div className="sidebar-section sidebar-section-grow">
-          <div className="sidebar-section-header">
-            <span className="sidebar-section-title">
-              Threads {threads.length > 0 && <span className="sidebar-count">{threads.length}</span>}
-            </span>
-            <button
-              className="sidebar-icon-btn"
-              title="New thread"
-              aria-label="New thread"
-              onClick={() => onCreateThread()}
-            >
-              <PlusIcon size={15} />
-            </button>
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <div className="flex items-center justify-between px-1">
+            <Txt as="span" variant="ui-xs" className="flex items-center gap-1.5 text-icon3 uppercase tracking-wide">
+              Threads
+              {threads.length > 0 && (
+                <Badge variant="default" size="xs">
+                  {threads.length}
+                </Badge>
+              )}
+            </Txt>
+            <Button variant="ghost" size="icon-sm" aria-label="New thread" onClick={() => onCreateThread()}>
+              <Plus size={15} />
+            </Button>
           </div>
 
-          <div className="sidebar-list">
-            {sortedThreads.length === 0 && <div className="sidebar-empty">No threads yet</div>}
+          <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+            {sortedThreads.length === 0 && (
+              <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
+                No threads yet
+              </Txt>
+            )}
             {sortedThreads.map(t =>
               renamingId === t.id ? (
-                <div key={t.id} className="sidebar-thread renaming">
-                  <input
-                    className="sidebar-rename-input"
+                <div key={t.id} role="listitem" className="px-1 py-0.5">
+                  <Input
+                    aria-label="Thread title"
                     autoFocus
                     value={renameDraft}
                     placeholder="Thread title"
@@ -174,15 +183,35 @@ export function Sidebar({
                   />
                 </div>
               ) : (
-                <div key={t.id} className={`sidebar-thread ${t.id === activeThreadId ? 'active' : ''}`}>
-                  <button className="sidebar-thread-main" onClick={() => onSwitchThread(t.id)}>
-                    <span className={`sidebar-thread-title ${t.title ? '' : 'untitled'}`}>{t.title || 'Untitled'}</span>
-                    {t.updatedAt && <span className="sidebar-thread-date">{relativeTime(t.updatedAt)}</span>}
+                <div
+                  key={t.id}
+                  role="listitem"
+                  className={`group flex items-center rounded-md transition-colors hover:bg-surface4 ${
+                    t.id === activeThreadId ? 'bg-surface4' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-1.5 text-left"
+                    onClick={() => onSwitchThread(t.id)}
+                  >
+                    <Txt
+                      as="span"
+                      variant="ui-sm"
+                      className={`truncate ${t.title ? 'text-icon6' : 'text-icon3 italic'}`}
+                    >
+                      {t.title || 'Untitled'}
+                    </Txt>
+                    {t.updatedAt && (
+                      <Txt as="span" variant="ui-xs" className="shrink-0 text-icon3">
+                        {relativeTime(t.updatedAt)}
+                      </Txt>
+                    )}
                   </button>
-                  <div className="sidebar-thread-menu" ref={menuFor === t.id ? menuRef : undefined}>
-                    <button
-                      className="sidebar-thread-action"
-                      title="Thread actions"
+                  <div className="relative pr-1" ref={menuFor === t.id ? menuRef : undefined}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
                       aria-label="Thread actions"
                       aria-haspopup="menu"
                       aria-expanded={menuFor === t.id}
@@ -191,32 +220,46 @@ export function Sidebar({
                         setMenuFor(prev => (prev === t.id ? null : t.id));
                       }}
                     >
-                      <EllipsisIcon size={15} />
-                    </button>
+                      <MoreHorizontal size={15} />
+                    </Button>
                     {menuFor === t.id && (
-                      <div className="sidebar-menu-popover" role="menu">
-                        <button role="menuitem" onClick={() => startRename(t)}>
-                          Rename
-                        </button>
-                        <button
+                      <div
+                        role="menu"
+                        className="absolute right-0 top-full z-10 mt-1 flex min-w-32 flex-col rounded-md border border-border1 bg-surface4 p-1 shadow-lg"
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           role="menuitem"
+                          className="justify-start"
+                          onClick={() => startRename(t)}
+                        >
+                          Rename
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          role="menuitem"
+                          className="justify-start"
                           onClick={() => {
                             setMenuFor(null);
                             onCloneThread(t.id);
                           }}
                         >
                           Clone
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           role="menuitem"
-                          className="danger"
+                          className="justify-start text-accent2"
                           onClick={() => {
                             setMenuFor(null);
                             onDeleteThread(t.id);
                           }}
                         >
                           Delete
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -224,7 +267,9 @@ export function Sidebar({
               ),
             )}
             {threads.length > MAX_THREADS && (
-              <div className="sidebar-overflow">+{threads.length - MAX_THREADS} more</div>
+              <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">
+                +{threads.length - MAX_THREADS} more
+              </Txt>
             )}
           </div>
         </div>

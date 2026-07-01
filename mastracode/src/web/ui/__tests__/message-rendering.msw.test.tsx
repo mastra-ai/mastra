@@ -91,6 +91,11 @@ function useAgentControllerHandlers({
   );
 }
 
+/** Locate a migrated tool card by its accessible group label ("Tool: <name>"). */
+async function findToolCard(toolName: string): Promise<HTMLElement> {
+  return screen.findByRole('group', { name: `Tool: ${toolName}` });
+}
+
 afterEach(() => localStorage.clear());
 
 describe('MastraCode message rendering', () => {
@@ -116,10 +121,7 @@ describe('MastraCode message rendering', () => {
     expect(await screen.findByText('Hello')).toBeInTheDocument();
     expect(screen.getByText('from hydrate')).toBeInTheDocument();
     expect(screen.getByText('checking files')).toBeInTheDocument();
-    const toolName = screen.getAllByText('view').find(node => node.closest('.tool-card'));
-    if (!toolName) throw new Error('missing view tool card');
-    const card = toolName.closest('.tool-card');
-    if (!(card instanceof HTMLElement)) throw new Error('missing view tool card wrapper');
+    const card = await findToolCard('view');
     expect(within(card).getByText('Done')).toBeInTheDocument();
   });
 
@@ -159,9 +161,7 @@ describe('MastraCode message rendering', () => {
 
     renderWithProviders(<App />);
 
-    const toolName = await screen.findByText('execute_command');
-    const card = toolName.closest('.tool-card');
-    if (!(card instanceof HTMLElement)) throw new Error('missing tool card');
+    const card = await findToolCard('execute_command');
     expect(within(card).getByText('Done')).toBeInTheDocument();
     expect(within(card).getByText('passing tests')).toBeInTheDocument();
   });
@@ -182,5 +182,152 @@ describe('MastraCode message rendering', () => {
 
     expect(await screen.findByText('Thread title updated: Better title')).toBeInTheDocument();
     expect(screen.queryByText(/om_thread_title_updated/)).not.toBeInTheDocument();
+  });
+
+  describe('when a tool approval is required', () => {
+    it('renders an approval prompt with approve and decline controls', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [
+          { type: 'tool_approval_required', toolCallId: 'tool-1', toolName: 'edit', args: { path: 'src/index.ts' } },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      const card = await screen.findByRole('group', { name: 'Tool approval for edit' });
+      expect(within(card).getByRole('button', { name: 'Approve edit' })).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Decline edit' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when a plan approval is suspended', () => {
+    it('renders the plan title with approve and reject controls', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [
+          {
+            type: 'tool_suspended',
+            toolCallId: 'plan-1',
+            toolName: 'submit_plan',
+            args: {},
+            suspendPayload: { plan: { title: 'Ship the migration', summary: 'Do the thing' } },
+          },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      const card = await screen.findByRole('group', { name: 'Plan approval' });
+      expect(within(card).getByText('Plan: Ship the migration')).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Approve the plan and switch to build' })).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Reject the plan' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when an access request is suspended', () => {
+    it('renders allow and deny controls for the requested path', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [
+          {
+            type: 'tool_suspended',
+            toolCallId: 'access-1',
+            toolName: 'request_access',
+            args: {},
+            suspendPayload: { requestedPath: '/etc/hosts', reason: 'read config' },
+          },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      const card = await screen.findByRole('group', { name: 'Access request' });
+      expect(within(card).getByRole('button', { name: 'Allow access to /etc/hosts' })).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Deny access to /etc/hosts' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when the agent asks the user a question', () => {
+    it('renders the question with selectable answer options', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [
+          {
+            type: 'tool_suspended',
+            toolCallId: 'ask-1',
+            toolName: 'ask_user',
+            args: {},
+            suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+          },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      const card = await screen.findByRole('group', { name: 'Question from the agent' });
+      expect(within(card).getByText('Which database?')).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Postgres' })).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'SQLite' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when a subagent is delegated work', () => {
+    it('renders a subagent entry with its task', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [
+          {
+            type: 'subagent_start',
+            toolCallId: 'sub-1',
+            agentType: 'execute',
+            task: 'Run the migration',
+            modelId: 'openai/gpt-4o-mini',
+          },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      expect(await screen.findByText('Run the migration')).toBeInTheDocument();
+    });
+  });
+
+  describe('when a goal evaluation arrives', () => {
+    it('renders the goal panel with its objective and controls', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [
+          {
+            type: 'goal_evaluation',
+            payload: { objective: 'Migrate the UI', status: 'active', iteration: 1, maxRuns: 5, passed: false },
+          },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      expect(await screen.findByText('Migrate the UI')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when a notice contains markdown', () => {
+    it('renders the notice text as formatted markdown instead of raw syntax', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [{ type: 'info', message: "I'm in **plan mode** — run `/mode build`" }],
+      });
+
+      renderWithProviders(<App />);
+
+      const bold = await screen.findByText('plan mode');
+      expect(bold.tagName).toBe('STRONG');
+
+      const code = screen.getByText('/mode build');
+      expect(code.tagName).toBe('CODE');
+
+      expect(screen.queryByText(/\*\*plan mode\*\*/)).not.toBeInTheDocument();
+    });
   });
 });

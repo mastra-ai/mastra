@@ -1,4 +1,6 @@
 import type { PlanResume } from '@mastra/client-js';
+import { Button, ButtonsGroup, Notice, Spinner, Textarea, ThemeToggle, Txt, useTheme } from '@mastra/playground-ui';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Menu, Settings, Square } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
@@ -6,18 +8,6 @@ import { CommandPalette } from './CommandPalette';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import type { SlashCommand } from './commands';
 import { GoalPanel, StatusLine, Transcript } from './components';
-import {
-  ArrowDownIcon,
-  ChevronIcon,
-  GearIcon,
-  LogoMark,
-  MenuIcon,
-  MoonIcon,
-  SendIcon,
-  StopIcon,
-  SunIcon,
-  Wordmark,
-} from './icons';
 import {
   loadProjects,
   DEFAULT_RESOURCE_ID,
@@ -30,8 +20,8 @@ import { ProjectsModal } from './ProjectsModal';
 import { SettingsPanel } from './SettingsPanel';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 import { Sidebar } from './Sidebar';
-import { applyDensity, applyTheme, loadDensity, loadTheme, saveDensity, saveTheme } from './theme';
-import type { Density, Theme } from './theme';
+import { applyDensity, loadDensity, saveDensity } from './theme';
+import type { Density } from './theme';
 import { useToast } from './toast';
 import { useAgentControllerSession } from './useAgentControllerSession';
 
@@ -387,16 +377,8 @@ export default function App() {
     else await send(text);
   }
 
-  const [theme, setTheme] = useState<Theme>(() => loadTheme());
-  // Apply the restored theme on mount (and whenever it changes).
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-  const changeTheme = (next: Theme) => {
-    setTheme(next);
-    saveTheme(next);
-  };
-  const toggleTheme = () => changeTheme(theme === 'dark' ? 'light' : 'dark');
+  // Theme is owned by playground-ui's ThemeProvider (class-based `.dark`/`.light`).
+  const { theme, setTheme } = useTheme();
 
   // Density preference (comfortable/compact), persisted and applied to <html>.
   const [density, setDensity] = useState<Density>(() => loadDensity());
@@ -491,8 +473,9 @@ export default function App() {
   };
 
   return (
-    <div className={`app-layout ${sidebarOpen ? 'sidebar-open' : ''}`}>
+    <div className="relative z-1 flex h-screen">
       <Sidebar
+        open={sidebarOpen}
         projects={projects}
         activeProjectId={activeProjectId}
         onManageProjects={() => {
@@ -525,61 +508,70 @@ export default function App() {
       />
 
       {/* Dim + dismiss overlay for the off-canvas sidebar on mobile. */}
-      <div className="sidebar-overlay" onClick={closeSidebar} aria-hidden="true" />
+      <div
+        className={`fixed inset-0 z-30 bg-black/50 transition-opacity duration-200 md:hidden ${
+          sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={closeSidebar}
+        aria-hidden="true"
+      />
 
-      <div className="app-main">
-        <header className="header">
-          <button className="menu-btn" onClick={() => setSidebarOpen(o => !o)} title="Menu" aria-label="Toggle sidebar">
-            <MenuIcon />
-          </button>
+      <div className="relative z-1 flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center gap-2 border-b border-border1 px-3 py-2">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="md:hidden"
+            onClick={() => setSidebarOpen(o => !o)}
+            aria-label="Toggle sidebar"
+          >
+            <Menu />
+          </Button>
           <button
-            className="header-title"
+            type="button"
+            className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-surface4"
             onClick={() => setProjectsOpen(true)}
             title={activeProject ? `${activeProject.path} — switch project` : 'Select a project'}
           >
-            <LogoMark size={24} className="logo-mark" />
-            <span className="header-name">{activeProject ? activeProject.name : 'MastraCode'}</span>
-            <ChevronIcon size={14} className="header-title-chevron" />
+            <Txt as="span" variant="ui-md" className="font-medium text-icon6">
+              {activeProject ? activeProject.name : 'MastraCode'}
+            </Txt>
+            <ChevronsUpDown size={14} className="text-icon3" />
           </button>
-          <div className="header-actions">
-            {activeProject &&
-              modes.map(m => (
-                <button
-                  key={m.id}
-                  className={`mode-btn ${transcript.modeId === m.id ? 'active' : ''}`}
-                  data-mode={m.id}
-                  onClick={() => void session.switchMode(m.id)}
-                >
-                  {m.name ?? m.id}
-                </button>
-              ))}
-            <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme" aria-label="Toggle theme">
-              {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-            </button>
-            <button
-              className="theme-toggle"
-              onClick={() => setSettingsOpen(true)}
-              title="Settings"
-              aria-label="Open settings"
-            >
-              <GearIcon />
-            </button>
+          <div className="ml-auto flex items-center gap-2">
+            {activeProject && modes.length > 0 && (
+              <ButtonsGroup spacing="close">
+                {modes.map(m => (
+                  <Button
+                    key={m.id}
+                    variant={transcript.modeId === m.id ? 'primary' : 'ghost'}
+                    size="sm"
+                    onClick={() => void session.switchMode(m.id)}
+                  >
+                    {m.name ?? m.id}
+                  </Button>
+                ))}
+              </ButtonsGroup>
+            )}
+            <ThemeToggle aria-label="Toggle theme" />
+            <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
+              <Settings />
+            </Button>
           </div>
         </header>
 
         {!activeProject ? (
-          <div className="no-project">
-            <div className="no-project-icon">
-              <LogoMark size={44} />
-            </div>
-            <h2>Welcome to MastraCode</h2>
-            <p>
+          <div className="m-auto flex max-w-md flex-col items-center gap-3 px-6 text-center">
+            <Txt as="h2" variant="header-md" className="text-icon6">
+              Welcome to MastraCode
+            </Txt>
+            <Txt as="p" variant="ui-md" className="max-w-sm text-icon3">
               Open a project folder to start a coding session. Each project keeps its own threads, memory, and workspace
               — shared with the terminal.
-            </p>
-            <button className="btn btn-primary no-project-cta" onClick={() => setProjectsOpen(true)}>
+            </Txt>
+            <Button variant="primary" className="mt-2" onClick={() => setProjectsOpen(true)}>
               Open a project
-            </button>
+            </Button>
           </div>
         ) : (
           <>
@@ -594,89 +586,96 @@ export default function App() {
             )}
 
             {(status === 'reconnecting' || status === 'error') && (
-              <div className={`conn-banner ${status}`} role="status" aria-live="polite">
-                <span className="conn-dot" />
-                {status === 'reconnecting'
-                  ? 'Connection lost — reconnecting…'
-                  : 'Disconnected. Check the server and reload to reconnect.'}
+              <div role="status" aria-live="polite" className="px-3 pt-2">
+                <Notice variant={status === 'reconnecting' ? 'warning' : 'destructive'}>
+                  {status === 'reconnecting'
+                    ? 'Connection lost — reconnecting…'
+                    : 'Disconnected. Check the server and reload to reconnect.'}
+                </Notice>
               </div>
             )}
 
-            <div className="transcript" ref={threadRef}>
+            <div
+              className="flex flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-3xl"
+              ref={threadRef}
+            >
               {transcript.entries.length === 0 && (
-                <div className="transcript-empty">
-                  <Wordmark />
-                  <dl className="banner-meta">
-                    <div className="banner-row">
-                      <dt>Project</dt>
-                      <dd>{activeProject.name}</dd>
+                <div className="m-auto w-full max-w-3xl px-7 py-10 text-left font-mono text-sm leading-relaxed text-icon3">
+                  <dl className="mb-4 mt-0 grid gap-0.5">
+                    <div className="flex gap-2">
+                      <dt className="min-w-24 text-icon2">Project</dt>
+                      <dd className="m-0 break-words text-icon5">{activeProject.name}</dd>
                     </div>
                     {activeProject.resourceId && (
-                      <div className="banner-row">
-                        <dt>Resource ID</dt>
-                        <dd>{activeProject.resourceId}</dd>
+                      <div className="flex gap-2">
+                        <dt className="min-w-24 text-icon2">Resource ID</dt>
+                        <dd className="m-0 break-words text-icon5">{activeProject.resourceId}</dd>
                       </div>
                     )}
                     {activeProject.gitBranch && (
-                      <div className="banner-row">
-                        <dt>Branch</dt>
-                        <dd>{activeProject.gitBranch}</dd>
+                      <div className="flex gap-2">
+                        <dt className="min-w-24 text-icon2">Branch</dt>
+                        <dd className="m-0 break-words text-icon5">{activeProject.gitBranch}</dd>
                       </div>
                     )}
-                    <div className="banner-row">
-                      <dt>Workspace</dt>
-                      <dd>{activeProject.path}</dd>
+                    <div className="flex gap-2">
+                      <dt className="min-w-24 text-icon2">Workspace</dt>
+                      <dd className="m-0 break-words text-icon5">{activeProject.path}</dd>
                     </div>
                   </dl>
-                  <p className="banner-ready">Ready for new conversation</p>
+                  <p className="mb-6 mt-0 text-icon3">Ready for new conversation</p>
                 </div>
               )}
               <Transcript entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />
               {showWorkingIndicator && (
-                <div className="working-indicator" aria-live="polite" aria-label="Agent is working">
-                  <span className="working-dots">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                  <span className="working-label">Thinking…</span>
+                <div className="flex items-center gap-2 px-2 py-2" aria-live="polite" aria-label="Agent is working">
+                  <Spinner className="text-icon3" />
+                  <Txt as="span" variant="ui-sm" className="text-icon3">
+                    Thinking…
+                  </Txt>
                 </div>
               )}
             </div>
 
             {showScrollDown && (
-              <button
-                type="button"
-                className="scroll-bottom-btn"
+              <Button
+                variant="default"
+                size="icon-sm"
+                className="absolute bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-full shadow-md"
                 onClick={() => scrollToBottom('smooth')}
-                title="Jump to latest"
                 aria-label="Jump to latest message"
               >
-                <ArrowDownIcon size={18} />
-              </button>
+                <ArrowDown size={18} />
+              </Button>
             )}
 
-            <form className="composer" onSubmit={onSubmit}>
+            <form
+              className="relative flex shrink-0 items-end gap-2 border-t border-border1 bg-surface2/70 px-4 py-3.5 backdrop-blur-md"
+              onSubmit={onSubmit}
+            >
               {showSuggestions && (
-                <div className="cmd-menu">
+                <div className="absolute bottom-full left-4 right-4 z-50 mb-1 max-h-64 overflow-y-auto rounded-md border border-border1 bg-surface2 shadow-lg">
                   {suggestions.map((c, i) => (
                     <button
                       type="button"
                       key={c.name}
-                      className={`cmd-item ${i === activeSuggestion ? 'active' : ''}`}
+                      className={`grid w-full items-baseline gap-2 px-3 py-1.5 text-left text-icon5 ${
+                        i === activeSuggestion ? 'bg-surface4' : 'hover:bg-surface3'
+                      }`}
+                      style={{ gridTemplateColumns: 'max-content max-content 1fr' }}
                       onMouseEnter={() => setActiveSuggestion(i)}
                       onClick={() => applyCommand(c.name)}
                     >
-                      <span className="cmd-name">/{c.name}</span>
-                      {c.args && <span className="cmd-args">{c.args}</span>}
-                      <span className="cmd-desc">{c.description}</span>
+                      <span className="font-mono text-accent3">/{c.name}</span>
+                      {c.args && <span className="font-mono text-xs text-icon3">{c.args}</span>}
+                      <span className="truncate text-xs text-icon3">{c.description}</span>
                     </button>
                   ))}
                 </div>
               )}
-              <textarea
+              <Textarea
                 ref={inputRef}
-                className="input composer-input"
+                className="max-h-52 min-h-10 resize-none"
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
                 onKeyDown={onComposerKeyDown}
@@ -685,25 +684,27 @@ export default function App() {
                 disabled={status === 'error'}
               />
               {busy ? (
-                <button
+                <Button
                   type="button"
-                  className="btn btn-danger btn-icon"
+                  variant="default"
+                  size="icon-md"
+                  className="shrink-0 text-accent2"
                   onClick={() => void abort()}
-                  title="Stop"
                   aria-label="Stop"
                 >
-                  <StopIcon />
-                </button>
+                  <Square />
+                </Button>
               ) : (
-                <button
+                <Button
                   type="submit"
-                  className="btn btn-primary btn-icon"
+                  variant="primary"
+                  size="icon-md"
+                  className="shrink-0"
                   disabled={status !== 'ready' || !draft.trim()}
-                  title="Send"
                   aria-label="Send"
                 >
-                  <SendIcon />
-                </button>
+                  <ArrowUp />
+                </Button>
               )}
             </form>
 
@@ -737,7 +738,7 @@ export default function App() {
           currentModelId={transcript.modelId ?? null}
           settings={session.settings}
           resourceId={sessionEnabled ? resourceId : undefined}
-          onThemeChange={changeTheme}
+          onThemeChange={setTheme}
           onDensityChange={changeDensity}
           onModelChange={modelId => {
             void session.switchModel(modelId);

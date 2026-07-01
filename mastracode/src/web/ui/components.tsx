@@ -1,12 +1,53 @@
 import type { PlanResume, AgentControllerOMProgress } from '@mastra/client-js';
+import {
+  Badge,
+  Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  CopyButton,
+  Input,
+  Notice,
+  Txt,
+} from '@mastra/playground-ui';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
+import {
+  Bell,
+  Bot,
+  Brain,
+  ChevronRight,
+  Eye,
+  Folder,
+  Globe,
+  ListChecks,
+  Pencil,
+  Search,
+  Target,
+  Terminal,
+  Wrench,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
 import { memo, useEffect, useMemo, useState } from 'react';
 
 import { highlightCode, languageForPath } from './highlight';
-import { BellIcon, BrainIcon, ChevronIcon, CopyIcon, FolderIcon, LogoMark, TargetIcon, ToolIcon } from './icons';
+
+function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
+  const n = name.toLowerCase();
+  const props = { size, className };
+  if (n.includes('view') || n.includes('read') || n.includes('cat')) return <Eye {...props} />;
+  if (n.includes('write') || n.includes('edit') || n.includes('replace') || n.includes('str_replace'))
+    return <Pencil {...props} />;
+  if (n.includes('exec') || n.includes('command') || n.includes('shell') || n.includes('bash') || n.includes('run'))
+    return <Terminal {...props} />;
+  if (n.includes('search') || n.includes('grep') || n.includes('find') || n.includes('glob'))
+    return <Search {...props} />;
+  if (n.includes('task') || n.includes('todo')) return <ListChecks {...props} />;
+  if (n.includes('browser') || n.includes('web') || n.includes('fetch') || n.includes('http'))
+    return <Globe {...props} />;
+  return <Wrench {...props} />;
+}
 import { Markdown } from './Markdown';
-import { useToast } from './toast';
 
 import type {
   ApprovalPrompt,
@@ -25,6 +66,31 @@ import type {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Monospace, scrollable container for serialized args/results/file dumps.
+const resultBlock =
+  'm-0 mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap break-all rounded-sm bg-surface1 p-2 font-mono text-xs leading-normal text-icon5';
+
+// Prompt cards (approval / suspension) — an elevated card with a colored left rail.
+const promptCardBase = 'rounded-lg border border-border1 bg-surface3 px-4 py-3 shadow-md';
+const promptCardApproval = `${promptCardBase} border-l-4 border-l-warning1`;
+const promptCardSuspension = `${promptCardBase} border-l-4 border-l-accent2`;
+const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
+const promptActions = 'mt-2 flex gap-2';
+
+// Message rows (user / assistant / system / signal).
+const msgRow = 'flex flex-col gap-1';
+const msgHead = 'inline-flex items-center gap-2';
+const msgRole = 'text-ui-xs font-bold uppercase tracking-wide text-icon3';
+
+// Status line items.
+const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
+const statusBudget = 'inline-flex items-baseline whitespace-nowrap text-icon3 tabular-nums';
+const slLabel = 'mr-1 text-icon2';
+const slBuffer = 'italic text-icon2';
+
+// Goal bar — horizontal control strip below the header.
+const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-accent2/5 px-4 py-2 text-xs';
 
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
@@ -54,42 +120,14 @@ function fmtTokensThreshold(n: number): string {
 
 /** Pick a severity class as a usage fraction climbs toward its threshold. */
 function pctClass(percent: number): string {
-  if (percent >= 90) return 'sl-budget-high';
-  if (percent >= 70) return 'sl-budget-mid';
+  if (percent >= 90) return 'text-error';
+  if (percent >= 70) return 'text-warning1';
   return '';
 }
 
 function lastSegment(id: string): string {
   const parts = id.split('/');
   return parts[parts.length - 1] ?? id;
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const { toast } = useToast();
-  return (
-    <button
-      type="button"
-      className="copy-btn"
-      title="Copy"
-      aria-label="Copy"
-      onClick={async e => {
-        e.stopPropagation();
-        try {
-          if (!navigator.clipboard) throw new Error('Clipboard API unavailable');
-          await navigator.clipboard.writeText(text);
-          setCopied(true);
-          toast('Copied to clipboard', 'success');
-          setTimeout(() => setCopied(false), 1200);
-        } catch {
-          // Only report success when the write actually succeeded.
-          toast('Could not copy to clipboard', 'error');
-        }
-      }}
-    >
-      {copied ? <span className="copy-ok">Copied</span> : <CopyIcon />}
-    </button>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +139,27 @@ const STATUS_LABEL: Record<ToolCall['status'], string> = {
   done: 'Done',
   error: 'Failed',
 };
+
+const STATUS_VARIANT: Record<ToolCall['status'], 'info' | 'success' | 'error'> = {
+  running: 'info',
+  done: 'success',
+  error: 'error',
+};
+
+/** Label + copy header for a section inside a tool card body. */
+function ToolSection({ label, copyText, children }: { label: string; copyText: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-2">
+        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
+          {label}
+        </Txt>
+        <CopyButton content={copyText} size="sm" variant="ghost" />
+      </div>
+      {children}
+    </div>
+  );
+}
 
 /** A unified-diff-style view of an edit's before/after text, syntax-highlighted. */
 function DiffView({ oldText, newText, path }: { oldText: string; newText: string; path?: string }) {
@@ -129,7 +188,7 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
 function CodeBlock({ text, path }: { text: string; path?: string }) {
   const lang = languageForPath(path);
   return (
-    <pre className="result-block hljs">
+    <pre className={`${resultBlock} hljs`}>
       <code dangerouslySetInnerHTML={{ __html: highlightCode(text, lang) }} />
     </pre>
   );
@@ -176,67 +235,69 @@ function ToolCard({ tool, forceExpanded }: { tool: ToolCall; forceExpanded?: boo
   const edit = editArgs(tool.toolName, tool.args);
 
   return (
-    <div className={`tool-card ${tool.status}`}>
-      <button type="button" className="tool-head" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
-        <span className="tool-icon">
-          <ToolIcon name={tool.toolName} />
-        </span>
-        <span className="tool-name">{tool.toolName}</span>
-        {edit?.path && !expanded && <span className="tool-args-preview">{edit.path}</span>}
-        {!edit && argsPreview && !expanded && <span className="tool-args-preview">{truncate(argsPreview, 72)}</span>}
-        <span className={`tool-status-label ${tool.status}`}>{STATUS_LABEL[tool.status]}</span>
-        <span className={`tool-status ${tool.status}`} title={STATUS_LABEL[tool.status]} />
-        <ChevronIcon size={13} className={`tool-chevron ${expanded ? 'open' : ''}`} />
-      </button>
-      {expanded && (
-        <div className="tool-body">
-          {edit ? (
-            <div className="tool-section">
-              <div className="tool-section-head">
-                <span>{edit.path ?? 'Change'}</span>
-                <CopyButton text={edit.content ?? edit.new_string ?? ''} />
-              </div>
-              {edit.new_string !== undefined ? (
-                <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
-              ) : (
-                <CodeBlock text={truncate(edit.content ?? '', 2000)} path={edit.path} />
-              )}
-            </div>
-          ) : argsPretty ? (
-            <div className="tool-section">
-              <div className="tool-section-head">
-                <span>Arguments</span>
-                <CopyButton text={argsPretty} />
-              </div>
-              <pre className="result-block">{argsPretty}</pre>
-            </div>
-          ) : null}
-          {tool.output && (
-            <div className="tool-section">
-              <div className="tool-section-head">
-                <span>Output</span>
-                <CopyButton text={tool.output} />
-              </div>
-              <pre className="shell-output">{tool.output}</pre>
-            </div>
-          )}
-          {resultText !== undefined && (
-            <div className="tool-section">
-              <div className="tool-section-head">
-                <span>Result</span>
-                <CopyButton text={resultText} />
-              </div>
-              <pre className="result-block">{truncate(resultText, 800)}</pre>
-            </div>
-          )}
-        </div>
-      )}
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="rounded-md border border-border1 bg-surface3"
+      role="group"
+      aria-label={`Tool: ${tool.toolName}`}
+    >
+      <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-1.5 text-left">
+        <ToolIcon name={tool.toolName} />
+        <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">
+          {tool.toolName}
+        </Txt>
+        {edit?.path && !expanded && (
+          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
+            {edit.path}
+          </Txt>
+        )}
+        {!edit && argsPreview && !expanded && (
+          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
+            {truncate(argsPreview, 72)}
+          </Txt>
+        )}
+        <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
+          {STATUS_LABEL[tool.status]}
+        </Badge>
+        <ChevronRight
+          size={13}
+          className={`shrink-0 text-icon3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-2 px-2 pb-2">
+        {edit ? (
+          <ToolSection label={edit.path ?? 'Change'} copyText={edit.content ?? edit.new_string ?? ''}>
+            {edit.new_string !== undefined ? (
+              <DiffView oldText={edit.old_string ?? ''} newText={edit.new_string} path={edit.path} />
+            ) : (
+              <CodeBlock text={truncate(edit.content ?? '', 2000)} path={edit.path} />
+            )}
+          </ToolSection>
+        ) : argsPretty ? (
+          <ToolSection label="Arguments" copyText={argsPretty}>
+            <pre className={resultBlock}>{argsPretty}</pre>
+          </ToolSection>
+        ) : null}
+        {tool.output && (
+          <ToolSection label="Output" copyText={tool.output}>
+            <pre className="m-0 max-h-72 overflow-y-auto whitespace-pre-wrap break-all py-1.5 font-mono text-xs leading-normal text-icon3">
+              {tool.output}
+            </pre>
+          </ToolSection>
+        )}
+        {resultText !== undefined && (
+          <ToolSection label="Result" copyText={resultText}>
+            <pre className={resultBlock}>{truncate(resultText, 800)}</pre>
+          </ToolSection>
+        )}
+      </CollapsibleContent>
       {!expanded && tool.output && (
-        <div className="tool-body">
-          <pre className="shell-output collapsed-output">{truncate(tool.output, 180)}</pre>
-        </div>
+        <pre className="mx-2 mb-2 max-h-72 overflow-y-auto whitespace-pre-wrap break-all py-1.5 font-mono text-xs leading-normal text-icon3 opacity-75">
+          {truncate(tool.output, 180)}
+        </pre>
       )}
-    </div>
+    </Collapsible>
   );
 }
 
@@ -252,27 +313,28 @@ function ApprovalCard({
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
 }) {
   return (
-    <div className="prompt-card approval" role="group" aria-label={`Tool approval for ${prompt.toolName}`}>
-      <div className="prompt-title">
-        Approve <code>{prompt.toolName}</code>?
+    <div className={promptCardApproval} role="group" aria-label={`Tool approval for ${prompt.toolName}`}>
+      <div className={promptTitle}>
+        Approve <code className="rounded bg-surface5 px-1.5 py-px font-mono text-xs">{prompt.toolName}</code>?
       </div>
-      <pre className="result-block">{truncate(stringify(prompt.args), 400)}</pre>
-      <div className="prompt-actions">
-        <button
-          className="btn btn-primary btn-sm"
+      <pre className={resultBlock}>{truncate(stringify(prompt.args), 400)}</pre>
+      <div className={promptActions}>
+        <Button
+          variant="primary"
+          size="sm"
           aria-label={`Approve ${prompt.toolName}`}
           autoFocus
           onClick={() => onApprove(prompt.toolCallId, true, prompt.id)}
         >
           Approve
-        </button>
-        <button
-          className="btn btn-danger btn-sm"
+        </Button>
+        <Button
+          size="sm"
           aria-label={`Decline ${prompt.toolName}`}
           onClick={() => onApprove(prompt.toolCallId, false, prompt.id)}
         >
           Decline
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -332,25 +394,30 @@ function SuspensionCard({
 
   if (prompt.toolName === 'submit_plan') {
     return (
-      <div className="prompt-card suspension" role="group" aria-label="Plan approval">
-        <div className="prompt-title">Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && <div className="text">{payload.plan.summary}</div>}
-        <div className="prompt-actions">
-          <button
-            className="btn btn-primary btn-sm"
+      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
+        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
+        {payload.plan?.summary && (
+          <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed text-icon5">
+            {payload.plan.summary}
+          </div>
+        )}
+        <div className={promptActions}>
+          <Button
+            variant="primary"
+            size="sm"
             aria-label="Approve the plan and switch to build"
             autoFocus
             onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
           >
             Approve &amp; build
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
+          </Button>
+          <Button
+            size="sm"
             aria-label="Reject the plan"
             onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
           >
             Reject
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -358,25 +425,26 @@ function SuspensionCard({
 
   if (prompt.toolName === 'request_access') {
     return (
-      <div className="prompt-card suspension" role="group" aria-label="Access request">
-        <div className="prompt-title">Grant access to {payload.requestedPath ?? 'a path'}?</div>
-        {payload.reason && <div className="prompt-reason">Reason: {payload.reason}</div>}
-        <div className="prompt-actions">
-          <button
-            className="btn btn-primary btn-sm"
+      <div className={promptCardSuspension} role="group" aria-label="Access request">
+        <div className={promptTitle}>Grant access to {payload.requestedPath ?? 'a path'}?</div>
+        {payload.reason && <div className="mt-0.5 text-xs text-icon3">Reason: {payload.reason}</div>}
+        <div className={promptActions}>
+          <Button
+            variant="primary"
+            size="sm"
             aria-label={`Allow access to ${payload.requestedPath ?? 'the requested path'}`}
             autoFocus
             onClick={() => onRespond(prompt.toolCallId, 'Yes', prompt.id)}
           >
             Allow
-          </button>
-          <button
-            className="btn btn-danger btn-sm"
+          </Button>
+          <Button
+            size="sm"
             aria-label={`Deny access to ${payload.requestedPath ?? 'the requested path'}`}
             onClick={() => onRespond(prompt.toolCallId, 'No', prompt.id)}
           >
             Deny
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -398,41 +466,42 @@ function AskUserCard({
   const options = payload.options ?? [];
   const question = payload.question ?? 'The agent has a question';
   return (
-    <div className="prompt-card suspension" role="group" aria-label="Question from the agent">
-      <div className="prompt-title">{question}</div>
+    <div className={promptCardSuspension} role="group" aria-label="Question from the agent">
+      <div className={promptTitle}>{question}</div>
       {options.length > 0 ? (
-        <div className="prompt-options" role="group" aria-label="Answer options">
+        <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Answer options">
           {options.map(opt => (
-            <button
+            <Button
               key={opt.label}
-              className="prompt-option"
+              variant="outline"
+              size="sm"
+              className="justify-start"
               aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}
               onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
             >
               <strong>{opt.label}</strong>
-              {opt.description && <span className="prompt-option-desc"> — {opt.description}</span>}
-            </button>
+              {opt.description && <span className="text-icon3"> — {opt.description}</span>}
+            </Button>
           ))}
         </div>
       ) : (
         <form
-          className="prompt-answer-form"
+          className="mt-2 flex gap-2"
           onSubmit={e => {
             e.preventDefault();
             if (draft.trim()) onRespond(prompt.toolCallId, draft.trim(), prompt.id);
           }}
         >
-          <input
-            className="input"
+          <Input
             value={draft}
             onChange={e => setDraft(e.target.value)}
             placeholder="Your answer…"
             aria-label={question}
             autoFocus
           />
-          <button className="btn btn-primary btn-sm" type="submit">
+          <Button variant="primary" size="sm" type="submit">
             Reply
-          </button>
+          </Button>
         </form>
       )}
     </div>
@@ -445,15 +514,16 @@ function AskUserCard({
 
 function SubagentCard({ entry }: { entry: SubagentEntry }) {
   return (
-    <div className="subagent-card">
-      <div className="tool-head">
-        <span className={`tool-status ${entry.done ? 'done' : 'running'}`} />
-        <span className="tool-name">subagent: {entry.agentType}</span>
-        <span style={{ color: 'var(--fg-dim)', fontSize: 11 }}>{lastSegment(entry.modelId)}</span>
+    <div className="rounded-lg border border-l-4 border-border1 border-l-accent5 bg-surface2 px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
+        <Txt variant="ui-xs" className="text-icon3">
+          {lastSegment(entry.modelId)}
+        </Txt>
       </div>
-      <div className="text" style={{ padding: '4px 0' }}>
+      <Txt variant="ui-sm" className="py-1">
         {entry.task}
-      </div>
+      </Txt>
     </div>
   );
 }
@@ -464,30 +534,38 @@ function SubagentCard({ entry }: { entry: SubagentEntry }) {
 
 function NotificationCard({ entry }: { entry: NotificationEntry }) {
   return (
-    <div className="notif-card">
-      <div className="notif-head">
-        <span className="notif-icon">
-          <BellIcon size={13} />
-        </span>
-        <span className="tool-name">{entry.source ?? 'notification'}</span>
-        {entry.priority && <span className={`notif-priority prio-${entry.priority}`}>{entry.priority}</span>}
+    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Bell size={13} />
+        <Txt variant="ui-sm" font="mono">
+          {entry.source ?? 'notification'}
+        </Txt>
+        {entry.priority && (
+          <Badge variant={entry.priority === 'high' || entry.priority === 'urgent' ? 'error' : 'default'}>
+            {entry.priority}
+          </Badge>
+        )}
       </div>
-      <div className="notif-message">{entry.message}</div>
+      <Txt variant="ui-sm" className="py-1">
+        {entry.message}
+      </Txt>
     </div>
   );
 }
 
 function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
   return (
-    <div className="notif-card">
-      <div className="notif-head">
-        <span className="notif-icon">
-          <BellIcon size={13} />
-        </span>
-        <span className="tool-name">Notification summary</span>
-        <span className="notif-count">{entry.pending} pending</span>
+    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-2">
+        <Bell size={13} />
+        <Txt variant="ui-sm" font="mono">
+          Notification summary
+        </Txt>
+        <Badge variant="info">{entry.pending} pending</Badge>
       </div>
-      <div className="notif-message">{entry.message}</div>
+      <Txt variant="ui-sm" className="py-1">
+        {entry.message}
+      </Txt>
     </div>
   );
 }
@@ -512,7 +590,7 @@ export const Transcript = memo(function Transcript({
           case 'message':
             return <MessageBubble key={entry.id} entry={entry} />;
           case 'notice':
-            return <Notice key={entry.id} entry={entry} />;
+            return <NoticeCard key={entry.id} entry={entry} />;
           case 'approval':
             return <ApprovalCard key={entry.id} prompt={entry} onApprove={onApprove} />;
           case 'notification':
@@ -554,48 +632,53 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   const roles = useMemo<MessageRoleRenderers>(
     () => ({
       User: ({ children }) => (
-        <div className="msg msg-user">
-          <div className="msg-head">
-            <span className={`msg-role ${entry.steer ? 'role-steer' : ''}`}>{entry.steer ? 'Steer' : 'You'}</span>
+        <div className={`${msgRow} items-end`}>
+          <div className={msgHead}>
+            <span className={`${msgRole} ${entry.steer ? '!text-warning1' : ''}`}>{entry.steer ? 'Steer' : 'You'}</span>
           </div>
-          <div className="bubble bubble-user">{children}</div>
+          <div
+            className="rounded-lg border border-accent2/20 bg-accent2/10 px-3.5 py-2.5 shadow-sm"
+            style={{ maxWidth: 'min(82%, 660px)' }}
+          >
+            {children}
+          </div>
         </div>
       ),
       Assistant: ({ children }) => (
-        <div className="msg msg-assistant">
-          <div className="msg-head">
-            <span className="msg-avatar">
-              <LogoMark size={14} />
+        <div className={`${msgRow} items-stretch`}>
+          <div className={msgHead}>
+            <span className="inline-grid h-5 w-5 place-items-center rounded-md border border-accent2/25 bg-accent2/10 text-accent2">
+              <Bot size={14} />
             </span>
-            <span className="msg-role">Agent</span>
+            <span className={msgRole}>Agent</span>
             {toolCount > 1 && (
-              <button
-                type="button"
-                className="tool-group-toggle"
+              <Button
+                variant="ghost"
+                size="xs"
                 onClick={() => setAllExpanded(v => (v === true ? false : true))}
                 aria-pressed={allExpanded === true}
               >
                 {allExpanded ? 'Collapse all' : `Expand all (${toolCount})`}
-              </button>
+              </Button>
             )}
           </div>
-          <div className="bubble bubble-assistant">{children}</div>
+          <div>{children}</div>
         </div>
       ),
       System: ({ children }) => (
-        <div className="msg msg-assistant">
-          <div className="msg-head">
-            <span className="msg-role">System</span>
+        <div className={`${msgRow} items-stretch`}>
+          <div className={msgHead}>
+            <span className={msgRole}>System</span>
           </div>
-          <div className="bubble bubble-assistant">{children}</div>
+          <div>{children}</div>
         </div>
       ),
       Signal: ({ children }) => (
-        <div className="msg msg-assistant">
-          <div className="msg-head">
-            <span className="msg-role">Signal</span>
+        <div className={`${msgRow} items-stretch`}>
+          <div className={msgHead}>
+            <span className={msgRole}>Signal</span>
           </div>
-          <div className="bubble bubble-assistant">{children}</div>
+          <div>{children}</div>
         </div>
       ),
     }),
@@ -606,7 +689,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
     () => ({
       Text: (part: TextPart) =>
         entry.message.role === 'user' ? (
-          <div className="text">{part.text}</div>
+          <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed">{part.text}</div>
         ) : (
           <div className="prose">
             <Markdown>{part.text}</Markdown>
@@ -623,7 +706,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
         const tool = toolFromInvocationPart(part, runtime);
         return <ToolCard tool={tool} forceExpanded={allExpanded} />;
       },
-      File: (part: FilePart) => <pre className="result-block">{stringify(part)}</pre>,
+      File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
     }),
     [allExpanded, entry.message.role, entry.runtimeTools, entry.streaming, lastTextPart],
   );
@@ -683,11 +766,17 @@ function messageText(entry: MessageEntry): string {
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {
-  return <div className={`notice ${status.level === 'error' ? 'error' : ''}`}>{status.text}</div>;
+  return <Notice variant={status.level === 'error' ? 'destructive' : 'info'}>{status.text}</Notice>;
 }
 
-function Notice({ entry }: { entry: NoticeEntry }) {
-  return <div className={`notice ${entry.level === 'error' ? 'error' : ''}`}>{entry.text}</div>;
+function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  return (
+    <Notice variant={entry.level === 'error' ? 'destructive' : 'info'}>
+      <div className="prose">
+        <Markdown>{entry.text}</Markdown>
+      </div>
+    </Notice>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -728,64 +817,60 @@ export function StatusLine({
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
 
   return (
-    <div className="status-line">
-      <span className="badge badge-mode" data-mode={modeId}>
-        {modeName ?? modeId ?? '—'}
-      </span>
-      <span className="status-model">{modelId ? lastSegment(modelId) : 'no model'}</span>
+    <div className="flex shrink-0 items-center gap-3 border-t border-border1 bg-surface2 px-4 py-2 text-ui-sm text-icon3">
+      <Badge variant="info">{modeName ?? modeId ?? '—'}</Badge>
+      <span className="text-icon3 tabular-nums">{modelId ? lastSegment(modelId) : 'no model'}</span>
 
       {showMsg && (
         <span
-          className={`status-budget ${pctClass(om!.thresholdPercent)}`}
+          className={`${statusBudget} ${pctClass(om!.thresholdPercent)}`}
           title="Message window until next observation"
         >
-          <span className="sl-label">msg</span> {fmtTokensValue(om!.pendingTokens)}/{fmtTokensThreshold(om!.threshold)}
+          <span className={slLabel}>msg</span> {fmtTokensValue(om!.pendingTokens)}/{fmtTokensThreshold(om!.threshold)}
           {om!.projectedMessageRemoval > 0 && (
-            <span className="sl-buffer"> ↓{fmtTokensThreshold(om!.projectedMessageRemoval)}</span>
+            <span className={slBuffer}> ↓{fmtTokensThreshold(om!.projectedMessageRemoval)}</span>
           )}
         </span>
       )}
       {showMem && (
         <span
-          className={`status-budget ${pctClass(om!.reflectionThresholdPercent)}`}
+          className={`${statusBudget} ${pctClass(om!.reflectionThresholdPercent)}`}
           title="Observations accumulated until next reflection"
         >
-          <span className="sl-label">mem</span> {fmtTokensValue(om!.observationTokens)}/
+          <span className={slLabel}>mem</span> {fmtTokensValue(om!.observationTokens)}/
           {fmtTokensThreshold(om!.reflectionThreshold)}
           {om!.projectedReflectionSavings > 0 && (
-            <span className="sl-buffer"> ↓{fmtTokensThreshold(om!.projectedReflectionSavings)}</span>
+            <span className={slBuffer}> ↓{fmtTokensThreshold(om!.projectedReflectionSavings)}</span>
           )}
         </span>
       )}
 
       {projectName && (
-        <span className="status-item">
-          <FolderIcon size={13} /> {projectName}
+        <span className={statusItem}>
+          <Folder size={13} /> {projectName}
         </span>
       )}
       {!projectName && workspaceReady !== undefined && (
-        <span className="status-item">
-          <FolderIcon size={13} /> {workspaceReady ? 'workspace' : 'no workspace'}
+        <span className={statusItem}>
+          <Folder size={13} /> {workspaceReady ? 'workspace' : 'no workspace'}
         </span>
       )}
       {omPhase && omPhase !== 'idle' && (
-        <span className="status-item">
-          <BrainIcon size={13} /> {omPhase}
+        <span className={statusItem}>
+          <Brain size={13} /> {omPhase}
         </span>
       )}
-      {(tokensPerSec ?? 0) > 0 && <span className="status-item">{tokensPerSec} tok/s</span>}
-      {(followUpCount ?? 0) > 0 && <span className="status-item">{followUpCount} queued</span>}
+      {(tokensPerSec ?? 0) > 0 && <span className={statusItem}>{tokensPerSec} tok/s</span>}
+      {(followUpCount ?? 0) > 0 && <span className={statusItem}>{followUpCount} queued</span>}
       {goal && goal.status !== 'done' && (
-        <span className="status-goal">
-          <TargetIcon size={13} /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
+        <span className="inline-flex items-center gap-1 text-accent2 [&_svg]:text-accent2">
+          <Target size={13} /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
         </span>
       )}
 
-      <span style={{ flex: 1 }} />
+      <span className="flex-1" />
       <span className={`connection-dot ${status}`} />
-      <span className="status-state">
-        {running ? 'working…' : status === 'reconnecting' ? 'reconnecting…' : status}
-      </span>
+      <span className="capitalize">{running ? 'working…' : status === 'reconnecting' ? 'reconnecting…' : status}</span>
     </div>
   );
 }
@@ -812,7 +897,7 @@ export function GoalPanel({
   if (!goal) {
     return (
       <form
-        className="goal-bar"
+        className={goalBar}
         onSubmit={e => {
           e.preventDefault();
           if (draft.trim()) {
@@ -821,16 +906,15 @@ export function GoalPanel({
           }
         }}
       >
-        <input
-          className="input"
-          style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
+        <Input
+          className="flex-1"
           value={draft}
           onChange={e => setDraft(e.target.value)}
           placeholder="Set a goal objective…"
         />
-        <button className="btn btn-primary btn-sm" type="submit">
+        <Button variant="primary" size="sm" type="submit">
           Set Goal
-        </button>
+        </Button>
       </form>
     );
   }
@@ -838,30 +922,32 @@ export function GoalPanel({
   const progress = `${goal.iteration}/${goal.maxRuns}`;
 
   return (
-    <div className={`goal-bar goal-${goal.status}`}>
-      <span className="goal-icon">
-        <TargetIcon size={15} />
+    <div className={goalBar}>
+      <span className="inline-flex text-accent2">
+        <Target size={15} />
       </span>
-      <span className="goal-objective">{goal.objective}</span>
-      <span className="goal-progress">{progress}</span>
+      <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-ui-sm font-medium">
+        {goal.objective}
+      </span>
+      <span className="rounded-full border border-border1 bg-surface2 px-2 py-px text-ui-sm tabular-nums text-icon3">
+        {progress}
+      </span>
       {goal.reason && (
-        <span style={{ color: 'var(--fg-dim)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {goal.reason}
-        </span>
+        <span className="max-w-52 overflow-hidden text-ellipsis whitespace-nowrap text-icon3">{goal.reason}</span>
       )}
       {goal.status === 'active' && (
-        <button className="btn btn-danger btn-sm" onClick={onPauseGoal}>
+        <Button size="sm" onClick={onPauseGoal}>
           Pause
-        </button>
+        </Button>
       )}
       {goal.status === 'paused' && (
-        <button className="btn btn-primary btn-sm" onClick={onResumeGoal}>
+        <Button variant="primary" size="sm" onClick={onResumeGoal}>
           Resume
-        </button>
+        </Button>
       )}
-      <button className="btn btn-sm" onClick={onClearGoal}>
+      <Button size="sm" onClick={onClearGoal}>
         Clear
-      </button>
+      </Button>
     </div>
   );
 }
