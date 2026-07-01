@@ -18,5 +18,8 @@
     "@types/node": "22.19.21",
     "tsx": "catalog:",
     "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

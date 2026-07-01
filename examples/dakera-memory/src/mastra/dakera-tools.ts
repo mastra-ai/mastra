@@ -19,6 +19,25 @@ const DAKERA_URL = process.env.DAKERA_API_URL ?? 'http://localhost:3300';
 const DAKERA_KEY = process.env.DAKERA_API_KEY ?? '';
 const AGENT_ID = process.env.DAKERA_AGENT_ID ?? 'mastra-agent';
 
+// Zod schemas for Dakera API responses — parse at runtime to catch schema drift early
+const dakeraMemoryItemSchema = z.object({
+  memory: z.object({
+    id: z.string(),
+    content: z.string(),
+  }),
+  score: z.number(),
+});
+
+const dakeraSearchResponseSchema = z.object({
+  memories: z.array(dakeraMemoryItemSchema).default([]),
+});
+
+const dakeraStoreResponseSchema = z.object({
+  memory: z.object({
+    id: z.string(),
+  }),
+});
+
 function dakeraHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
   if (DAKERA_KEY) h['Authorization'] = `Bearer ${DAKERA_KEY}`;
@@ -71,8 +90,12 @@ export const dakeraRecallTool = createTool({
       return { memories: [] };
     }
 
-    const data = (await resp.json()) as { memories?: Array<{ memory: { id: string; content: string }; score: number }> };
-    const memories = (data.memories ?? []).map((r) => ({
+    const parsed = dakeraSearchResponseSchema.safeParse(await resp.json());
+    if (!parsed.success) {
+      console.warn('[dakera-recall] Unexpected response shape:', parsed.error.message);
+      return { memories: [] };
+    }
+    const memories = parsed.data.memories.map((r) => ({
       id: r.memory.id,
       content: r.memory.content,
       score: r.score,
@@ -127,7 +150,11 @@ export const dakeraStoreTool = createTool({
       return { id: '', stored: false };
     }
 
-    const data = (await resp.json()) as { memory: { id: string } };
-    return { id: data.memory?.id ?? '', stored: true };
+    const parsed = dakeraStoreResponseSchema.safeParse(await resp.json());
+    if (!parsed.success) {
+      console.warn('[dakera-store] Unexpected response shape:', parsed.error.message);
+      return { id: '', stored: true }; // stored successfully but ID not parseable
+    }
+    return { id: parsed.data.memory.id, stored: true };
   },
 });
