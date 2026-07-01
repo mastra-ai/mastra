@@ -166,7 +166,7 @@
 /packages/playground/src/pages/integrations/ @YujohnNattrass @damien-schneider
 
 # Playground-UI domain overrides
-/packages/playground-ui/src/domains/metrics/ @greglobinski @intojhanurag
+/packages/playground-ui/src/domains/metrics/ @greglobinski @damien-schneider
 /packages/playground-ui/src/domains/traces/ @greglobinski @damien-schneider
 /packages/playground-ui/src/domains/logs/ @greglobinski @damien-schneider
 /packages/playground-ui/src/utils/ @damien-schneider @mfrachet
