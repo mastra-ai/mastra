@@ -117,6 +117,16 @@ const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
+const MANUAL_ENV_VARS: Record<string, string[]> = {
+  'azure-openai': [
+    'AZURE_API_KEY',
+    'AZURE_TENANT_ID',
+    'AZURE_CLIENT_ID',
+    'AZURE_CLIENT_SECRET',
+    'AZURE_SUBSCRIPTION_ID',
+  ],
+  mastra: ['MASTRA_GATEWAY_API_KEY'],
+};
 
 interface ProviderInfo {
   id: string;
@@ -586,6 +596,55 @@ ANTHROPIC_API_KEY=ant-...
 \`\`\`
 
 ${modelTable}
+`;
+}
+
+function formatEnvVarsForTable(envVars: string[]): string {
+  if (envVars.length === 0) return 'Configured in code';
+  return envVars.map(envVar => `\`${envVar}\``).join(', ');
+}
+
+function generateEnvListPage(grouped: GroupedProviders): string {
+  const providerRows = [...grouped.popular, ...grouped.other]
+    .map(provider => ({
+      type: 'Provider',
+      name: provider.name,
+      href: `/models/providers/${provider.id}`,
+      prefix: `${provider.id}/*`,
+      envVars: MANUAL_ENV_VARS[provider.id] ?? getRequiredEnvVars(provider),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const gatewayRows = Array.from(grouped.gateways.entries())
+    .map(([gatewayId, providers]) => ({
+      type: 'Gateway',
+      name: formatProviderName(gatewayId),
+      href: `/models/gateways/${gatewayId}`,
+      prefix: `${gatewayId}/*`,
+      envVars: MANUAL_ENV_VARS[gatewayId] ?? (providers[0] ? getRequiredEnvVars(providers[0]) : []),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const rows = [...providerRows, ...gatewayRows];
+
+  return `---
+title: "Models environment variables"
+description: "A list of environment variables used by Mastra for each model provider and gateway."
+---
+
+${getGeneratedComment()}
+
+# Models environment variables
+
+Use this page to find the environment variables Mastra reads for each model provider or gateway.
+
+| Type | Name | Model prefix | Environment variables |
+| ---- | ---- | ------------ | --------------------- |
+${rows
+  .map(
+    row => `| ${row.type} | [${row.name}](${row.href}) | \`${row.prefix}\` | ${formatEnvVarsForTable(row.envVars)} |`,
+  )
+  .join('\n')}
 `;
 }
 
@@ -1238,6 +1297,7 @@ const sidebars = {
   modelsSidebar: [
     "index",
     "embeddings",
+    "environment-variables",
     {
       type: "category",
       label: "Gateways",
@@ -1286,6 +1346,11 @@ async function generateDocs() {
   const indexContent = generateIndexPage(grouped);
   await fs.writeFile(path.join(docsDir, 'index.mdx'), indexContent);
   console.info('✅ Generated models/index.mdx');
+
+  // Generate environment variables page
+  const envListContent = generateEnvListPage(grouped);
+  await fs.writeFile(path.join(docsDir, 'environment-variables.mdx'), envListContent);
+  console.info('✅ Generated models/environment-variables.mdx');
 
   // Generate gateways overview page
   const gatewaysIndexContent = generateGatewaysIndexPage(grouped);
@@ -1390,6 +1455,7 @@ export {
   parseProviders,
   generateProviderPage,
   generateGatewayPage,
+  generateEnvListPage,
   generateIndexPage,
   generateSidebarsFile,
 };

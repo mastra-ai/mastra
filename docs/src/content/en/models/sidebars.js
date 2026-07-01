@@ -9,6 +9,7 @@ const sidebars = {
   modelsSidebar: [
     'index',
     'embeddings',
+    'environment-variables',
     {
       type: 'category',
       label: 'Gateways',
@@ -575,6 +576,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/routing-run',
           label: 'routing.run',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sakana',
+          label: 'Sakana AI',
         },
         {
           type: 'doc',
