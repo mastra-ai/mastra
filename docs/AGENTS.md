@@ -3,6 +3,7 @@ Use @styleguides/STYLEGUIDE.md first. @styleguides/ also includes guides for doc
 When working check src/content/en/docs/ and src/content/en/reference/ update existing docs or create new docs
 @CONTRIBUTING.md for setup, local development, and components / frontmatter
 When adding a model name or ID to docs, use a placeholder token from src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time)
+When deleting/renaming a doc, a redirect needs to be added to vercel.redirects.json. Use pnpm run generate-vercel-redirects to update the generated vercel.json afterwards.
 
 main documentation src/content/en/docs/
 step by step guides src/content/en/guides/
