@@ -13,6 +13,14 @@ import { PlatformClient, type PlatformClientOptions } from './client.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
+/**
+ * Curated menu of sandbox flavors. Only `default` is guaranteed today —
+ * `node` and `python` are accepted names that currently fall through to
+ * `default` on the server side until snapshot builds ship, so agent code
+ * can commit to a name now and pick up the fast path automatically later.
+ */
+export type PlatformSandboxTemplate = 'default' | 'node' | 'python';
+
 export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'processes'>, PlatformClientOptions {
   id?: string;
   environmentId?: string;
@@ -20,7 +28,7 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
   env?: Record<string, string>;
-  template?: string;
+  template?: PlatformSandboxTemplate;
   timeout?: number;
   instructions?: InstructionsOption;
 }
@@ -118,7 +126,7 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly idleTimeoutMinutes?: number;
   private readonly networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly env: Record<string, string>;
-  private readonly template?: string;
+  private readonly template?: PlatformSandboxTemplate;
   private readonly timeout?: number;
   private readonly instructionsOverride?: InstructionsOption;
   private platformSandboxId?: string;
@@ -154,7 +162,7 @@ export class PlatformSandbox extends MastraSandbox {
         idleTimeoutMinutes: this.idleTimeoutMinutes,
         networkIsolation: this.networkIsolation,
         env: this.env,
-        templateId: this.template,
+        template: this.template,
       }),
     });
     const json = (await response.json()) as CreateSandboxResponse;
