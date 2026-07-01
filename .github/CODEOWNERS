@@ -263,10 +263,26 @@
 /docs/styleguides/ @LekoArts @wardpeet
 
 # ============================================================================
+# Voice providers
+# ============================================================================
+/voice/ @wardpeet @abhiaiyer91
+
+# ============================================================================
+# Workflow integrations (inngest, temporal)
+# ============================================================================
+/workflows/ @taofeeq-deru @wardpeet
+
+# ============================================================================
+# Workspace providers (e2b, docker, etc.)
+# ============================================================================
+/workspaces/ @NikAiyer @intojhanurag
+
+# ============================================================================
 # Infrastructure
 # ============================================================================
 /e2e-tests/ @wardpeet @LekoArts
 /scripts/ @wardpeet @LekoArts
 /templates/ @LekoArts @taofeeq-deru
+/examples/ @NikAiyer @DanielSLew
 /explorations/ @TylerBarnes @abhiaiyer91
 /mastracode/ @TylerBarnes @abhiaiyer91
