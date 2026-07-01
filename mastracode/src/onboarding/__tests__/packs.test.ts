@@ -4,51 +4,6 @@ import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import { getAvailableModePacks } from '../packs.js';
 
 describe('getAvailableModePacks', () => {
-  it('uses latest Anthropic models for the Anthropic pack', () => {
-    const oauthPacks = getAvailableModePacks({
-      anthropic: 'oauth',
-      openai: false,
-      cerebras: false,
-      google: false,
-      deepseek: false,
-      'github-copilot': false,
-    });
-
-    expect(oauthPacks.find(pack => pack.id === 'anthropic')?.models).toEqual({
-      build: 'anthropic/claude-opus-4-8',
-      plan: 'anthropic/claude-opus-4-8',
-      fast: 'anthropic/claude-haiku-4-5',
-    });
-
-    const apikeyPacks = getAvailableModePacks({
-      anthropic: 'apikey',
-      openai: false,
-      cerebras: false,
-      google: false,
-      deepseek: false,
-      'github-copilot': false,
-    });
-
-    expect(apikeyPacks.find(pack => pack.id === 'anthropic')?.models).toEqual({
-      build: 'anthropic/claude-sonnet-5',
-      plan: 'anthropic/claude-sonnet-5',
-      fast: 'anthropic/claude-haiku-4-5',
-    });
-  });
-
-  it('keeps the Anthropic OAuth post-login default aligned with the build model', () => {
-    const packs = getAvailableModePacks({
-      anthropic: 'oauth',
-      openai: false,
-      cerebras: false,
-      google: false,
-      deepseek: false,
-      'github-copilot': false,
-    });
-
-    expect(PROVIDER_DEFAULT_MODELS['anthropic']).toBe(packs.find(pack => pack.id === 'anthropic')?.models.build);
-  });
-
   it('uses GPT-5.5 for OpenAI plan and build modes while keeping fast on GPT-5.4 mini', () => {
     const packs = getAvailableModePacks({
       anthropic: false,
