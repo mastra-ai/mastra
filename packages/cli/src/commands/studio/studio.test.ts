@@ -24,6 +24,7 @@ function createStudioFixture() {
       window.MASTRA_STUDIO_BASE_PATH = '%%MASTRA_STUDIO_BASE_PATH%%';
       window.MASTRA_TEMPLATES = '%%MASTRA_TEMPLATES%%';
       window.MASTRA_AGENT_SIGNALS = '%%MASTRA_AGENT_SIGNALS%%';
+      window.MASTRA_SIGNALS_UI = '%%MASTRA_SIGNALS_UI%%';
     </script>
   </head>
   <body>studio</body>
@@ -55,6 +56,7 @@ afterEach(() => {
   delete process.env.MASTRA_STUDIO_BASE_PATH;
   delete process.env.MASTRA_TEMPLATES;
   delete process.env.MASTRA_AGENT_SIGNALS;
+  delete process.env.MASTRA_SIGNALS_UI;
 
   for (const dir of createdDirs.splice(0, createdDirs.length)) {
     rmSync(dir, { recursive: true, force: true });
@@ -139,6 +141,41 @@ describe('studio base path support', () => {
       expect(htmlResponse.body).toContain("window.MASTRA_AGENT_SIGNALS = 'false'");
     } finally {
       await new Promise<void>((resolve, reject) => optOutServer.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
+  it('disables the Signals UI by default and enables it via MASTRA_SIGNALS_UI', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    const studioDir = createStudioFixture();
+    const defaultServer = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => defaultServer.listen(0, resolve));
+    const defaultAddress = defaultServer.address();
+    const defaultPort = typeof defaultAddress === 'object' && defaultAddress ? defaultAddress.port : 0;
+
+    try {
+      const htmlResponse = await request(`http://127.0.0.1:${defaultPort}/agents`);
+
+      expect(htmlResponse.status).toBe(200);
+      expect(htmlResponse.body).toContain("window.MASTRA_SIGNALS_UI = 'false'");
+    } finally {
+      await new Promise<void>((resolve, reject) => defaultServer.close(err => (err ? reject(err) : resolve())));
+    }
+
+    process.env.MASTRA_SIGNALS_UI = 'true';
+    const optInServer = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => optInServer.listen(0, resolve));
+    const optInAddress = optInServer.address();
+    const optInPort = typeof optInAddress === 'object' && optInAddress ? optInAddress.port : 0;
+
+    try {
+      const htmlResponse = await request(`http://127.0.0.1:${optInPort}/agents`);
+
+      expect(htmlResponse.status).toBe(200);
+      expect(htmlResponse.body).toContain("window.MASTRA_SIGNALS_UI = 'true'");
+    } finally {
+      await new Promise<void>((resolve, reject) => optInServer.close(err => (err ? reject(err) : resolve())));
     }
   });
 

@@ -29,18 +29,22 @@ describe('getAllowedPathsFromContext', () => {
     expect(a).not.toBe(b);
   });
 
-  it('merges skill paths with sandbox paths from harness state (getState)', () => {
+  it('merges skill paths with sandbox paths from session state', () => {
     buildSkillPathsMock.mockClear();
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
-              getState: () => ({
-                projectPath: '/test/project',
-                configDir: '.mastracode',
-                sandboxAllowedPaths: ['/user/sandbox/path-1', '/user/sandbox/path-2'],
-              }),
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                    configDir: '.mastracode',
+                    sandboxAllowedPaths: ['/user/sandbox/path-1', '/user/sandbox/path-2'],
+                  }),
+                },
+              },
             };
           }
           return undefined;
@@ -57,15 +61,19 @@ describe('getAllowedPathsFromContext', () => {
     ]);
   });
 
-  it('merges skill paths with sandbox paths from harness state (static state)', () => {
+  it('merges skill paths with sandbox paths from controller state (static state)', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
-              state: {
-                projectPath: '/test/project',
-                sandboxAllowedPaths: ['/user/sandbox/static-path'],
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                    sandboxAllowedPaths: ['/user/sandbox/static-path'],
+                  }),
+                },
               },
             };
           }
@@ -77,15 +85,19 @@ describe('getAllowedPathsFromContext', () => {
     expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b', '/user/sandbox/static-path']);
   });
 
-  it('returns only skill paths when harness context has no sandbox paths', () => {
+  it('returns only skill paths when session state has no sandbox paths', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
-              getState: () => ({
-                projectPath: '/test/project',
-              }),
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                  }),
+                },
+              },
             };
           }
           return undefined;
@@ -96,7 +108,7 @@ describe('getAllowedPathsFromContext', () => {
     expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b']);
   });
 
-  it('returns only skill paths when harness context is not set', () => {
+  it('returns only skill paths when controller context is not set', () => {
     const toolContext = {
       requestContext: {
         get: () => undefined,
@@ -106,19 +118,19 @@ describe('getAllowedPathsFromContext', () => {
     expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b']);
   });
 
-  it('prefers getState() over static state property', () => {
+  it('reads sandbox paths from session state', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
-              getState: () => ({
-                projectPath: '/test/project',
-                sandboxAllowedPaths: ['/from-getState'],
-              }),
-              state: {
-                projectPath: '/test/project',
-                sandboxAllowedPaths: ['/from-static-state'],
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                    sandboxAllowedPaths: ['/from-session-state'],
+                  }),
+                },
               },
             };
           }
@@ -127,6 +139,6 @@ describe('getAllowedPathsFromContext', () => {
       },
     };
     const result = getAllowedPathsFromContext(toolContext);
-    expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b', '/from-getState']);
+    expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b', '/from-session-state']);
   });
 });

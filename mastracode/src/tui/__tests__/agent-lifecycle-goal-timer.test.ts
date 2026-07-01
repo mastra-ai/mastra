@@ -13,7 +13,7 @@ vi.mock('../../utils/project.js', () => ({
   getCurrentGitBranchAsync: vi.fn(() => Promise.resolve('main')),
 }));
 
-import { handleAgentAborted, handleAgentError } from '../handlers/agent-lifecycle.js';
+import { handleAgentAborted, handleAgentEnd, handleAgentError } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
 import type { TUIState } from '../state.js';
 
@@ -51,10 +51,44 @@ describe('agent lifecycle goal timing', () => {
     expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
   });
 
+  it('does not render redundant interrupted errors for user aborts', () => {
+    const updateContent = vi.fn();
+    const streamingMessage = { id: 'msg-1' } as any;
+    const state = createState({
+      userInitiatedAbort: true,
+      streamingComponent: { updateContent } as any,
+      streamingMessage,
+    });
+
+    handleAgentAborted(createContext(state));
+
+    expect(updateContent).not.toHaveBeenCalled();
+    expect(streamingMessage.errorMessage).toBeUndefined();
+    expect(state.streamingComponent).toBeUndefined();
+    expect(state.streamingMessage).toBeUndefined();
+  });
+
   it('stops active goal timing when an agent error ends the turn', () => {
     const state = createState();
 
     handleAgentError(createContext(state));
+
+    expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
+  });
+
+  it('stops active goal timing when an agent completes normally', () => {
+    const state = createState({
+      pendingTaskToolIds: new Set(),
+      session: { followUps: { count: vi.fn(() => 0) } },
+    } as unknown as Partial<TUIState>);
+
+    const ctx = {
+      state,
+      updateStatusLine: vi.fn(),
+      notify: vi.fn(),
+    } as unknown as EventHandlerContext;
+
+    handleAgentEnd(ctx);
 
     expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
   });

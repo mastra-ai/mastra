@@ -1,27 +1,16 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import {
-  Badge,
-  Button,
-  Column,
-  Columns,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  EmptyState,
-  DataList,
-  DataListSkeleton,
-  Searchbar,
-  Spinner,
-  StatusBadge,
-  Tabs,
-  TabContent,
-  TabList,
-  Tab,
-  Txt,
-  toast,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -712,7 +701,12 @@ export function AgentPlaygroundEvaluate({
     return (
       <>
         {/* Create Dataset Dialog */}
-        <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} targetIds={[agentId]} />
+        <CreateDatasetDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          targetType="agent"
+          targetIds={[agentId]}
+        />
 
         {/* Generate Config Dialog */}
         {generateDatasetId && (
@@ -754,6 +748,8 @@ export function AgentPlaygroundEvaluate({
                       try {
                         await updateDataset.mutateAsync({
                           datasetId: ds.id,
+                          // Classify legacy/untyped datasets without overwriting existing target types.
+                          targetType: ds.targetType ?? 'agent',
                           targetIds: [...parseIdList(ds.targetIds), agentId],
                         });
                         toast.success(`Dataset "${ds.name}" attached`);

@@ -1,15 +1,17 @@
-import { Button, Skeleton } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useQueryClient } from '@tanstack/react-query';
 import { Settings } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useFormContext, useWatch, type UseFormSetValue } from 'react-hook-form';
+import { useFormContext, useWatch } from 'react-hook-form';
+import type { UseFormSetValue } from 'react-hook-form';
 
 import { ManageConnectionDialog } from '../../../../tool-providers/components/manage-connection-dialog';
 import { useAuthorize } from '../../../../tool-providers/hooks/use-authorize';
 import { useExistingConnections } from '../../../../tool-providers/hooks/use-existing-connections';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
-import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { ToolProviderConnectionFormValue, ToolProvidersFormValue } from '../../../../tool-providers/schemas';
+import type { AgentBuilderEditFormValues } from '../../../schemas';
 
 export interface ToolkitConnectionControlProps {
   providerId: string;

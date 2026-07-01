@@ -49,13 +49,13 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData } from '
  *
  * The evented engine serialises the RequestContext via `toJSON()` when
  * publishing workflow events.  Values that fail `JSON.stringify` (functions,
- * objects with circular references — e.g. the `harness` context) are silently
+ * objects with circular references — e.g. the `controller` context) are silently
  * dropped.  The reconstructed RC handed to steps is therefore *degraded*.
  *
  * Tools, however, also hold a reference to the *original* RC captured during
  * tool conversion (the "closure" RC).  By merging both — exec first, then
  * closure on top — keys that survived serialisation are preserved while
- * non-serializable keys from the closure (like `harness`) are restored.
+ * non-serializable keys from the closure (like `controller`) are restored.
  */
 function mergeRequestContexts(
   closureRC: RequestContext | undefined,
@@ -588,6 +588,7 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             requestContext: mergeRequestContexts(options.requestContext, execOptions.requestContext),
+            actor: execOptions.actor,
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
@@ -648,7 +649,7 @@ export class CoreToolBuilder extends MastraBase {
                 resumeData,
                 threadId,
                 resourceId,
-                outputWriter: execOptions.outputWriter,
+                outputWriter: options.outputWriter || execOptions.outputWriter,
                 flushMessages: execOptions.flushMessages,
               },
             };
@@ -778,6 +779,7 @@ export class CoreToolBuilder extends MastraBase {
           resource: { type: 'tool', id: toolResourceId },
           permission: MastraFGAPermissions.TOOLS_EXECUTE,
           requestContext: toolRequestContext,
+          actor: execOptions?.actor,
           context: {
             resourceId: options.resourceId,
           },
@@ -796,20 +798,28 @@ export class CoreToolBuilder extends MastraBase {
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
 
+        // When a tool is being resumed (resumeData present in execOptions), skip input
+        // validation. The original args were already validated during the initial
+        // execution, and during resume the tool's execute function checks resumeData
+        // and returns early without using the input args.
+        const isResuming = !!execOptions?.resumeData;
+
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = this.getParameters();
-        const { data, error } = validateToolInput(parameters, args, options.name);
-        //suspendedToolRunId is only required when resumeData is provided
-        const suspendedToolRunIdErrToIgnore =
-          error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
-        if (error && !suspendedToolRunIdErrToIgnore) {
-          logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
-          toolSpan?.end({ output: error, attributes: { success: false } });
-          return error;
+        if (!isResuming) {
+          const { data, error } = validateToolInput(parameters, args, options.name);
+          //suspendedToolRunId is only required when resumeData is provided
+          const suspendedToolRunIdErrToIgnore =
+            error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
+          if (error && !suspendedToolRunIdErrToIgnore) {
+            logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
+            toolSpan?.end({ output: error, attributes: { success: false } });
+            return error;
+          }
+          // Use validated/transformed data
+          args = data;
         }
-        // Use validated/transformed data
-        args = data;
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {

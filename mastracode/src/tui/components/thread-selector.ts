@@ -3,9 +3,9 @@
  * Uses pi-tui overlay pattern with search and navigation.
  */
 
-import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, TUI } from '@mariozechner/pi-tui';
-import type { HarnessThread } from '@mastra/core/harness';
+import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, TUI } from '@earendil-works/pi-tui';
+import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 
@@ -15,16 +15,16 @@ import { theme } from '../theme.js';
 
 export interface ThreadSelectorOptions {
   tui: TUI;
-  threads: HarnessThread[];
+  threads: AgentControllerThread[];
   currentThreadId: string | null;
   /** Current resource ID — threads from this resource sort to the top */
   currentResourceId?: string;
   /** Current project root path — threads tagged with this directory sort above other same-resource threads */
   currentProjectPath?: string;
-  onSelect: (thread: HarnessThread) => void;
+  onSelect: (thread: AgentControllerThread) => void;
   onCancel: () => void;
   /** Called when user presses 'c' to clone the selected thread */
-  onClone?: (thread: HarnessThread) => void;
+  onClone?: (thread: AgentControllerThread) => void;
   /** Function to fetch message previews for currently visible threads */
   getMessagePreviews?: (threadIds: string[]) => Promise<Map<string, string>>;
   initialMessagePreviews?: Map<string, string>;
@@ -46,15 +46,15 @@ const FOLLOW_UP_PREVIEW_LOAD_DELAY_MS = 50;
 export class ThreadSelectorComponent extends Box implements Focusable {
   private searchInput!: Input;
   private listContainer!: Container;
-  private allThreads: HarnessThread[];
-  private filteredThreads: HarnessThread[];
+  private allThreads: AgentControllerThread[];
+  private filteredThreads: AgentControllerThread[];
   private selectedIndex = 0;
   private currentThreadId: string | null;
   private currentResourceId: string | undefined;
   private currentProjectPath: string | undefined;
-  private onSelectCallback: (thread: HarnessThread) => void;
+  private onSelectCallback: (thread: AgentControllerThread) => void;
   private onCancelCallback: () => void;
-  private onCloneCallback: ((thread: HarnessThread) => void) | undefined;
+  private onCloneCallback: ((thread: AgentControllerThread) => void) | undefined;
   private tui: TUI;
   private getMessagePreviews: ((threadIds: string[]) => Promise<Map<string, string>>) | undefined;
   private onMessagePreviewsLoaded:
@@ -109,12 +109,12 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     return { startIndex, endIndex };
   }
 
-  private getVisibleThreads(): HarnessThread[] {
+  private getVisibleThreads(): AgentControllerThread[] {
     const { startIndex, endIndex } = this.getVisibleRange();
     return this.filteredThreads.slice(startIndex, endIndex);
   }
 
-  private getPreviewCandidates(initialLoad: boolean): HarnessThread[] {
+  private getPreviewCandidates(initialLoad: boolean): AgentControllerThread[] {
     const initialThreads = initialLoad ? this.filteredThreads.slice(0, INITIAL_PREVIEW_LOAD_COUNT) : [];
     const combinedThreads = [...initialThreads, ...this.getVisibleThreads()];
     const uniqueThreads = combinedThreads.filter(
@@ -218,7 +218,7 @@ export class ThreadSelectorComponent extends Box implements Focusable {
     this.updateList();
   }
 
-  private sortThreads(threads: HarnessThread[], currentThreadId: string | null): HarnessThread[] {
+  private sortThreads(threads: AgentControllerThread[], currentThreadId: string | null): AgentControllerThread[] {
     const sorted = [...threads];
     const resId = this.currentResourceId;
     const projPath = this.currentProjectPath;

@@ -272,6 +272,17 @@ Intended to be passed onto an Agent definition.
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
 
+### `listToolsWithErrors()`
+
+Retrieves all tools from all configured servers, with tool names namespaced by their server name. Also returns per-server errors for servers that failed to connect or list tools.
+
+```typescript
+const { tools, errors } = await mcp.listToolsWithErrors()
+
+new Agent({ id: 'agent', tools })
+console.log(errors)
+```
+
 ### `listToolsets()`
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.

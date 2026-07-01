@@ -27,6 +27,9 @@ const meta: Meta<typeof CodeEditor> = {
     highlightVariables: {
       control: { type: 'boolean' },
     },
+    lineWrapping: {
+      control: { type: 'boolean' },
+    },
   },
 };
 
@@ -119,6 +122,17 @@ export const LargeContent: Story = {
       },
     },
     className: 'w-[600px] max-h-[400px] overflow-auto',
+  },
+};
+
+export const WithoutLineWrapping: Story = {
+  args: {
+    data: {
+      output:
+        'https://example.com/search?q=this-is-a-very-long-url-with-structured-query-parameters-that-should-stay-on-one-line-for-inspection&filter=recent&sort=created_at_desc',
+    },
+    lineWrapping: false,
+    className: 'w-[400px] overflow-x-auto',
   },
 };
 

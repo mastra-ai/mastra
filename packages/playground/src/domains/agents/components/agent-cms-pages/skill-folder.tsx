@@ -1,8 +1,11 @@
-import { CodeEditor, Combobox, Txt } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState, useCallback, useMemo } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
-import { SkillFileTree, updateNodeContent, isImageContent } from './skill-file-tree';
+import { SkillFileTree } from './skill-file-tree';
+import { updateNodeContent, isImageContent } from './skill-file-tree-utils';
 
 function findFileContent(nodes: InMemoryFileNode[], fileId: string): string | undefined {
   for (const node of nodes) {

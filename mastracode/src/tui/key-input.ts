@@ -19,7 +19,7 @@
  * is multi-character (`space`, `enter`, `tab`, function keys) should use
  * pi-tui's `matchesKey` directly.
  */
-import { parseKey } from '@mariozechner/pi-tui';
+import { parseKey } from '@earendil-works/pi-tui';
 
 const SHIFT_LETTER_RE = /^shift\+([a-z])$/;
 

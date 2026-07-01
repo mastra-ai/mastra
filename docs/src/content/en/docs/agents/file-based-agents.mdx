@@ -1,0 +1,279 @@
+---
+title: "File-based agents | Agents"
+description: Define agents by file convention under src/mastra/agents, alongside agents created in code.
+packages:
+  - "@mastra/core"
+---
+
+# File-based agents
+
+**Added in:** `@mastra/core@1.48.0`
+
+:::experimental
+
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+You can define an agent by file convention instead of constructing it in code. Mastra discovers a directory under `src/mastra/agents/<name>/`, assembles an [`Agent`](/reference/agents/agent), and registers it on your [`Mastra`](/reference/core/mastra-class) instance.
+
+## When to use file-based agents
+
+Use file-based agents when you want one directory per agent, with configuration, instructions, tools, skills, workspace files, and subagents grouped together.
+
+Keep using [`new Agent()`](/reference/agents/agent) in code when you need dynamic configuration, programmatic registration, or a shared agent instance across modules. Both approaches can coexist: code-registered agents are always present, and the bundler adds file-based agents when you run through the Mastra CLI.
+
+## Quickstart
+
+Create a directory for the agent and add a `config.ts`. Use `agentConfig` so the partial config is typed while sibling files supply the rest.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // instructions omitted -> taken from instructions.md
+  // tools omitted -> taken from tools/*.ts
+})
+```
+
+Add the agent instructions:
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
+```
+
+Add a tool. The filename becomes the tool key, so this file is exposed as `get_weather`.
+
+```typescript title="src/mastra/agents/weather/tools/get_weather.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export default createTool({
+  id: 'get_weather',
+  description: 'Get the current weather for a city',
+  inputSchema: z.object({ city: z.string() }),
+  execute: async ({ context }) => ({ city: context.city, tempC: 21 }),
+})
+```
+
+Your `src/mastra/index.ts` stays the same. The discovered agent is registered automatically when you run the app through `mastra dev` or `mastra build`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+
+const supportAgent = new Agent({
+  id: 'support',
+  name: 'support',
+  instructions: 'You are a support agent.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+// `support` is registered in code; `weather` is discovered from the filesystem.
+export const mastra = new Mastra({
+  agents: { support: supportAgent },
+})
+```
+
+Start the app through the Mastra CLI:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+## Folder structure
+
+The following table shows the supported file-based agent surface:
+
+| File / directory | Maps to |
+| - | - |
+| `agents/<name>/config.ts` | Default export merged into the agent config. `id` and `name` default to `<name>`. |
+| `agents/<name>/instructions.md` | The agent `instructions`. The file contents are inlined into generated code. |
+| `agents/<name>/tools/*.ts` | Each default-exported [`createTool()`](/reference/tools/create-tool). The tool key defaults to the filename. |
+| `agents/<name>/skills/*.ts` | Each default-exported [`createSkill()`](/reference/agents/createSkill), added to the agent `skills`. |
+| `agents/<name>/skills/<skill>/SKILL.md` | A packaged skill. Frontmatter supplies `name` and `description`, the body is the instructions, and files under `references/` are inlined. |
+| `agents/<name>/skills/<skill>.md` | A flat skill. The filename is the skill name and the body is the instructions. |
+| `agents/<name>/memory.ts` | Default export: a [`Memory`](/reference/memory/memory-class) instance used as the agent `memory`. |
+| `agents/<name>/workspace.ts` | Default export: a [`Workspace`](/reference/workspace/workspace-class) for the agent. |
+| `agents/<name>/workspace/` | Seed files mirrored into the agent's default workspace at build time. |
+| `agents/<name>/subagents/<childId>/` | A declared subagent with the same layout as an agent directory. Wired into the parent as a delegation tool named `<childId>`. |
+
+Test files named `*.test.ts`, `*.spec.ts`, `*.test.js`, and `*.spec.js` are ignored during tool and skill discovery.
+
+## Add skills
+
+Add skills to a file-based agent by placing them under `agents/<name>/skills/`. Three layouts are supported, and they're inlined into the bundle at build time so the deployed agent doesn't read them from disk at runtime.
+
+- A `.ts` file can default-export `createSkill()`:
+
+  ```typescript title="src/mastra/agents/weather/skills/forecasting.ts"
+  import { createSkill } from '@mastra/core/skills'
+
+  export default createSkill({
+    name: 'forecasting',
+    description: 'Use when the user asks about multi-day forecasts.',
+    instructions: 'Summarize the forecast day by day and call out precipitation.',
+  })
+  ```
+
+  :::note
+  Visit [`createSkill()` reference](/reference/agents/createSkill) for the full API.
+  :::
+
+- A packaged `SKILL.md` directory uses frontmatter for the name and description. Files under `references/` are inlined with the skill.
+
+  ```markdown title="src/mastra/agents/weather/skills/severe-weather/SKILL.md"
+  ---
+  name: severe-weather
+  description: Use when conditions include storms, flooding, or other hazards.
+  ---
+
+  Lead with the active alert, then give safety guidance.
+  ```
+
+- A flat `<skill>.md` file uses the filename as the skill name:
+
+  ```markdown title="src/mastra/agents/weather/skills/units.md"
+  Always report temperatures in both Celsius and Fahrenheit.
+  ```
+
+Discovered skills merge with any `skills` in `config.ts`. On a name collision, `config.skills` wins and a warning is logged. If `config.skills` is a function, discovered skills are ignored with a warning because they can't be statically merged.
+
+## Add memory
+
+Give a file-based agent [memory](/docs/memory/overview) by adding a `memory.ts` that default-exports a [`Memory`](/reference/memory/memory-class) instance:
+
+```typescript title="src/mastra/agents/weather/memory.ts"
+import { Memory } from '@mastra/memory'
+
+export default new Memory()
+```
+
+The exported instance becomes the agent's `memory`. You can also set `memory` directly in `config.ts`. `config.memory` wins over `memory.ts`, and a warning is logged when both are present. If neither is present, the agent has no memory, which is the default.
+
+## Add a workspace
+
+When a file-based agent is discovered through `mastra dev` or `mastra build`, it gets a default workspace unless `config.workspace` or `workspace.ts` supplies one. The default workspace uses a contained filesystem and shell sandbox rooted at a per-agent `workspace/` directory in the bundle.
+
+To customize it, add a `workspace.ts` that default-exports a [`Workspace`](/reference/workspace/workspace-class):
+
+```typescript title="src/mastra/agents/weather/workspace.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+export default new Workspace({
+  name: 'weather-workspace',
+  filesystem: new LocalFilesystem({ basePath: './data/weather' }),
+  sandbox: new LocalSandbox({ workingDirectory: './data/weather' }),
+})
+```
+
+You can also set `workspace` directly in `config.ts`. `config.workspace` wins over `workspace.ts`, and `workspace.ts` wins over the default workspace.
+
+### Seed files
+
+Add a `workspace/` directory to ship files with the agent. Mastra mirrors every file under it into the agent's default workspace at build time, so the agent starts with those files on disk:
+
+```text
+src/mastra/agents/weather/
+  config.ts
+  workspace/
+    README.md
+    data/cities.json
+```
+
+Seed files are copied into the bundle next to the running server. Commit the starting files alongside the agent that uses them.
+
+## Add subagents
+
+A file-based agent can declare **subagents**, specialist child agents it can delegate to. Add a `subagents/` directory under the agent, with one directory per subagent. Each subagent directory has the same layout as a top-level agent: `config.ts`, `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, and `workspace/`.
+
+```text
+src/mastra/agents/
+  supervisor/
+    config.ts
+    instructions.md
+    subagents/
+      researcher/
+        config.ts
+        instructions.md
+        tools/
+          search.ts
+```
+
+Each subagent is assembled as its own agent and wired into the parent's `agents` map. The agent loop lowers it into a model-visible delegation tool. The tool name is the bare directory name, so the example above exposes `researcher` to the supervisor.
+
+A subagent's `config.ts` must set a non-empty `description`. The description is what the model sees when deciding whether to delegate, so the build fails if it's missing.
+
+```typescript title="src/mastra/agents/supervisor/subagents/researcher/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  description: 'Researches a topic and returns cited findings.',
+})
+```
+
+Subagents are isolated. A subagent inherits nothing from its parent. Its tools, skills, and workspace come only from its own directory, and any absent slot falls back to the same framework defaults as a top-level agent.
+
+Subagents are one level deep. A `subagents/` directory nested inside a subagent is ignored with a warning.
+
+Naming rules:
+
+- A subagent id that collides with one of the parent's tool keys is a build error.
+- A duplicate subagent id under the same parent is a build error.
+- If a subagent id also exists in the parent's `config.agents`, the `config.agents` entry wins and logs a warning.
+- If `config.agents` is a function, discovered subagents are ignored with a warning because they can't be statically merged.
+
+## Precedence rules
+
+File-based and code-based agents coexist with deterministic rules:
+
+- **Code wins on name collisions:** If an agent name exists in both code and the filesystem, the code-registered agent is kept and a warning is logged.
+- **A folder can hold a code agent:** If `config.ts` exports `new Agent({...})`, that instance is used as-is. Sibling `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, and `subagents/` entries are ignored with warnings.
+- **Instructions:** Dynamic function instructions in `config.ts` win over `instructions.md`. Otherwise, `instructions.md` wins over a static `instructions` string. If neither is present, the build fails for that agent.
+- **Model:** A missing `model` fails the build and names the agent directory.
+- **Tools:** Tools from `tools/*.ts` merge with `config.tools`. On a key collision, `config.tools` wins and a warning is logged. If `config.tools` is a function, discovered tools are ignored with a warning.
+- **Skills:** Skills from `skills/` merge with `config.skills`. On a name collision, `config.skills` wins and a warning is logged. If `config.skills` is a function, discovered skills are ignored with a warning.
+- **Memory:** `config.memory` wins over `memory.ts`, and a warning is logged when both are present. If neither is set, the agent has no memory.
+- **Workspace:** `config.workspace` wins over `workspace.ts`, which wins over the default workspace.
+- **Subagents:** Subagents from `subagents/` merge with `config.agents`. On an id collision, `config.agents` wins and a warning is logged. A subagent id that collides with a tool key, or a duplicate subagent id, is a build error.
+
+## What happens at build time
+
+File-based agents are discovered by the Mastra **bundler**, the step that runs under `mastra dev` and `mastra build`.
+
+File-based agents are registered only when your app runs through the Mastra CLI. If you import your `mastra` instance directly, `agents/<name>/` directories aren't discovered.
+
+When you consume Mastra as a library, register those agents in code instead of relying on file discovery:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+
+const weather = new Agent({
+  id: 'weather',
+  name: 'weather',
+  instructions: 'You are a helpful weather assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+export const mastra = new Mastra({
+  agents: { weather },
+})
+```
+
+## Related
+
+- [Agents overview](/docs/agents/overview)
+- [Tools](/docs/agents/using-tools)
+- [Skills](/docs/agents/skills)
+- [Memory](/docs/memory/overview)
+- [Supervisor agents](/docs/agents/supervisor-agents)
+- [Workspace](/docs/workspace/overview)
+- [Studio overview](/docs/studio/overview)
+- [`Agent` reference](/reference/agents/agent)
+- [`createTool()` reference](/reference/tools/create-tool)
+- [`createSkill()` reference](/reference/agents/createSkill)
+- [`Memory` reference](/reference/memory/memory-class)
+- [`Workspace` reference](/reference/workspace/workspace-class)

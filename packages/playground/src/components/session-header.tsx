@@ -1,14 +1,6 @@
-import {
-  Header,
-  HeaderAction,
-  HeaderTitle,
-  LogoWithoutText,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@mastra/playground-ui';
+import { Header, HeaderAction, HeaderTitle } from '@mastra/playground-ui/components/Header';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { useMemo } from 'react';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { useRequestContextPresets } from '@/domains/request-context/hooks/use-request-context-presets';

@@ -190,6 +190,95 @@ export function collectInlineCreateSteps(
   });
 }
 
+export function getReturnedCreateStepCall(node: t.Node | null | undefined): t.CallExpression | null {
+  if (!node) {
+    return null;
+  }
+
+  if (t.isArrowFunctionExpression(node) && !t.isBlockStatement(node.body)) {
+    return t.isCallExpression(node.body) && isIdentifierNamed(node.body.callee, 'createStep') ? node.body : null;
+  }
+
+  if (!t.isFunctionDeclaration(node) && !t.isFunctionExpression(node) && !t.isArrowFunctionExpression(node)) {
+    return null;
+  }
+
+  if (!t.isBlockStatement(node.body)) {
+    return null;
+  }
+
+  for (const statement of node.body.body) {
+    if (
+      t.isReturnStatement(statement) &&
+      t.isCallExpression(statement.argument) &&
+      isIdentifierNamed(statement.argument.callee, 'createStep')
+    ) {
+      return statement.argument;
+    }
+  }
+
+  return null;
+}
+
+export function collectCreateStepFactoryBindings(program: t.Program): Map<string, t.CallExpression> {
+  const factories = new Map<string, t.CallExpression>();
+
+  for (const statement of program.body) {
+    const declaration = t.isExportNamedDeclaration(statement) ? statement.declaration : statement;
+
+    if (t.isFunctionDeclaration(declaration) && declaration.id) {
+      const createStepCall = getReturnedCreateStepCall(declaration);
+      if (createStepCall) {
+        factories.set(declaration.id.name, createStepCall);
+      }
+      continue;
+    }
+
+    if (!t.isVariableDeclaration(declaration)) {
+      continue;
+    }
+
+    for (const declarator of declaration.declarations) {
+      if (!t.isIdentifier(declarator.id) || !declarator.init) {
+        continue;
+      }
+
+      const createStepCall = getReturnedCreateStepCall(declarator.init);
+      if (createStepCall) {
+        factories.set(declarator.id.name, createStepCall);
+      }
+    }
+  }
+
+  return factories;
+}
+
+export function getCreateStepCallFromExpression(
+  node: t.Node | null | undefined,
+  factoryBindings: Map<string, t.CallExpression>,
+): t.CallExpression | null {
+  if (!node) {
+    return null;
+  }
+
+  if (t.isCallExpression(node)) {
+    if (isIdentifierNamed(node.callee, 'createStep')) {
+      return node;
+    }
+
+    if (t.isIdentifier(node.callee)) {
+      return factoryBindings.get(node.callee.name) ?? null;
+    }
+  }
+
+  const returnedCreateStepCall = getReturnedCreateStepCall(node);
+  if (returnedCreateStepCall) {
+    return returnedCreateStepCall;
+  }
+
+  return null;
+}
+
 export function getCreateStepId(node: t.Node | null | undefined): string | null {
   if (!node || !isCreateStepCall(node)) {
     return null;

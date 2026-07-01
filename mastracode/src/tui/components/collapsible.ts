@@ -3,8 +3,8 @@
  * Can be used to wrap any content that should be expandable/collapsible.
  */
 
-import { Container, Text } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import { highlight } from 'cli-highlight';
 import { theme } from '../theme.js';
 

@@ -1,5 +1,8 @@
+import { Container } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
-import { handleSkillCommand } from '../skills.js';
+import { createMockAgentController } from '../../__tests__/agent-controller-mock.js';
+import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { handleSkillCommand, handleSkillsCommand } from '../skills.js';
 
 function createCtx(options?: {
   pendingNewThread?: boolean;
@@ -23,43 +26,84 @@ function createCtx(options?: {
         list: vi.fn().mockResolvedValue(options?.skills ?? [skill]),
       },
     } as any);
+  const controller = createMockAgentController({
+    session: {
+      thread: { create: vi.fn().mockResolvedValue(undefined) },
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+    },
+    controller: {
+      hasWorkspace: vi.fn(() => options?.hasWorkspace ?? true),
+      resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+    },
+  });
   const state = {
     pendingNewThread: options?.pendingNewThread ?? false,
     allSlashCommandComponents: [],
-    chatContainer: { addChild: vi.fn() },
+    chatContainer: new Container(),
     ui: { requestRender: vi.fn() },
-  };
-  const harness = {
-    hasWorkspace: vi.fn(() => options?.hasWorkspace ?? true),
-    resolveWorkspace: vi.fn().mockResolvedValue(workspace),
-    createThread: vi.fn().mockResolvedValue(undefined),
-    sendMessage: vi.fn().mockResolvedValue(undefined),
+    controller,
+    session: controller.session,
   };
 
   return {
     ctx: {
       state,
-      harness,
+      controller,
       getResolvedWorkspace: vi.fn(() => workspace),
       showInfo: vi.fn(),
       showError: vi.fn(),
     } as any,
-    harness,
+    controller,
     state,
     workspace,
   };
 }
 
 describe('handleSkillCommand', () => {
-  it('loads a named skill and sends its instructions to the agent', async () => {
-    const { ctx, harness, state } = createCtx();
+  it('eagerly resolves the workspace for /skills when no message has resolved it yet', async () => {
+    const workspace = {
+      skills: {
+        list: vi.fn().mockResolvedValue([
+          { name: 'review', description: 'Review code' },
+          { name: 'internal-helper', description: 'Hidden helper', 'user-invocable': false },
+        ]),
+      },
+    };
+    const ctx = {
+      state: { session: {} },
+      controller: {
+        hasWorkspace: vi.fn(() => true),
+        resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+      },
+      getResolvedWorkspace: vi.fn(() => undefined),
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await handleSkillsCommand(ctx);
+
+    expect(ctx.controller.resolveWorkspace).toHaveBeenCalledTimes(1);
+    expect(workspace.skills.list).toHaveBeenCalledTimes(1);
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Skills (1):\n  review - Review code'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.not.stringContaining('internal-helper'));
+    expect(ctx.showError).not.toHaveBeenCalled();
+  });
+
+  it('loads a named skill and sends its instructions to the agent with immediate boundary spacing', async () => {
+    const { ctx, controller, state } = createCtx();
+    const previousComponent = new Container();
+    (previousComponent as any).getChatSpacingKind = () => 'user-message';
+    state.chatContainer.addChild(previousComponent);
 
     await handleSkillCommand(ctx, 'github-triage', ['focus', 'tests']);
 
     expect(state.allSlashCommandComponents).toHaveLength(1);
-    expect(state.chatContainer.addChild).toHaveBeenCalledWith(state.allSlashCommandComponents[0]);
+    expect(state.chatContainer.children).toHaveLength(3);
+    expect(state.chatContainer.children[0]).toBe(previousComponent);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(state.chatContainer.children[2]).toBe(state.allSlashCommandComponents[0]);
     expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
-    expect(harness.sendMessage).toHaveBeenCalledWith({
+    expect(controller.session.sendMessage).toHaveBeenCalledWith({
       content:
         '<skill name="github-triage">\n' +
         '# GitHub triage\n\n' +
@@ -75,7 +119,7 @@ describe('handleSkillCommand', () => {
   });
 
   it('preserves general XML/HTML in skill content but neutralizes the </skill> boundary token', async () => {
-    const { ctx, harness } = createCtx({
+    const { ctx, controller } = createCtx({
       skill: {
         name: 'github-triage',
         instructions: 'Use <div>, A&B, "quotes". Embedded </skill> stays out of the way.',
@@ -87,7 +131,7 @@ describe('handleSkillCommand', () => {
 
     await handleSkillCommand(ctx, 'github-triage', []);
 
-    expect(harness.sendMessage).toHaveBeenCalledWith({
+    expect(controller.session.sendMessage).toHaveBeenCalledWith({
       content:
         '<skill name="github-triage">\n' +
         'Use <div>, A&B, "quotes". Embedded &lt;/skill&gt; stays out of the way.\n' +
@@ -96,14 +140,14 @@ describe('handleSkillCommand', () => {
   });
 
   it('creates a pending new thread before sending the skill activation', async () => {
-    const { ctx, harness, state } = createCtx({ pendingNewThread: true });
+    const { ctx, controller, state } = createCtx({ pendingNewThread: true });
 
     await handleSkillCommand(ctx, 'github-triage', []);
 
-    expect(harness.createThread).toHaveBeenCalledTimes(1);
+    expect(controller.session.thread.create).toHaveBeenCalledTimes(1);
     expect(state.pendingNewThread).toBe(false);
-    expect(harness.createThread.mock.invocationCallOrder[0]).toBeLessThan(
-      harness.sendMessage.mock.invocationCallOrder[0],
+    expect(controller.session.thread.create.mock.invocationCallOrder[0]).toBeLessThan(
+      controller.session.sendMessage.mock.invocationCallOrder[0],
     );
   });
 
@@ -117,29 +161,29 @@ describe('handleSkillCommand', () => {
         ]),
       },
     };
-    const { ctx, harness } = createCtx({ workspace });
+    const { ctx, controller } = createCtx({ workspace });
 
     await handleSkillCommand(ctx, 'missing', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(controller.session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('Skill not found: missing. Available skills: review, browse');
   });
 
   it('shows an error when no skills are configured', async () => {
-    const { ctx, harness } = createCtx({ workspace: {} });
+    const { ctx, controller } = createCtx({ workspace: {} });
 
     await handleSkillCommand(ctx, 'any', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(controller.session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('No skills configured.');
   });
 
   it('rejects empty skill names', async () => {
-    const { ctx, harness } = createCtx();
+    const { ctx, controller } = createCtx();
 
     await handleSkillCommand(ctx, '', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(controller.session.sendMessage).not.toHaveBeenCalled();
     expect(ctx.showError).toHaveBeenCalledWith('Usage: /skill/<name>');
   });
 
@@ -160,11 +204,11 @@ describe('handleSkillCommand', () => {
         ]),
       },
     };
-    const { ctx, harness } = createCtx({ workspace });
+    const { ctx, controller } = createCtx({ workspace });
 
     await handleSkillCommand(ctx, 'internal-helper', []);
 
-    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(controller.session.sendMessage).not.toHaveBeenCalled();
     // The non-user-invocable skill must also be hidden from the "Available skills" hint.
     expect(ctx.showError).toHaveBeenCalledWith('Skill not found: internal-helper. Available skills: review');
   });

@@ -1,6 +1,4 @@
-// @vitest-environment jsdom
 import type { BuilderSettingsResponse, StoredAgentResponse } from '@mastra/client-js';
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -15,15 +13,11 @@ import { server } from '@/test/msw-server';
 // Tooltip primitives render their content lazily on hover; flatten them for
 // these structural tests so we can assert on the inline tooltip copy directly.
 // This is a UI-rendering seam only — it does NOT hide data/auth flow.
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  };
-});
+vi.mock('@mastra/playground-ui/components/Tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
 
 const BASE_URL = 'http://localhost:4111';
 

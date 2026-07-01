@@ -1,6 +1,17 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { Button, Chip, DataList as EntityList, DataListSkeleton as EntityListSkeleton } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useMemo } from 'react';
+import type { DatasetTargetType } from '../target-type-options';
+import { getDatasetTargetTypes, matchesDatasetTargetFilter } from './helpers';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetsListProps {
@@ -27,6 +38,22 @@ function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boo
     showReviewPlaceholderInLink: !hasExperimentsAction && !hasReviewAction,
     showReviewPlaceholderAfterExperiments: hasExperimentsAction && !hasReviewAction,
   };
+}
+
+function TargetTypeIcon({ type }: { type: DatasetTargetType }) {
+  const className = 'size-3.5 shrink-0 text-neutral2';
+  switch (type) {
+    case 'agent':
+      return <AgentIcon className={className} aria-hidden />;
+    case 'workflow':
+      return <WorkflowIcon className={className} aria-hidden />;
+    case 'scorer':
+      return <ScorersIcon className={className} aria-hidden />;
+    case 'processor':
+      return <ProcessorIcon className={className} aria-hidden />;
+    default:
+      return null;
+  }
 }
 
 function formatDate(dateStr: string | Date | undefined | null): string {
@@ -57,7 +84,8 @@ export function DatasetsList({
       const completed = dsExperiments.filter(e => e.status === 'completed').length;
       const total = dsExperiments.length;
       const successPct = total > 0 ? Math.round((completed / total) * 100) : null;
-      return { ...ds, experimentCount: total, successPct };
+      const targetTypes = getDatasetTargetTypes(ds.targetType, dsExperiments);
+      return { ...ds, experimentCount: total, successPct, targetTypes };
     });
   }, [datasets, experiments]);
 
@@ -65,7 +93,7 @@ export function DatasetsList({
     const term = search.toLowerCase();
     return enrichedDatasets.filter(ds => {
       const matchesSearch = !term || ds.name.toLowerCase().includes(term);
-      const matchesTarget = targetFilter === 'all' || ds.targetType === targetFilter;
+      const matchesTarget = matchesDatasetTargetFilter(ds.targetTypes, targetFilter);
       const matchesExperiment =
         experimentFilter === 'all' ||
         (experimentFilter === 'with' && ds.experimentCount > 0) ||
@@ -80,7 +108,7 @@ export function DatasetsList({
   }
 
   return (
-    <EntityList columns={COLUMNS}>
+    <EntityList columns={COLUMNS} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -130,9 +158,20 @@ export function DatasetsList({
                 )}
               </EntityList.Cell>
               <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-              <EntityList.TextCell>
-                {ds.targetType ? ds.targetType : <span className="text-neutral2">—</span>}
-              </EntityList.TextCell>
+              <EntityList.Cell className="text-neutral4 text-ui-smd">
+                {ds.targetTypes.length > 0 ? (
+                  <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+                    {ds.targetTypes.map(type => (
+                      <span key={type} className="flex min-w-0 items-center gap-1 capitalize">
+                        <TargetTypeIcon type={type} />
+                        <span className="truncate">{type}</span>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="text-neutral2">—</span>
+                )}
+              </EntityList.Cell>
               <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
               {rowLayout.showExperimentsPlaceholder ? <EntityList.Cell className="justify-center" /> : null}
               {rowLayout.showReviewPlaceholderInLink ? <EntityList.Cell className="justify-center" /> : null}

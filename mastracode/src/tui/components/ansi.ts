@@ -2,7 +2,7 @@
  * Shared ANSI text-handling helpers for TUI components.
  */
 
-import { visibleWidth } from '@mariozechner/pi-tui';
+import { visibleWidth } from '@earendil-works/pi-tui';
 
 const ANSI_CLOSERS = '\x1b]8;;\x07\x1b[0m';
 const ELLIPSIS = '…';

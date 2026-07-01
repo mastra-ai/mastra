@@ -1,4 +1,8 @@
-import { Breadcrumb, Button, Crumb, DocsIcon, Header, Icon } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Header } from '@mastra/playground-ui/components/Header';
+import { DocsIcon } from '@mastra/playground-ui/icons/DocsIcon';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Link } from 'react-router';
 import { RouteHeaderActionsSlot } from './route-header-actions';
 import { useRouteHeaderCrumbsOverride } from './route-header-crumbs-context';

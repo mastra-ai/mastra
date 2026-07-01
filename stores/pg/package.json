@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.13.0-alpha.0",
+  "version": "1.14.3",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -27,8 +27,14 @@
     "test": "vitest run",
     "pretest:perf": "docker compose -f docker-compose.perf.yaml up -d && (for i in $(seq 1 30); do docker compose -f docker-compose.perf.yaml exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test:perf": "NODE_OPTIONS='--max-old-space-size=16384' vitest run -c vitest.perf.config.ts",
+    "pretest:pooler": "docker compose -f docker-compose.pooler.yaml up -d && (for i in $(seq 1 30); do docker compose -f docker-compose.pooler.yaml exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done) && (for i in $(seq 1 30); do nc -z localhost 6433 && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "test:pooler": "vitest run -c vitest.pooler.config.ts",
+    "prebench:init": "docker compose -f docker-compose.benchmark.yaml up -d && (for i in $(seq 1 30); do docker compose -f docker-compose.benchmark.yaml exec -T db pg_isready -U postgres && break || (sleep 1; [ $i -eq 30 ] && exit 1); done) && (for i in $(seq 1 30); do nc -z localhost 8476 && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "bench:init": "tsx scripts/init-benchmark.ts",
+    "postbench:init": "docker compose -f docker-compose.benchmark.yaml down -v",
     "posttest": "docker compose down -v",
     "posttest:perf": "docker compose -f docker-compose.perf.yaml down -v",
+    "posttest:pooler": "docker compose -f docker-compose.pooler.yaml down -v",
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
@@ -46,7 +52,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@types/pg": "^8.18.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
@@ -57,7 +63,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.42.1-0 <2.0.0-0"
   },
   "files": [
     "dist",

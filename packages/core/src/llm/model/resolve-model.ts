@@ -1,11 +1,13 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import type { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
+import { AISDKV7LanguageModel } from './aisdk/v7/model';
 import { ModelRouterLanguageModel } from './router';
 import type {
   MastraModelConfig,
@@ -94,7 +96,8 @@ export async function resolveModelConfig(
     modelConfig instanceof ModelRouterLanguageModel ||
     modelConfig instanceof AISDKV4LegacyLanguageModel ||
     modelConfig instanceof AISDKV5LanguageModel ||
-    modelConfig instanceof AISDKV6LanguageModel
+    modelConfig instanceof AISDKV6LanguageModel ||
+    modelConfig instanceof AISDKV7LanguageModel
   ) {
     return modelConfig;
   }
@@ -107,6 +110,9 @@ export async function resolveModelConfig(
     if (modelConfig.specificationVersion === 'v3') {
       return new AISDKV6LanguageModel(modelConfig as LanguageModelV3);
     }
+    if (modelConfig.specificationVersion === 'v4') {
+      return new AISDKV7LanguageModel(modelConfig as LanguageModelV4);
+    }
     if (modelConfig.specificationVersion === 'v1') {
       // Wrap legacy v1 models so the underlying SDK client (and any
       // enumerable config) does not leak into observability spans.
@@ -116,9 +122,9 @@ export async function resolveModelConfig(
     // If the model has doStream/doGenerate methods, wrap it as a modern model
     // to prevent the stream()/streamLegacy() catch-22 where neither method accepts the model.
     if (typeof (modelConfig as any).doStream === 'function' && typeof (modelConfig as any).doGenerate === 'function') {
-      return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
+      return new AISDKV5LanguageModel(modelConfig as unknown as LanguageModelV2);
     }
-    return modelConfig;
+    return modelConfig as MastraLanguageModel;
   }
 
   const gatewayRecord = mastra?.listGateways();
