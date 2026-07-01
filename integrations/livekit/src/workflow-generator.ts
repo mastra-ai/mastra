@@ -222,7 +222,11 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
       },
       cancel: () => {
         cancelled = true;
-        void run.cancel();
+        // Barge-in fires this synchronously; swallow any rejection from the run cancellation so a
+        // failed cancel can't surface as an unhandled promise rejection.
+        void Promise.resolve(run.cancel()).catch(error => {
+          console.warn('@mastra/livekit: failed to cancel the workflow run on barge-in', error);
+        });
       },
     });
   };
