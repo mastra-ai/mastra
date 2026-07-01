@@ -356,9 +356,17 @@ export class ProcessorRunner {
     const resolvedResourceId = resourceId ?? memoryContext?.resourceId;
 
     if (!resolvedMemory || !resolvedThreadId || !resolvedResourceId) {
-      throw new Error(
-        `[Processor:${processor.id}] computeStateSignal requires Mastra memory with an active resourceId and threadId`,
-      );
+      // State-signal processors (e.g. TaskStateProcessor) project thread-scoped
+      // state onto the model context. Without a memory-backed thread there is no
+      // state to project — the task tools already no-op in this case. Gracefully
+      // skip rather than throwing, so agents configured with signal providers
+      // (like createCodingAgent's default TaskSignalProvider) still run in
+      // memoryless contexts such as the CLI.
+      this.logger?.debug(`[${processor.id}] computeStateSignal skipped — no memory-backed thread`, {
+        agent: this.agentName,
+        processorId: processor.id,
+      });
+      return;
     }
 
     const loadedThread = (await resolvedMemory.getThreadById({ threadId: resolvedThreadId })) ?? memoryContext?.thread;

@@ -3478,7 +3478,8 @@ describe('ProcessorRunner', () => {
       );
     });
 
-    it('requires memory for computeStateSignal processors', async () => {
+    it('skips computeStateSignal processors gracefully when no memory-backed thread', async () => {
+      vi.mocked(mockLogger.debug).mockClear();
       runner = new ProcessorRunner({
         inputProcessors: [
           { id: 'state-processor', computeStateSignal: () => ({ cacheKey: 'state', contents: 'state' }) },
@@ -3488,16 +3489,20 @@ describe('ProcessorRunner', () => {
         agentName: 'test-agent',
       });
 
-      await expect(
-        runner.runProcessInputStep({
-          messageList,
-          stepNumber: 0,
-          steps: [],
-          model: {} as any,
-          tools: {},
-          retryCount: 0,
-        }),
-      ).rejects.toThrow('computeStateSignal requires Mastra memory');
+      // Should NOT throw — the run resolves and a debug log is emitted.
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('[state-processor] computeStateSignal skipped'),
+        expect.objectContaining({ processorId: 'state-processor' }),
+      );
     });
 
     it('honors processor.stateId over processor.id in computeStateSignal', async () => {
