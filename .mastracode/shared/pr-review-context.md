@@ -42,10 +42,11 @@ gh pr diff <PR>
    - Regression risk: affected runtime paths, compatibility concerns, and edge cases.
    - Test quality: whether regression coverage exercises the reported failure shape and relevant integration point.
    - Review state: unresolved blocking comments, stale suggestions, or prior maintainer notes.
-   - Verification state: narrow local lint/typecheck/test/build checks actually run, plus approved/required remote checks that actually ran. Treat unapproved remote CI checks as neutral, not as missing verification or failures.
-9. Compare the PR title and description against the actual diff; record mismatches.
-10. Check status checks, but ignore Vercel CI failures unless directly relevant to the issue, PR, or deployment behavior. Record unapproved remote CI checks separately from confidence evidence.
-11. Before relying on tests, builds, or checks, verify they were actually run locally or are approved/required CI checks that actually ran. Do not claim they passed from expectation alone.
+   - Verification state: relevant local lint/typecheck/test/build checks actually run for the changed package(s), plus approved/required remote checks that actually ran. Treat unapproved remote CI checks as neutral, not as missing verification or failures.
+9. Record check state at triage time: checked-at timestamp, local checks run or why they could not be run, required/approved failures, other visible pending/failing checks, and score impact.
+10. Compare the PR title and description against the actual diff; record mismatches.
+11. Check status checks, but ignore Vercel CI failures unless directly relevant to the issue, PR, or deployment behavior. Record unapproved remote CI checks separately from confidence evidence.
+12. Before relying on tests, builds, or checks, verify they were actually run locally or are approved/required CI checks that actually ran. Do not claim they passed from expectation alone.
 
 ## Return only context
 

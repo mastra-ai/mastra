@@ -81,7 +81,7 @@ Use this compact lifecycle template and update it after each major step with con
 ### Comment style, only when preparing comments
 
 - Author pre-review: tag the PR author when known, be concise/action-oriented, and request only concrete changes the author needs to make. Do not ask authors to confirm tests, verification, or maintainer review readiness.
-- Maintainer notes: start with `## 🟠 High: Maintainer notes`, then `Merge confidence - <x>/5`. Keep concise `Scope`, `Context`, `Confidence basis`, `Evidence checked`, and `Observations` sections. In `Confidence basis`, use short support/limit bullets; each limit should state the gap/risk, merge impact, and blocking yes/no. Do not count missing human approval or unapproved remote CI checks as confidence limits; mention approval/review/remote-check status separately only if useful. If maintainer notes already exist, update that comment instead of preparing a new one.
+- Maintainer notes: start with `## 🟠 High: Maintainer notes`, then `Merge confidence - <x>/5`. Keep concise `Scope`, `Context`, `Confidence basis`, `Checks`, `Evidence checked`, and `Observations` sections. In `Confidence basis`, use short support/limit bullets; each limit should state the gap/risk, merge impact, and blocking yes/no. `Checks` must state the checked-at time, required/approved failures, and other visible pending/failing checks with their score impact. Do not count missing human approval or unapproved remote CI checks as confidence limits. If maintainer notes already exist, update that comment instead of preparing a new one.
 - For PR branches, always prepare or update maintainer notes. Do not write `Maintainer notes: Not needed.` for Branch B or Branch C.
 - Do not present maintainer notes as final approval or rejection.
 
@@ -145,9 +145,12 @@ gh pr view "$PR" --json number,title,state,isDraft,url,author,body,comments,revi
 
 For Branch B/C PRs, do this before branch output or `ask_user`. Do not modify branches, apply suggestions, resolve conflicts, or run broad checks without approval.
 
-- [ ] Check conflicts, approved/required `statusCheckRollup` failures, and applicable inline suggestions/review nits; ignore unrelated Vercel failures and unapproved remote CI checks.
-- [ ] Do not reduce merge confidence for unapproved remote CI checks that did not run; rely on narrow local lint/typecheck/test/build checks you ran, or approved/required remote checks that actually ran.
-- [ ] If a relevant approved/required failure is unclear or stale, or if remote checks are unapproved, run only the narrowest local check needed for the affected package when practical.
+- [ ] Check conflicts, approved/required `statusCheckRollup` failures, and applicable inline suggestions/review nits; ignore unrelated Vercel failures and unapproved remote CI checks for scoring.
+- [ ] Record check state at triage time: required/approved failures, other visible pending/failing checks, and whether each affects the score.
+- [ ] Run relevant local checks for the changed package(s) when practical: lint, typecheck, tests, and/or build, using the narrowest applicable package scripts.
+- [ ] If a relevant local check cannot be run, record why and how that affects merge confidence.
+- [ ] Do not reduce merge confidence for unapproved remote CI checks that did not run; rely on local checks you ran, or approved/required remote checks that actually ran.
+- [ ] If a relevant approved/required failure is unclear or stale, run the narrowest local check needed for the affected package when practical.
 - [ ] Record concise results in `Context gathered` and `Evidence`, using `None found.` when nothing applies.
 - [ ] If a small low/medium-severity fix-up is found, set `Recommended next step` to `maintainer PR fix-up` and include matching final `ask_user` option(s).
 
