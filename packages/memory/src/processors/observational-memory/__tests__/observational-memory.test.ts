@@ -15855,12 +15855,14 @@ describe('Processor stream events: buffering status and activation markers', () 
     // return fresh rows on each query, so the cached record remains stale.
     const originalGetOrCreate = om.getOrCreateRecord.bind(om);
     const getOrCreateClones: Array<{ id: string }> = [];
-    const getOrCreateSpy = vi.spyOn(om, 'getOrCreateRecord').mockImplementation(async (...args: Parameters<typeof om.getOrCreateRecord>) => {
-      const record = await originalGetOrCreate(...args);
-      const cloned = JSON.parse(JSON.stringify(record));
-      getOrCreateClones.push({ id: cloned.id });
-      return cloned;
-    });
+    const getOrCreateSpy = vi
+      .spyOn(om, 'getOrCreateRecord')
+      .mockImplementation(async (...args: Parameters<typeof om.getOrCreateRecord>) => {
+        const record = await originalGetOrCreate(...args);
+        const cloned = JSON.parse(JSON.stringify(record));
+        getOrCreateClones.push({ id: cloned.id });
+        return cloned;
+      });
     const setPendingSpy = vi.spyOn(storage, 'setPendingMessageTokens');
     const emitProgressSpy = vi.spyOn(om, 'emitProgress');
 
