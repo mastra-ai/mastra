@@ -18,6 +18,8 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
+import type { CreatedAgentSignal } from '../signals';
+import { mastraDBMessageToSignal } from '../signals';
 import type {
   AgentInstructions,
   AgentMethodType,
@@ -28,8 +30,6 @@ import type {
 } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
-import type { CreatedAgentSignal } from '../signals';
-import { mastraDBMessageToSignal } from '../signals';
 
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
@@ -635,7 +635,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requireToolApproval: execOptions?.requireToolApproval,
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
-    drainPendingSignals: (scope) => typedAgent.__getDrainPendingSignals()(runId, scope),
+    drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.

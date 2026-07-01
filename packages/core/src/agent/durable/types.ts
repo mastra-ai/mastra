@@ -21,7 +21,6 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
-import type { CreatedAgentSignal } from '../signals';
 import type {
   CoreTool,
   RequireToolApproval,
@@ -33,6 +32,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
+import type { CreatedAgentSignal } from '../signals';
 import type { GoalConfig } from '../types';
 
 /**

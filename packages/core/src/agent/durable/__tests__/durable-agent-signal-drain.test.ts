@@ -19,8 +19,9 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { createSignal, type CreatedAgentSignal } from '../../signals';
 import { Agent } from '../../agent';
+import type { CreatedAgentSignal } from '../../signals';
+import { createSignal } from '../../signals';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
 
@@ -108,7 +109,10 @@ function makeSimpleTextModel() {
   });
 }
 
-function createTestSignal(text: string, overrides?: Partial<{ type: 'user' | 'state' | 'reactive' | 'notification' }>): CreatedAgentSignal {
+function createTestSignal(
+  text: string,
+  overrides?: Partial<{ type: 'user' | 'state' | 'reactive' | 'notification' }>,
+): CreatedAgentSignal {
   return createSignal({
     type: overrides?.type ?? 'user',
     contents: text,
@@ -146,10 +150,7 @@ describe('DurableAgent signal drain', () => {
 
       // Create signals that simulate what getInitialSignalEchoes would return
       // (signals already in the messageList with role 'signal' from persisted history)
-      const echoSignals = [
-        createTestSignal('echo one'),
-        createTestSignal('echo two'),
-      ];
+      const echoSignals = [createTestSignal('echo one'), createTestSignal('echo two')];
 
       // Intercept the registry entry to inject initialSignalEchoes
       const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
@@ -172,14 +173,11 @@ describe('DurableAgent signal drain', () => {
       await cleanup?.();
 
       // Find the signal data parts in the stream — echoed signals should appear
-      const signalChunks = chunks.filter(
-        (c: any) => c.type === 'data-signal' || c.type === 'data-user-message',
-      );
+      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
       expect(signalChunks.length).toBe(2);
       expect(signalChunks[0].data.contents).toBe('echo one');
       expect(signalChunks[1].data.contents).toBe('echo two');
-
     });
   });
 
@@ -196,10 +194,7 @@ describe('DurableAgent signal drain', () => {
 
       // Pre-run signals: queue them via the registry entry's drainPendingSignals
       // by monkey-patching the registry entry after preparation
-      const preRunSignals = [
-        createTestSignal('prerun signal one'),
-        createTestSignal('prerun signal two'),
-      ];
+      const preRunSignals = [createTestSignal('prerun signal one'), createTestSignal('prerun signal two')];
 
       // We need to intercept the registry entry to inject pre-run signals
       const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
@@ -231,9 +226,7 @@ describe('DurableAgent signal drain', () => {
       await cleanup?.();
 
       // Find the signal data parts in the stream
-      const signalChunks = chunks.filter(
-        (c: any) => c.type === 'data-signal' || c.type === 'data-user-message',
-      );
+      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
       // Pre-run signals should appear in the stream
       expect(signalChunks.length).toBe(2);
@@ -296,9 +289,7 @@ describe('DurableAgent signal drain', () => {
       await cleanup?.();
 
       // Find the signal data parts in the stream
-      const signalChunks = chunks.filter(
-        (c: any) => c.type === 'data-signal' || c.type === 'data-user-message',
-      );
+      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
 
       // The inter-iteration signal should appear in the stream
       expect(signalChunks.length).toBe(1);
@@ -378,9 +369,7 @@ describe('DurableAgent signal drain', () => {
       expect(callNum).toBeGreaterThanOrEqual(2);
 
       // The signal should appear in the stream
-      const signalChunks = chunks.filter(
-        (c: any) => c.type === 'data-signal' || c.type === 'data-user-message',
-      );
+      const signalChunks = chunks.filter((c: any) => c.type === 'data-signal' || c.type === 'data-user-message');
       expect(signalChunks.length).toBe(1);
       expect(signalChunks[0].data.contents).toBe('forced continuation signal');
     });
