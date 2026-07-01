@@ -1,5 +1,35 @@
 # @mastra/mcp
 
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Fixed MCP tool execution failures being recorded as successes. ([#18482](https://github.com/mastra-ai/mastra/pull/18482))
+
+  A failing MCP tool used to look like it succeeded. The call was traced and saved as a success, and error handling like retries and Studio error states never ran. For tools with an `outputSchema`, the error message was thrown away, so neither the model nor the user saw why the call failed.
+
+  This happened because the server reports the failure inside a normal result (with an `isError` flag), and `MCPClient` did not check that flag.
+
+  Now `isError: true` results are surfaced on the failed-tool-call path: the tool throws with the server's error text, so spans, stream chunks, scorers, and persisted messages reflect the failure and the model can self-correct.
+
+  You can opt back into the previous behavior per server with `onToolError: 'return'`, which resolves with the raw result instead of throwing:
+
+  ```typescript
+  const mcp = new MCPClient({
+    servers: {
+      weather: {
+        url: new URL('https://example.com/mcp'),
+        onToolError: 'return', // default is 'throw'
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`cc440a3`](https://github.com/mastra-ai/mastra/commit/cc440a39400d8ce06655462b26c1666a1b3d4320), [`ea6327b`](https://github.com/mastra-ai/mastra/commit/ea6327ba2d63ca647804bc97b347e03a58617162), [`3439fa8`](https://github.com/mastra-ai/mastra/commit/3439fa836ecfcaa257b40c20b30ac2a8be22e9ea), [`85107f2`](https://github.com/mastra-ai/mastra/commit/85107f2758b527147fccbedff962961927c2d3b8), [`06ff9e0`](https://github.com/mastra-ai/mastra/commit/06ff9e0befd1d642ab87ff749285ee4091205c7e), [`7f5e1ff`](https://github.com/mastra-ai/mastra/commit/7f5e1ff695a92f672bb3976363925d1e9136b54a), [`b8375c1`](https://github.com/mastra-ai/mastra/commit/b8375c1f8fe905df8ae2ae9a893bb365f17aec4e), [`003f35d`](https://github.com/mastra-ai/mastra/commit/003f35d19e07b23b4bacc591c8bc0c59b42124ae)]:
+  - @mastra/core@1.49.0-alpha.1
+
 ## 1.12.1
 
 ### Patch Changes
