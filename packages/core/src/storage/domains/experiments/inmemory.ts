@@ -3,6 +3,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -80,8 +81,16 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     return updated;
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
-    return this.db.experiments.get(args.id) ?? null;
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
+    const row = this.db.experiments.get(args.id);
+    if (!row) return null;
+    if (args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId) {
+      return null;
+    }
+    if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
+      return null;
+    }
+    return row;
   }
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
@@ -183,8 +192,19 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     return updated;
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
-    return this.db.experimentResults.get(args.id) ?? null;
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
+    const row = this.db.experimentResults.get(args.id);
+    if (!row) return null;
+    if (args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId) {
+      return null;
+    }
+    if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
+      return null;
+    }
+    return row;
   }
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {

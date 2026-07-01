@@ -17,6 +17,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
   ListExperimentsInput,
@@ -289,9 +290,29 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
-      const row = await this.db.load<Record<string, any>>({ tableName: TABLE_EXPERIMENTS, keys: { id: args.id } });
+      const hasTenancy = args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined;
+      if (!hasTenancy) {
+        const row = await this.db.load<Record<string, any>>({ tableName: TABLE_EXPERIMENTS, keys: { id: args.id } });
+        return row ? rowToExperiment(row) : null;
+      }
+      const conditions: string[] = [`${quoteIdent('id', 'column name')} = @id`];
+      const params: Record<string, any> = { id: args.id };
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        params.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.projectId !== undefined) {
+        conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        params.projectId = args.filters.projectId;
+      }
+      const [rows] = await this.database.run({
+        sql: `SELECT * FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')} WHERE ${conditions.join(' AND ')} LIMIT 1`,
+        params,
+        json: true,
+      });
+      const row = (rows as Array<Record<string, any>>)[0];
       return row ? rowToExperiment(row) : null;
     } catch (error) {
       throw new MastraError(
@@ -559,12 +580,35 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
-      const row = await this.db.load<Record<string, any>>({
-        tableName: TABLE_EXPERIMENT_RESULTS,
-        keys: { id: args.id },
+      const hasTenancy = args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined;
+      if (!hasTenancy) {
+        const row = await this.db.load<Record<string, any>>({
+          tableName: TABLE_EXPERIMENT_RESULTS,
+          keys: { id: args.id },
+        });
+        return row ? rowToExperimentResult(row) : null;
+      }
+      const conditions: string[] = [`${quoteIdent('id', 'column name')} = @id`];
+      const params: Record<string, any> = { id: args.id };
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        params.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.projectId !== undefined) {
+        conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        params.projectId = args.filters.projectId;
+      }
+      const [rows] = await this.database.run({
+        sql: `SELECT * FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} WHERE ${conditions.join(' AND ')} LIMIT 1`,
+        params,
+        json: true,
       });
+      const row = (rows as Array<Record<string, any>>)[0];
       return row ? rowToExperimentResult(row) : null;
     } catch (error) {
       throw new MastraError(

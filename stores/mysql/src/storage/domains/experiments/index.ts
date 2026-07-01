@@ -16,6 +16,7 @@ import type {
   ExperimentResult,
   ExperimentReviewCounts,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -349,11 +350,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentRow>({
         tableName: TABLE_EXPERIMENTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperiment(row) : null;
     } catch (error) {
@@ -551,11 +558,20 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentResultRow>({
         tableName: TABLE_EXPERIMENT_RESULTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperimentResult(row) : null;
     } catch (error) {

@@ -16,6 +16,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -29,6 +30,30 @@ import type {
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { getTableName, getSchemaName } from '../utils';
+
+/**
+ * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
+ * Uses double-quoted PG identifiers and continues numbering from `startIndex`.
+ * Returns empty arrays and unchanged `nextIndex` when no filters apply.
+ * Mirrors the datasets domain helper (MASTRA-4438).
+ */
+function tenancyWhere(
+  filters: ExperimentTenancyFilters | undefined,
+  startIndex: number,
+): { conditions: string[]; params: any[]; nextIndex: number } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let idx = startIndex;
+  if (filters?.organizationId !== undefined) {
+    conditions.push(`"organizationId" = $${idx++}`);
+    params.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push(`"projectId" = $${idx++}`);
+    params.push(filters.projectId);
+  }
+  return { conditions, params, nextIndex: idx };
+}
 
 export class ExperimentsPG extends ExperimentsStorage {
   #db: PgDB;
@@ -325,10 +350,18 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({ id }: { id: string }): Promise<Experiment | null> {
+  async getExperimentById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<Experiment | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const whereSql = ['"id" = $1', ...conditions].join(' AND ');
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -578,10 +611,18 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({ id }: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const whereSql = ['"id" = $1', ...conditions].join(' AND ');
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(

@@ -16,6 +16,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -28,6 +29,26 @@ import type {
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+
+/**
+ * Build additional `AND col = ?` conditions for a tenancy read-scope filter.
+ * Returned in the shape expected by the existing SQL builders in this file.
+ * When `filters` is undefined or empty, returns empty arrays (no scoping).
+ * Mirrors the datasets domain helper (MASTRA-4438).
+ */
+function tenancyWhere(filters?: ExperimentTenancyFilters): { conditions: string[]; params: InValue[] } {
+  const conditions: string[] = [];
+  const params: InValue[] = [];
+  if (filters?.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push('projectId = ?');
+    params.push(filters.projectId);
+  }
+  return { conditions, params };
+}
 
 export class ExperimentsLibSQL extends ExperimentsStorage {
   #db: LibSQLDB;
@@ -289,11 +310,13 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
+      const { conditions, params } = tenancyWhere(args.filters);
+      const whereSql = ['id = ?', ...conditions].join(' AND ');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE id = ?`,
-        args: [args.id],
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE ${whereSql}`,
+        args: [args.id, ...params],
       });
       return result.rows?.[0] ? this.transformExperimentRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
@@ -551,11 +574,16 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
+      const { conditions, params } = tenancyWhere(args.filters);
+      const whereSql = ['id = ?', ...conditions].join(' AND ');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE id = ?`,
-        args: [args.id],
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${whereSql}`,
+        args: [args.id, ...params],
       });
       return result.rows?.[0] ? this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {

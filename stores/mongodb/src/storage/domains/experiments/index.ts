@@ -14,6 +14,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -27,6 +28,17 @@ import type {
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+
+/**
+ * Merge tenancy read-scope conditions into a MongoDB filter document. Fields
+ * with `undefined` filter values are omitted (no predicate). Defined values
+ * become equality matches. Mirrors the datasets helper (MASTRA-4438).
+ */
+function applyTenancyFilter(filter: Record<string, any>, filters: ExperimentTenancyFilters | undefined): void {
+  if (!filters) return;
+  if (filters.organizationId !== undefined) filter.organizationId = filters.organizationId;
+  if (filters.projectId !== undefined) filter.projectId = filters.projectId;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -283,10 +295,18 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({ id }: { id: string }): Promise<Experiment | null> {
+  async getExperimentById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<Experiment | null> {
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
-      const doc = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const doc = await collection.findOne(query);
       if (!doc) return null;
       return transformExperimentRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
@@ -517,10 +537,18 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({ id }: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      const doc = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const doc = await collection.findOne(query);
       if (!doc) return null;
       return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
