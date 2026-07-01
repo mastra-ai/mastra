@@ -75,7 +75,7 @@ export const weatherAgent = new Agent({
 })
 ```
 
-The defined model requires an environment variable to be set for the provider. Go to [https://mastra.ai/models/environment-variables](https://mastra.ai/models/environment-variables) for a full list of supported providers and their environment variable names.
+The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`. Go to [https://mastra.ai/models/environment-variables](https://mastra.ai/models/environment-variables) for a full list of supported providers and their environment variable names.
 
 Create a Mastra entry point at `src/mastra/index.ts` and register the agent:
 
