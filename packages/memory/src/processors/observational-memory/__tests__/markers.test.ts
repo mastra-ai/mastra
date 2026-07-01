@@ -98,6 +98,8 @@ describe('markers', () => {
         observations: '- User asked about weather\n- User prefers Celsius',
         currentTask: 'Helping with weather info',
         suggestedResponse: 'The forecast looks clear',
+        extractedValues: { priority: 'high' },
+        extractionFailures: [{ slug: 'profile', error: 'schema mismatch' }],
         recordId: 'rec-1',
         threadId: 'thread-1',
       });
@@ -110,6 +112,8 @@ describe('markers', () => {
       expect(marker.data.observations).toBe('- User asked about weather\n- User prefers Celsius');
       expect(marker.data.currentTask).toBe('Helping with weather info');
       expect(marker.data.suggestedResponse).toBe('The forecast looks clear');
+      expect(marker.data.extractedValues).toEqual({ priority: 'high' });
+      expect(marker.data.extractionFailures).toEqual([{ slug: 'profile', error: 'schema mismatch' }]);
     });
 
     it('allows optional fields to be undefined', () => {
@@ -229,6 +233,8 @@ describe('markers', () => {
         recordId: 'rec-1',
         threadId: 'thread-1',
         observations: '- Buffered obs 1\n- Buffered obs 2',
+        extractedValues: { priority: 'medium' },
+        extractionFailures: [{ slug: 'status', error: 'missing value' }],
       });
 
       expect(marker.type).toBe('data-om-buffering-end');
@@ -237,6 +243,8 @@ describe('markers', () => {
       expect(marker.data.tokensBuffered).toBe(3500);
       expect(marker.data.bufferedTokens).toBe(7000);
       expect(marker.data.observations).toBe('- Buffered obs 1\n- Buffered obs 2');
+      expect(marker.data.extractedValues).toEqual({ priority: 'medium' });
+      expect(marker.data.extractionFailures).toEqual([{ slug: 'status', error: 'missing value' }]);
     });
 
     it('allows observations to be undefined', () => {

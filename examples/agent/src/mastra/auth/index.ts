@@ -7,6 +7,7 @@
  * - workos: Enterprise SSO (SAML, OIDC)
  * - cloud: Mastra platform OAuth with PKCE
  * - composite: Combines SimpleAuth + MastraCloudAuth via CompositeAuth
+ * - clerk: Clerk JWT-based authentication
  * - auth0-okta: Auth0 for authentication + Okta for RBAC (cross-provider)
  * - okta: Full Okta for both authentication and RBAC
  *
@@ -30,6 +31,10 @@ async function initAuth(): Promise<AuthResult> {
     case 'workos': {
       const { initWorkOS } = await import('./workos');
       return initWorkOS();
+    }
+    case 'clerk': {
+      const { initClerk } = await import('./clerk');
+      return initClerk();
     }
     case 'cloud': {
       const { initCloud } = await import('./cloud');

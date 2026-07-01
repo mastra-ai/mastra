@@ -1,9 +1,7 @@
-import {
-  OpenInTracesButton,
-  TokenUsageTimelineCardView,
-  useDrilldown,
-  useTokenUsageTimeSeries,
-} from '@mastra/playground-ui';
+import { OpenInTracesButton } from '@mastra/playground-ui/domains/metrics/components/card-action-buttons';
+import { TokenUsageTimelineCardView } from '@mastra/playground-ui/domains/metrics/components/token-usage-timeline-card-view';
+import { useDrilldown } from '@mastra/playground-ui/domains/metrics/hooks/use-drilldown';
+import { useTokenUsageTimeSeries } from '@mastra/playground-ui/domains/metrics/hooks/use-token-usage-timeseries';
 import { useLinkComponent } from '@/lib/framework';
 
 export function TokenUsageTimelineCard() {

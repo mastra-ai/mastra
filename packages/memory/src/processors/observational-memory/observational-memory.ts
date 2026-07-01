@@ -9,10 +9,13 @@ import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/proce
 import { MessageHistory } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
+import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
+import type { Memory } from '../..';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
+import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
@@ -188,6 +191,11 @@ function parseActivationTTL(
 
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
+import {
+  buildExtractedValueContextSections,
+  buildThreadMetadataFromExtractedValues,
+  getPriorExtractedValues,
+} from './extracted-values';
 import { createBufferingStartMarker, createActivationMarker } from './markers';
 import {
   findLastCompletedObservationBoundary,
@@ -300,6 +308,7 @@ export class ObservationalMemory {
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
+  private memory?: Memory;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -381,6 +390,7 @@ export class ObservationalMemory {
     this.retrieval = Boolean(config.retrieval);
     this.onIndexObservations = config.onIndexObservations;
     this.mastra = config.mastra;
+    this.memory = config.memory;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -505,6 +515,10 @@ export class ObservationalMemory {
       instruction: config.observation?.instruction,
       threadTitle: config.observation?.threadTitle ?? false,
       observeAttachments: config.observation?.observeAttachments ?? true,
+      extractors: composeObservationExtractors({
+        threadTitle: config.observation?.threadTitle ?? false,
+        extract: config.observation?.extract,
+      }),
     };
 
     // Resolve reflection config with defaults
@@ -536,6 +550,7 @@ export class ObservationalMemory {
             config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens,
           ),
       instruction: config.reflection?.instruction,
+      extractors: composeReflectionExtractors({ extract: config.reflection?.extract }),
     };
 
     this.tokenCounter = new TokenCounter({
@@ -554,6 +569,7 @@ export class ObservationalMemory {
       resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
       tokenCounter: this.tokenCounter,
       mastra: config.mastra,
+      memory: this.memory,
     });
 
     this.buffering = new BufferingCoordinator({
@@ -575,6 +591,7 @@ export class ObservationalMemory {
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
       mastra: config.mastra,
+      memory: this.memory,
     });
 
     // Validate buffer configuration
@@ -1570,6 +1587,7 @@ export class ObservationalMemory {
     observations: string,
     currentTask?: string,
     suggestedResponse?: string,
+    extractedValues?: Record<string, unknown>,
     unobservedContextBlocks?: string,
     currentDate?: Date,
     retrieval = false,
@@ -1608,6 +1626,13 @@ export class ObservationalMemory {
     if (suggestedResponse) {
       messages.push(`<suggested-response>\n${suggestedResponse}\n</suggested-response>`);
     }
+
+    messages.push(
+      ...buildExtractedValueContextSections(
+        [...this.observationConfig.extractors, ...this.reflectionConfig.extractors],
+        extractedValues,
+      ),
+    );
 
     return messages;
   }
@@ -1988,15 +2013,19 @@ ${formattedMessages}
       writer,
       requestContext,
       observabilityContext,
-    ).finally(() => {
-      // Clean up the operation tracking
-      BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-      // Clear persistent flag
-      unregisterOp(record.id, 'bufferingObservation');
-      this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
-        omError('[OM] Failed to clear buffering observation flag', err);
+    )
+      .catch(err => {
+        omError('[OM] async buffering observation failed', err);
+      })
+      .finally(() => {
+        // Clean up the operation tracking
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        // Clear persistent flag
+        unregisterOp(record.id, 'bufferingObservation');
+        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+          omError('[OM] Failed to clear buffering observation flag', err);
+        });
       });
-    });
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
   }
@@ -2081,11 +2110,16 @@ ${formattedMessages}
     // 2. When MessageList creates new messages for streaming content after the seal,
     //    those new messages have their own IDs and don't overwrite the sealed messages
     // 3. The sealed messages remain intact with their content at the time of buffering
-    await this.messageHistory.persistMessages({
-      messages: messagesToBuffer,
-      threadId,
-      resourceId: freshRecord.resourceId ?? undefined,
-    });
+    try {
+      await this.messageHistory.persistMessages({
+        messages: messagesToBuffer,
+        threadId,
+        resourceId: freshRecord.resourceId ?? undefined,
+      });
+    } catch (err) {
+      omError('[OM] Failed to persist sealed messages before buffering — skipping observation cycle', err);
+      return;
+    }
 
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -2488,6 +2522,7 @@ ${formattedMessages}
       record.activeObservations,
       currentTask,
       suggestedResponse,
+      omMetadata?.extracted,
       unobservedContextBlocks,
       currentDate,
       this.retrieval,
@@ -2897,6 +2932,7 @@ ${formattedMessages}
      *  in place with buffering-flag changes so same-loop callers can reuse it. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
+    agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     currentModel?: ObservationModelContext;
@@ -3070,6 +3106,7 @@ ${formattedMessages}
         cycleId,
         startedAt,
         writer,
+        agent: opts.agent,
         sendSignal: opts.sendSignal,
         requestContext,
         currentModel: opts.currentModel,
@@ -3380,6 +3417,7 @@ ${formattedMessages}
     resourceId?: string;
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
+    agent?: ProcessorContext['agent'];
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
     observabilityContext?: ObservabilityContext;
@@ -3396,6 +3434,7 @@ ${formattedMessages}
 
     let observed = false;
     let observationUsage: ObserveHookUsage | undefined;
+    let observationProviderMetadata: ProviderMetadata | undefined;
     let generationBefore = -1;
 
     await this.withLock(lockKey, async () => {
@@ -3428,17 +3467,23 @@ ${formattedMessages}
           resourceId,
           messages: unobservedMessages,
           reflectionHooks,
+          agent: opts.agent,
           requestContext,
           writer: opts.writer,
           observabilityContext: opts.observabilityContext,
         }).run();
         observed = result.observed;
         observationUsage = result.usage;
+        observationProviderMetadata = result.providerMetadata;
       } catch (error) {
         observationError = error instanceof Error ? error : new Error(String(error));
         throw error;
       } finally {
-        hooks?.onObservationEnd?.({ usage: observationUsage, error: observationError });
+        hooks?.onObservationEnd?.({
+          usage: observationUsage,
+          error: observationError,
+          ...(observationProviderMetadata ? { providerMetadata: observationProviderMetadata } : {}),
+        });
       }
     });
 
@@ -3480,6 +3525,9 @@ ${formattedMessages}
     registerOp(record.id, 'reflecting');
 
     try {
+      const thread = await this.storage.getThreadById({ threadId });
+      const previousOmMetadata = getThreadOMMetadata(thread?.metadata);
+      const priorExtractedValues = getPriorExtractedValues(previousOmMetadata, this.reflectionConfig.extractors);
       const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
       const reflectResult = await this.reflector.call(
         record.activeObservations,
@@ -3490,6 +3538,7 @@ ${formattedMessages}
         undefined,
         undefined,
         requestContext,
+        priorExtractedValues,
         observabilityContext,
         undefined,
       );
@@ -3501,8 +3550,24 @@ ${formattedMessages}
         tokenCount: reflectionTokenCount,
       });
 
-      // Note: Thread metadata (currentTask, suggestedResponse) is preserved on each thread
-      // and doesn't need to be updated during reflection - it was set during observation
+      if (thread && reflectResult.extractedValues) {
+        const metadataUpdate = buildThreadMetadataFromExtractedValues(
+          this.reflectionConfig.extractors,
+          reflectResult.extractedValues,
+        );
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          currentTask: metadataUpdate.currentTask ?? previousOmMetadata?.currentTask,
+          suggestedResponse: metadataUpdate.suggestedResponse ?? previousOmMetadata?.suggestedResponse,
+          threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
+          extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: thread.title ?? '',
+          metadata: newMetadata,
+        });
+      }
+
       const updatedRecord = await this.getOrCreateRecord(threadId, resourceId);
       return { reflected: true, record: updatedRecord, usage: reflectResult.usage };
     } catch (error) {
@@ -3598,6 +3663,13 @@ ${formattedMessages}
   }
 
   /**
+   * Get the owning Memory instance when available.
+   */
+  getMemory(): Memory | undefined {
+    return this.memory;
+  }
+
+  /**
    * Get the token counter
    */
   getTokenCounter(): TokenCounter {
@@ -3652,6 +3724,7 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    agent?: ProcessorContext['agent'];
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }): ObservationTurn {
@@ -3660,6 +3733,7 @@ ${formattedMessages}
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       messageList: opts.messageList,
+      agent: opts.agent,
       observabilityContext: opts.observabilityContext,
       hooks: opts.hooks,
     });

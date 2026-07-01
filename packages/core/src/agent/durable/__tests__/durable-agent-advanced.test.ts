@@ -500,7 +500,148 @@ describe('DurableAgent workflow state serialization', () => {
     expect(deserialized.toolChoice).toBe('required');
     expect(deserialized.requireToolApproval).toBe(true);
     expect(deserialized.toolCallConcurrency).toBe(3);
-    expect(deserialized.temperature).toBe(0.8);
+    expect(deserialized.modelSettings?.temperature).toBe(0.8);
+  });
+
+  it('should serialize the full modelSettings object', async () => {
+    const mockModel = createTextModel('Hello');
+    const baseAgent = new Agent({
+      id: 'full-model-settings-agent',
+      name: 'Full Model Settings Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test', {
+      modelSettings: {
+        temperature: 0.42,
+        maxOutputTokens: 1024,
+        topP: 0.9,
+        topK: 40,
+        presencePenalty: 0.1,
+        frequencyPenalty: 0.2,
+        stopSequences: ['<end>', '<stop>'],
+        seed: 7,
+        headers: { 'x-trace-id': 'abc-123' },
+      },
+    });
+
+    const serialized = JSON.stringify(result.workflowInput.options);
+    const deserialized = JSON.parse(serialized);
+
+    expect(deserialized.modelSettings).toEqual({
+      temperature: 0.42,
+      maxOutputTokens: 1024,
+      topP: 0.9,
+      topK: 40,
+      presencePenalty: 0.1,
+      frequencyPenalty: 0.2,
+      stopSequences: ['<end>', '<stop>'],
+      seed: 7,
+      headers: { 'x-trace-id': 'abc-123' },
+    });
+  });
+
+  it('should drop non-serializable values from modelSettings', async () => {
+    const mockModel = createTextModel('Hello');
+    const baseAgent = new Agent({
+      id: 'lossy-model-settings-agent',
+      name: 'Lossy Model Settings Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test', {
+      modelSettings: {
+        temperature: 0.5,
+        // @ts-expect-error – intentionally non-serializable function
+        someFunc: () => {},
+        // @ts-expect-error – headers with non-string value should be dropped
+        headers: { ok: 'yes', bad: 5 },
+      },
+    });
+
+    expect(result.workflowInput.options.modelSettings).toEqual({
+      temperature: 0.5,
+      headers: { ok: 'yes' },
+    });
+  });
+
+  it('should serialize misc options (disableBackgroundTasks, tracingOptions, actor, instructions, system)', async () => {
+    const mockModel = createTextModel('Hello');
+    const baseAgent = new Agent({
+      id: 'misc-options-agent',
+      name: 'Misc Options Agent',
+      instructions: 'Default instructions',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test', {
+      disableBackgroundTasks: true,
+      tracingOptions: {
+        metadata: { env: 'test' },
+        tags: ['durable', 'parity'],
+        traceId: '0123456789abcdef0123456789abcdef',
+      },
+      actor: { actorKind: 'system', sourceWorkflow: 'parity-suite' },
+      instructions: 'Per-call instructions override',
+      system: 'Additional system note',
+    });
+
+    const serialized = JSON.parse(JSON.stringify(result.workflowInput.options));
+
+    expect(serialized.disableBackgroundTasks).toBe(true);
+    expect(serialized.tracingOptions).toEqual({
+      metadata: { env: 'test' },
+      tags: ['durable', 'parity'],
+      traceId: '0123456789abcdef0123456789abcdef',
+    });
+    expect(serialized.actor).toEqual({ actorKind: 'system', sourceWorkflow: 'parity-suite' });
+    expect(serialized.instructionsOverride).toBe('Per-call instructions override');
+    expect(serialized.systemMessage).toBe('Additional system note');
+  });
+
+  it('uses per-call instructions override in place of the agent default', async () => {
+    const mockModel = createTextModel('Hello');
+    const baseAgent = new Agent({
+      id: 'instructions-override-agent',
+      name: 'Instructions Override Agent',
+      instructions: 'DEFAULT_INSTRUCTIONS',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test', {
+      instructions: 'OVERRIDDEN_INSTRUCTIONS',
+    });
+
+    const serializedSystem = JSON.stringify(result.workflowInput.messageListState);
+
+    expect(serializedSystem).toContain('OVERRIDDEN_INSTRUCTIONS');
+    expect(serializedSystem).not.toContain('DEFAULT_INSTRUCTIONS');
+  });
+
+  it('appends per-call system message in addition to the agent instructions', async () => {
+    const mockModel = createTextModel('Hello');
+    const baseAgent = new Agent({
+      id: 'system-message-agent',
+      name: 'System Message Agent',
+      instructions: 'DEFAULT_INSTRUCTIONS',
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Test', {
+      system: 'EXTRA_SYSTEM_NOTE',
+    });
+
+    const serializedSystem = JSON.stringify(result.workflowInput.messageListState);
+
+    expect(serializedSystem).toContain('DEFAULT_INSTRUCTIONS');
+    expect(serializedSystem).toContain('EXTRA_SYSTEM_NOTE');
   });
 
   it('should handle complex tool metadata serialization', async () => {

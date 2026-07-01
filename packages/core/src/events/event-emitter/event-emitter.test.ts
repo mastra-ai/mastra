@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Event } from '../types';
 import { EventEmitterPubSub } from './index';
 
@@ -202,6 +202,95 @@ describe('EventEmitterPubSub', () => {
       expect(event.id).toBeDefined();
       expect(typeof event.id).toBe('string');
       expect(event.createdAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('lease', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('grants a lease when the key is free', async () => {
+      const result = await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      expect(result).toEqual({ acquired: true, owner: 'owner-a' });
+      expect(await pubsub.getLeaseOwner('thread-1')).toBe('owner-a');
+    });
+
+    it('denies a lease while another owner holds it', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      const result = await pubsub.acquireLease('thread-1', 'owner-b', 1000);
+      expect(result).toEqual({ acquired: false, owner: 'owner-a' });
+      expect(await pubsub.getLeaseOwner('thread-1')).toBe('owner-a');
+    });
+
+    it('lets the same owner re-acquire (idempotent)', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      const result = await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      expect(result).toEqual({ acquired: true, owner: 'owner-a' });
+    });
+
+    it('expires the lease after TTL and lets a new owner acquire it', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      vi.advanceTimersByTime(1001);
+      const result = await pubsub.acquireLease('thread-1', 'owner-b', 1000);
+      expect(result).toEqual({ acquired: true, owner: 'owner-b' });
+      expect(await pubsub.getLeaseOwner('thread-1')).toBe('owner-b');
+    });
+
+    it('returns undefined owner once the lease has expired', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      vi.advanceTimersByTime(1001);
+      expect(await pubsub.getLeaseOwner('thread-1')).toBeUndefined();
+    });
+
+    it('releases a lease that the caller owns', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      await pubsub.releaseLease('thread-1', 'owner-a');
+      expect(await pubsub.getLeaseOwner('thread-1')).toBeUndefined();
+    });
+
+    it('does not release a lease held by a different owner', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      await pubsub.releaseLease('thread-1', 'owner-b');
+      expect(await pubsub.getLeaseOwner('thread-1')).toBe('owner-a');
+    });
+
+    it('renews a lease the caller still owns', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      vi.advanceTimersByTime(800);
+      const renewed = await pubsub.renewLease('thread-1', 'owner-a', 1000);
+      expect(renewed).toBe(true);
+
+      // 500ms past the original expiry but well within the renewed window.
+      vi.advanceTimersByTime(700);
+      expect(await pubsub.getLeaseOwner('thread-1')).toBe('owner-a');
+    });
+
+    it('fails to renew a lease held by a different owner', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      const renewed = await pubsub.renewLease('thread-1', 'owner-b', 1000);
+      expect(renewed).toBe(false);
+      expect(await pubsub.getLeaseOwner('thread-1')).toBe('owner-a');
+    });
+
+    it('fails to renew a lease that has already expired', async () => {
+      await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      vi.advanceTimersByTime(1001);
+      const renewed = await pubsub.renewLease('thread-1', 'owner-a', 1000);
+      expect(renewed).toBe(false);
+    });
+
+    it('keeps leases for different keys independent', async () => {
+      const a = await pubsub.acquireLease('thread-1', 'owner-a', 1000);
+      const b = await pubsub.acquireLease('thread-2', 'owner-b', 1000);
+      expect(a.acquired).toBe(true);
+      expect(b.acquired).toBe(true);
+      expect(await pubsub.getLeaseOwner('thread-1')).toBe('owner-a');
+      expect(await pubsub.getLeaseOwner('thread-2')).toBe('owner-b');
     });
   });
 });

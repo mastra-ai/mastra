@@ -1,10 +1,6 @@
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-  MultiCombobox,
-  WorkflowIcon,
-} from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -84,7 +80,8 @@ export function WorkflowsSection({ control, error, readOnly = false }: Workflows
 
                 return (
                   <div className="flex flex-col gap-2">
-                    <MultiCombobox
+                    <Combobox
+                      multiple
                       options={options}
                       value={selectedIds}
                       onValueChange={handleValueChange}

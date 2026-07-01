@@ -221,11 +221,12 @@ export class WorkflowsPG extends WorkflowsStorage {
         const now = new Date();
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
         await t.none(
-          `INSERT INTO ${tableName} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO ${tableName}
+           (workflow_name, run_id, snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (workflow_name, run_id) DO UPDATE
-           SET snapshot = $3, "updatedAt" = $5`,
-          [workflowName, runId, sanitizedSnapshot, now, now],
+           SET snapshot = $3, "updatedAt" = $5, "updatedAtZ" = $7`,
+          [workflowName, runId, sanitizedSnapshot, now, now, now, now],
         );
 
         return snapshot.context;
@@ -284,9 +285,12 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Update the snapshot within the same transaction
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        const now = new Date();
         await t.none(
-          `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
-          [sanitizedSnapshot, new Date(), workflowName, runId],
+          `UPDATE ${tableName}
+           SET snapshot = $1, "updatedAt" = $2, "updatedAtZ" = $3
+           WHERE workflow_name = $4 AND run_id = $5`,
+          [sanitizedSnapshot, now, now, workflowName, runId],
         );
 
         return updatedSnapshot;
@@ -329,11 +333,21 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
-                 VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+                 (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, sanitizedSnapshot, createdAtValue, updatedAtValue],
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+        [
+          workflowName,
+          runId,
+          resourceId,
+          sanitizedSnapshot,
+          createdAtValue,
+          updatedAtValue,
+          createdAtValue,
+          updatedAtValue,
+        ],
       );
     } catch (error) {
       throw new MastraError(

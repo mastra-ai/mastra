@@ -6,7 +6,7 @@ import type { SlashCommandContext } from './types.js';
 export function handleHelpCommand(ctx: SlashCommandContext): void {
   const shellInvocation = resolveShellPassthroughInvocation('', loadSettings().shellPassthrough);
   const text = buildHelpText({
-    modes: ctx.harness.listModes().length,
+    modes: ctx.controller.listModes().length,
     customSlashCommands: ctx.customSlashCommands,
     shellModeLabel: describeShellPassthroughInvocation(shellInvocation),
   });

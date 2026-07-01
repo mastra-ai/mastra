@@ -1,0 +1,143 @@
+---
+title: "AgentController overview"
+description: "Build interactive AI agents with multiple modes, persistent threads, tool approval, and model switching using the AgentController class."
+packages:
+  - "@mastra/core"
+---
+
+# AgentController overview
+
+:::experimental
+
+The `AgentController` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+
+:::
+
+The AgentController is a session controller for building interactive agent applications. It handles the runtime concerns that sit between your UI and the agent loop: managing conversation threads, switching between agent modes, persisting state, gating tool execution with approvals, and coordinating subagents. You can focus on what your agent does rather than how to wire it together.
+
+A AgentController exposes a [`Session`](/docs/agent-controller/session) — the per-conversation runtime state that tracks the active mode, model, thread binding, permission grants, follow-up queue, and token usage. The AgentController is the shared host; the Session is the conversation running inside it. In a multi-user host, the same AgentController can back many Sessions at once.
+
+[Mastra Code](https://code.mastra.ai/) is the flagship AgentController implementation: A terminal-based coding agent with multi-model support, persistent conversations, and plan-then-execute workflows.
+
+## What you can build
+
+The AgentController gives you the runtime pieces to ship interactive agent applications. Each outcome below maps to a capability you can use today:
+
+- **Resume a conversation exactly where the user left off.** Persistent [threads and state](/docs/agent-controller/threads-and-state) reload the active mode, model, and progress across restarts, so a coding agent or assistant picks up mid-task instead of starting over.
+- **Gate destructive actions behind human approval.** [Tool approvals and permission policies](/docs/agent-controller/tool-approvals) let you require confirmation for risky operations like file writes or deployments, while trusted tools run automatically.
+- **Move a task through distinct phases without losing context.** [Modes](/docs/agent-controller/modes) switch the agent's instructions, tools, and model on the same thread, so you can build a plan-then-execute coding agent or a research-then-draft assistant.
+- **Let users pick the right model for each step.** Per-mode [model management](/reference/agent-controller/agent-controller-class) switches models at runtime and tracks usage, which powers copilot UIs where users trade speed for capability.
+- **Delegate focused work to child agents.** [Subagents](/docs/agent-controller/subagents) run subtasks with constrained tools and can fork the parent conversation, so a research mode can spin off web search or code review without polluting the main thread.
+- **Drive a live UI from agent activity.** The [event system](/docs/agent-controller/session) emits typed events and coalesced display snapshots, so your TUI or web app reflects message updates, mode changes, and pending approvals in real time.
+- **Run long-lived autonomous agents.** Structured task lists, interval handlers, and observational memory keep background task runners on track and let them learn across threads.
+
+## When to use the AgentController
+
+Use the AgentController when your application needs:
+
+- Multiple agent modes that share one conversation thread (e.g., plan → build → review)
+- A control layer between your UI and the agent loop (model switching, state persistence, thread management)
+- Tool approval flows and permission policies for human-in-the-loop gating
+- Subagent orchestration to delegate focused subtasks with constrained tools
+- Session continuity with persistent threads, state, and observational memory across restarts
+
+You could assemble all of this yourself on top of the [Agent class](/docs/agents/overview), which exposes the full agent loop, tools, and memory. The AgentController is an opinionated set of defaults that wires those pieces into one application style: an ongoing session where the agent acts as a collaborator rather than a one-shot endpoint. Reach for the Agent class directly when you want full control or a simple request-response call; reach for the AgentController when you want the collaborative-session model without building the runtime around it.
+
+## Key capabilities
+
+- **Session**: Per-conversation state — active thread, mode, model, grants, follow-ups, token usage, and the display snapshot — accessed through `agentController.session`. See [Session](/docs/agent-controller/session).
+- **Modes**: Define distinct agent personalities (instructions, tools, model) and switch between them without losing conversation context. See [Modes](/docs/agent-controller/modes).
+- **Threads and state**: Persist conversations and structured state across sessions, users, and mode switches. See [Threads and state](/docs/agent-controller/threads-and-state).
+- **Subagents**: Spawn focused child agents with constrained tools for subtasks, optionally forking the parent conversation. See [Subagents](/docs/agent-controller/subagents).
+- **Tool approvals and permissions**: Configure which tools require user confirmation, grant session-wide exceptions, and handle interactive tool suspension. See [Tool approvals](/docs/agent-controller/tool-approvals).
+- **Model management**: Switch models per-mode at runtime, track usage, and resolve gateway-backed models through Mastra's [model router](/models).
+- **Follow-ups and steering**: Queue messages while the agent is running, or inject mid-stream instructions to redirect the agent. Built on [signals](/docs/agents/signals).
+- **Event system**: Subscribe to typed events (message updates, mode changes, tool approvals) or coalesced `AgentControllerDisplayState` snapshots to drive your UI. See [Events](/reference/agent-controller/agent-controller-class#events).
+- **Observational memory**: Automatic summarization and reflection across threads for long-running agent sessions. See [Observational memory](/docs/memory/observational-memory).
+
+## Quickstart
+
+Import the `AgentController` class and create a new instance with an agent, storage backend, and modes:
+
+```typescript title="src/mastra/agent-controller.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentController } from '@mastra/core/agent-controller'
+import { LibSQLStore } from '@mastra/libsql'
+
+const agent = new Agent({
+  name: 'assistant',
+  instructions: 'Help the user plan and complete tasks.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const agentController = new AgentController({
+  id: 'my-agent',
+  agent,
+  storage: new LibSQLStore({ url: 'file:./data.db' }),
+  modes: [
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about changes before making them.',
+    },
+    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
+  ],
+})
+
+agentController.subscribe(event => {
+  if (event.type === 'message_update') {
+    console.log(event.message)
+  }
+})
+
+await agentController.init()
+await agentController.selectOrCreateThread()
+await agentController.sendMessage({ content: 'Hello!' })
+```
+
+:::note
+
+Visit the [AgentController reference](/reference/agent-controller/agent-controller-class) for the full constructor parameters and method signatures.
+
+:::
+
+## Architecture
+
+The AgentController sits between your application layer and the underlying agent loop:
+
+```
+┌───────────────────────────────────────┐
+│         Your App (TUI/Web/API)        │
+└───────────────────────────────────────┘
+      │  commands              ▲  events
+      ▼                        │
+┌───────────────────────────────────────┐
+│            AgentController             │
+│ Config · storage · threads            │
+│ permissions · subagents · events      │
+│                                       │
+│  ┌─────────────────────────────────┐  │
+│  │     agentController.session     │  │
+│  │ identity · thread · mode        │  │
+│  │ model · run · grants            │  │
+│  │ display state                   │  │
+│  └─────────────────────────────────┘  │
+└───────────────────────────────────────┘
+                   │
+                   ▼
+┌───────────────────────────────────────┐
+│         Agent + Memory + Tools        │
+└───────────────────────────────────────┘
+```
+
+Your app sends commands — send a message, switch mode, approve a tool call — and receives typed events such as `message_update` and `tool_approval_required`. The AgentController manages the lifecycle internally: persisting threads, routing to the correct mode agent, enforcing permissions, and emitting events as state changes.
+
+## Next steps
+
+- [Session](/docs/agent-controller/session): The per-conversation state on an AgentController
+- [Modes](/docs/agent-controller/modes): Define and switch between agent personalities
+- [Threads and state](/docs/agent-controller/threads-and-state): Manage persistent conversations
+- [Subagents](/docs/agent-controller/subagents): Delegate focused subtasks
+- [Tool approvals and permissions](/docs/agent-controller/tool-approvals): Human-in-the-loop gating
+- [API reference](/reference/agent-controller/agent-controller-class): Full constructor and method docs

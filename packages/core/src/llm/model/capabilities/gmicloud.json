@@ -3,6 +3,18 @@
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
     "anthropic/claude-sonnet-4.6",
-    "moonshotai/Kimi-K2.6"
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/kimi-k2.7-code-highspeed"
+  ],
+  "temperature": [
+    "Qwen/Qwen3.7-Max",
+    "anthropic/claude-opus-4.6",
+    "anthropic/claude-sonnet-4.6",
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "moonshotai/Kimi-K2.6",
+    "zai-org/GLM-5-FP8",
+    "zai-org/GLM-5.1-FP8",
+    "zai-org/GLM-5.2-FP8"
   ]
 }

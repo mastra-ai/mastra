@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { useRef, useEffect, useState } from 'react';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';

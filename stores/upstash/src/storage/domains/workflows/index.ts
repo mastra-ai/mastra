@@ -18,6 +18,15 @@ import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';
 import { getKey } from '../utils';
 
+type WorkflowRunRecord = {
+  workflow_name: string;
+  run_id: string;
+  snapshot: WorkflowRunState | string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  resourceId?: string;
+};
+
 export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
   #db: UpstashDB;
@@ -55,6 +64,50 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  private async getWorkflowRunRecord({
+    namespace,
+    runId,
+    resourceId,
+    workflowName,
+  }: {
+    namespace: string;
+    runId: string;
+    resourceId?: string;
+    workflowName?: string;
+  }) {
+    if (workflowName) {
+      const keyVariants: Array<Record<string, string>> = [
+        ...(resourceId ? [{ namespace, workflow_name: workflowName, run_id: runId, resourceId }] : []),
+        { namespace, workflow_name: workflowName, run_id: runId },
+      ];
+
+      for (const keys of keyVariants) {
+        const data = await this.#db.get<WorkflowRunRecord>({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          keys,
+        });
+        if (data) return data;
+      }
+    }
+
+    const key = `${getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace })}:*run_id:${runId}*`;
+    const keys = await this.#db.scanKeys(key);
+    const workflows = await Promise.all(
+      keys.map(async key => {
+        return this.client.get<WorkflowRunRecord>(key);
+      }),
+    );
+
+    return (
+      workflows.find(
+        w =>
+          w?.run_id === runId &&
+          (!workflowName || w.workflow_name === workflowName) &&
+          (!resourceId || w.resourceId === resourceId),
+      ) ?? null
+    );
   }
 
   async updateWorkflowResults({
@@ -298,18 +351,40 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
-      await this.#db.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          namespace,
-          workflow_name: workflowName,
-          run_id: runId,
-          resourceId,
-          snapshot,
-          createdAt: createdAt ?? new Date(),
-          updatedAt: updatedAt ?? new Date(),
-        },
+      const now = new Date();
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        ...(resourceId ? { resourceId } : {}),
       });
+
+      const record = {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        resourceId,
+        snapshot,
+        createdAt: (createdAt ?? now).toISOString(),
+        updatedAt: (updatedAt ?? now).toISOString(),
+      };
+
+      await (this.client as any).eval(
+        `
+        local existing = redis.call("GET", KEYS[1])
+        local next = cjson.decode(ARGV[1])
+        if existing then
+          local current = cjson.decode(existing)
+          if current["createdAt"] then
+            next["createdAt"] = current["createdAt"]
+          end
+        end
+        redis.call("SET", KEYS[1], cjson.encode(next))
+        return 1
+        `,
+        [key],
+        [JSON.stringify(record)],
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -333,20 +408,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     const { namespace = 'workflows', workflowName, runId } = params;
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-      namespace,
-      workflow_name: workflowName,
-      run_id: runId,
-    });
     try {
-      const data = await this.client.get<{
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-      }>(key);
+      const data = await this.getWorkflowRunRecord({ namespace, runId, workflowName });
       if (!data) return null;
-      return data.snapshot;
+      return typeof data.snapshot === 'string' ? (JSON.parse(data.snapshot) as WorkflowRunState) : data.snapshot;
     } catch (error) {
       throw new MastraError(
         {
@@ -372,23 +437,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     try {
-      const key =
-        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.#db.scanKeys(key);
-      const workflows = await Promise.all(
-        keys.map(async key => {
-          const data = await this.client.get<{
-            workflow_name: string;
-            run_id: string;
-            snapshot: WorkflowRunState | string;
-            createdAt: string | Date;
-            updatedAt: string | Date;
-            resourceId: string;
-          }>(key);
-          return data;
-        }),
-      );
-      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
+      const data = await this.getWorkflowRunRecord({ namespace: 'workflows', runId, workflowName });
       if (!data) return null;
       return this.parseWorkflowRun(data);
     } catch (error) {
@@ -409,8 +458,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
     try {
+      const record = await this.getWorkflowRunRecord({ namespace: 'workflows', runId, workflowName });
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace: 'workflows',
+        workflow_name: workflowName,
+        run_id: runId,
+        ...(record?.resourceId ? { resourceId: record.resourceId } : {}),
+      });
       await this.client.del(key);
     } catch (error) {
       throw new MastraError(
@@ -451,25 +506,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         );
       }
 
-      // Get all workflow keys
-      let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
-      if (workflowName && resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: '*',
-          resourceId,
-        });
-      } else if (workflowName) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }) + ':*';
-      } else if (resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: '*',
-          run_id: '*',
-          resourceId,
-        });
-      }
+      // Get workflow keys, then filter returned records. Resource-scoped keys include
+      // resourceId after run_id, so broad namespace scanning avoids missing those variants.
+      const pattern = `${getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' })}:*`;
       const keys = await this.#db.scanKeys(pattern);
 
       // Check if we have any keys before using pipeline
@@ -491,6 +530,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         )
         // Only filter by workflowName if it was specifically requested
         .filter(record => !workflowName || record.workflow_name === workflowName)
+        .filter(record => !resourceId || record.resourceId === resourceId)
         .map(w => this.parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;

@@ -85,6 +85,7 @@ export type AgentSignalDataPart = {
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
+    providerOptions?: MastraProviderMetadata;
   };
   transient: true;
 };
@@ -438,6 +439,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
+      ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
     },
     transient: true,
   };

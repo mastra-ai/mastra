@@ -5,7 +5,7 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
 ## Features
 
 - Agent Builder enabled by default
-- WorkOS AuthKit authentication and WorkOS-backed RBAC permissions
+- Optional WorkOS AuthKit authentication and WorkOS-backed RBAC permissions
 - Local filesystem workspace at `.mastra/workspace`
 - No starter agents, tools, or workflows
 - Observational memory enabled for builder-created agents
@@ -15,8 +15,7 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
 
 - Node.js 22.13 or newer
 - An OpenAI API key
-- A valid `MASTRA_EE_LICENSE` for Agent Builder
-- WorkOS AuthKit credentials for authentication/RBAC
+- A valid `MASTRA_EE_LICENSE` for running Agent Builder in production
 
 ## Quickstart
 
@@ -28,10 +27,10 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
 
 2. **Configure environment variables**
    Copy `.env.example` to `.env`, then set:
-   - `MASTRA_EE_LICENSE` — required; the template fails fast if it is missing or shorter than 32 characters.
+   - `MASTRA_EE_LICENSE` — required to run Agent Builder in production. Development environments run without one.
    - `OPENAI_API_KEY` — required for builder-created agents that use the default OpenAI model.
-   - `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and `WORKOS_COOKIE_PASSWORD` — required for AuthKit login and RBAC. The cookie password must be at least 32 characters.
-   - `WORKOS_REDIRECT_URI` — defaults to `http://localhost:4111/api/auth/callback`.
+
+   Authentication is optional. See [Optional integrations](#optional-integrations) for WorkOS and other providers.
 
 3. **Start Mastra**
 
@@ -46,6 +45,7 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
 
 The template does not register optional integrations with empty credentials. They appear only after you set their required environment variables:
 
+- **WorkOS AuthKit (auth + RBAC)**: set `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and `WORKOS_COOKIE_PASSWORD` (the cookie password must be at least 32 characters). `WORKOS_REDIRECT_URI` is optional and defaults to `http://localhost:4111/api/auth/callback`. When these are unset, the template runs without authentication.
 - **Composio**: set `COMPOSIO_API_KEY`.
 - **Slack**: set `SLACK_APP_CONFIG_TOKEN` and `SLACK_APP_CONFIG_REFRESH_TOKEN`. `SLACK_BASE_URL` is optional.
 - **Browserbase + Stagehand**: set both `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID`.

@@ -2,15 +2,14 @@
  * Event handlers for agent lifecycle events:
  * agent_start, agent_end (normal / aborted / error).
  */
-import { Spacer, Text } from '@mariozechner/pi-tui';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 
 import { getCurrentGitBranchAsync } from '../../utils/project.js';
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
-import { BOX_INDENT, theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
@@ -55,6 +54,11 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
+  // Drop the live judge reference so that a continuation turn creates a fresh
+  // JudgeDisplayComponent *after* the new streaming text. Without this the
+  // reused component stays at the position of the previous turn's evaluation,
+  // causing the new turn's text to visually overwrite the old text + judge.
+  state.activeGoalJudge = undefined;
   state.followUpComponents = [];
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
@@ -70,10 +74,10 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
 function drainQueuedAction(ctx: EventHandlerContext): boolean {
   const { state } = ctx;
 
-  // Drain queued follow-up actions once all harness-level follow-ups are done.
+  // Drain queued follow-up actions once all controller-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
-  if (state.harness.getFollowUpCount() > 0) {
+  if (state.session.followUps.count() > 0) {
     return true;
   }
 
@@ -138,19 +142,22 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // Update streaming message to show it was interrupted
-  if (state.streamingComponent && state.streamingMessage) {
+  // User-initiated aborts and plan "Request Changes" aborts are intentional.
+  // The timing line already says "canceled after x", so don't also render a
+  // redundant "Error: Interrupted" message in the transcript.
+  if (state.planRejectionAbort || state.userInitiatedAbort) {
+    state.streamingComponent = undefined;
+    state.streamingMessage = undefined;
+  } else if (state.streamingComponent && state.streamingMessage) {
+    // Update unexpected aborted streams to show they were interrupted.
     state.streamingMessage.stopReason = 'aborted';
     state.streamingMessage.errorMessage = 'Interrupted';
     state.streamingComponent.updateContent(state.streamingMessage);
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
-  } else if (state.userInitiatedAbort) {
-    // Show standalone "Interrupted" if user pressed Ctrl+C but no streaming component
-    state.chatContainer.addChild(new Text(theme.fg('error', 'Interrupted'), BOX_INDENT, 0));
-    state.chatContainer.addChild(new Spacer(1));
   }
   state.userInitiatedAbort = false;
+  state.planRejectionAbort = false;
   if (state.activeGoalJudge) {
     removeJudgeComponent(state, state.activeGoalJudge.component);
     state.activeGoalJudge = undefined;
@@ -213,13 +220,20 @@ function removeJudgeComponent(state: EventHandlerContext['state'], component: Ju
 
 /**
  * Render an in-loop goal evaluation surfaced by the core goal step as a `goal`
- * stream chunk (bridged to a `goal_evaluation` harness event). The core loop
+ * stream chunk (bridged to a `goal_evaluation` controller event). The core loop
  * owns continuation — this handler only mirrors the judge's decision into the
  * UI, syncs the adapter's progress, and runs the plan-mode auto-switch when a
  * plan-started goal completes.
  */
 export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEvaluationPayload): void {
   const { state } = ctx;
+
+  // Esc/Ctrl+C pauses the goal and aborts the run. If a judge stream races in a
+  // late goal chunk after that, don't let it recreate UI or overwrite the
+  // user-paused objective with the stale active/continue result.
+  if (state.userInitiatedAbort && state.goalManager.getGoal()?.status === 'paused') {
+    return;
+  }
 
   // Reuse the existing judge component for this turn, or create one inline so
   // the judge's progress appears alongside the agent's response.
@@ -233,7 +247,26 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
       component,
     };
     state.activeGoalJudge = activeGoalJudge;
-    state.chatContainer.addChild(component);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, component);
+  }
+
+  if (payload.activity?.length) {
+    for (const activity of payload.activity) {
+      if (activity.type === 'reason') {
+        activeGoalJudge.component.setStreamingReason(activity.message);
+      } else {
+        activeGoalJudge.component.addActivity(activity.message);
+      }
+    }
+  }
+
+  // A pending chunk signals that scoring has started but isn't finished yet.
+  // Show the loading indicator (the component already renders "evaluating…"
+  // when result is null) and wait for the follow-up chunk with the result.
+  if (payload.pending) {
+    ctx.updateStatusLine();
+    state.ui.requestRender();
+    return;
   }
 
   activeGoalJudge.component.setEvaluation(payload);
@@ -245,18 +278,18 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
   ctx.updateStatusLine();
   state.ui.requestRender();
 
-  if (payload.status !== 'active') {
-    // The goal reached a terminal/parked state this turn. Drop the live judge
-    // reference so the next turn starts a fresh display.
-    state.activeGoalJudge = undefined;
-  }
+  // A final (non-pending) goal chunk completes this judge display. Keep the
+  // rendered component in history, but drop the live reference so an in-loop
+  // continuation creates a fresh display after the next assistant output instead
+  // of updating the previous turn's component in place.
+  state.activeGoalJudge = undefined;
 
   if (payload.status === 'done') {
     const goal = state.goalManager.getGoal();
     if (goal && goal.id === state.planStartedGoalId) {
       const goalId = state.planStartedGoalId;
       state.planStartedGoalId = undefined;
-      state.harness.switchMode({ modeId: 'plan' }).catch(error => {
+      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
         ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
         state.planStartedGoalId = goalId;
       });

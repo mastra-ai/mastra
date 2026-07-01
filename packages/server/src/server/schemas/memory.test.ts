@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeQueryParams } from '../server-adapter/index';
-import { listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
+import { awaitBufferStatusResponseSchema, listMessagesQuerySchema, listThreadsQuerySchema } from './memory';
 
 /**
  * Regression tests for GitHub Issue #11761
@@ -584,5 +584,53 @@ describe('Memory Schema Query Parsing', () => {
 
       expect(result.success).toBe(false);
     });
+  });
+});
+
+describe('Observational Memory buffer status schema', () => {
+  it('preserves buffered observation chunks with extraction fields', () => {
+    const result = awaitBufferStatusResponseSchema.safeParse({
+      record: {
+        id: 'record-1',
+        scope: 'thread',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        activeObservations: '',
+        bufferedObservations: '',
+        bufferedObservationChunks: [
+          {
+            id: 'chunk-1',
+            cycleId: 'cycle-1',
+            observations: 'observed facts',
+            tokenCount: 12,
+            messageIds: ['message-1'],
+            messageTokens: 20,
+            suggestedContinuation: 'continue',
+            currentTask: 'task',
+            threadTitle: 'title',
+            extractedValues: { priority: 'high' },
+            extractionFailures: [{ slug: 'status', error: 'missing value' }],
+          },
+        ],
+        originType: 'observation',
+        generationCount: 1,
+        totalTokensObserved: 20,
+        observationTokenCount: 12,
+        pendingMessageTokens: 0,
+        isObserving: false,
+        isReflecting: false,
+        config: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.record?.bufferedObservationChunks?.[0]?.extractedValues).toEqual({ priority: 'high' });
+      expect(result.data.record?.bufferedObservationChunks?.[0]?.extractionFailures).toEqual([
+        { slug: 'status', error: 'missing value' },
+      ]);
+    }
   });
 });

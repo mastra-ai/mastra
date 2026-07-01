@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowStatus } from './workflow-status';
 
