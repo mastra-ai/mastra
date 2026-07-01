@@ -1,6 +1,5 @@
 ---
 '@mastra/core': patch
-'mastracode': patch
 ---
 
-Fixed oversized images (>8000px) breaking LLM threads by auto-resizing them before sending to the model. Images exceeding the 8000px dimension limit are now resized proportionally using bilinear downsampling. Users are notified when an image is resized.
+Auto-resize oversized images (>8000px) before sending to the LLM API. Images exceeding the 8000px dimension limit are now resized proportionally using sharp (lanczos3) as a safety net in the prompt pipeline. Oversized images that cannot be resized are dropped to prevent API errors.

@@ -703,7 +703,14 @@ export class MessageList {
             if (!dims || !isOversized(dims)) continue;
 
             const result = await resizeImageIfNeeded(bytes, filePart.mediaType, MAX_IMAGE_DIMENSION);
-            if (!result || !result.resized) continue;
+            if (!result || !result.resized) {
+              this.logger?.debug?.(
+                `[image-resize] Dropping oversized image (${dims.width}x${dims.height}) — resize failed for ${filePart.mediaType}`,
+              );
+              message.content.splice(j, 1);
+              j--;
+              continue;
+            }
 
             this.logger?.debug?.(
               `[image-resize] Resized image from ${dims.width}x${dims.height} to ${result.newDimensions!.width}x${result.newDimensions!.height} (max ${MAX_IMAGE_DIMENSION}px)`,

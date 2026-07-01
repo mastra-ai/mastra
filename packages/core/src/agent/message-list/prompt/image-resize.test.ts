@@ -67,6 +67,32 @@ describe('getImageDimensions', () => {
     expect(dims).toEqual({ width: 300, height: 150 });
   });
 
+  it('reads WebP dimensions from header', async () => {
+    const buf = await createWebpBuffer(400, 250);
+    const dims = getImageDimensions(buf);
+    expect(dims).not.toBeNull();
+    expect(dims!.width).toBe(400);
+    expect(dims!.height).toBe(250);
+  });
+
+  it('reads GIF dimensions from header', () => {
+    // Minimal GIF89a header: signature (6 bytes) + width (2 LE) + height (2 LE)
+    const buf = new Uint8Array(100);
+    buf[0] = 0x47; // G
+    buf[1] = 0x49; // I
+    buf[2] = 0x46; // F
+    buf[3] = 0x38; // 8
+    buf[4] = 0x39; // 9
+    buf[5] = 0x61; // a
+    // 320x240 in little-endian
+    buf[6] = 0x40; // 320 & 0xFF
+    buf[7] = 0x01; // 320 >> 8
+    buf[8] = 0xf0; // 240 & 0xFF
+    buf[9] = 0x00; // 240 >> 8
+    const dims = getImageDimensions(buf);
+    expect(dims).toEqual({ width: 320, height: 240 });
+  });
+
   it('returns null for unrecognized format', () => {
     const buf = new Uint8Array(25);
     expect(getImageDimensions(buf)).toBeNull();
@@ -123,6 +149,12 @@ describe('computeTargetDimensions', () => {
     const result = computeTargetDimensions({ width: 10000, height: 20000 }, 8000);
     expect(result.width).toBe(4000);
     expect(result.height).toBe(8000);
+  });
+
+  it('clamps to at least 1px for very thin images', () => {
+    const result = computeTargetDimensions({ width: 100000, height: 1 }, 8000);
+    expect(result.width).toBe(8000);
+    expect(result.height).toBe(1);
   });
 });
 

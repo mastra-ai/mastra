@@ -112,6 +112,7 @@ export async function resizeImageIfNeeded(
 
     const normalizedType = mediaType.toLowerCase();
     let outputBuffer: Buffer;
+    let outputMediaType = mediaType;
 
     if (normalizedType.includes('png')) {
       outputBuffer = await pipeline.png().toBuffer();
@@ -122,13 +123,13 @@ export async function resizeImageIfNeeded(
     } else if (normalizedType.includes('gif')) {
       outputBuffer = await pipeline.gif().toBuffer();
     } else {
-      // Try PNG as safe fallback
       outputBuffer = await pipeline.png().toBuffer();
+      outputMediaType = 'image/png';
     }
 
     return {
       data: new Uint8Array(outputBuffer),
-      mediaType,
+      mediaType: outputMediaType,
       resized: true,
       originalDimensions: dimensions,
       newDimensions: { width: targetWidth, height: targetHeight },
@@ -145,8 +146,8 @@ export function computeTargetDimensions(dimensions: ImageDimensions, maxDimensio
   const { width, height } = dimensions;
   const scale = Math.min(maxDimension / width, maxDimension / height);
   return {
-    width: Math.round(width * scale),
-    height: Math.round(height * scale),
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
   };
 }
 
