@@ -26,6 +26,10 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -49,9 +53,21 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
 export class MemoryLibSQL extends MemoryStorage {
   readonly supportsObservationalMemory = true;
+
+  /**
+   * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
+   * on `createdAt` and are indexed for fast batched deletes. Cascade order is
+   * enforced in `prune()` (children before threads), not here.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    messages: { table: TABLE_MESSAGES, column: 'createdAt', indexed: true },
+    resources: { table: TABLE_RESOURCES, column: 'createdAt', indexed: true },
+    threads: { table: TABLE_THREADS, column: 'createdAt', indexed: true },
+  };
 
   #client: Client;
   #db: LibSQLDB;
@@ -123,6 +139,20 @@ export class MemoryLibSQL extends MemoryStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_resource_created_at ON ${TABLE_MESSAGES} (thread_id, "resourceId", "createdAt")`,
           args: [],
         },
+        // Anchor indexes for age-based retention (prune). The composite indexes
+        // above lead with thread_id, so a bare createdAt range can't use them.
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_messages_created_at ON ${TABLE_MESSAGES} ("createdAt")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_threads_created_at ON ${TABLE_THREADS} ("createdAt")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_resources_created_at ON ${TABLE_RESOURCES} ("createdAt")`,
+          args: [],
+        },
       ],
       'write',
     );
@@ -145,6 +175,22 @@ export class MemoryLibSQL extends MemoryStorage {
     if (OM_TABLE) {
       await this.#db.deleteData({ tableName: OM_TABLE as any });
     }
+  }
+
+  /**
+   * Delete rows older than each policy's `maxAge`, batched and cancellable.
+   *
+   * Deletes children before parents (messages/resources before threads) so a
+   * `threads` policy doesn't strand rows behind a deleted parent — there are no
+   * FKs in the LibSQL schema, so cascade ordering is explicit here.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: MemoryLibSQL.retentionTables,
+      order: ['messages', 'resources', 'threads'],
+    });
+    return runPrune({ db: this.#db, domain: 'memory', targets, options });
   }
 
   private parseRow(row: any): MastraDBMessage {

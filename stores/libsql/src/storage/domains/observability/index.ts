@@ -26,13 +26,26 @@ import type {
   GetTraceResponse,
   GetTraceLightResponse,
   LightSpanRecord,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { transformFromSqlRow } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
 export class ObservabilityLibSQL extends ObservabilityStorage {
+  /**
+   * Spans are the only physical table; traces are derived from them. Spans
+   * anchor on `startedAt` (not `createdAt`), stored as an ISO-8601 string.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
 
   constructor(config: LibSQLDomainConfig) {
@@ -49,10 +62,26 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       schema: SPAN_SCHEMA,
       ifNotExists: ['requestContext'],
     });
+    // Anchor index for age-based retention (prune on startedAt).
+    await this.#db.ensureIndex({
+      indexName: 'idx_spans_started_at',
+      tableName: TABLE_SPANS,
+      column: 'startedAt',
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_SPANS });
+  }
+
+  /** Delete spans older than the `spans` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityLibSQL.retentionTables,
+      order: ['spans'],
+    });
+    return runPrune({ db: this.#db, domain: 'observability', targets, options });
   }
 
   /**

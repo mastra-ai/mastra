@@ -1102,4 +1102,75 @@ export class LibSQLDB extends MastraBase {
       this.logger?.error?.(mastraError.toString());
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Retention helpers (prune / vacuum)
+  //
+  // Low-level SQL primitives the memory and observability domains build their
+  // `prune()` on, plus a plain user-invoked `VACUUM`. Keeping the SQL here
+  // reuses the existing write-lock + retry machinery and keeps identifier
+  // parsing in one place.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Delete up to `limit` of the oldest rows whose `column` timestamp is strictly
+   * before `cutoffMs`, in a single bounded statement. Returns the number of rows
+   * removed so the caller can decide whether more batches remain.
+   *
+   * Deletes by `rowid` so the range scan is bounded by LIMIT and the write set
+   * stays small — short locks, bounded WAL growth. Requires an index on
+   * `column` to be fast at scale (see ensureIndex).
+   */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    /**
+     * Exclusive upper bound for the anchor column. Must match the column's
+     * stored type — the memory/observability timestamp anchors are stored as
+     * ISO-8601 strings, which sort lexicographically in chronological order, so
+     * the caller passes an ISO string cutoff.
+     */
+    cutoff: string | number;
+    limit: number;
+  }): Promise<number> {
+    const parsedTable = parseSqlIdentifier(tableName, 'table name');
+    const parsedColumn = parseSqlIdentifier(column, 'column name');
+    const sql = `DELETE FROM "${parsedTable}" WHERE rowid IN (SELECT rowid FROM "${parsedTable}" WHERE "${parsedColumn}" < ? LIMIT ?)`;
+    const result = await this.executeWriteOperationWithRetry(
+      () => withClientWriteLock(this.client, () => this.client.execute({ sql, args: [cutoff, limit] })),
+      `prune ${tableName}`,
+    );
+    return Number(result.rowsAffected ?? 0);
+  }
+
+  /**
+   * Run a plain `VACUUM` to rewrite and compact the file. This is the explicit,
+   * user-invoked reclaim path — it does not read or change the file's
+   * `auto_vacuum` mode. Locking and rewrites the whole file; the caller decides
+   * when to run it.
+   */
+  async runVacuum(): Promise<void> {
+    await this.client.execute('VACUUM');
+  }
+
+  /** Create an index if it does not already exist. */
+  async ensureIndex({
+    indexName,
+    tableName,
+    column,
+  }: {
+    indexName: string;
+    tableName: TABLE_NAMES;
+    column: string;
+  }): Promise<void> {
+    const parsedTable = parseSqlIdentifier(tableName, 'table name');
+    const parsedColumn = parseSqlIdentifier(column, 'column name');
+    const parsedIndex = parseSqlIdentifier(indexName, 'index name');
+    await this.client.execute(`CREATE INDEX IF NOT EXISTS "${parsedIndex}" ON "${parsedTable}" ("${parsedColumn}")`);
+  }
 }
