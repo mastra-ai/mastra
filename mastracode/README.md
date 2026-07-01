@@ -422,15 +422,67 @@ export MASTRACODE_MAX_SANDBOXES=50
 
 ## Development
 
+Mastra Code lives inside the [mastra monorepo](https://github.com/mastra-ai/mastra). All commands below assume you have cloned the repo and are in the repository root.
+
+### Setup
+
 ```bash
-# Run in development mode (with watch)
-pnpm dev
+# Install dependencies (from repo root)
+pnpm i
 
-# Type check
-pnpm typecheck
-
-# Build
+# Build all packages (required before first run)
 pnpm build
+```
+
+### Running from source
+
+```bash
+# Run the TUI directly via tsx (from repo root)
+pnpx tsx mastracode/src/main.ts
+```
+
+### Building
+
+```bash
+# Build only the mastracode package (and its dependencies)
+pnpm build:mastracode
+
+# Build the library bundle (from mastracode/)
+pnpm --filter ./mastracode run build:lib
+```
+
+### Type checking
+
+```bash
+# Type-check mastracode
+pnpm --filter ./mastracode run check
+```
+
+### Linting
+
+```bash
+# Lint mastracode
+pnpm --filter ./mastracode run lint
+```
+
+### Testing
+
+```bash
+# Run unit tests
+pnpm --filter ./mastracode test
+
+# Run e2e smoke tests
+pnpm --filter ./mastracode run e2e:smoke
+```
+
+### Web UI development
+
+```bash
+# Start the web UI dev server (API + Vite)
+pnpm --filter ./mastracode run web:dev
+
+# With GitHub App integration (starts Postgres first)
+pnpm --filter ./mastracode run web:dev:github
 ```
 
 ## Credits
