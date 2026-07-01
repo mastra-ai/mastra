@@ -15,7 +15,7 @@ import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
@@ -85,7 +85,7 @@ async function zipOutput(projectDir: string): Promise<string> {
 
   return new Promise((resolvePromise, reject) => {
     const output = createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
 
     output.on('close', () => resolvePromise(zipPath));
     archive.on('error', reject);
@@ -269,18 +269,17 @@ async function resolveEnvironment(
   autoAccept: boolean,
 ): Promise<EnvironmentResolution> {
   const environments = await fetchEnvironments(token, orgId, projectId);
-  
+
   // Try to find by name (case-insensitive)
   const existing = environments.find(env => env.name.toLowerCase() === envName.toLowerCase());
-  
+
   if (existing) {
     return { existing: true, environment: existing };
   }
 
   // Environment doesn't exist - determine type and prepare to create
-  const envType = envName.toLowerCase() === 'production' ? 'production' 
-    : envName.toLowerCase() === 'staging' ? 'staging' 
-    : 'preview';
+  const envType =
+    envName.toLowerCase() === 'production' ? 'production' : envName.toLowerCase() === 'staging' ? 'staging' : 'preview';
 
   if (!autoAccept) {
     const confirmed = await p.confirm({
@@ -552,12 +551,12 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
 async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const targetDir = resolve(dir || process.cwd());
   loadDeployEnvFromDotenv(targetDir);
-  
+
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   if (isHeadless && (!process.env.MASTRA_ORG_ID || !process.env.MASTRA_PROJECT_ID)) {
     throw new Error('MASTRA_ORG_ID and MASTRA_PROJECT_ID are required when MASTRA_API_TOKEN is set');
   }
-  
+
   const autoAccept = opts.yes ?? isHeadless;
   const skipPreflight = opts.skipPreflight || process.env.MASTRA_SKIP_PREFLIGHT === '1';
   const envName = opts.env || 'production';
@@ -632,9 +631,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   // Step 5: Resolve environment (auto-create production if first deploy)
   const envResolution = await resolveEnvironment(token, orgId, projectId, envName, autoAccept);
-  
+
   let environment: Environment;
-  
+
   if (envResolution.existing) {
     environment = envResolution.environment;
   } else {
