@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { injectStudioHtmlConfig } from './utils';
+import type { StudioInjectionConfig } from './utils';
 
-function baseConfig(overrides: Record<string, string> = {}) {
+function baseConfig(overrides: Partial<StudioInjectionConfig> = {}): StudioInjectionConfig {
   return {
     host: "'localhost'",
     port: "'4111'",
@@ -19,7 +20,7 @@ function baseConfig(overrides: Record<string, string> = {}) {
     signalsUI: "'false'",
     autoDetectUrl: "'false'",
     ...overrides,
-  } as any;
+  };
 }
 
 describe('injectStudioHtmlConfig $ handling', () => {
