@@ -9,44 +9,42 @@
  * - editing docs/vercel.redirects.json requires re-running this generator and committing docs/vercel.json
  * - editing docs/vercel.json directly will be overwritten by this generator and fail CI drift checks
  */
-import fs from "node:fs/promises";
-import path from "node:path";
+import fs from 'node:fs/promises'
+import path from 'node:path'
 
-const docsDir = new URL("..", import.meta.url);
-const sourcePath = new URL("../vercel.redirects.json", import.meta.url);
-const outputPath = new URL("../vercel.json", import.meta.url);
+const docsDir = new URL('..', import.meta.url)
+const sourcePath = new URL('../vercel.redirects.json', import.meta.url)
+const outputPath = new URL('../vercel.json', import.meta.url)
 
-const INTERNAL_PREFIXES = ["/docs", "/guides", "/models", "/reference"];
+const INTERNAL_PREFIXES = ['/docs', '/guides', '/models', '/reference']
 
 function isInternalDocsPath(value) {
-  return INTERNAL_PREFIXES.some(
-    (prefix) => value === prefix || value.startsWith(`${prefix}/`),
-  );
+  return INTERNAL_PREFIXES.some(prefix => value === prefix || value.startsWith(`${prefix}/`))
 }
 
 function isExternalUrl(value) {
-  return value.startsWith("http://") || value.startsWith("https://");
+  return value.startsWith('http://') || value.startsWith('https://')
 }
 
 function normalizeForLlms(pathname) {
-  if (pathname.endsWith("/llms.txt")) return pathname;
-  if (pathname.length > 1 && pathname.endsWith("/")) {
-    return `${pathname.slice(0, -1)}/llms.txt`;
+  if (pathname.endsWith('/llms.txt')) return pathname
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    return `${pathname.slice(0, -1)}/llms.txt`
   }
-  return `${pathname}/llms.txt`;
+  return `${pathname}/llms.txt`
 }
 
 function shouldGenerateLlmsRedirect(redirect) {
-  const { source, destination } = redirect;
+  const { source, destination } = redirect
 
-  if (!source || !destination) return false;
-  if (isExternalUrl(destination)) return false;
-  if (!isInternalDocsPath(source)) return false;
-  if (!isInternalDocsPath(destination)) return false;
-  if (source.endsWith("/llms.txt")) return false;
-  if (destination.endsWith("/llms.txt")) return false;
+  if (!source || !destination) return false
+  if (isExternalUrl(destination)) return false
+  if (!isInternalDocsPath(source)) return false
+  if (!isInternalDocsPath(destination)) return false
+  if (source.endsWith('/llms.txt')) return false
+  if (destination.endsWith('/llms.txt')) return false
 
-  return true;
+  return true
 }
 
 function createLlmsRedirect(redirect) {
@@ -54,52 +52,50 @@ function createLlmsRedirect(redirect) {
     ...redirect,
     source: normalizeForLlms(redirect.source),
     destination: normalizeForLlms(redirect.destination),
-  };
+  }
 }
 
 function assertNoDuplicateSources(redirects) {
-  const seen = new Map();
+  const seen = new Map()
 
   for (const redirect of redirects) {
     if (seen.has(redirect.source)) {
       throw new Error(
         `Duplicate redirect source: ${redirect.source}\n` +
           `First: ${JSON.stringify(seen.get(redirect.source))}\n` +
-          `Second: ${JSON.stringify(redirect)}`
-      );
+          `Second: ${JSON.stringify(redirect)}`,
+      )
     }
-    seen.set(redirect.source, redirect);
+    seen.set(redirect.source, redirect)
   }
 }
 
 async function main() {
-  const raw = await fs.readFile(sourcePath, "utf8");
-  const config = JSON.parse(raw);
+  const raw = await fs.readFile(sourcePath, 'utf8')
+  const config = JSON.parse(raw)
 
   if (!Array.isArray(config.redirects)) {
-    throw new Error("Expected redirects array in vercel.redirects.json");
+    throw new Error('Expected redirects array in vercel.redirects.json')
   }
 
-  const generated = config.redirects
-    .filter(shouldGenerateLlmsRedirect)
-    .map(createLlmsRedirect);
+  const generated = config.redirects.filter(shouldGenerateLlmsRedirect).map(createLlmsRedirect)
 
-  const finalRedirects = [...config.redirects, ...generated];
+  const finalRedirects = [...config.redirects, ...generated]
 
-  assertNoDuplicateSources(finalRedirects);
+  assertNoDuplicateSources(finalRedirects)
 
   const output = {
     redirects: finalRedirects,
-  };
+  }
 
-  await fs.writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
+  await fs.writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`)
   console.log(
     `Wrote ${finalRedirects.length} redirects ` +
-      `(${config.redirects.length} base + ${generated.length} llms companions)`
-  );
+      `(${config.redirects.length} base + ${generated.length} llms companions)`,
+  )
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main().catch(error => {
+  console.error(error)
+  process.exit(1)
+})
