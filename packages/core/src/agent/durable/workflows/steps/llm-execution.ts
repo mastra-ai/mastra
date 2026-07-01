@@ -352,6 +352,32 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               agentBackgroundConfig: registryEntry?.backgroundTasksConfig,
             });
 
+            // ── Signal echo & pre-run drain ───────────────────────────────
+            // Mirror the non-durable llm-execution-step:
+            //  1. Echo initialSignalEchoes (signals that were part of the input
+            //     messages, e.g. from persisted memory) so the client sees them.
+            //  2. Pre-run signals: if this is the first model request of the run
+            //     (stepIndex === 0), drain signals that were queued before the
+            //     run made its first request.
+            if (pubsub) {
+              const initialSignalEchoes = registryEntry?.initialSignalEchoes?.splice(0) ?? [];
+              for (const initialSignal of initialSignalEchoes) {
+                await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
+              }
+
+              const isFirstModelRequest = stepIndex === 0;
+              if (isFirstModelRequest && registryEntry?.drainPendingSignals) {
+                const preRunSignals = registryEntry.drainPendingSignals('pre-run');
+                if (preRunSignals.length > 0) {
+                  currentMessageId = mastra?.generateId?.() ?? crypto.randomUUID();
+                }
+                for (const preRunSignal of preRunSignals) {
+                  const signalForTranscript = messageList.addSignal(preRunSignal);
+                  await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
+                }
+              }
+            }
+
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
             modelSpanTracker?.setDeferStepClose(true);

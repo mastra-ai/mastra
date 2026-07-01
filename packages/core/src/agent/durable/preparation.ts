@@ -21,6 +21,8 @@ import { SaveQueueManager } from '../save-queue';
 import type { AgentInstructions, AgentMethodType, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
+import type { CreatedAgentSignal } from '../signals';
+import { mastraDBMessageToSignal } from '../signals';
 
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
@@ -65,6 +67,19 @@ function convertInstructionsToString(instructions: AgentInstructions | undefined
 }
 
 /**
+ * Extract signal messages already present in the messageList at run start
+ * (from persisted history) so they can be echoed as data-signal stream parts
+ * on the first LLM step. Mirrors `prepare-memory-step.ts#getInitialSignalEchoes`.
+ */
+function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] {
+  const inputMessageIds = messageList.makeMessageSourceChecker().input;
+  return messageList.get.all
+    .db()
+    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
+    .map(mastraDBMessageToSignal);
+}
+
+/**
  * Interface for the Agent methods needed during durable preparation.
  * This provides proper typing for the public Agent methods we call.
  */
@@ -98,6 +113,7 @@ interface DurablePreparationAgent {
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
 }
 
 /**
@@ -603,6 +619,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // real (toolName, args) on each call. The boolean shadow on the
     // serialized workflow input is the cross-process fallback.
     requireToolApproval: execOptions?.requireToolApproval,
+    // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
+    // Non-serializable; cross-process engines lose it and signals go undelivered.
+    drainPendingSignals: typedAgent.__getDrainPendingSignals(),
+    // Signal messages already in the messageList at run start (from persisted
+    // history). Echoed as data-signal parts on the first LLM step so the client
+    // sees them without refetching. Spliced once, never re-emitted.
+    initialSignalEchoes: getInitialSignalEchoes(messageList),
     cleanup: () => {},
   };
 
