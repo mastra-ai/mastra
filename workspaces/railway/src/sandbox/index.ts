@@ -385,7 +385,12 @@ export class RailwaySandbox extends MastraSandbox {
   }
 
   private _scheduleCheckpointRefresh(): void {
-    if (!this._checkpointName || !this._sandbox || !this._idleTimeoutMinutes) {
+    if (!this._checkpointName || !this._sandbox) {
+      return;
+    }
+
+    const idleTimeoutMinutes = this._idleTimeoutMinutes ?? this._sandbox.idleTimeoutMinutes;
+    if (!idleTimeoutMinutes) {
       return;
     }
 
@@ -393,7 +398,7 @@ export class RailwaySandbox extends MastraSandbox {
       clearTimeout(this._checkpointRefreshTimer);
     }
 
-    const delayMs = Math.max(1_000, this._idleTimeoutMinutes * 60_000 - 10_000);
+    const delayMs = Math.max(1_000, idleTimeoutMinutes * 60_000 - 10_000);
     this._checkpointRefreshTimer = setTimeout(() => {
       this._checkpointRefreshTimer = null;
       const sandbox = this._sandbox;

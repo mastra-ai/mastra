@@ -344,6 +344,24 @@ describe('RailwaySandbox', () => {
       expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(2);
       expect(mockSandbox.checkpoint).toHaveBeenLastCalledWith('mastracode-repo-abc123');
     });
+
+    it('uses the Railway sandbox idle timeout when scheduling checkpoint refresh', async () => {
+      vi.useFakeTimers();
+      mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
+
+      const sandbox = new RailwaySandbox({
+        token: 'tok',
+        checkpointName: 'mastracode-repo-abc123',
+        template: t => t.run('npm i -g pnpm'),
+      });
+      await sandbox._start();
+      expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(30 * 60_000 - 10_000);
+
+      expect(mockSandbox.checkpoint).toHaveBeenCalledTimes(2);
+      expect(mockSandbox.checkpoint).toHaveBeenLastCalledWith('mastracode-repo-abc123');
+    });
   });
 
   describe('fork', () => {
