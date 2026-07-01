@@ -1,3 +1,4 @@
 {
-  "attachment": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code"]
+  "attachment": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code"],
+  "temperature": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "zai-org/GLM-5.1-FP8"]
 }

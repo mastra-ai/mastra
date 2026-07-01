@@ -740,11 +740,10 @@ export class DurableAgent<
           scheduleAutoCleanup();
         }
       },
-      onIterationComplete: options?.onIterationComplete
-        ? async data => {
-            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
-          }
-        : undefined,
+      // onIterationComplete is NOT forwarded here — the dowhile predicate
+      // now calls it in-process from globalRunRegistry and honors its return
+      // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
+      // still fires for external observability subscribers.
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
     });
 
@@ -1157,11 +1156,10 @@ export class DurableAgent<
           scheduleAutoCleanup();
         }
       },
-      onIterationComplete: options?.onIterationComplete
-        ? async data => {
-            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
-          }
-        : undefined,
+      // onIterationComplete is NOT forwarded here — the dowhile predicate
+      // now calls it in-process from globalRunRegistry and honors its return
+      // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
+      // still fires for external observability subscribers.
       closeOnSuspend: true,
     });
 
