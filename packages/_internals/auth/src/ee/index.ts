@@ -44,5 +44,8 @@ export {
   type RequireFGAOptions,
 } from './fga-check';
 
+// Telemetry
+export { captureEEEvent, getEETelemetryFallbackDistinctId } from './telemetry';
+
 // Default implementations
 export * from './defaults';

@@ -3,6 +3,18 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MastraServer } from './index';
 
+const { captureEEEventSpy } = vi.hoisted(() => ({
+  captureEEEventSpy: vi.fn(),
+}));
+
+vi.mock('@mastra/core/auth/ee', async importActual => {
+  const actual = (await importActual()) as Record<string, unknown>;
+  return {
+    ...actual,
+    captureEEEvent: captureEEEventSpy,
+  };
+});
+
 // Mock server adapter for testing
 class TestMastraServer extends MastraServer<any, any, any> {
   stream = vi.fn();
@@ -38,6 +50,7 @@ describe('MastraServer.validateAgentBuilderLicense', () => {
   beforeEach(() => {
     originalEnv = { ...process.env };
     clearLicenseCache();
+    captureEEEventSpy.mockClear();
   });
 
   afterEach(() => {
@@ -125,5 +138,30 @@ describe('MastraServer.validateAgentBuilderLicense', () => {
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toMatch(/^\[mastra\/auth-ee\]/);
     }
+  });
+
+  it('captures ee_feature_used event with feature "builder" on success', async () => {
+    process.env.NODE_ENV = 'development';
+
+    const editor = createMockEditor(true);
+    const mastra = new Mastra({ editor });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.validateAgentBuilderLicense();
+
+    expect(captureEEEventSpy).toHaveBeenCalledWith(
+      'ee_feature_used',
+      expect.any(String),
+      expect.objectContaining({ feature: 'builder' }),
+    );
+  });
+
+  it('does not capture ee_feature_used when builder is not configured', async () => {
+    const mastra = new Mastra({});
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.validateAgentBuilderLicense();
+
+    expect(captureEEEventSpy).not.toHaveBeenCalled();
   });
 });
