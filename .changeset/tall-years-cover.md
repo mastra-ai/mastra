@@ -14,6 +14,7 @@ The Signals page is no longer static. Select an agent reported by the platform a
 - Added an agent filter at the top of the Signals page, mirroring the traces filter, so you can inspect signals for any agent on the server.
 - The Signals overview and details pages now render live Entity-Learning topics, examples, and points directly, with shape-matching skeletons while data loads, centered empty states, and explicit error states.
 - Clicking a cluster card opens its topic by default, and the Signals breadcrumbs preserve the selected entity and topic query params on back-navigation.
+- Signals detail navigation keeps selected clusters, trace examples, and chart filters in sync when moving between signals or entities.
 
 **Gating**
 
