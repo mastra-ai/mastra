@@ -123,6 +123,20 @@ export class Dataset {
     }
   }
 
+  /**
+   * Ownership gate: verifies a child record's `datasetId` matches `this.id`.
+   * Prevents a valid scoped handle from reading/mutating child records
+   * (items, experiments, results) that live under a different dataset — even
+   * one in the same tenant. Returns `null` when the record is missing or
+   * belongs to a different dataset, so callers can either return null or
+   * translate to NOT_FOUND depending on their contract.
+   */
+  #ownsChild<T extends { datasetId?: string | null }>(record: T | null | undefined): T | null {
+    if (!record) return null;
+    if (record.datasetId !== this.id) return null;
+    return record;
+  }
+
   // ---------------------------------------------------------------------------
   // Dataset metadata
   // ---------------------------------------------------------------------------
@@ -209,7 +223,8 @@ export class Dataset {
   async getItem(args: { itemId: string; version?: number }): Promise<DatasetItem | null> {
     await this.#assertScope();
     const store = await this.#getDatasetsStore();
-    return store.getItemById({ id: args.itemId, datasetVersion: args.version });
+    const item = await store.getItemById({ id: args.itemId, datasetVersion: args.version });
+    return this.#ownsChild(item);
   }
 
   /**
@@ -224,15 +239,17 @@ export class Dataset {
     | DatasetItem[]
     | { items: DatasetItem[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }
   > {
-    await this.#assertScope();
     const store = await this.#getDatasetsStore();
     if (args?.version) {
+      // getItemsByVersion is keyed by datasetId — gate via scoped parent existence
+      await this.#assertScope();
       return store.getItemsByVersion({ datasetId: this.id, version: args.version });
     }
     return store.listItems({
       datasetId: this.id,
       search: args?.search,
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
+      filters: this.#scope,
     });
   }
 
@@ -287,7 +304,11 @@ export class Dataset {
   async getItemHistory(args: { itemId: string }): Promise<DatasetItemRow[]> {
     await this.#assertScope();
     const store = await this.#getDatasetsStore();
-    return store.getItemHistory(args.itemId);
+    const rows = await store.getItemHistory(args.itemId);
+    // Ownership gate: SCD-2 history is keyed only by item id — filter out any
+    // rows that don't belong to this dataset so a known cross-dataset item id
+    // cannot leak history through a valid scoped handle.
+    return rows.filter(row => row.datasetId === this.id);
   }
 
   // ---------------------------------------------------------------------------
@@ -392,19 +413,41 @@ export class Dataset {
   }
 
   /**
+   * Verify the experiment belongs to this dataset (and, by extension, to the
+   * handle's tenancy scope which was enforced when the handle was minted).
+   * Throws NOT_FOUND on missing or cross-dataset experiments so cross-tenant
+   * mutation via a valid scoped handle + a known foreign experimentId is
+   * rejected.
+   */
+  async #assertExperimentOwnership(experimentId: string): Promise<void> {
+    const experimentsStore = await this.#getExperimentsStore();
+    const experiment = await experimentsStore.getExperimentById({ id: experimentId });
+    if (!experiment || experiment.datasetId !== this.id) {
+      throw new MastraError({
+        id: 'EXPERIMENT_NOT_FOUND',
+        text: `Experiment not found: ${experimentId}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+  }
+
+  /**
    * Get a specific experiment (run) by ID.
    */
   async getExperiment(args: { experimentId: string }) {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
-    return experimentsStore.getExperimentById({ id: args.experimentId });
+    const experiment = await experimentsStore.getExperimentById({ id: args.experimentId });
+    if (!experiment || experiment.datasetId !== this.id) return null;
+    return experiment;
   }
 
   /**
    * List results for a specific experiment.
    */
   async listExperimentResults(args: { experimentId: string; page?: number; perPage?: number }) {
-    await this.#assertScope();
+    await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.listExperimentResults({
       experimentId: args.experimentId,
@@ -413,19 +456,30 @@ export class Dataset {
   }
 
   /**
-   * Delete an experiment (run) by ID.
-   */
-  /**
    * Update an experiment result's status or tags.
    */
   async updateExperimentResult(input: UpdateExperimentResultInput) {
-    await this.#assertScope();
+    // The result's parent experiment must belong to this dataset. If the
+    // caller supplied `experimentId`, verify ownership on that; otherwise we
+    // cannot bind the update to this dataset and must reject.
+    if (!input.experimentId) {
+      throw new MastraError({
+        id: 'EXPERIMENT_RESULT_MISSING_EXPERIMENT_ID',
+        text: 'updateExperimentResult requires experimentId when called via a Dataset handle',
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    await this.#assertExperimentOwnership(input.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.updateExperimentResult(input);
   }
 
+  /**
+   * Delete an experiment (run) by ID.
+   */
   async deleteExperiment(args: { experimentId: string }) {
-    await this.#assertScope();
+    await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.deleteExperiment({ id: args.experimentId });
   }

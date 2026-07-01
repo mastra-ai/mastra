@@ -567,4 +567,81 @@ describe('Dataset', () => {
     expect('items' in (result as any)).toBe(true);
     expect((result as any).items.length).toBe(2);
   });
+
+  // ---------------------------------------------------------------------------
+  // Ownership gates: reject child records that belong to a different dataset
+  // even when the caller holds a valid handle to the current dataset.
+  // ---------------------------------------------------------------------------
+
+  it('getItem returns null when the item belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherItem = await datasetsStorage.addItem({ datasetId: other.id, input: { x: 1 } });
+    const leaked = await ds.getItem({ itemId: otherItem.id });
+    expect(leaked).toBeNull();
+  });
+
+  it('getItemHistory filters out rows that belong to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherItem = await datasetsStorage.addItem({ datasetId: other.id, input: { x: 1 } });
+    const rows = await ds.getItemHistory({ itemId: otherItem.id });
+    expect(rows).toEqual([]);
+  });
+
+  it('getExperiment returns null when the experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    const leaked = await ds.getExperiment({ experimentId: otherExp.id });
+    expect(leaked).toBeNull();
+  });
+
+  it('deleteExperiment throws NOT_FOUND when the experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    await expect(ds.deleteExperiment({ experimentId: otherExp.id })).rejects.toThrow(MastraError);
+    // Original experiment should still exist under its true dataset
+    const stillThere = await experimentsStorage.getExperimentById({ id: otherExp.id });
+    expect(stillThere?.id).toBe(otherExp.id);
+  });
+
+  it('listExperimentResults throws NOT_FOUND when experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    await expect(ds.listExperimentResults({ experimentId: otherExp.id })).rejects.toThrow(MastraError);
+  });
+
+  it('updateExperimentResult throws when experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    await expect(
+      ds.updateExperimentResult({ id: 'any-result-id', experimentId: otherExp.id, status: 'reviewed' }),
+    ).rejects.toThrow(MastraError);
+  });
+
+  it('updateExperimentResult rejects when called without experimentId', async () => {
+    await expect(ds.updateExperimentResult({ id: 'any-result-id', status: 'reviewed' })).rejects.toThrow(MastraError);
+  });
 });

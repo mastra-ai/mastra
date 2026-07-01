@@ -112,13 +112,16 @@ describe('Datasets Handlers', () => {
         projectId: 'proj_1',
       });
 
-      await expect(
-        GET_DATASET_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          datasetId: created.id,
-          organizationId: 'org_b',
-        } as any),
-      ).rejects.toThrow(HTTPException);
+      const err = await GET_DATASET_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: created.id,
+        organizationId: 'org_b',
+      } as any).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(HTTPException);
+      expect((err as HTTPException).status).toBe(404);
     });
 
     it('returns 404 when projectId does not match', async () => {
@@ -128,14 +131,17 @@ describe('Datasets Handlers', () => {
         projectId: 'proj_1',
       });
 
-      await expect(
-        GET_DATASET_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          datasetId: created.id,
-          organizationId: 'org_a',
-          projectId: 'proj_2',
-        } as any),
-      ).rejects.toThrow(HTTPException);
+      const err = await GET_DATASET_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: created.id,
+        organizationId: 'org_a',
+        projectId: 'proj_2',
+      } as any).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(HTTPException);
+      expect((err as HTTPException).status).toBe(404);
     });
   });
 
@@ -158,23 +164,51 @@ describe('Datasets Handlers', () => {
       expect(result.name).toBe('After');
     });
 
-    it('rejects update when organizationId does not match', async () => {
+    it('rejects update with 404 when organizationId does not match', async () => {
       const created = await mastra.datasets.create({
         name: 'Before',
         organizationId: 'org_a',
         projectId: 'proj_1',
       });
 
-      await expect(
-        UPDATE_DATASET_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          datasetId: created.id,
-          organizationId: 'org_b',
-          name: 'After',
-        } as any),
-      ).rejects.toThrow(HTTPException);
+      const err = await UPDATE_DATASET_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: created.id,
+        organizationId: 'org_b',
+        name: 'After',
+      } as any).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(HTTPException);
+      expect((err as HTTPException).status).toBe(404);
 
       // dataset unchanged
+      const untouched = await mastra.datasets.get({ id: created.id });
+      const details = await untouched.getDetails();
+      expect(details.name).toBe('Before');
+    });
+
+    it('rejects update with 404 when projectId does not match', async () => {
+      const created = await mastra.datasets.create({
+        name: 'Before',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const err = await UPDATE_DATASET_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: created.id,
+        organizationId: 'org_a',
+        projectId: 'proj_2',
+        name: 'After',
+      } as any).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(HTTPException);
+      expect((err as HTTPException).status).toBe(404);
+
       const untouched = await mastra.datasets.get({ id: created.id });
       const details = await untouched.getDetails();
       expect(details.name).toBe('Before');
@@ -225,6 +259,28 @@ describe('Datasets Handlers', () => {
       const details = await survivor.getDetails();
       expect(details.id).toBe(created.id);
       expect(details.organizationId).toBe('org_a');
+    });
+
+    it('silently no-ops delete when projectId does not match and dataset remains', async () => {
+      const created = await mastra.datasets.create({
+        name: 'Guarded',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const result = (await DELETE_DATASET_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: created.id,
+        organizationId: 'org_a',
+        projectId: 'proj_2',
+      } as any)) as any;
+
+      expect(result.success).toBe(true);
+
+      const survivor = await mastra.datasets.get({ id: created.id });
+      const details = await survivor.getDetails();
+      expect(details.id).toBe(created.id);
+      expect(details.projectId).toBe('proj_1');
     });
   });
 
