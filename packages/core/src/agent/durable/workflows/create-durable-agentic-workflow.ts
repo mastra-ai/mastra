@@ -29,6 +29,7 @@ import {
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
+  createDurableGoalStep,
   createDurableIsTaskCompleteStep,
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
@@ -114,6 +115,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
   // so it shows up in workflow traces and produces a proper state transition.
   const isTaskCompleteStep = createDurableIsTaskCompleteStep(maxSteps);
+
+  // Create the goal evaluation step — mirrors the non-durable
+  // `createGoalStep`. Runs after isTaskComplete so the goal judge
+  // sees whether isTaskComplete already stopped the loop.
+  const goalStep = createDurableGoalStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   // Note: foreach runs with concurrency: 1 (sequential) because tool approval
@@ -230,6 +236,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     // messageListState before the dowhile predicate decides whether to loop
     // again. No-op when the run has no policy configured.
     .then(isTaskCompleteStep)
+    // Step 9: Goal evaluation. Mirrors the non-durable createGoalStep — judges
+    // whether the thread's active objective is satisfied or should continue.
+    // No-op when no goal is configured or no active objective exists.
+    .then(goalStep)
     .commit();
 
   // Create the main agentic loop workflow with dowhile
