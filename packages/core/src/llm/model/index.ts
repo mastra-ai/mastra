@@ -6,6 +6,7 @@ export {
   type ModelForProvider,
   type AttachmentCapabilities,
   modelSupportsAttachments,
+  modelSupportsTemperature,
 } from './provider-registry.js';
 export { resolveModelConfig, isOpenAICompatibleObjectConfig } from './resolve-model';
 export { resolveModelAuth, type ResolveModelAuthArgs } from './model-auth-resolver';

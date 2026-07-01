@@ -4,6 +4,11 @@ import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
+import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
+import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
+import { composeStepInput } from '../../../../loop/shared/compose-step-input';
+import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
+import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
@@ -232,9 +237,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const stepIndex = (inputData as any).stepIndex ?? 0;
             modelSpanTracker?.setStepIndex(stepIndex);
 
-            // Build structured output for AI SDK if configured
+            // Build structured output for AI SDK if configured. Held in a `let`
+            // because `composeStepInput` (driven by input processors / prepareStep)
+            // is allowed to replace `structuredOutput` for this iteration.
             const structuredOutputConfig = execOptions.structuredOutput;
-            const structuredOutput =
+            let structuredOutput =
               structuredOutputConfig?.schema && !structuredOutputConfig?.structuringModelConfig
                 ? {
                     schema: structuredOutputConfig.schema,
@@ -289,36 +296,61 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 abortSignal: executionAbortSignal,
                 writer: inputStepWriter,
               });
-              currentMessageId = processInputStepResult.messageId ?? currentMessageId;
-              currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
-              currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
-              currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
-              currentProviderOptions = processInputStepResult.providerOptions ?? currentProviderOptions;
-              currentActiveTools = processInputStepResult.activeTools;
-              currentModelSettings = {
-                ...currentModelSettings,
-                ...(processInputStepResult.modelSettings ?? {}),
-              };
+              const merged = composeStepInput(
+                {
+                  messageId: currentMessageId,
+                  model: currentModel,
+                  tools: currentTools,
+                  toolChoice: currentToolChoice,
+                  activeTools: currentActiveTools,
+                  providerOptions: currentProviderOptions,
+                  modelSettings: currentModelSettings,
+                  structuredOutput,
+                },
+                processInputStepResult,
+              );
+              currentMessageId = merged.messageId;
+              currentModel = merged.model as typeof currentModel;
+              currentTools = merged.tools as ToolSet;
+              currentToolChoice = merged.toolChoice as ToolChoice<ToolSet> | undefined;
+              currentActiveTools = merged.activeTools;
+              currentProviderOptions = merged.providerOptions;
+              currentModelSettings = merged.modelSettings;
+              structuredOutput = merged.structuredOutput;
             }
 
-            // Forward the model's `supportedUrls` (may be a Promise) so URLs a provider
-            // fetches natively (e.g. Vertex `gs://`) pass through instead of being
-            // downloaded/inlined. Mirrors loop/workflows/agentic-execution/llm-execution-step.ts.
-            let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
-            const modelSupportedUrls = currentModel?.supportedUrls;
-            if (modelSupportedUrls) {
-              resolvedSupportedUrls =
-                typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function'
-                  ? await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>)
-                  : (modelSupportedUrls as Record<string, RegExp[]>);
-            }
+            // `downloadRetries` / `downloadConcurrency` are internal-only on the
+            // non-durable path today (not exposed through AgentExecutionOptions),
+            // so durable also relies on the MessageList defaults here. If those
+            // ever become user-facing they should be plumbed in identically.
+            const messageListPromptArgs = await buildLlmPromptArgs({
+              model: currentModel,
+            });
             const llmPromptForModel =
               currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
                 ? messageList.get.all.aiV6.llmPrompt
                 : messageList.get.all.aiV5.llmPrompt;
-            const inputMessages = (await llmPromptForModel({
-              supportedUrls: resolvedSupportedUrls,
-            })) as LanguageModelV2Prompt;
+            let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
+
+            // Inject the auto-resume directive into the leading system message when
+            // there are suspended tools waiting for resumption (parity with the
+            // non-durable agentic-execution step).
+            inputMessages = applyAutoResumeSystemMessage({
+              autoResume: execOptions.autoResumeSuspendedTools,
+              inputMessages,
+              messages: messageList.get.all.db(),
+            });
+
+            // Tell the model about background-task capabilities when a
+            // background-task manager is wired in. Mirrors the non-durable
+            // agentic-execution step so background-enabled tools surface the
+            // same `_background` guidance to the LLM.
+            inputMessages = injectBackgroundTaskPrompt({
+              inputMessages,
+              backgroundTaskManager: registryEntry?.backgroundTaskManager,
+              tools: currentTools as Record<string, { background?: any; description?: string }> | undefined,
+              agentBackgroundConfig: registryEntry?.backgroundTasksConfig,
+            });
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
@@ -366,6 +398,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               toolChoice: currentToolChoice,
               activeTools: currentActiveTools,
               options: { abortSignal: executionAbortSignal },
+              headers: mergeLlmCallHeaders({
+                memoryHeaders: buildMemoryHeaders({
+                  threadId: typedInput.state?.threadId,
+                  resourceId: typedInput.state?.resourceId,
+                }),
+                callTimeHeaders: currentModelSettings.headers as Record<string, string> | undefined,
+              }),
               modelSettings: {
                 ...currentModelSettings,
                 maxRetries: 0,
