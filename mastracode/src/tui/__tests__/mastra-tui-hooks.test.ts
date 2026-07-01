@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   showInfo: vi.fn(),
   showFormattedError: vi.fn(),
   notify: vi.fn(),
+  updateStatusLine: vi.fn(),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -26,6 +27,10 @@ vi.mock('../display.js', () => ({
   notify: mocks.notify,
 }));
 
+vi.mock('../status-line.js', () => ({
+  updateStatusLine: mocks.updateStatusLine,
+}));
+
 import { MastraTUI } from '../mastra-tui.js';
 
 function createHookResult(overrides: Record<string, unknown> = {}) {
@@ -40,6 +45,7 @@ function createHookResult(overrides: Record<string, unknown> = {}) {
 function createBareTui(hookManager?: Record<string, unknown>) {
   const tui = Object.create(MastraTUI.prototype) as {
     state: Record<string, unknown>;
+    statusTimingTimer: ReturnType<typeof setInterval> | null;
     caffeinateProcess: MockChildProcess | null;
     getEventContext: ReturnType<typeof vi.fn>;
     showHookWarnings: ReturnType<typeof vi.fn>;
@@ -48,7 +54,12 @@ function createBareTui(hookManager?: Record<string, unknown>) {
     stop: () => void;
   };
 
-  tui.state = { hookManager, ui: { stop: vi.fn() } };
+  tui.state = {
+    hookManager,
+    ui: { stop: vi.fn(), requestRender: vi.fn() },
+    idleCounter: { setTimingState: vi.fn(), update: vi.fn() },
+  };
+  tui.statusTimingTimer = null;
   tui.caffeinateProcess = null;
   tui.getEventContext = vi.fn(() => ({}));
   tui.showHookWarnings = vi.fn();
@@ -115,6 +126,45 @@ describe('MastraTUI hook wiring', () => {
     await tui.handleEvent({ type: 'agent_start' });
 
     expect(runStop).not.toHaveBeenCalled();
+  });
+
+  it('ticks idle status line every second while an agent run is active', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.dispatchEvent.mockImplementation(async (_event, _ctx, state) => {
+        state.agentRunStartedAt = Date.now();
+      });
+      const tui = createBareTui();
+
+      await tui.handleEvent({ type: 'agent_start' });
+      expect((tui.state.idleCounter as any).setTimingState).toHaveBeenCalledWith(tui.state, expect.any(Number));
+      (tui.state.idleCounter as any).setTimingState.mockClear();
+
+      vi.advanceTimersByTime(1_000);
+      expect((tui.state.idleCounter as any).setTimingState).toHaveBeenCalledWith(tui.state, expect.any(Number));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ticks idle status line every minute after an agent run ends', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.dispatchEvent.mockImplementation(async (_event, _ctx, state) => {
+        state.lastAgentRunDurationMs = 1_000;
+        state.lastAgentRunEndedAt = Date.now();
+      });
+      const tui = createBareTui();
+
+      await tui.handleEvent({ type: 'agent_end', reason: 'complete' });
+      expect((tui.state.idleCounter as any).setTimingState).toHaveBeenCalledWith(tui.state, expect.any(Number));
+      (tui.state.idleCounter as any).setTimingState.mockClear();
+
+      vi.advanceTimersByTime(60_000);
+      expect((tui.state.idleCounter as any).setTimingState).toHaveBeenCalledWith(tui.state, expect.any(Number));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('starts caffeinate on macOS agent_start', async () => {

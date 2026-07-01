@@ -168,6 +168,15 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Coding Agent',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'coding-agent/build-base-prompt', label: 'buildBasePrompt()' },
+        { type: 'doc', id: 'coding-agent/create-coding-agent', label: 'createCodingAgent()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Core',
       collapsed: true,
       items: [
@@ -774,6 +783,7 @@ const sidebars = {
           label: 'AgentCoreRuntimeSandbox',
         },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
+        { type: 'doc', id: 'workspace/apple-container-sandbox', label: 'AppleContainerSandbox' },
         { type: 'doc', id: 'workspace/archil-filesystem', label: 'ArchilFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },

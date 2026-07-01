@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { DirectoryBrowser } from './DirectoryPicker';
-import { CloseIcon, FolderIcon, LogoMark, PlusIcon } from './icons';
+import { CloseIcon, FolderIcon, GithubIcon, LogoMark, PlusIcon } from './icons';
 import type { Project } from './projects';
 import { addProject, loadProjects, removeProject } from './projects';
 
@@ -105,6 +105,7 @@ export function ProjectsModal({
             <div className="projects-list">
               {projects.map(p => {
                 const active = p.id === activeProjectId;
+                const isGithub = p.source === 'github';
                 return (
                   <button
                     key={p.id}
@@ -113,12 +114,26 @@ export function ProjectsModal({
                       onSelectProject(p);
                       onClose();
                     }}
-                    title={p.path}
+                    title={isGithub ? 'GitHub repository' : p.path}
                   >
-                    <FolderIcon size={18} className="project-card-icon" />
+                    {isGithub ? (
+                      <GithubIcon size={18} className="project-card-icon" />
+                    ) : (
+                      <FolderIcon size={18} className="project-card-icon" />
+                    )}
                     <span className="project-card-text">
-                      <span className="project-card-name">{p.name}</span>
-                      <span className="project-card-path">{p.path}</span>
+                      <span className="project-card-name" title={p.name}>
+                        {p.name}
+                      </span>
+                      {/* For GitHub projects `name` is the `owner/repo` identifier; keep it
+                          visible and show the tracked branch (when known) in the subtitle
+                          instead of a redundant "GitHub repo" label. */}
+                      <span className="project-card-path" title={isGithub ? p.name : p.path}>
+                        {isGithub ? (p.gitBranch ? `branch: ${p.gitBranch}` : 'GitHub repo') : p.path}
+                      </span>
+                    </span>
+                    <span className={`project-card-source ${isGithub ? 'github' : 'local'}`}>
+                      {isGithub ? 'GitHub' : 'Local'}
                     </span>
                     {active && <span className="project-card-badge">Active</span>}
                     <span

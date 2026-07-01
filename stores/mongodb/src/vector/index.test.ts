@@ -1,4 +1,5 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
+import { MongoClient } from 'mongodb';
 import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 
@@ -338,6 +339,72 @@ describe('MongoDBVector Integration Tests', () => {
       expect(threadIds).toContain('thread-456');
     });
   });
+
+  // ─── Hardening: NODE-7556 ───────────────────────────────────────────────────
+  describe('Hardening: NODE-7556', () => {
+    test('F2: updateVector with a vector must not throw when collectionForValidation was never set', async () => {
+      const indexName = `f2-npe-${Date.now()}`;
+
+      // Create the index and upsert a document via the shared vectorDB instance.
+      // createIndex writes the sentinel (__index_metadata__); upsert writes the doc.
+      await createIndexAndWait(vectorDB, indexName, 4, 'cosine');
+      await vectorDB.upsert({ indexName, vectors: [[1, 0, 0, 0]], ids: ['f2-doc'] });
+
+      // Reproduce the edge case where the Atlas Search index has been modified outside
+      // Mastra (e.g. via the Atlas UI or mongosh) but the __index_metadata__ document
+      // was not updated alongside it — or was dropped entirely during that operation.
+      const rawClient = new MongoClient(uri);
+      await rawClient.connect();
+      try {
+        await rawClient
+          .db(dbName)
+          .collection(indexName)
+          .deleteOne({ _id: '__index_metadata__' as any });
+      } finally {
+        await rawClient.close();
+      }
+
+      // Fresh instance — collectionForValidation is null (upsert was never called on it).
+      // describeIndex now returns dimension=0 (no sentinel) → validateVectorDimensions
+      // calls setIndexDimension → this.collectionForValidation! is null → TypeError.
+      const vectorDB2 = new MongoDBVector({ uri, dbName, id: 'f2-fresh' });
+      await vectorDB2.connect();
+      try {
+        // Currently throws: TypeError: Cannot read properties of null (reading 'updateOne')
+        // After fix: resolves without error
+        await expect(
+          vectorDB2.updateVector({ indexName, id: 'f2-doc', update: { vector: [0.5, 0.5, 0.5, 0.5] } }),
+        ).resolves.not.toThrow();
+      } finally {
+        await vectorDB2.disconnect();
+        await deleteIndexAndWait(vectorDB, indexName);
+      }
+    });
+
+    test.todo(
+      'F1: concurrent upserts to the same index must not write dimension metadata to the wrong collection ' +
+        '(non-deterministic timing: requires a controlled async yield between upsert calls)',
+    );
+
+    test.todo(
+      'F6: query with a pre-filter matching >370 000 documents must not hit the 16 MB BSON limit ' +
+        '(requires seeding ~400 000 documents — impractical in CI; fix is to pass combinedFilter directly to $vectorSearch)',
+    );
+
+    test.todo(
+      'F12: upsert immediately after createIndex must not fail with index-not-ready ' +
+        '(non-deterministic in atlas-local where indexes become READY within milliseconds; ' +
+        'fix: callers must call waitForIndexReady after createIndex before querying — ' +
+        'see createIndex JSDoc and the createIndexAndWait helper in this test file)',
+    );
+
+    test.todo(
+      'F15: getCollection with throwIfNotExists=true must throw after the collection is dropped externally ' +
+        '(failure mode is a wrong error message not silence, making a clear red/green assertion impractical; ' +
+        'fix: phantom handles are no longer cached when collectionExists=false)',
+    );
+  });
+  // ─────────────────────────────────────────────────────────────────────────────
 });
 
 // Shared vector store test suite

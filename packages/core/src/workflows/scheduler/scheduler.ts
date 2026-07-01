@@ -89,6 +89,14 @@ export class Scheduler extends MastraBase {
           this.logger.error('Scheduler tick crashed', { error: err });
         });
       }, this.#config.tickIntervalMs);
+
+      // Don't keep the process alive just because the scheduler is polling.
+      // The process should be able to exit when all other work is done.
+      // Without .unref(), the setInterval prevents clean shutdown in
+      // scripts that create a Mastra instance (which auto-creates the
+      // notification dispatch workflow with a cron schedule) and exit
+      // after a single agent.generate() call.
+      this.#intervalHandle.unref();
     } catch (err) {
       // Reset state so a future start() can retry. Without this, a failed
       // warm-up tick would leave #started=true with no interval armed and
