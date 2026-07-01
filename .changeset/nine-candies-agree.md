@@ -2,4 +2,13 @@
 '@mastra/railway': minor
 ---
 
-Added checkpoint persistence, automatic restart, and reconnect support to RailwaySandbox. New checkpointName option saves sandbox filesystem state before idle timeout so sandboxes can be restored on reconnect. restart() and withRestartRetry() automatically reconnect or recreate unavailable sandboxes during command execution. Fixed restart() to await in-flight checkpoint saves before nulling the sandbox reference. Fixed _teardown() to always destroy the sandbox even when checkpoint flush fails. Fixed checkpoint refresh timer race where a stale finally() callback could clobber a newer timer handle. Removed RailwayConnectionError from retriable sandbox errors to prevent command replay after transport failures.
+Added checkpoint-backed restart and reconnect support to `RailwaySandbox`. Pass `checkpointName` to save the sandbox filesystem before idle teardown and restore it when a sandbox must be recreated.
+
+```ts
+const sandbox = new RailwaySandbox({
+  checkpointName: 'mastra-workspace-cache',
+  idleTimeoutMinutes: 30,
+})
+```
+
+Added `restart()` and automatic retry for unavailable Railway sandboxes during command execution. Fixed checkpoint refresh scheduling, restart checkpoint flushing, teardown cleanup, and retry classification so checkpoint state is preserved without replaying commands after ambiguous transport failures.
