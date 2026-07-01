@@ -45,15 +45,7 @@ export class ScoresLibSQL extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: [
-        'spanId',
-        'requestContext',
-        'organizationId',
-        'projectId',
-        'batchId',
-        'datasetId',
-        'datasetItemId',
-      ],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
     });
   }
 

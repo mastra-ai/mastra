@@ -419,7 +419,9 @@ export function createScoresTest({
         const batchId = `batch-${randomUUID()}`;
         await scoresStorage.saveScore(createSampleScore({ scorerId, batchId, runId: 'run-1' }));
         await scoresStorage.saveScore(createSampleScore({ scorerId, batchId, runId: 'run-2' }));
-        await scoresStorage.saveScore(createSampleScore({ scorerId, batchId: `other-${randomUUID()}`, runId: 'run-3' }));
+        await scoresStorage.saveScore(
+          createSampleScore({ scorerId, batchId: `other-${randomUUID()}`, runId: 'run-3' }),
+        );
 
         const result = await scoresStorage.listScoresByBatchId({
           batchId,
