@@ -192,7 +192,7 @@ export const durableAgent = createDurableAgent({
 
 ## Streaming with background tasks
 
-Durable agents support the same [`untilIdle`](/reference/agents/durable-agent#stream) option as regular agents. When `untilIdle` is set, `stream()` keeps the connection open across background-task continuations until the agent is idle:
+Durable agents support the same [`untilIdle`](/reference/streaming/agents/stream) option as regular agents. When `untilIdle` is set, `stream()` keeps the connection open across background-task continuations until the agent is idle:
 
 ```typescript title="src/mastra/run.ts"
 const { output, cleanup } = await durableAgent.stream('Research and summarize the topic', {
