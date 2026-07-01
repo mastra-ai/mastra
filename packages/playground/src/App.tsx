@@ -11,7 +11,7 @@ import { RoutePermissionsGate } from './domains/auth/components/route-permission
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
-import { SignalCrumb, SignalsRootCrumb } from './ee/signals/signal-crumb';
+import { SignalCrumb, SignalDetailsCrumb, SignalsRootCrumb } from './ee/signals/signal-crumb';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -218,9 +218,15 @@ const MinimalRootLayout = () => {
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
 
-// Signals reads from the platform Entity-Learning API, so it is gated on the
-// presence of the server-injected `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`.
-const isSignalsEnabled = Boolean(window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT);
+// Signals reads from the platform Entity-Learning API, which requires the
+// observability endpoint plus the organization and project ids to build every
+// request. It is gated on the presence of all three server-injected values,
+// mirroring the nav-items gate so the route is not directly routable with a
+// partial platform config.
+const isSignalsEnabled =
+  Boolean(window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT) &&
+  Boolean(window.MASTRA_ORGANIZATION_ID) &&
+  Boolean(window.MASTRA_PLATFORM_PROJECT_ID);
 
 const agentCmsChildRoutes = [
   { index: true, element: <CmsAgentInformationPage /> },
@@ -411,12 +417,11 @@ export const routes: RouteObject[] = [
                   path: ':signalId/traces/:traceId',
                   element: <SignalTraceIdPage />,
                   handle: {
-                    crumbs: ({ params }) => [
+                    crumbs: [
                       {
                         id: 'signal',
-                        Component: SignalCrumb,
+                        Component: SignalDetailsCrumb,
                         heading: 'Signal',
-                        to: params.signalId ? `/signals/${encodeURIComponent(params.signalId)}` : '/signals',
                       },
                       { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
                     ],

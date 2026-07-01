@@ -80,13 +80,27 @@ describe('SignalsOverviewPage', () => {
       expect(await screen.findByText('Select an entity to inspect its signals and clusters.')).not.toBeNull();
     });
 
-    it('keeps the agent filter pinned at the top regardless of selection', async () => {
+    it('offers the agent picker as the empty-state CTA', async () => {
       server.use(http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)));
 
       renderOverview(null);
 
-      // The agent picker is present even before an agent is picked.
-      expect(await screen.findByLabelText('Agent')).not.toBeNull();
+      // The empty-state prompt renders, and the agent picker is its CTA.
+      const prompt = await screen.findByText('Select an entity to inspect its signals and clusters.');
+      expect(prompt).not.toBeNull();
+      expect(screen.getByLabelText('Agent')).not.toBeNull();
+    });
+
+    it('hides the top filter bar until an agent is selected', async () => {
+      server.use(http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)));
+
+      renderOverview(null);
+
+      await screen.findByText('Select an entity to inspect its signals and clusters.');
+
+      // Before selection there is exactly one agent picker — the empty-state CTA.
+      // The top filter bar (a second picker) is not rendered.
+      expect(screen.getAllByLabelText('Agent')).toHaveLength(1);
     });
   });
 

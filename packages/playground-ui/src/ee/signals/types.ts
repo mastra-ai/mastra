@@ -1,9 +1,3 @@
-export type {
-  EntityLearningTopic,
-  EntityLearningTopicExample,
-  EntityLearningPoint,
-} from './services/entity-learning-types';
-
 /**
  * Display metadata for a signal in the catalog. The clusters themselves are
  * fetched live from the Entity-Learning `/topics` endpoint per selected entity.

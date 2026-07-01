@@ -183,12 +183,19 @@ export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSe
 
   const entity = selectedEntity ? entities.find(item => item.entityId === selectedEntity.entityId) : undefined;
 
+  // When entities exist but none is selected, hide the filter bar and surface a
+  // centered empty state whose CTA is the agent picker itself, so selecting an
+  // agent is the primary action. The bar returns once an agent is selected.
+  const showEntityPrompt = !isLoading && !isError && entities.length > 0 && !entity;
+
   return (
     <TopicsLayout sidebar={null} contentPadding={false}>
       <div className="flex h-full min-w-0 flex-col" aria-label="Signals">
-        <div className="border-b border-border1/70 px-6 py-4">
-          <SignalsEntityFilter entities={entities} selected={selectedEntity} onChange={onEntityChange} />
-        </div>
+        {!showEntityPrompt && (
+          <div className="border-b border-border1/70 px-6 py-4">
+            <SignalsEntityFilter entities={entities} selected={selectedEntity} onChange={onEntityChange} />
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {isLoading ? (
@@ -217,6 +224,9 @@ export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSe
                 iconSlot={<MousePointerClickIcon />}
                 titleSlot="No entity selected"
                 descriptionSlot="Select an entity to inspect its signals and clusters."
+                actionSlot={
+                  <SignalsEntityFilter entities={entities} selected={selectedEntity} onChange={onEntityChange} />
+                }
               />
             </div>
           ) : entity.availableSignals.length === 0 ? (

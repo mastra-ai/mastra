@@ -9,6 +9,23 @@ export function SignalCrumb() {
 }
 
 /**
+ * Signal breadcrumb used on the trace route, where it links back to the signal
+ * details page. It preserves the current query params (`entityId`, `topicId`,
+ * …) so navigating up keeps the selected entity/topic instead of landing on the
+ * details page empty state.
+ */
+export function SignalDetailsCrumb() {
+  const { signalId } = useParams<{ signalId: string }>();
+  const [searchParams] = useSearchParams();
+  if (!signalId) return null;
+
+  const search = searchParams.toString();
+  const to = `/signals/${encodeURIComponent(signalId)}${search ? `?${search}` : ''}`;
+
+  return <Link to={to}>{getSignalName(signalId)}</Link>;
+}
+
+/**
  * Root "Signals" breadcrumb that links back to the overview while preserving the
  * current entity context (`entityId`) from the URL, so navigating up keeps the
  * selected agent instead of resetting the overview.

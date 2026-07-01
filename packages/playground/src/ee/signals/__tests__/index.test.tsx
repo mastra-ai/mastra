@@ -8,7 +8,7 @@ import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from '..';
-import { SignalCrumb, SignalsRootCrumb } from '../signal-crumb';
+import { SignalCrumb, SignalDetailsCrumb, SignalsRootCrumb } from '../signal-crumb';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -267,6 +267,34 @@ describe('Signals page wrappers', () => {
 
       const link = screen.getByRole('link', { name: 'Signals' });
       expect(link.getAttribute('href')).toBe('/signals');
+    });
+  });
+
+  describe('when rendering the signal breadcrumb on the trace route', () => {
+    it('links back to the signal details page preserving the current query params', () => {
+      render(
+        <MemoryRouter initialEntries={['/signals/sentiment/traces/trace-1?entityId=entity_support&topicId=89']}>
+          <Routes>
+            <Route path="/signals/:signalId/traces/:traceId" element={<SignalDetailsCrumb />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Sentiment' });
+      expect(link.getAttribute('href')).toBe('/signals/sentiment?entityId=entity_support&topicId=89');
+    });
+
+    it('links to the signal details page without a query string when no params are present', () => {
+      render(
+        <MemoryRouter initialEntries={['/signals/sentiment/traces/trace-1']}>
+          <Routes>
+            <Route path="/signals/:signalId/traces/:traceId" element={<SignalDetailsCrumb />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Sentiment' });
+      expect(link.getAttribute('href')).toBe('/signals/sentiment');
     });
   });
 });

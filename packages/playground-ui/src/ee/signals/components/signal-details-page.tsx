@@ -9,18 +9,16 @@ import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import { cn } from '../../../lib/utils';
 import { TopicTraceDetailsPanel, TopicsLayout } from '../../topics';
 import { useEntities, useEntityPoints, useEntityTopicExamples, useEntityTopics } from '../hooks';
+import type { EntityLearningPoint, EntityLearningTopic, EntityLearningTopicExample } from '../services';
 import { getSignalCatalogEntry } from '../signals-data';
-import type { EntityLearningPoint, EntityLearningTopic, EntityLearningTopicExample, SelectedEntity } from '../types';
+import type { SelectedEntity } from '../types';
 
 export const SignalTraceDetailsPanel = TopicTraceDetailsPanel;
 const SignalsLayout = TopicsLayout;
 
 type SignalTab = 'trace-list' | 'chart';
 
-const OUTLIER_COLOR = 'hsl(0, 0%, 55%)';
-
-function clusterColor(topicId: string | undefined) {
-  if (!topicId) return OUTLIER_COLOR;
+function clusterColor(topicId: string) {
   let hash = 0;
   for (let i = 0; i < topicId.length; i++) {
     hash = topicId.charCodeAt(i) + ((hash << 5) - hash);
@@ -188,7 +186,11 @@ export function SignalChartTab({ topics, points, selectedTopicIds, onTopicToggle
   const chartData = useMemo(
     () =>
       points
-        .filter(point => point.topicId !== undefined && selectedTopicIds.includes(point.topicId))
+        // Only show points belonging to a selected cluster.
+        .filter(
+          (point): point is EntityLearningPoint & { topicId: string } =>
+            point.topicId !== undefined && selectedTopicIds.includes(point.topicId),
+        )
         .map(point => ({ ...point, color: clusterColor(point.topicId) })),
     [points, selectedTopicIds],
   );
@@ -323,6 +325,7 @@ export function SignalDetailsPage({
     data: examplesData,
     isLoading: examplesLoading,
     isFetching: examplesFetching,
+    isError: examplesError,
   } = useEntityTopicExamples(
     resolvedEntity?.entityId,
     selectedTopic?.topicId,
@@ -333,7 +336,7 @@ export function SignalDetailsPage({
   // so the trace list never flashes the empty-state copy between datasets.
   const examplesPending = examplesLoading || (examplesFetching && examplesData === undefined);
 
-  const { data: pointsData } = useEntityPoints(
+  const { data: pointsData, isError: pointsError } = useEntityPoints(
     resolvedEntity?.entityId,
     runId && signalId ? { signalName: signalId, runId, includeOutliers: true } : undefined,
   );
@@ -359,7 +362,7 @@ export function SignalDetailsPage({
     );
   }
 
-  if (entitiesError || topicsError) {
+  if (entitiesError || topicsError || examplesError || pointsError) {
     return (
       <SignalsLayout sidebar={null}>
         <p className="text-ui-md text-accent2">Failed to load this signal from the observability endpoint.</p>
