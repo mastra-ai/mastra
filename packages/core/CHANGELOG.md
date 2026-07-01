@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.48.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb))
+
 ## 1.48.0
 
 ### Minor Changes

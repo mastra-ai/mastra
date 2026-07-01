@@ -394,6 +394,8 @@ export interface DurableAgenticExecutionOutput {
   processorRetryFeedback?: string;
   /** Whether background tasks are still running after this iteration */
   backgroundTaskPending?: boolean;
+  /** Whether a delegation hook called ctx.bail() during this iteration */
+  delegationBailed?: boolean;
 }
 
 /**
