@@ -132,6 +132,15 @@ gh api "repos/$OWNER/$REPO/issues/$ISSUE/timeline" --paginate --jq '.[] | select
 gh pr view "$PR" --json number,title,state,isDraft,url,author,body,comments,reviewRequests,reviews,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
 ```
 
+### PR maintainer-fix checks
+
+For Branch B/C PRs, do this before branch output or `ask_user`. Do not modify branches, apply suggestions, resolve conflicts, or run broad checks without approval.
+
+- [ ] Check conflicts, failed `statusCheckRollup` lint/typecheck/format/test/CI, and applicable inline suggestions/review nits; ignore unrelated Vercel failures.
+- [ ] If a relevant failure is unclear or stale and the affected package is obvious, run only the narrowest local check needed to confirm it.
+- [ ] Record concise results in `Context gathered` and `Evidence`, using `None found.` when nothing applies.
+- [ ] If a small low/medium-severity fix-up is found, set `Recommended next step` to `maintainer PR fix-up` and include matching final `ask_user` option(s).
+
 ### Repo/history context
 
 - [ ] Inspect repo files/history only as needed for severity, scope, routing, or maintainer notes.
@@ -186,13 +195,15 @@ Use when exactly one PR clearly closes/fixes the issue, or when the input itself
 
 - [ ] Immediately update the triage file's `Context gathered` and `Evidence` sections with the PR context findings before writing branch conclusions.
 
-- [ ] Write Branch output with severity/assessment/scope, issue summary, PR relevance, evidence checked, review observations, optional author pre-review, optional maintainer PR fix-up if severity is low/medium and the fix is small, and required maintainer notes to post after any fix-up.
+- [ ] Write Branch output with severity/assessment/scope, issue summary, PR relevance, evidence checked, review observations, PR maintainer-fix check results, optional author pre-review, optional maintainer PR fix-up, and required maintainer notes.
 
-- [ ] Update the triage file, then call `ask_user` with exactly:
+- [ ] Update the triage file, then call `ask_user` with exactly the relevant Branch B options:
   - `Post author pre-review comment`
   - `Post maintainer notes comment`
   - `Post both comments`
-  - `Fix up PR as maintainer, then post maintainer notes` (only if severity is low/medium and the fix is small)
+  - `Fix conflicts as maintainer, then post maintainer notes` (only if found)
+  - `Fix lint/CI failures as maintainer, then post maintainer notes` (only if found)
+  - `Apply inline suggestions as maintainer, then post maintainer notes` (only if found)
   - `End triage`
 
 ### Branch C: Multiple linked PRs
@@ -203,11 +214,13 @@ Use when multiple PRs clearly close/fix the issue.
 
 - [ ] Immediately update the triage file's `Context gathered` and `Evidence` sections with each PR context finding before writing comparison conclusions.
 
-- [ ] Write Branch output with severity/assessment/scope, issue summary, PR list, evidence checked, comparison notes, optional maintainer PR fix-up if severity is low/medium and the fix is small, and required maintainer notes to post after any fix-up.
+- [ ] Write Branch output with severity/assessment/scope, issue summary, PR list, evidence checked, comparison notes, PR maintainer-fix check results, optional maintainer PR fix-up, and required maintainer notes.
 
-- [ ] Update the triage file, then call `ask_user` with exactly:
+- [ ] Update the triage file, then call `ask_user` with exactly the relevant Branch C options:
   - `Post maintainer notes comment`
-  - `Fix up PR as maintainer, then post maintainer notes` (only if severity is low/medium and the fix is small)
+  - `Fix conflicts as maintainer, then post maintainer notes` (only if found)
+  - `Fix lint/CI failures as maintainer, then post maintainer notes` (only if found)
+  - `Apply inline suggestions as maintainer, then post maintainer notes` (only if found)
   - `End triage`
 
 ### Branch D: No linked PR
