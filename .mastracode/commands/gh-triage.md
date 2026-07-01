@@ -60,7 +60,7 @@ Use this compact lifecycle template and update it after each major step with con
 
 ### Confidence basis
 
-<For PR branches: 1-2 score-support bullets plus concise limits: gap/risk, merge impact, blocking yes/no.>
+<For PR branches: 1-2 bullets supporting the score, then 1-3 explicit confidence limitations.>
 
 ### Evidence
 
