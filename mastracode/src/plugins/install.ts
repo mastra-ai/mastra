@@ -15,6 +15,7 @@ import type { InstalledPluginRecord, PluginScope } from './types.js';
 export type InstallPluginOptions = PluginPathOptions & {
   entry?: string;
   ref?: string;
+  githubCliPath?: string;
 };
 
 export type DiscoveredLocalPlugin = {
@@ -66,12 +67,13 @@ export async function installGithubPlugin(
   const paths = getPluginScopePaths(scope, options);
   const checkoutDir = path.join(paths.sourcesPath, 'github', `${parsed.owner}-${parsed.repo}`);
 
-  await assertGithubCliAvailable();
-  await assertGithubCliAuthenticated();
+  const githubCli = options.githubCliPath ?? 'gh';
+  await assertGithubCliAvailable(githubCli);
+  await assertGithubCliAuthenticated(githubCli);
 
   fs.rmSync(checkoutDir, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(checkoutDir), { recursive: true });
-  await execa('gh', ['repo', 'clone', parsed.repoSpec, checkoutDir], NON_INTERACTIVE_EXEC_OPTIONS);
+  await execa(githubCli, ['repo', 'clone', parsed.repoSpec, checkoutDir], NON_INTERACTIVE_EXEC_OPTIONS);
   const ref = options.ref ?? parsed.ref;
   if (ref) {
     await execa('git', ['checkout', ref], { cwd: checkoutDir, env: NON_INTERACTIVE_GIT_ENV });
@@ -175,17 +177,17 @@ function isInsideDirectory(targetPath: string, root: string): boolean {
   return targetPath === root || targetPath.startsWith(root + path.sep);
 }
 
-async function assertGithubCliAvailable(): Promise<void> {
+async function assertGithubCliAvailable(githubCli: string): Promise<void> {
   try {
-    await execa('gh', ['--version'], NON_INTERACTIVE_EXEC_OPTIONS);
+    await execa(githubCli, ['--version'], NON_INTERACTIVE_EXEC_OPTIONS);
   } catch {
     throw new Error('GitHub CLI is required to install GitHub plugins. Install gh and run gh auth login.');
   }
 }
 
-async function assertGithubCliAuthenticated(): Promise<void> {
+async function assertGithubCliAuthenticated(githubCli: string): Promise<void> {
   try {
-    await execa('gh', ['auth', 'status'], NON_INTERACTIVE_EXEC_OPTIONS);
+    await execa(githubCli, ['auth', 'status'], NON_INTERACTIVE_EXEC_OPTIONS);
   } catch {
     throw new Error('GitHub CLI is not authenticated. Run gh auth login, then install the plugin again.');
   }

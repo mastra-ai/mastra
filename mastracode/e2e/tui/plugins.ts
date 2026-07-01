@@ -20,6 +20,7 @@ let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
 let githubInstallGhLogPath: string | undefined;
+let githubInstallGhPath: string | undefined;
 
 function resetPluginScenarioState(): void {
   currentTui = undefined;
@@ -27,6 +28,7 @@ function resetPluginScenarioState(): void {
   githubPollSourceDir = undefined;
   githubPollManager = undefined;
   githubInstallGhLogPath = undefined;
+  githubInstallGhPath = undefined;
 }
 
 function writeLocalPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
@@ -274,6 +276,7 @@ exit 1
 `,
   );
   chmodSync(fakeGhPath, 0o755);
+  githubInstallGhPath = fakeGhPath;
   githubInstallGhLogPath = ghLogPath;
 }
 
@@ -507,14 +510,17 @@ export const pluginsGithubInstallGhCliScenario: McE2eScenario = {
     resetPluginScenarioState();
     prepareGithubInstallGhPlugin(projectDir);
   },
-  env({ projectDir }) {
-    return { PATH: `${join(projectDir, 'fixtures', 'bin')}:${process.env.PATH ?? ''}` };
-  },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    if (!githubInstallGhPath) throw new Error('GitHub install gh fixture was not prepared');
     const { PluginManager } = await import('../../src/plugins/manager.js');
     return startMastraCodeApp({
       config: {
-        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+        pluginManager: new PluginManager({
+          projectRoot: projectDir,
+          configDir: '.mastracode',
+          homeDir,
+          githubCliPath: githubInstallGhPath,
+        }),
       },
     });
   },

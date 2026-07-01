@@ -23,6 +23,10 @@ function getEntryVersion(entryPath: string): string {
   return `${stat.mtimeNs}:${stat.size}`;
 }
 
+type PluginManagerOptions = PluginPathOptions & {
+  githubCliPath?: string;
+};
+
 export class PluginManager {
   private loadedPlugins: LoadedPlugin[] = [];
   private readonly pluginTools: ReturnType<typeof collectActivePluginTools> = {};
@@ -35,7 +39,7 @@ export class PluginManager {
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
 
-  constructor(private readonly options: PluginPathOptions) {}
+  constructor(private readonly options: PluginManagerOptions) {}
 
   onReload(listener: (plugins: LoadedPlugin[]) => void | Promise<void>): () => void {
     this.reloadListeners.add(listener);
