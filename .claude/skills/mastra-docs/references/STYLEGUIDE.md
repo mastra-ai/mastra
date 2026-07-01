@@ -48,6 +48,7 @@ Use this file as the default writing guide for Mastra's documentation.
 - When an instruction is opinionated, separate the required action from the opinionated choice used in the example.
 - Use `Ensure`, not `make sure`.
 - Use exclamation points rarely.
+- Do not use "Alpha" to mark early-stage features. Only use "Beta" (this also applies to the sidebars)
 
 ## Links and references
 
