@@ -23,6 +23,7 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   MEMORY_GATEWAY_PROVIDER,
 } from '../onboarding/settings.js';
+import type { LoadedPlugin } from '../plugins/types.js';
 import {
   detectPackageManager,
   fetchChangelog,
@@ -152,10 +153,11 @@ export function consumePendingImages(
 export class MastraTUI {
   private state: TUIState;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
-  private idleCounterTimer: ReturnType<typeof setInterval> | null = null;
+  private statusTimingTimer: ReturnType<typeof setInterval> | null = null;
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
   private cleanupKeyHandlers?: () => void;
+  private cleanupPluginReloadListener?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -359,7 +361,7 @@ export class MastraTUI {
    * Errors are handled via controller events.
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    this.clearIdleCounter();
+    this.clearStatusTimingTicker();
     const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
     this.state.session.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
@@ -430,7 +432,7 @@ export class MastraTUI {
     pendingNewThread: boolean,
   ): void {
     const send = () => {
-      this.clearIdleCounter();
+      this.clearStatusTimingTicker();
       this.state.analytics?.capture('mastracode_prompt_submitted', {
         threadId: this.state.session.thread.getId(),
         resourceId: this.state.session.identity.getResourceId(),
@@ -467,7 +469,7 @@ export class MastraTUI {
     const hasActiveRun = this.state.session.stream.isActive();
 
     const send = () => {
-      this.clearIdleCounter();
+      this.clearStatusTimingTicker();
       if (hasActiveRun) {
         this.state.pendingApprovalDismiss?.(USER_MESSAGE_APPROVAL_INTERRUPT);
       }
@@ -541,20 +543,33 @@ export class MastraTUI {
       this.updateCheckTimer = null;
     }
 
-    if (this.idleCounterTimer) {
-      clearInterval(this.idleCounterTimer);
-      this.idleCounterTimer = null;
-    }
+    this.clearStatusTimingTicker();
 
     if (this.cleanupKeyHandlers) {
       this.cleanupKeyHandlers();
       this.cleanupKeyHandlers = undefined;
     }
 
+    if (this.cleanupPluginReloadListener) {
+      this.cleanupPluginReloadListener();
+      this.cleanupPluginReloadListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
     this.state.ui.stop();
+  }
+
+  private async refreshPluginRuntimeState(plugins: LoadedPlugin[]): Promise<void> {
+    const activePlugins = plugins.filter(plugin => plugin.status === 'active');
+    this.state.session.state.set({
+      pluginSkillPaths: activePlugins.flatMap(plugin => plugin.skillPaths ?? []),
+      pluginCommandPaths: activePlugins.flatMap(plugin => plugin.commandPaths ?? []),
+      pluginInstructions: activePlugins.flatMap(plugin => (plugin.instructions ? [plugin.instructions] : [])),
+    });
+    await loadCustomSlashCommands(this.state);
+    await refreshSkillsAutocomplete(this.state);
   }
 
   // ===========================================================================
@@ -567,6 +582,15 @@ export class MastraTUI {
     // Initialize controller (but don't select thread yet)
     await this.state.controller.init();
     await this.state.controller.getMastra()?.startWorkers();
+
+    if (this.state.pluginManager && !this.cleanupPluginReloadListener) {
+      this.cleanupPluginReloadListener = this.state.pluginManager.onReload(plugins =>
+        this.refreshPluginRuntimeState(plugins).catch(err => {
+          const msg = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[plugin runtime refresh] ${msg}\n`);
+        }),
+      );
+    }
 
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
@@ -656,18 +680,34 @@ export class MastraTUI {
     updateStatusLine(this.state);
   }
 
-  private startIdleCounter(idleStartedAt = Date.now(), now = Date.now()): void {
-    this.state.idleStartedAt = idleStartedAt;
-    this.state.idleCounter?.setIdleStartedAt(idleStartedAt, now);
+  private updateIdleStatusLine(now = Date.now()): void {
+    this.state.idleCounter?.setTimingState(this.state, now);
     this.state.ui.requestRender?.();
+  }
 
-    if (this.idleCounterTimer) {
-      clearInterval(this.idleCounterTimer);
-    }
+  private updateActiveStatusTiming(now = Date.now()): void {
+    this.state.idleCounter?.setTimingState(this.state, now);
+    updateStatusLine(this.state);
+    this.state.ui.requestRender?.();
+  }
 
-    this.idleCounterTimer = setInterval(() => {
-      this.state.idleCounter?.update();
-      this.state.ui.requestRender?.();
+  private startActiveStatusTimingTicker(): void {
+    this.clearStatusTimingTicker();
+    this.updateActiveStatusTiming();
+    this.statusTimingTimer = setInterval(() => {
+      if (this.state.agentRunStartedAt === undefined) {
+        this.clearStatusTimingTicker(false);
+        return;
+      }
+      this.updateActiveStatusTiming();
+    }, 1_000);
+  }
+
+  private startIdleStatusTimingTicker(): void {
+    this.clearStatusTimingTicker();
+    this.updateIdleStatusLine();
+    this.statusTimingTimer = setInterval(() => {
+      this.updateIdleStatusLine();
     }, 60_000);
   }
 
@@ -675,26 +715,28 @@ export class MastraTUI {
     await renderExistingMessages(this.state);
 
     if (this.state.session.run.isRunning()) {
-      this.clearIdleCounter();
+      this.clearStatusTimingTicker();
       return;
     }
 
     if (this.state.lastRenderedMessageAt === undefined) {
-      this.clearIdleCounter();
+      this.clearStatusTimingTicker();
       return;
     }
 
-    this.startIdleCounter(this.state.lastRenderedMessageAt);
+    this.state.lastAgentRunEndedAt = this.state.lastRenderedMessageAt;
+    this.startIdleStatusTimingTicker();
   }
 
-  private clearIdleCounter(): void {
-    this.state.idleStartedAt = undefined;
-    this.state.idleCounter?.setIdleStartedAt(undefined);
-    if (this.idleCounterTimer) {
-      clearInterval(this.idleCounterTimer);
-      this.idleCounterTimer = null;
+  private clearStatusTimingTicker(clearDisplay = true): void {
+    if (this.statusTimingTimer) {
+      clearInterval(this.statusTimingTimer);
+      this.statusTimingTimer = null;
     }
-    this.state.ui.requestRender?.();
+    if (clearDisplay) {
+      this.state.idleCounter?.setTimingState(undefined);
+      this.state.ui.requestRender?.();
+    }
   }
 
   // ===========================================================================
@@ -713,7 +755,7 @@ export class MastraTUI {
 
   private async handleEvent(event: AgentControllerEvent): Promise<void> {
     if (event.type === 'agent_start') {
-      this.clearIdleCounter();
+      this.clearStatusTimingTicker();
       this.startCaffeinate();
       this.lastStreamError = null;
     }
@@ -737,9 +779,13 @@ export class MastraTUI {
         await this.syncThreadActivePackMetadata();
       }
 
+      if (event.type === 'agent_start' && this.state.agentRunStartedAt !== undefined) {
+        this.startActiveStatusTimingTicker();
+      }
+
       if (event.type === 'agent_end') {
         const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
-        this.startIdleCounter();
+        this.startIdleStatusTimingTicker();
         await this.runStopHook(stopReason);
 
         if (event.reason === 'error' && this.lastStreamError) {
@@ -1072,6 +1118,7 @@ export class MastraTUI {
       session: this.state.session,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
+      pluginManager: this.state.pluginManager,
       analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,

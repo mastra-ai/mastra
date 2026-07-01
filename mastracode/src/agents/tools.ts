@@ -88,11 +88,16 @@ export function createToolHooks(hookManager?: HookManager): ToolHooks | undefine
   };
 }
 
+type DynamicToolProvider =
+  | Record<string, ToolLike | undefined>
+  | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike | undefined>);
+
 export function createDynamicTools(
   mcpManager?: McpManager,
-  extraTools?: Record<string, ToolLike> | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike>),
+  extraTools?: DynamicToolProvider,
   disabledTools?: string[],
   storage?: MastraCompositeStore,
+  pluginTools?: Record<string, ToolLike>,
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
@@ -134,6 +139,14 @@ export function createDynamicTools(
     if (extraTools) {
       const resolved = typeof extraTools === 'function' ? extraTools({ requestContext }) : extraTools;
       for (const [name, tool] of Object.entries(resolved)) {
+        if (tool && !(name in tools)) {
+          tools[name] = tool;
+        }
+      }
+    }
+
+    if (pluginTools) {
+      for (const [name, tool] of Object.entries(pluginTools)) {
         if (!(name in tools)) {
           tools[name] = tool;
         }
