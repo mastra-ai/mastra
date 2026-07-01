@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 Removed the `Searchbar` component from `@mastra/playground-ui`. Compose search inputs with `InputGroup` instead so search remains a documented use case of the existing input composition primitive.
