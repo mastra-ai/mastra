@@ -442,7 +442,10 @@ export class RailwaySandbox extends MastraSandbox {
     }
 
     const message = error.message.toLowerCase();
-    return /checkpoint/.test(message) && /(not found|does not exist|missing|unknown|no checkpoint)/.test(message);
+    return (
+      message.includes('checkpoint') &&
+      ['not found', 'does not exist', 'missing', 'unknown', 'no checkpoint'].some(phrase => message.includes(phrase))
+    );
   }
 
   private isCheckpointAlreadyExistsError(error: unknown): boolean {
@@ -451,7 +454,11 @@ export class RailwaySandbox extends MastraSandbox {
     }
 
     const message = error.message.toLowerCase();
-    return /checkpoint/.test(message) && /(already exists|name.*used|must be unused|unique)/.test(message);
+    return (
+      message.includes('checkpoint') &&
+      (['already exists', 'must be unused', 'unique'].some(phrase => message.includes(phrase)) ||
+        (message.includes('name') && message.includes('used')))
+    );
   }
 
   private isSandboxUnavailableError(error: unknown, seen = new Set<unknown>()): boolean {
@@ -482,8 +489,8 @@ export class RailwaySandbox extends MastraSandbox {
       }
 
       if (
-        /sandbox.*(not found|destroyed|failed|not running|unavailable|closed)/.test(message) ||
-        /(not found|destroyed|failed|not running|unavailable|closed).*sandbox/.test(message)
+        message.includes('sandbox') &&
+        ['not found', 'destroyed', 'failed', 'not running', 'unavailable'].some(phrase => message.includes(phrase))
       ) {
         return true;
       }
