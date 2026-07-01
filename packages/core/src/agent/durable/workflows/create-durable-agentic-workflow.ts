@@ -29,6 +29,7 @@ import {
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
+  createDurableGoalStep,
   createDurableIsTaskCompleteStep,
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
@@ -114,6 +115,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
   // so it shows up in workflow traces and produces a proper state transition.
   const isTaskCompleteStep = createDurableIsTaskCompleteStep(maxSteps);
+
+  // Create the goal evaluation step — mirrors the non-durable
+  // `createGoalStep`. Runs after isTaskComplete so the goal judge
+  // sees whether isTaskComplete already stopped the loop.
+  const goalStep = createDurableGoalStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   // Note: foreach runs with concurrency: 1 (sequential) because tool approval
@@ -216,10 +222,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
         if (!drainFn) return execOutput;
 
-        const pendingSignals = drainFn('pending');
-        if (pendingSignals.length === 0) return execOutput;
-
         try {
+          const pendingSignals = drainFn('pending');
+          if (pendingSignals.length === 0) return execOutput;
+
           const drainList = new MessageList();
           drainList.deserialize(execOutput.messageListState);
           drainList.markResponseMessageBoundary(execOutput.messageId);
@@ -248,6 +254,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             },
           };
         } catch {
+          // Signal drain is best-effort; drainPendingSignals() is inside
+          // the try so signals remain queued if it throws.
           return execOutput;
         }
       },
@@ -280,6 +288,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     // messageListState before the dowhile predicate decides whether to loop
     // again. No-op when the run has no policy configured.
     .then(isTaskCompleteStep)
+    // Step 9: Goal evaluation. Mirrors the non-durable createGoalStep — judges
+    // whether the thread's active objective is satisfied or should continue.
+    // No-op when no goal is configured or no active objective exists.
+    .then(goalStep)
     .commit();
 
   // Create the main agentic loop workflow with dowhile
@@ -395,9 +407,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // rotate the messageId, add them to the transcript, emit them
         // to the stream, and force continuation so the LLM sees them.
         if (pubsub && registryEntry?.drainPendingSignals) {
-          const pendingSignals = registryEntry.drainPendingSignals('pending');
-          if (pendingSignals.length > 0) {
-            try {
+          try {
+            const pendingSignals = registryEntry.drainPendingSignals('pending');
+            if (pendingSignals.length > 0) {
               const drainList = new MessageList();
               drainList.deserialize(state.messageListState);
               drainList.markResponseMessageBoundary();
@@ -420,10 +432,12 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 state.lastStepResult.isContinued = true;
               }
               shouldContinue = true;
-            } catch {
-              // Signal drain is best-effort; if deserialization fails
-              // the next iteration still runs with the un-drained state.
             }
+          } catch {
+            // Signal drain is best-effort; if deserialization fails
+            // the next iteration still runs with the un-drained state.
+            // drainPendingSignals() is inside the try so signals remain
+            // queued if the drain function itself throws.
           }
         }
 

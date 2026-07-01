@@ -129,6 +129,7 @@ describe('DurableAgent signal drain', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await pubsub.close();
   });
 
@@ -143,14 +144,26 @@ describe('DurableAgent signal drain', () => {
 
       const durableAgent = createDurableAgent({ agent, pubsub });
 
-      // Create a signal to include in the input messages
-      const inputSignal = createTestSignal('wake up');
+      // Create signals that simulate what getInitialSignalEchoes would return
+      // (signals already in the messageList with role 'signal' from persisted history)
+      const echoSignals = [
+        createTestSignal('echo one'),
+        createTestSignal('echo two'),
+      ];
 
-      // Stream with the signal included as an input message
-      const { fullStream, cleanup } = await durableAgent.stream(
-        [inputSignal.toLLMMessage()],
-        { maxSteps: 3 },
-      );
+      // Intercept the registry entry to inject initialSignalEchoes
+      const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
+      let intercepted = false;
+      vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
+        const entry = originalGet(runId);
+        if (entry && !intercepted) {
+          intercepted = true;
+          entry.initialSignalEchoes = [...echoSignals];
+        }
+        return entry;
+      });
+
+      const { fullStream, cleanup } = await durableAgent.stream('Hello', { maxSteps: 3 });
 
       const chunks: any[] = [];
       for await (const chunk of fullStream) {
@@ -158,11 +171,15 @@ describe('DurableAgent signal drain', () => {
       }
       await cleanup?.();
 
-      // The signal echo should NOT appear because the signal must have role 'signal'
-      // in the messageList to be echoed. Only signals added via messageList.addSignal()
-      // get role 'signal'. When passed as regular user messages, they have role 'user'.
-      // This test verifies the basic flow doesn't error.
-      expect(chunks.length).toBeGreaterThan(0);
+      // Find the signal data parts in the stream — echoed signals should appear
+      const signalChunks = chunks.filter(
+        (c: any) => c.type === 'data-signal' || c.type === 'data-user-message',
+      );
+
+      expect(signalChunks.length).toBe(2);
+      expect(signalChunks[0].data.contents).toBe('echo one');
+      expect(signalChunks[1].data.contents).toBe('echo two');
+
     });
   });
 
@@ -193,7 +210,7 @@ describe('DurableAgent signal drain', () => {
           intercepted = true;
           const originalDrain = entry.drainPendingSignals;
           let preRunDrained = false;
-          entry.drainPendingSignals = (scope: 'pending' | 'pre-run') => {
+          entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
             if (scope === 'pre-run' && !preRunDrained) {
               preRunDrained = true;
               return preRunSignals;
@@ -222,8 +239,6 @@ describe('DurableAgent signal drain', () => {
       expect(signalChunks.length).toBe(2);
       expect(signalChunks[0].data.contents).toBe('prerun signal one');
       expect(signalChunks[1].data.contents).toBe('prerun signal two');
-
-      vi.restoreAllMocks();
     });
   });
 
@@ -255,7 +270,7 @@ describe('DurableAgent signal drain', () => {
         const entry = originalGet(runId);
         if (entry) {
           const originalDrain = entry.drainPendingSignals;
-          entry.drainPendingSignals = (scope: 'pending' | 'pre-run') => {
+          entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
             if (scope === 'pending') {
               drainCallCount++;
               // Return signals on the first pending drain (within-iteration
@@ -291,8 +306,6 @@ describe('DurableAgent signal drain', () => {
 
       // The drain function should have been called at least once
       expect(drainCallCount).toBeGreaterThanOrEqual(1);
-
-      vi.restoreAllMocks();
     });
 
     it('forces loop continuation when signals are drained even if LLM would have stopped', async () => {
@@ -338,7 +351,7 @@ describe('DurableAgent signal drain', () => {
         const entry = originalGet(runId);
         if (entry) {
           const originalDrain = entry.drainPendingSignals;
-          entry.drainPendingSignals = (scope: 'pending' | 'pre-run') => {
+          entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
             if (scope === 'pending') {
               pendingDrainCount++;
               // Return signal on the first pending drain only
@@ -370,8 +383,6 @@ describe('DurableAgent signal drain', () => {
       );
       expect(signalChunks.length).toBe(1);
       expect(signalChunks[0].data.contents).toBe('forced continuation signal');
-
-      vi.restoreAllMocks();
     });
   });
 });

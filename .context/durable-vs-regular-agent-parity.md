@@ -152,7 +152,7 @@ Sources audited (branch `durable-agent-parity-check`):
 
 The current durable serialization (`packages/core/src/agent/durable/utils/serialize-state.ts`) uses a **hand-maintained allowlist** of fields:
 
-```
+```text
 maxOutputTokens, temperature, topP, topK, presencePenalty, frequencyPenalty,
 stopSequences, seed, maxRetries, headers
 ```

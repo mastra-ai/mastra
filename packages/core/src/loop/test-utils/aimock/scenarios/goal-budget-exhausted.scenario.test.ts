@@ -72,5 +72,5 @@ describeForAllEngines(
       expect(record?.runsUsed).toBe(2); // Should match maxRuns
     });
   },
-  { skip: ['durable'] },
+  {},
 );

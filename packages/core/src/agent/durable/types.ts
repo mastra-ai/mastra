@@ -33,6 +33,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
+import type { GoalConfig } from '../types';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -545,8 +546,16 @@ export interface RunRegistryEntry {
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
-  /** Resolved input processors (non-serializable) */
+  /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Uncombined input processors for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest` in the
+   * `ProcessorRunner`; this field stores individual processors so the runner
+   * can invoke each processor's `processLLMRequest` method. When absent the
+   * durable `llm-execution` step falls back to `inputProcessors`.
+   */
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
   /** Resolved output processors (non-serializable) */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors (non-serializable) */
@@ -614,6 +623,13 @@ export interface RunRegistryEntry {
    */
   isTaskComplete?: AgentExecutionOptions['isTaskComplete'];
   /**
+   * Agent-level goal configuration. Contains closures (judge resolver,
+   * tools resolver, scorer) that cannot survive the wire; the durable goal
+   * step reads this from the in-process registry. Cross-process engines
+   * without this slot simply skip goal evaluation.
+   */
+  goal?: GoalConfig;
+  /**
    * Per-call global tool-approval policy. When `RequireToolApproval` is a
    * function it cannot be serialized into the workflow input, so the closure
    * lives on the in-process registry. The durable tool-call step prefers this
@@ -634,7 +650,7 @@ export interface RunRegistryEntry {
    * Non-serializable (a closure); cross-process engines cannot recover it and
    * signals sent to a restarted worker will not be drained.
    */
-  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   /**
    * Signal messages already present in the `messageList` at run start (from
    * persisted history). These are echoed as `data-signal` stream data parts
