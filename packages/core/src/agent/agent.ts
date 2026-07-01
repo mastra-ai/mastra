@@ -3079,8 +3079,10 @@ export class Agent<
     this.#mastra = mastra;
 
     // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish.
+    // the background — we don't await to keep this hot path sync-ish. Release
+    // its global scorer hook synchronously so it can't outlive the instance.
     if (this.#ephemeralMastra) {
+      this.#ephemeralMastra.__unregisterHooks();
       void this.#ephemeralMastra.stopWorkers().catch(() => {});
       this.#ephemeralMastra = undefined;
     }
