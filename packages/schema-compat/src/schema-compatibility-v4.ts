@@ -496,6 +496,12 @@ export class SchemaCompatLayer {
                     // @ts-expect-error - fix later
                     constraints.push(`input must match this regex ${check._zod.def.pattern}`);
                     break;
+                  default:
+                    // Formats without a textual description (ipv4, datetime,
+                    // base64, etc.) must be preserved as real validation instead
+                    // of being silently dropped.
+                    newChecks.push(check);
+                    break;
                 }
               }
               break;

@@ -135,7 +135,7 @@ export interface SerializableStructuredOutput {
   /** JSON Schema representation of the output schema */
   schema?: JSONSchema7;
   /** Whether to use JSON prompt injection instead of native response format */
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
   /** Whether to use the parent agent's model for structuring */
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
@@ -269,6 +269,13 @@ export interface DurableAgenticWorkflowInput {
   modelSpanData?: unknown;
   /** Starting step index for continuation across iterations */
   stepIndex?: number;
+  /**
+   * JSON-safe snapshot of `requestContext.entries()` from the call site.
+   * Threaded through workflow input so durable steps (e.g. `is-task-complete`
+   * scorers) can pass it as `customContext`, matching the non-durable path.
+   * Only plain JSON-safe entries should appear here.
+   */
+  requestContextEntries?: Record<string, unknown>;
 }
 
 /**

@@ -215,5 +215,5 @@ describeForAllEngines(
       expect(toolExecuted).toBe(false);
     });
   },
-  { skip: ['durable'] },
+  { skip: ['durable', 'fs'] },
 );

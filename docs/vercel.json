@@ -676,6 +676,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-code/headless",
+      "destination": "https://code.mastra.ai/headless",
+      "permanent": true
+    },
+    {
       "source": "/reference/mastra-code/createMastraCode",
       "destination": "https://code.mastra.ai/",
       "permanent": true

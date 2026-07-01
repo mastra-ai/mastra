@@ -1155,6 +1155,76 @@ body::before {
 
 /* ── Goal panel ─────────────────────────────────────────────────────────── */
 
+.branch-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.branch-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.branch-panel-icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.branch-panel-current {
+  font-size: 12.5px;
+}
+
+.branch-panel-muted {
+  color: var(--fg-dim);
+}
+
+.branch-panel-input {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.branch-panel-textarea {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 8px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.branch-panel-pr {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.branch-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.branch-panel-prlink {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.branch-panel-disabled {
+  flex-direction: row;
+  align-items: center;
+  color: var(--fg-dim);
+}
+
+.branch-panel-hint {
+  font-size: 12px;
+}
+
 .goal-bar {
   display: flex;
   align-items: center;
@@ -1677,6 +1747,56 @@ body::before {
   min-height: 0;
 }
 
+.sidebar-account {
+  margin-top: auto;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-account-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-account-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account-email {
+  font-size: 11px;
+  color: var(--fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-signout-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  background: var(--bg-surface3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.sidebar-signout-btn:hover {
+  color: var(--fg);
+  background: var(--bg-surface);
+}
+
 .sidebar-section-header {
   display: flex;
   align-items: center;
@@ -1782,6 +1902,21 @@ body::before {
   direction: rtl;
   text-align: left;
 }
+.project-switcher-source {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  background: var(--bg-surface3);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.project-switcher-source.github {
+  color: var(--fg);
+}
 .project-switcher-chevron {
   color: var(--fg-muted);
   transform: rotate(90deg);
@@ -1851,6 +1986,113 @@ body::before {
   font-size: 10px;
   color: var(--fg-muted);
   flex-shrink: 0;
+}
+
+/* ── Worktree tree (GitHub projects: project → worktree → threads) ──────── */
+
+/* Collapsible "Workspaces" header toggle */
+.sidebar-tree-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.sidebar-tree-chevron {
+  color: var(--fg-muted);
+  transition: transform 0.12s ease;
+  flex-shrink: 0;
+}
+.sidebar-tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+/* Inline "new workspace" branch-name input */
+.sidebar-newworkspace {
+  padding: 2px 12px 6px;
+}
+
+.sidebar-newworkspace-error {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--danger, #e5484d);
+}
+
+.sidebar-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 6px;
+}
+
+.sidebar-worktree-group {
+  margin-bottom: 2px;
+}
+
+/* A worktree (branch) row */
+.sidebar-worktree {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.sidebar-worktree:hover {
+  background: var(--bg-surface2);
+  color: var(--fg);
+}
+.sidebar-worktree.active {
+  background: var(--accent-soft);
+  color: var(--fg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.sidebar-worktree-icon {
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+.sidebar-worktree.active .sidebar-worktree-icon {
+  color: var(--accent);
+}
+.sidebar-worktree-branch {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* Threads nested under the selected worktree */
+.sidebar-worktree-threads {
+  margin: 2px 0 4px 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border, var(--bg-surface3));
+}
+.sidebar-worktree-threads-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 2px 4px;
+}
+.sidebar-worktree-threads-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
 }
 
 /* Per-thread ⋯ action menu */
@@ -2054,6 +2296,21 @@ body::before {
   border-radius: 999px;
   flex-shrink: 0;
 }
+.project-card-source {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  background: var(--bg-surface3);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.project-card-source.github {
+  color: var(--fg);
+}
 .project-card-remove {
   display: inline-flex;
   align-items: center;
@@ -2097,6 +2354,92 @@ body::before {
   background: var(--bg-surface2);
   color: var(--fg);
   border-color: var(--accent);
+}
+
+/* ── GitHub connect / repo picker ─────────────────────────────────── */
+.sidebar-github-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  margin: 8px 12px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.sidebar-github-btn:hover {
+  background: var(--bg-surface2);
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.github-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 14px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface2);
+}
+.github-search-icon {
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+.github-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 13px;
+  outline: none;
+}
+.github-muted {
+  margin: 8px 14px;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+.github-error {
+  margin: 0 14px 8px;
+  color: var(--danger, #e5484d);
+  font-size: 12px;
+}
+.github-preparing {
+  margin-top: 18vh;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-size: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.github-preparing-spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--fg);
+  border-radius: 50%;
+  animation: github-preparing-spin 0.8s linear infinite;
+}
+@keyframes github-preparing-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Directory browser (embedded inside the Projects modal) ─────────── */
@@ -3274,6 +3617,178 @@ body::before {
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar {
+    transition: none;
+  }
+}
+
+/* ── Auth splash (shown when signed out) ──────────────────────────────── */
+.auth-splash {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  overflow: hidden;
+}
+
+/* Ambient brand glow specific to the splash, layered above the page glow. */
+.auth-splash::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42rem 30rem at 50% -8%, var(--accent-soft), transparent 62%),
+    radial-gradient(34rem 26rem at 50% 120%, oklch(0.769 0.188 70.08 / 0.06), transparent 60%);
+}
+
+/* While /auth/me is in flight: a blank, non-flashing screen. */
+.auth-splash-loading {
+  pointer-events: none;
+}
+.auth-splash-loading::before {
+  display: none;
+}
+
+.auth-splash-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  width: 100%;
+  max-width: 25rem;
+  padding: 40px;
+  text-align: left;
+  background: linear-gradient(180deg, color-mix(in oklch, var(--bg-surface2) 92%, transparent), var(--bg-surface));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: auth-splash-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Accent hairline along the top edge of the card. */
+.auth-splash-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
+  opacity: 0.7;
+}
+
+@keyframes auth-splash-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-splash-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.auth-splash-logo {
+  filter: drop-shadow(0 2px 8px var(--accent-soft));
+}
+
+.auth-splash-wordmark {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.auth-splash-wordmark-accent {
+  color: var(--accent);
+}
+
+.auth-splash-title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+.auth-splash-tagline {
+  margin: 0 0 28px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--fg-muted);
+}
+
+.auth-splash-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 18px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: oklch(0.16 0 0);
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.18) inset,
+    0 6px 18px -10px var(--accent);
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
+}
+
+.auth-splash-button:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.22) inset,
+    0 10px 24px -10px var(--accent);
+}
+.auth-splash-button:active {
+  transform: translateY(0);
+}
+.auth-splash-button:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+.auth-splash-button-arrow {
+  transition: transform 0.15s ease;
+}
+.auth-splash-button:hover .auth-splash-button-arrow {
+  transform: translateX(3px);
+}
+
+.auth-splash-footnote {
+  margin: 18px 0 0;
+  width: 100%;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-splash-card {
+    animation: none;
+  }
+  .auth-splash-button,
+  .auth-splash-button-arrow {
     transition: none;
   }
 }

@@ -84,10 +84,12 @@ export const requestSandboxAccessTool = createTool({
         // filesystem allowlist from `sandboxAllowedPaths` on every call
         // (getDynamicWorkspace), so an unawaited setState would let that
         // rebuild clobber the in-turn widen below before the grant lands.
-        const currentAllowed = (agentControllerCtx?.getState()?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const controllerState = agentControllerCtx?.getState();
+        const currentAllowed = (controllerState?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const nextAllowed = currentAllowed.includes(absolutePath) ? currentAllowed : [...currentAllowed, absolutePath];
         if (!currentAllowed.includes(absolutePath)) {
           await agentControllerCtx?.setState({
-            sandboxAllowedPaths: [...currentAllowed, absolutePath],
+            sandboxAllowedPaths: nextAllowed,
           });
         }
 

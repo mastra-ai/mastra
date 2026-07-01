@@ -2,6 +2,7 @@ Use @styleguides/STYLEGUIDE.md first. @styleguides/ also includes guides for doc
 
 When working check src/content/en/docs/ and src/content/en/reference/ update existing docs or create new docs
 @CONTRIBUTING.md for setup, local development, and components / frontmatter
+When adding a model name or ID to docs, use a placeholder token from src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time)
 
 main documentation src/content/en/docs/
 step by step guides src/content/en/guides/
@@ -25,5 +26,9 @@ pnpm test:e2e # Playwright tests desktop + tablet + mobile
 pnpm test:smoke # Smoke tests only desktop
 pnpm test:og # OG image meta tag tests only desktop
 pnpm test:navigation # Navigation tests desktop + tablet + mobile
+
+Linting
+pnpm validate # Check frontmatter values and if all sidebars are valid
+pnpm lint:prose # Check prose with Vale and Remark
 
 Tests live in tests/ helpers in tests/helpers/ and playwright.config.ts starts pnpm serve

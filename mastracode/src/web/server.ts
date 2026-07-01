@@ -11,8 +11,15 @@ import { Hono } from 'hono';
 import { mountAgentControllerOnMastra } from '../index.js';
 import type { MastraCodeConfig } from '../index.js';
 
+import { mountWebAuth } from './auth.js';
 import { mountConfigRoutes } from './config-routes.js';
 import { mountFsRoutes } from './fs-routes.js';
+import { assertReplicaStableStateSecret, isGithubFeatureEnabled } from './github/config.js';
+import { ensureAppDbReady } from './github/db.js';
+import { mountGithubRoutes } from './github/routes.js';
+import { isSandboxEnabled } from './github/sandbox.js';
+import { TenantDispatcher } from './tenant-server.js';
+import { assertRemoteTenantDbIfRequired } from './tenant-storage.js';
 
 const CONTROLLER_ID = 'code';
 
@@ -74,6 +81,43 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // middleware and every Mastra route under `/api`, with the same schema
   // validation, SSE framing, and error handling the production server uses.
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+
+  // The browser-facing origin used to build OAuth callback URLs. In dev the SPA
+  // is served by Vite on a different port (e.g. :5173) and proxies to this
+  // server, so callback URLs must point at the SPA origin, not this bind. Set
+  // MASTRACODE_PUBLIC_URL to that origin; otherwise we fall back to the bind.
+  const publicOrigin = (
+    process.env.MASTRACODE_PUBLIC_URL ?? `http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`
+  ).replace(/\/+$/, '');
+
+  // Optional WorkOS AuthKit gate. Mounted BEFORE the Mastra adapter and the
+  // custom routes so the `app.use('*')` gate runs ahead of every other handler
+  // and protects the whole surface. No-op unless WorkOS env vars are set.
+  const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
+  const webAuthEnabled = mountWebAuth(app, { redirectUri });
+  process.stderr.write(`MastraCode web auth: ${webAuthEnabled ? 'enabled (WorkOS AuthKit)' : 'disabled'}\n`);
+
+  // Per-tenant isolation: when web auth is enabled, every authenticated user
+  // operates against their own Mastra bound to their own libSQL storage/vector
+  // pair so no tenant's threads/messages/memory/recall can leak into another's.
+  // The dispatcher intercepts the Mastra controller surface (`/api/*`), routes
+  // authenticated users to their isolated tenant app, and falls through to the
+  // shared adapter below for the auth-disabled / unauthenticated public path.
+  let tenantDispatcher: TenantDispatcher | undefined;
+  if (webAuthEnabled) {
+    // Fail loud if a remote tenant DB is required (multi-replica/ephemeral
+    // deploy) but only local-file tenant DBs are configured.
+    assertRemoteTenantDbIfRequired();
+    tenantDispatcher = new TenantDispatcher({
+      baseConfig: mastraCodeConfig,
+      controllerId: CONTROLLER_ID,
+    });
+    app.use('/api/*', tenantDispatcher.middleware());
+    process.stderr.write('MastraCode web storage: per-tenant libSQL (isolated)\n');
+  } else {
+    process.stderr.write('MastraCode web storage: shared (single store)\n');
+  }
+
   const adapter = new MastraServer({ app, mastra });
   await adapter.init();
 
@@ -87,6 +131,33 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // Provider + API-key management for the settings panel (mirrors the TUI's
   // /api-keys command). Reuses the controller model catalog + the credential store.
   mountConfigRoutes(app, { controller, authStorage: result.authStorage });
+
+  // Optional GitHub App + cloud-sandbox project feature. Enabled only when the
+  // GitHub App env vars, web auth, and the app DB are all configured. Fails soft:
+  // if the app DB can't be reached we log and leave the feature disabled rather
+  // than crashing the server.
+  if (isGithubFeatureEnabled()) {
+    // Fail loud if state signing wouldn't be stable across replicas. A random
+    // per-process secret silently breaks the OAuth/install callback on a replica
+    // that didn't sign the `state`.
+    assertReplicaStableStateSecret();
+    const baseUrl = publicOrigin;
+    let githubReady = false;
+    try {
+      await ensureAppDbReady();
+      githubReady = true;
+    } catch (err) {
+      process.stderr.write(
+        `MastraCode GitHub: app DB unavailable, feature disabled (${err instanceof Error ? err.message : String(err)})\n`,
+      );
+    }
+    if (githubReady) {
+      mountGithubRoutes(app, { baseUrl });
+      process.stderr.write(`MastraCode GitHub: enabled (sandbox ${isSandboxEnabled() ? 'enabled' : 'disabled'})\n`);
+    }
+  } else {
+    process.stderr.write('MastraCode GitHub: disabled\n');
+  }
 
   // Serve the built UI when available (production / `mastracode web`).
   const resolvedUiDir = uiDir ?? defaultUiDir();
@@ -103,7 +174,11 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
     url: `http://localhost:${port}`,
     stop: async () => {
       await new Promise<void>(resolve => server.close(() => resolve()));
-      await Promise.allSettled([controller.getMastra()?.stopWorkers(), controller.stopHeartbeats()]);
+      await Promise.allSettled([
+        controller.getMastra()?.stopWorkers(),
+        controller.stopIntervals(),
+        tenantDispatcher?.stopAll(),
+      ]);
     },
   };
 }

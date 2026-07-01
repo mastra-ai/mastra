@@ -26,6 +26,7 @@ import type {
   GetTraceResponse,
   GetTraceLightResponse,
 } from '@mastra/core/storage';
+import { MongoBulkWriteError } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
@@ -927,9 +928,15 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
       if (records.length > 0) {
         const collection = await this.getCollection(TABLE_SPANS);
-        await collection.insertMany(records);
+        await collection.insertMany(records, { ordered: false });
       }
     } catch (error) {
+      // With ordered: false, MongoDB throws MongoBulkWriteError when any writes fail.
+      // Duplicate key errors (11000) are expected in at-least-once delivery — skip them.
+      if (error instanceof MongoBulkWriteError) {
+        const writeErrors = Array.isArray(error.writeErrors) ? error.writeErrors : [error.writeErrors];
+        if (writeErrors.length > 0 && writeErrors.every(e => e.code === 11000)) return;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'BATCH_CREATE_SPANS', 'FAILED'),
