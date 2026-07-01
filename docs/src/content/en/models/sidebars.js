@@ -9,7 +9,11 @@ const sidebars = {
   modelsSidebar: [
     'index',
     'embeddings',
-    'environment-variables',
+    {
+      type: 'doc',
+      id: 'environment-variables',
+      label: 'Environment Variables',
+    },
     {
       type: 'category',
       label: 'Gateways',
