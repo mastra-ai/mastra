@@ -143,23 +143,4 @@ describe('LibSQL retention', () => {
       expect(await threadIds(store)).toEqual(['old-1']);
     });
   });
-
-  describe('vacuum()', () => {
-    it('runs VACUUM once for the underlying file and reports vacuumed:true', async () => {
-      const results = await store.vacuum();
-      expect(results).toHaveLength(1);
-      expect(results[0]).toMatchObject({ vacuumed: true });
-    });
-
-    it('skips VACUUM on a remote/embedded-replica connection', async () => {
-      const remote = new LibSQLStore({
-        id: 'retention-remote',
-        url: 'libsql://example.turso.io',
-        authToken: 'token',
-      });
-      const [result] = await remote.vacuum();
-      expect(result).toMatchObject({ vacuumed: false });
-      expect(result!.skipped).toBeTruthy();
-    });
-  });
 });

@@ -42,8 +42,8 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  * - pauses `pauseMs` between batches when set, to avoid starving live traffic.
  *
  * `prune()` only deletes rows; it never reclaims disk. Freed pages are reused
- * by future writes so the file stops growing. Shrinking the file is the
- * separate, user-invoked `vacuum()`.
+ * by future writes so the file stops growing. Handing disk back to the OS is
+ * left to the underlying database and the operator to manage.
  */
 export async function runPrune({
   db,

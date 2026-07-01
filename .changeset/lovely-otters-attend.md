@@ -4,7 +4,7 @@
 
 Added storage retention support to libSQL. When you set a `retention` config, `LibSQLStore` can prune old rows from the `memory` domain (threads, messages, and resources by `createdAt`) and the `observability` domain (spans by `startedAt`).
 
-Deletes run in batches so they stay safe on large tables, and anchor columns are indexed so the sweeps stay fast. `storage.vacuum()` runs `VACUUM` to reclaim disk space and skips remote or embedded-replica connections instead of failing.
+Deletes run in batches so they stay safe on large tables, and anchor columns are indexed so the sweeps stay fast. `prune()` only deletes rows; reclaiming disk (for example a `VACUUM` on self-hosted libSQL) is left to you to run in a maintenance window.
 
 ```typescript
 const storage = new LibSQLStore({

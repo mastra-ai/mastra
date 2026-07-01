@@ -46,8 +46,9 @@ export interface TableRetentionPolicy {
  * the caller cooperatively cancel and pace deletions against live traffic.
  *
  * `prune()` only deletes rows — it never reclaims disk. On SQLite/LibSQL freed
- * pages are reused by future writes so the file stops growing, but shrinking
- * the file is a separate, explicit `vacuum()` the user chooses to run.
+ * pages are reused by future writes so the file stops growing. Handing disk
+ * back to the OS (e.g. `VACUUM`) is left to the underlying database and the
+ * operator to manage.
  */
 export interface PruneOptions {
   /**
@@ -92,25 +93,6 @@ export interface PruneResult {
    * loop early). Call `prune()` again to continue.
    */
   done: boolean;
-}
-
-/**
- * Result of vacuuming a single underlying database file.
- *
- * `vacuum()` is an explicit, user-invoked escape hatch. It is keyed by the
- * underlying connection/file, not by domain, and de-duplicated across domains
- * that share a file. It runs a plain `VACUUM` — it does not detect or change
- * the file's `auto_vacuum` mode.
- */
-export interface VacuumResult {
-  /** Identifier of the underlying connection/file that was vacuumed. */
-  db: string;
-
-  /** Whether the `VACUUM` ran successfully on this file. */
-  vacuumed: boolean;
-
-  /** Reason the file was skipped or the vacuum failed, if any. */
-  skipped?: string;
 }
 
 /**

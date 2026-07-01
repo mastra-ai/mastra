@@ -25,7 +25,7 @@ import type {
   ThreadStateStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
-import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy, VacuumResult } from './retention';
+import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
 
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
@@ -269,35 +269,6 @@ export interface StorageMastraRef {
   getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
 }
 
-/**
- * One vacuumable underlying database file.
- *
- * `vacuum()` is keyed by the underlying connection/file, not by domain, so a
- * store/domain that owns physical files exposes them as targets keyed by a
- * stable `db` identifier. The composite de-duplicates targets by `db` id (two
- * domains sharing one file → one target) and runs each once.
- */
-export interface VacuumTarget {
-  /** Stable identifier of the underlying connection/file (used for de-dup). */
-  db: string;
-  /** Reclaim disk for this file. See {@link VacuumResult}. */
-  vacuum(): Promise<VacuumResult>;
-}
-
-/**
- * Optional capability implemented by stores/domains that own physical database
- * files and can reclaim disk. The composite `vacuum()` collects targets from
- * everything that implements this, de-dups by `db` id, and runs each once.
- */
-export interface VacuumCapable {
-  /** Enumerate the distinct underlying files this store/domain can vacuum. */
-  __vacuumTargets(): VacuumTarget[] | Promise<VacuumTarget[]>;
-}
-
-function isVacuumCapable(value: unknown): value is VacuumCapable {
-  return typeof value === 'object' && value !== null && typeof (value as VacuumCapable).__vacuumTargets === 'function';
-}
-
 /** A domain that implements the age-based retention `prune()` contract. */
 interface PruneCapable {
   prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]>;
@@ -466,9 +437,10 @@ export class MastraCompositeStore extends MastraBase {
    * have a policy declared in `retention`.
    *
    * Prune is safe at scale: each domain deletes in bounded, batched, resumable,
-   * cancellable chunks (see {@link PruneOptions}). It never runs a `VACUUM` — it
-   * only deletes rows. Freed pages are reused by future writes so the file stops
-   * growing; reclaiming disk to the OS is the separate, explicit {@link vacuum}.
+   * cancellable chunks (see {@link PruneOptions}). It only deletes rows. On
+   * SQLite/LibSQL freed pages are reused by future writes so the file stops
+   * growing; handing disk back to the OS is left to the underlying database and
+   * the operator to manage.
    *
    * Returns one {@link PruneResult} per table touched. A result with
    * `done: false` means eligible rows remain — call `prune()` again (e.g. on
@@ -493,53 +465,6 @@ export class MastraCompositeStore extends MastraBase {
 
       const domainResults = await domain.prune(tablePolicies, options);
       results.push(...domainResults);
-    }
-    return results;
-  }
-
-  /**
-   * Reclaim disk space for the underlying database files behind this store.
-   *
-   * This is the guided, explicit maintenance-window counterpart to
-   * {@link prune}. It is keyed by the underlying connection/file (not by
-   * domain) and de-duplicated so a file shared by multiple domains is
-   * vacuumed once. Each target returns a per-file {@link VacuumResult}.
-   *
-   * A full `VACUUM` locks the file and needs roughly twice the file size in
-   * free disk; targets that don't support it (e.g. remote/embedded-replica
-   * LibSQL) are skipped (`vacuumed: false` with a `skipped` reason) rather
-   * than throwing.
-   *
-   * Stores/domains opt in by implementing {@link VacuumCapable}. If nothing
-   * implements it, this returns `[]`.
-   */
-  async vacuum(): Promise<VacuumResult[]> {
-    // Collect vacuum targets from parents and every owned domain.
-    const targets = new Map<string, VacuumTarget>();
-    const collectFrom = async (source: unknown) => {
-      if (!isVacuumCapable(source)) return;
-      const found = await source.__vacuumTargets();
-      for (const target of found) {
-        // De-dup by underlying file id so a file shared by multiple domains is
-        // vacuumed once.
-        if (!targets.has(target.db)) targets.set(target.db, target);
-      }
-    };
-
-    // The composite subclass itself may own the underlying file(s) (e.g. LibSQL,
-    // where all domains share one connection), so collect from `this` too.
-    await collectFrom(this);
-    await collectFrom(this.parentDefault);
-    await collectFrom(this.parentEditor);
-    if (this.stores) {
-      for (const domain of Object.values(this.stores)) {
-        await collectFrom(domain);
-      }
-    }
-
-    const results: VacuumResult[] = [];
-    for (const target of targets.values()) {
-      results.push(await target.vacuum());
     }
     return results;
   }

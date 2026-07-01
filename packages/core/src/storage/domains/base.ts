@@ -44,9 +44,9 @@ export abstract class StorageDomain extends MastraBase {
    * Returns one {@link PruneResult} per table touched. A result with
    * `done: false` means eligible rows remain — call `prune()` again to continue.
    *
-   * `prune()` never runs a `VACUUM`; it only deletes rows. Freed pages are
-   * reused by future writes so the file stops growing. Reclaiming disk to the OS
-   * is the separate, user-invoked `vacuum()`.
+   * `prune()` only deletes rows. On SQLite/LibSQL freed pages are reused by
+   * future writes so the file stops growing. Handing disk back to the OS is left
+   * to the underlying database and the operator to manage.
    *
    * Default implementation is a no-op (retention not supported).
    */

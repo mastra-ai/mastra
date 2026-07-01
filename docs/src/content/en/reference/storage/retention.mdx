@@ -1,6 +1,6 @@
 ---
-title: "Reference: Storage retention (prune & vacuum) | Storage"
-description: "API reference for retention policies, prune(), and vacuum() on Mastra storage."
+title: "Reference: Storage retention (prune) | Storage"
+description: "API reference for retention policies and prune() on Mastra storage."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -10,10 +10,7 @@ packages:
 
 Storage grows without bound by default. Retention is an opt-in, age-based cleanup system: you declare per-table `maxAge` policies in the `retention` config, then call `storage.prune()` to delete rows older than their configured age. Anything you don't configure is kept forever, so there is no behavior change until you opt in.
 
-Retention has two separate operations:
-
-- **`prune()`** deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable). It never reclaims disk.
-- **`vacuum()`** reclaims disk. It rewrites the underlying database file so the OS gets the space back. It locks the file and is a maintenance-window operation you invoke explicitly.
+`prune()` deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable). It never reclaims disk — on SQLite/libSQL the freed pages are reused by future writes so the file stops growing, but handing disk back to the OS (for example a `VACUUM`) is left to the underlying database and the operator to manage.
 
 The reference implementation covers the `memory` and `observability` domains on [libSQL](/reference/storage/libsql). Other adapters keep rows forever until they implement retention.
 
@@ -189,33 +186,6 @@ interface PruneResult {
 }
 ```
 
-#### `vacuum()`
-
-Reclaims disk space for the underlying database files. This is the explicit, maintenance-window counterpart to `prune()`. It runs a plain `VACUUM` per underlying file, keyed by connection and de-duplicated so a file shared by multiple domains is vacuumed once.
-
-A `VACUUM` locks the file for the duration of the rewrite and needs roughly twice the file size in free disk. Targets that don't support it (remote/embedded-replica libSQL) are skipped instead of throwing.
-
-```typescript
-const results = await storage.vacuum()
-
-for (const r of results) {
-  if (r.vacuumed) console.log(`${r.db}: reclaimed`)
-  else console.log(`${r.db}: skipped (${r.skipped})`)
-}
-```
-
-Returns: `Promise<VacuumResult[]>`
-
-##### VacuumResult
-
-```typescript
-interface VacuumResult {
-  db: string // underlying connection/file identifier
-  vacuumed: boolean // whether VACUUM ran on this file
-  skipped?: string // reason it was skipped, e.g. remote/embedded-replica
-}
-```
-
 ## Running prune on a schedule
 
 `prune()` has no built-in scheduler — you decide when it runs. Because it is bounded, a single call may not delete everything. When any result has `done: false`, eligible rows remain and you call again on the next tick. This keeps each invocation short and lets a large backlog drain over several runs.
@@ -237,19 +207,14 @@ async function retentionTick() {
 
 You can also cancel a long-running prune with an `AbortSignal` — the loop stops between batches and returns partial results with `done: false`, so the next run resumes cleanly.
 
-## prune vs vacuum
+## Reclaiming disk
 
-| | `prune()` | `vacuum()` |
-| - | - | - |
-| What it does | Deletes rows older than `maxAge` | Rewrites the file to return free space to the OS |
-| Effect on file size | Caps growth (freed pages are reused by future writes); file does not shrink | Shrinks the file |
-| Cost | Bounded, batched, short locks — safe on huge tables | Full-file rewrite, exclusive lock, needs \~2x free disk |
-| When to run | Regularly, on your cron | Occasionally, in a maintenance window |
+`prune()` deletes rows but does not shrink the database file. On SQLite/libSQL the freed pages go on a freelist and are reused by future writes, so the file stops growing — for most users this alone solves the unbounded-growth problem.
 
-For most users, `prune()` alone solves the unbounded-growth problem: once old rows are deleted, their pages are reused and the file stops growing. Run `vacuum()` only when you specifically need to hand disk back to the OS.
+Handing that free space back to the OS is a separate concern that Mastra does not manage. If you specifically need to shrink the file, run the underlying database's compaction (for example `VACUUM` on self-hosted libSQL) yourself, in a maintenance window — a full `VACUUM` locks the file and needs roughly twice the file size in free disk.
 
 :::note[libSQL and Turso]
-[Turso Cloud](/reference/storage/libsql) manages storage compaction for you, so `vacuum()` is aimed at self-hosted libSQL files. On remote or embedded-replica connections `vacuum()` skips the file rather than failing.
+[Turso Cloud](/reference/storage/libsql) manages storage compaction for you, so there's nothing to reclaim manually. This applies only to self-hosted libSQL files.
 :::
 
 ## Related

@@ -1104,7 +1104,7 @@ export class LibSQLDB extends MastraBase {
   }
 
   // ---------------------------------------------------------------------------
-  // Retention helpers (prune / vacuum)
+  // Retention helpers (prune)
   //
   // Low-level SQL primitives the memory and observability domains build their
   // `prune()` on, plus a plain user-invoked `VACUUM`. Keeping the SQL here
@@ -1146,16 +1146,6 @@ export class LibSQLDB extends MastraBase {
       `prune ${tableName}`,
     );
     return Number(result.rowsAffected ?? 0);
-  }
-
-  /**
-   * Run a plain `VACUUM` to rewrite and compact the file. This is the explicit,
-   * user-invoked reclaim path — it does not read or change the file's
-   * `auto_vacuum` mode. Locking and rewrites the whole file; the caller decides
-   * when to run it.
-   */
-  async runVacuum(): Promise<void> {
-    await this.client.execute('VACUUM');
   }
 
   /** Create an index if it does not already exist. */

@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MastraCompositeStore } from './base';
-import type { StorageDomains, VacuumTarget } from './base';
-import type { PruneOptions, PruneResult, TableRetentionPolicy, VacuumResult } from './retention';
+import type { StorageDomains } from './base';
+import type { PruneOptions, PruneResult, TableRetentionPolicy } from './retention';
 
 /**
- * Composite-level orchestration tests for `prune()` and `vacuum()`.
+ * Composite-level orchestration tests for `prune()`.
  *
  * These exercise the domain-agnostic wiring in MastraCompositeStore using mock
- * domains: policy routing, unset = keep forever, cooperative abort, and per-DB
- * de-duplication of vacuum targets. The physical batched-delete behavior is
- * covered by the LibSQL reference implementation's own tests.
+ * domains: policy routing, unset = keep forever, and cooperative abort. The
+ * physical batched-delete behavior is covered by the LibSQL reference
+ * implementation's own tests.
  */
 
 type PruneCall = { policies: Record<string, TableRetentionPolicy>; options?: PruneOptions };
@@ -138,66 +138,5 @@ describe('MastraCompositeStore.prune()', () => {
     await composite.prune(options);
 
     expect(memory.calls[0]!.options).toBe(options);
-  });
-});
-
-describe('MastraCompositeStore.vacuum()', () => {
-  function makeVacuumTarget(db: string, result: Partial<VacuumResult> = {}): VacuumTarget {
-    return {
-      db,
-      vacuum: vi.fn(async () => ({
-        db,
-        vacuumed: true,
-        ...result,
-      })),
-    };
-  }
-
-  it('returns [] when no domain is vacuum-capable', async () => {
-    const composite = new TestComposite('v1', { memory: {} as any }, undefined);
-    const results = await composite.vacuum();
-    expect(results).toEqual([]);
-  });
-
-  it('collects targets from vacuum-capable domains and returns one result per file', async () => {
-    const targetA = makeVacuumTarget('file-a');
-    const targetB = makeVacuumTarget('file-b');
-
-    const memory = { __vacuumTargets: () => [targetA] };
-    const observability = { __vacuumTargets: () => [targetB] };
-
-    const composite = new TestComposite(
-      'v2',
-      { memory: memory as any, observability: observability as any },
-      undefined,
-    );
-
-    const results = await composite.vacuum();
-
-    expect(results).toHaveLength(2);
-    expect(results.map(r => r.db).sort()).toEqual(['file-a', 'file-b']);
-    expect(targetA.vacuum).toHaveBeenCalledTimes(1);
-    expect(targetB.vacuum).toHaveBeenCalledTimes(1);
-  });
-
-  it('de-duplicates a file shared by multiple domains (vacuums it once)', async () => {
-    const shared = makeVacuumTarget('shared-file');
-
-    // Two domains that both report the same underlying file id.
-    const memory = { __vacuumTargets: () => [shared] };
-    const observability = { __vacuumTargets: () => [{ ...shared }] };
-
-    const composite = new TestComposite(
-      'v3',
-      { memory: memory as any, observability: observability as any },
-      undefined,
-    );
-
-    const results = await composite.vacuum();
-
-    expect(results).toHaveLength(1);
-    expect(results[0]!.db).toBe('shared-file');
-    // Only the first-seen target's vacuum() runs.
-    expect(shared.vacuum).toHaveBeenCalledTimes(1);
   });
 });

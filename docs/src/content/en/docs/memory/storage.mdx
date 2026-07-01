@@ -121,7 +121,7 @@ This is useful when different types of data have different performance or operat
 
 #### Retention
 
-Storage grows without bound by default. To cap growth, declare per-table `maxAge` policies in the `retention` config and call `storage.prune()` from your own scheduler to delete old rows. Anything you don't configure is kept forever. See [Storage retention](/reference/storage/retention) for `prune()`, `vacuum()`, and the full config shape.
+Storage grows without bound by default. To cap growth, declare per-table `maxAge` policies in the `retention` config and call `storage.prune()` from your own scheduler to delete old rows. Anything you don't configure is kept forever. See [Storage retention](/reference/storage/retention) for `prune()` and the full config shape.
 
 ### Agent-level storage
 

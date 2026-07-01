@@ -1,9 +1,9 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { RetentionConfig, StorageDomains, VacuumResult, VacuumTarget } from '@mastra/core/storage';
+import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
-import { DEFAULT_CONNECTION_TIMEOUT_MS, LibSQLDB } from './db';
+import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
 import { AgentsLibSQL } from './domains/agents';
 import { BackgroundTasksLibSQL } from './domains/background-tasks';
 import { BlobsLibSQL } from './domains/blobs';
@@ -171,8 +171,6 @@ export class LibSQLStore extends MastraCompositeStore {
   private readonly pragmasReady: Promise<void>;
   private readonly isLocalDb: boolean;
   private readonly localPragmas: Required<LibSQLLocalPragmaOptions>;
-  private readonly db: LibSQLDB;
-  private readonly dbId: string;
 
   stores: StorageDomains;
 
@@ -206,20 +204,11 @@ export class LibSQLStore extends MastraCompositeStore {
         ...(this.isLocalDb ? { timeout: this.connectionTimeoutMs } : {}),
       });
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
-      this.dbId = config.url;
     } else {
       this.client = config.client;
       this.isLocalDb = false;
       this.pragmasReady = Promise.resolve();
-      // No url on an injected client; key vacuum de-dup by store id instead.
-      this.dbId = `libsql:${config.id}`;
     }
-
-    this.db = new LibSQLDB({
-      client: this.client,
-      maxRetries: this.maxRetries,
-      initialBackoffMs: this.initialBackoffMs,
-    });
 
     const domainConfig = {
       client: this.client,
@@ -296,37 +285,6 @@ export class LibSQLStore extends MastraCompositeStore {
         this.logger.warn(`LibSQLStore: Failed to set PRAGMA ${label}.`, err);
       }
     }
-  }
-
-  /**
-   * Vacuum target for the composite's `vacuum()`. All domains in this store
-   * share one underlying file, so there is a single target keyed by `dbId`
-   * (de-duplicated by the composite if the same file is reached via multiple
-   * stores).
-   *
-   * `VACUUM` only applies to local sqlite files. On remote/embedded-replica
-   * connections it is server-managed, so the target reports `vacuumed: false`
-   * with a `skipped` reason instead of running anything.
-   */
-  __vacuumTargets(): VacuumTarget[] {
-    const dbId = this.dbId;
-    const isLocalFileDb = this.isLocalDb || this.client.protocol === 'file';
-    return [
-      {
-        db: dbId,
-        vacuum: async (): Promise<VacuumResult> => {
-          if (!isLocalFileDb) {
-            return {
-              db: dbId,
-              vacuumed: false,
-              skipped: 'VACUUM is unsupported on remote/embedded-replica LibSQL (storage is server-managed).',
-            };
-          }
-          await this.db.runVacuum();
-          return { db: dbId, vacuumed: true };
-        },
-      },
-    ];
   }
 
   private getStoresToInit() {
