@@ -61,13 +61,13 @@ export interface RailwaySandboxOptions extends Omit<MastraSandboxOptions, 'proce
    * every sandbox created from it starts ready.
    *
    * - Builder callback — receives the base `Sandbox.template()` and returns the
-   *   configured template. The template is built (`.build()`) on first
-   *   `start()` if not already built.
+   *   configured template. Railway builds the template when `Sandbox.create()`
+   *   runs during `start()`.
    *   ```ts
    *   template: t => t.withPackages('git', 'curl').run('npm i -g pnpm')
    *   ```
-   * - Pre-built `SandboxTemplate` — pass a template you built yourself to reuse
-   *   it across sandboxes without rebuilding.
+   * - Pre-built `SandboxTemplate` — pass a template to reuse it across
+   *   sandboxes. Railway still builds the image during sandbox creation.
    *
    * Ignored when `sandboxId` is set (reattach) or when forking.
    */
@@ -211,7 +211,7 @@ export class RailwaySandbox extends MastraSandbox {
       this.logger.debug(`${LOG_PREFIX} Reconnecting to Railway sandbox ${this._sandboxId}...`);
       this._sandbox = await Sandbox.connect(this._sandboxId, clientConfig);
     } else if (this._templateOption) {
-      const template = await this._resolveTemplate(clientConfig);
+      const template = this._resolveTemplate();
       this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox from template for: ${this.id}`);
       this._sandbox = await Sandbox.create(template, createOptions);
     } else {
@@ -254,15 +254,13 @@ export class RailwaySandbox extends MastraSandbox {
   }
 
   /**
-   * Build the configured template into a ready-to-use base. Accepts either a
-   * pre-built `SandboxTemplate` or a builder callback over `Sandbox.template()`.
-   * Calls `.build()` so the recipe is materialised before `Sandbox.create()`.
+   * Resolve the configured template into a `SandboxTemplate` that Railway
+   * builds during `Sandbox.create()`. Accepts either a pre-built
+   * `SandboxTemplate` or a builder callback over `Sandbox.template()`.
    */
-  private async _resolveTemplate(buildOptions: { token?: string; environmentId?: string }): Promise<SandboxTemplate> {
+  private _resolveTemplate(): SandboxTemplate {
     const option = this._templateOption!;
-    const template = typeof option === 'function' ? option(Sandbox.template()) : option;
-    this.logger.debug(`${LOG_PREFIX} Building Railway sandbox template for: ${this.id}`);
-    return template.build(buildOptions);
+    return typeof option === 'function' ? option(Sandbox.template()) : option;
   }
 
   /**

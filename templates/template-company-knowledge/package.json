@@ -1,0 +1,38 @@
+{
+  "name": "template-company-knowledge",
+  "version": "1.0.0",
+  "description": "A company knowledge agent that indexes Linear issues and Notion pages into pgvector (Neon Postgres) and answers questions via semantic recall, with provider-native web search as a fallback. Uses Mastra Gateway.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.34",
+    "@mastra/core": "latest",
+    "@mastra/editor": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/rag": "latest",
+    "@notionhq/notion-mcp-server": "^2.2.1",
+    "ai": "^6.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "dotenv": "^17.3.1",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}

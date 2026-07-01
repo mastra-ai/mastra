@@ -8,8 +8,8 @@
  *   a       — always allow this category for the session
  *   Y       — switch to YOLO mode (approve all)
  */
-import { Box, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
 import { decodePrintableShortcut } from '../key-input.js';

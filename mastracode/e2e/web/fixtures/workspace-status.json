@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "check workspace"
+      },
+      "response": {
+        "content": "workspace checked"
+      }
+    }
+  ]
+}

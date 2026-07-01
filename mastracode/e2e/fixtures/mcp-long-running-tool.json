@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Use the long-running MCP lookup tool and report its payload.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_mcp_long_lookup_e2e",
+            "name": "e2e_long_mcp_slow_lookup",
+            "arguments": {
+              "query": "timeout-e2e"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_mcp_long_lookup_e2e",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Long-running MCP lookup completed with payload MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete."
+      }
+    }
+  ]
+}

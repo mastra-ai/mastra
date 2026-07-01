@@ -123,7 +123,7 @@ export interface ObservabilityContext {
 // ============================================================================
 
 /** Where a registered definition came from. */
-export type DefinitionSource = 'code' | 'stored';
+export type DefinitionSource = 'code' | 'stored' | 'fs';
 
 /** What kind of scoring flow produced the score. */
 export type ScorerScoreSource = 'live' | 'trace' | 'experiment';

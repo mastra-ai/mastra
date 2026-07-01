@@ -176,7 +176,7 @@ describe('DurableAgent usage tracking', () => {
         },
       });
 
-      expect(result.workflowInput.options.temperature).toBe(0.7);
+      expect(result.workflowInput.options.modelSettings?.temperature).toBe(0.7);
     });
   });
 
@@ -314,7 +314,7 @@ describe('DurableAgent model settings', () => {
       modelSettings: { temperature: 0.5 },
     });
 
-    expect(result.workflowInput.options.temperature).toBe(0.5);
+    expect(result.workflowInput.options.modelSettings?.temperature).toBe(0.5);
   });
 
   it('should handle missing model settings', async () => {
@@ -334,8 +334,8 @@ describe('DurableAgent model settings', () => {
 
     const result = await durableAgent.prepare('Test');
 
-    // Should not throw and temperature should be undefined
-    expect(result.workflowInput.options.temperature).toBeUndefined();
+    // Should not throw and modelSettings should be undefined
+    expect(result.workflowInput.options.modelSettings).toBeUndefined();
   });
 
   it('should serialize model config correctly', async () => {

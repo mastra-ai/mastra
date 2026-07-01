@@ -1,0 +1,32 @@
+# Local-dev Postgres for the MastraCode Web GitHub App feature.
+#
+# This is the separate "application database" referenced by APP_DATABASE_URL
+# (distinct from Mastra's own storage). The web server runs the GitHub schema
+# migrations automatically on boot when the feature is enabled.
+#
+# Usage:
+#   docker compose up -d
+#   export APP_DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
+#
+# The default credentials below match the APP_DATABASE_URL example in
+# src/web/.env.example.
+services:
+  app-db:
+    image: postgres:16
+    container_name: mastracode-web-db
+    ports:
+      - '54329:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
+      POSTGRES_DB: ${POSTGRES_DB:-mastracode_web}
+    volumes:
+      - mastracode-web-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-mastracode_web}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mastracode-web-pgdata:

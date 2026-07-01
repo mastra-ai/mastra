@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "before disconnect",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "PRE_DISCONNECT_RESPONSE"
+      }
+    },
+    {
+      "match": {
+        "userMessage": "after reconnect",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "POST_RECONNECT_RESPONSE"
+      }
+    }
+  ]
+}

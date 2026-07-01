@@ -1,0 +1,9 @@
+{
+  "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "openai/gpt-oss-120b",
+    "speakleash/Bielik-11B-v2.6-Instruct",
+    "speakleash/Bielik-11B-v3.0-Instruct"
+  ]
+}
