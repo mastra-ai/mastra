@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 
+import { getDynamicWorkspace } from './agents/workspace.js';
 import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, runMCCli } from './headless/index.js';
@@ -62,6 +63,7 @@ async function tuiMain(pipedInput?: string | null) {
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
+    workspaceFactory: getDynamicWorkspace,
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
   });

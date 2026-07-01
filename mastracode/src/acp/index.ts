@@ -1,5 +1,6 @@
 import type { AgentControllerMode } from '@mastra/core/agent-controller';
 
+import { getDynamicWorkspace } from '../agents/workspace.js';
 import { createMastraCode } from '../index.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
 import { setAutoApprove } from './event-mapper.js';
@@ -28,6 +29,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
       unixSocketPubSub: false,
       disableMcp: false,
       disableHooks: false,
+      workspaceFactory: getDynamicWorkspace,
     });
 
     const { controller, mcpManager, signalsPubSub } = result;

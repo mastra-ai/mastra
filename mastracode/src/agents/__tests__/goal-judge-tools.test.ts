@@ -40,8 +40,11 @@ describe('getGoalJudgeTools', () => {
   it('returns only the read-only verification subset of workspace tools', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-goal-judge-tools-'));
     try {
-      const { getGoalJudgeTools } = await import('../workspace.js');
-      const tools = await getGoalJudgeTools({ requestContext: createRequestContext(tempDir) as any });
+      const { getDynamicWorkspace, getGoalJudgeTools } = await import('../workspace.js');
+      const tools = await getGoalJudgeTools({
+        requestContext: createRequestContext(tempDir) as any,
+        workspaceFactory: getDynamicWorkspace,
+      });
 
       expect(tools).toBeDefined();
       const names = Object.keys(tools!);
@@ -60,12 +63,15 @@ describe('getGoalJudgeTools', () => {
   });
 
   it('returns undefined when no project path can be resolved (keeps judge text-only)', async () => {
-    const { getGoalJudgeTools } = await import('../workspace.js');
+    const { getDynamicWorkspace, getGoalJudgeTools } = await import('../workspace.js');
     // Empty controller state → getDynamicWorkspace throws → resolver returns undefined.
     const requestContext = new RequestContext();
     const getState = () => ({});
     requestContext.set('controller', { modeId: 'build', getState, session: { state: { get: getState } } });
-    const tools = await getGoalJudgeTools({ requestContext: requestContext as any });
+    const tools = await getGoalJudgeTools({
+      requestContext: requestContext as any,
+      workspaceFactory: getDynamicWorkspace,
+    });
     expect(tools).toBeUndefined();
   });
 });

@@ -29,11 +29,15 @@
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '../index.js';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
+import { loadWebEnvFiles } from '../web/env.js';
 import { TenantDispatcher } from '../web/tenant-server.js';
 import { assertRemoteTenantDbIfRequired } from '../web/tenant-storage.js';
 import { assembleWebApiRoutes, resolveGithubReady } from '../web/web-surface.js';
+import { createWebWorkspaceFactory } from '../web/workspace.js';
 
 const CONTROLLER_ID = 'code';
+
+loadWebEnvFiles();
 
 /**
  * Browser-facing origin used to build GitHub OAuth/install callback URLs and to
@@ -41,6 +45,9 @@ const CONTROLLER_ID = 'code';
  * so this MUST be set to the public API origin via `MASTRACODE_PUBLIC_URL`.
  */
 const publicOrigin = (process.env.MASTRACODE_PUBLIC_URL ?? 'http://localhost:4111').replace(/\/+$/, '');
+const webWorkspaceFactory = createWebWorkspaceFactory();
+const railwayEnvironmentId = process.env.RAILWAY_ENVIRONMENT_ID;
+process.stderr.write(`MastraCode Railway sandbox: ${railwayEnvironmentId ? 'enabled' : 'disabled'}\n`);
 
 /**
  * Allowed cross-origin SPA origins (comma-separated). The SPA is served from a
@@ -67,7 +74,7 @@ if (webAuthEnabled) {
   // platform FS) but only local-file tenant DBs are configured.
   assertRemoteTenantDbIfRequired();
   tenantDispatcher = new TenantDispatcher({
-    baseConfig: {},
+    baseConfig: { workspaceFactory: webWorkspaceFactory },
     controllerId: CONTROLLER_ID,
   });
 }
@@ -85,6 +92,7 @@ const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undef
 // all ride along.
 const prepared = await prepareAgentControllerMount({
   controllerId: CONTROLLER_ID,
+  workspaceFactory: webWorkspaceFactory,
   buildApiRoutes: ({ controller, authStorage }) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as
     // `apiRoutes` (not plain Hono routes) because the entry can't touch the Hono

@@ -297,13 +297,13 @@ async function resolveGoalWorkspace({
   mastra,
   workspaceFactory,
 }: MastraCodeWorkspaceFactoryArgs & { workspaceFactory?: MastraCodeWorkspaceFactory }): Promise<Workspace> {
-  const workspace = workspaceFactory ?? getDynamicWorkspace;
-  if (typeof workspace === 'function') {
-    const resolved = await workspace({ requestContext, mastra });
+  if (!workspaceFactory) throw new Error('Workspace factory is required');
+  if (typeof workspaceFactory === 'function') {
+    const resolved = await workspaceFactory({ requestContext, mastra });
     if (!resolved) throw new Error('Workspace factory returned undefined');
     return resolved as Workspace;
   }
-  return workspace as Workspace;
+  return workspaceFactory as Workspace;
 }
 
 /**
@@ -318,7 +318,9 @@ export async function getGoalJudgeTools({
   requestContext,
   mastra,
   workspaceFactory,
-}: MastraCodeWorkspaceFactoryArgs & { workspaceFactory?: MastraCodeWorkspaceFactory }): Promise<ToolsInput | undefined> {
+}: MastraCodeWorkspaceFactoryArgs & { workspaceFactory?: MastraCodeWorkspaceFactory }): Promise<
+  ToolsInput | undefined
+> {
   let workspace: Workspace;
   try {
     workspace = await resolveGoalWorkspace({ requestContext, mastra, workspaceFactory });

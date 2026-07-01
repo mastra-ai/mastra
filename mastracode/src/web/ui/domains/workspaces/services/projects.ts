@@ -12,7 +12,7 @@
  * workspace factory reads it to resolve the working directory.
  */
 
-import { getWebGitCloneDirectoryName, getWebGitRepoName, normalizeWebGitUrl } from '../git-clone-context';
+import { getWebGitCloneDirectoryName, getWebGitRepoName, normalizeWebGitUrl } from '../../../../git-clone-context';
 
 const STORAGE_KEY = 'mastracode-projects';
 const ACTIVE_KEY = 'mastracode-active-project';

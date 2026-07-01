@@ -9,6 +9,7 @@
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
+import { getDynamicWorkspace } from '../agents/workspace.js';
 import { createMastraCode } from '../index.js';
 import { setupDebugLogging } from '../utils/debug-log.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
@@ -184,7 +185,10 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
     process.exit(1);
   }
 
-  const boot = await createMastraCode({ settingsPath: args.settings });
+  const boot = await createMastraCode({
+    settingsPath: args.settings,
+    workspaceFactory: getDynamicWorkspace,
+  });
   const { controller, session, mcpManager, effectiveDefaults } = boot;
 
   if (mcpManager?.hasServers()) {

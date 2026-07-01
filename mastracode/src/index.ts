@@ -54,7 +54,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 
-import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
+import { getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
@@ -196,9 +196,9 @@ export interface MastraCodeConfig {
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
   /** Override interval handlers. Default: gateway-sync */
   intervalHandlers?: IntervalHandler[];
-  /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
+  /** Override the workspace. Entrypoints must provide their default workspace behavior explicitly. */
   workspace?: AgentControllerConfig<MastraCodeState>['workspace'];
-  /** Workspace factory override for entrypoint-specific behavior (for example web vs TUI). */
+  /** Workspace factory supplied by entrypoints for their environment-specific behavior. */
   workspaceFactory?: AgentControllerConfig<MastraCodeState>['workspace'];
   /** Railway sandbox credentials for web workspaces. When set, web sessions provision Railway sandboxes. */
   railway?: MastraCodeRailwayConfig;
@@ -487,7 +487,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const pluginTools = pluginManager?.getPluginTools() ?? {};
 
   const workspaceFactory: AgentControllerConfig<MastraCodeState>['workspace'] =
-    config?.workspace ?? config?.workspaceFactory ?? (args => getDynamicWorkspace(args));
+    config?.workspace ?? config?.workspaceFactory;
 
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();

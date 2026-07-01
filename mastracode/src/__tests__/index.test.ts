@@ -494,26 +494,18 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ workspaceFactory: customWorkspaceFactory as any });
 
-    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { workspace?: unknown }
-      | undefined;
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
     expect(agentControllerConfig?.workspace).toBe(customWorkspaceFactory);
   });
 
-  it('uses the default workspace factory when no custom workspace is configured', async () => {
+  it('does not configure a default workspace when no workspace is supplied', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
-      | { workspace?: (args: Record<string, unknown>) => unknown }
-      | undefined;
-    expect(typeof agentControllerConfig?.workspace).toBe('function');
-
-    const args = { requestContext: 'request-context' };
-    agentControllerConfig?.workspace?.(args);
-
-    expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(args);
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    expect(agentControllerConfig?.workspace).toBeUndefined();
+    expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
   });
 
   it('passes the selected workspace factory to goal judge tools', async () => {
