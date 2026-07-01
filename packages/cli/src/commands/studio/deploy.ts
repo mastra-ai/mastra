@@ -13,7 +13,7 @@ import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
-import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL  } from '../auth/client.js';
+import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
@@ -378,7 +378,7 @@ export async function deployAction(dir: string | undefined, opts: StudioDeployOp
   if (!analytics) {
     return runStudioDeploy(dir, opts);
   }
-  await analytics.trackCommandExecution({
+  return analytics.trackCommandExecution({
     command: 'mastra studio deploy',
     args: {
       yes: Boolean(opts.yes),

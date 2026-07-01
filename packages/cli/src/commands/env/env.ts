@@ -2,7 +2,47 @@ import * as p from '@clack/prompts';
 import type { Command } from 'commander';
 import { getToken } from '../auth/credentials.js';
 import { resolveCurrentOrg } from '../auth/orgs.js';
+import type { Environment } from './platform-api.js';
 import { fetchProjects, fetchEnvironments, createEnvironment, deleteEnvironment } from './platform-api.js';
+
+/**
+ * Shape returned by `mastra env list --json` and `mastra env create --json`.
+ *
+ * The platform API response can include sensitive fields such as `envVars`
+ * (raw environment variable values). We deliberately return only
+ * non-sensitive metadata here so CLI JSON output — which frequently ends up
+ * in CI logs, shell history, and pipeline artifacts — cannot leak secrets.
+ */
+type PublicEnvironment = Pick<
+  Environment,
+  | 'id'
+  | 'projectId'
+  | 'name'
+  | 'slug'
+  | 'type'
+  | 'region'
+  | 'branch'
+  | 'instanceUrl'
+  | 'customServerUrl'
+  | 'createdAt'
+  | 'updatedAt'
+>;
+
+function toPublicEnvironment(env: Environment): PublicEnvironment {
+  return {
+    id: env.id,
+    projectId: env.projectId,
+    name: env.name,
+    slug: env.slug,
+    type: env.type,
+    region: env.region,
+    branch: env.branch,
+    instanceUrl: env.instanceUrl,
+    customServerUrl: env.customServerUrl,
+    createdAt: env.createdAt,
+    updatedAt: env.updatedAt,
+  };
+}
 
 export function registerEnvCommands(program: Command) {
   const env = program.command('env').description('Manage environments');
@@ -62,7 +102,8 @@ async function listEnvironmentsAction(projectArg: string, options?: { json?: boo
   const environments = await fetchEnvironments(token, orgId, project.id);
 
   if (options?.json) {
-    process.stdout.write(`${JSON.stringify({ environments }, null, 2)}\n`);
+    const safeEnvironments = environments.map(toPublicEnvironment);
+    process.stdout.write(`${JSON.stringify({ environments: safeEnvironments }, null, 2)}\n`);
     return;
   }
 
@@ -105,7 +146,8 @@ async function createEnvironmentAction(
   });
 
   if (options.json) {
-    process.stdout.write(`${JSON.stringify({ environment }, null, 2)}\n`);
+    const safeEnvironment = toPublicEnvironment(environment);
+    process.stdout.write(`${JSON.stringify({ environment: safeEnvironment }, null, 2)}\n`);
     return;
   }
 

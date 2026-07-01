@@ -29,8 +29,7 @@ export function bucketApiHost(apiUrl: string): 'cloud' | 'staging' | 'localhost'
     const { host, hostname } = new URL(apiUrl);
     if (hostname === 'localhost' || hostname === '127.0.0.1') return 'localhost';
     if (host === 'staging.mastra.cloud' || host.endsWith('.staging.mastra.cloud')) return 'staging';
-    if (host === 'platform.mastra.ai' || host === 'mastra.cloud' || host.endsWith('.mastra.cloud'))
-      return 'cloud';
+    if (host === 'platform.mastra.ai' || host === 'mastra.cloud' || host.endsWith('.mastra.cloud')) return 'cloud';
     return 'custom';
   } catch {
     return 'unknown';

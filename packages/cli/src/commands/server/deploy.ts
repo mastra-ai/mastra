@@ -12,7 +12,7 @@ import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
-import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL  } from '../auth/client.js';
+import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
@@ -341,7 +341,7 @@ export async function serverDeployAction(dir: string | undefined, opts: ServerDe
   if (!analytics) {
     return runServerDeploy(dir, opts);
   }
-  await analytics.trackCommandExecution({
+  return analytics.trackCommandExecution({
     command: 'mastra server deploy',
     args: {
       yes: Boolean(opts.yes),

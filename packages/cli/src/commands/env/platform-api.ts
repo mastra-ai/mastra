@@ -82,12 +82,7 @@ export async function createEnvironment(
   return data.environment;
 }
 
-export async function deleteEnvironment(
-  token: string,
-  orgId: string,
-  projectId: string,
-  envId: string,
-): Promise<void> {
+export async function deleteEnvironment(token: string, orgId: string, projectId: string, envId: string): Promise<void> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments/${envId}`, {
     method: 'DELETE',
     headers: {

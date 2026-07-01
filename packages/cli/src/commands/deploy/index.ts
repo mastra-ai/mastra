@@ -483,6 +483,9 @@ async function pollEnvironmentDeploy(
 
       if (resp.status === 401) {
         currentToken = await getToken();
+        // Back off before retrying so a persistently-401 token cannot spin
+        // the poll loop into a tight retry storm against the platform API.
+        await new Promise(r => setTimeout(r, 2000));
         continue;
       }
 
@@ -528,7 +531,7 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
   if (!analytics) {
     return runUnifiedDeploy(dir, opts);
   }
-  await analytics.trackCommandExecution({
+  return analytics.trackCommandExecution({
     command: 'mastra deploy',
     args: {
       env: opts.env || 'production',
@@ -723,15 +726,26 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   }
 
   // Auto-select .env.<envName> when deploying to a named environment
-  // (e.g. --env staging auto-selects .env.staging if it exists)
+  // (e.g. --env staging auto-selects .env.staging if it exists).
+  //
+  // envName comes from the --env CLI flag, so we validate it before
+  // interpolating it into a file path. Only simple environment identifiers
+  // (letters, digits, dot, dash, underscore) are allowed; anything with a
+  // path separator or `..` traversal segment is ignored. This keeps a
+  // hostile --env value from escaping the project directory and being read
+  // (and re-uploaded) via readEnvVars.
   let envFile = opts.envFile;
-  if (!envFile) {
+  if (!envFile && /^[a-zA-Z0-9._-]+$/.test(envName) && !envName.includes('..')) {
     const envNameFile = `.env.${envName}`;
-    try {
-      await access(join(targetDir, envNameFile));
-      envFile = envNameFile;
-    } catch {
-      // No matching env file for this environment name — fall through to default logic
+    const candidate = resolve(targetDir, envNameFile);
+    const targetPrefix = resolve(targetDir) + '/';
+    if (candidate.startsWith(targetPrefix)) {
+      try {
+        await access(candidate);
+        envFile = envNameFile;
+      } catch {
+        // No matching env file for this environment name — fall through to default logic
+      }
     }
   }
 
