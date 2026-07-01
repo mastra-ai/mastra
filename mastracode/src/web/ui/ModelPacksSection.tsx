@@ -78,11 +78,12 @@ export function ModelPacksSection({
     }
     setDraftError(null);
     try {
-      // If we renamed the pack during edit, remove the old one first.
-      if (editingPackId && `custom:${name}` !== editingPackId) {
+      const renamed = editingPackId && `custom:${name}` !== editingPackId;
+      await saveMutation.mutateAsync({ name, models: { build: draft.build, plan: draft.plan, fast: draft.fast } });
+      // Remove the old pack only after the new one is safely saved.
+      if (renamed) {
         await removeMutation.mutateAsync({ id: editingPackId });
       }
-      await saveMutation.mutateAsync({ name, models: { build: draft.build, plan: draft.plan, fast: draft.fast } });
       setDraft(null);
       setEditingPackId(null);
     } catch (e) {
