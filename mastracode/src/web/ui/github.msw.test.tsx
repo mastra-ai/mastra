@@ -6,7 +6,7 @@ import { commitChanges, createWorktree, openPullRequest, pushBranch } from './gi
 import type { GitOpError } from './github';
 
 /**
- * The GitHub git-op helpers use raw relative `fetch('/api/web/github/...')`
+ * The GitHub git-op helpers use raw relative `fetch('/web/github/...')`
  * (not the injected ApiConfig base), so jsdom resolves them against its default
  * origin. Match handlers against that origin.
  */
@@ -14,7 +14,7 @@ const ORIGIN = 'http://localhost:3000';
 const PROJECT = 'proj-1';
 
 function gitOpUrl(action: string): string {
-  return `${ORIGIN}/api/web/github/projects/${PROJECT}/${action}`;
+  return `${ORIGIN}/web/github/projects/${PROJECT}/${action}`;
 }
 
 describe('github git-op helpers', () => {

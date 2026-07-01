@@ -9,7 +9,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../e2e/web-ui/render';
 import type { OMConfigInfo } from '../../shared/api/types';
 import { OMSection } from './OMSection';
 
-const OM_URL = `${TEST_BASE_URL}/api/web/config/om`;
+const OM_URL = `${TEST_BASE_URL}/web/config/om`;
 const RESOURCE_ID = 'res-1';
 
 const models: AgentControllerAvailableModel[] = [

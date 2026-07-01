@@ -1,7 +1,7 @@
 /**
  * Browser-side helpers for the GitHub App project flow.
  *
- * All requests go to the server's `/api/web/github/*` and `/auth/github/*`
+ * All requests go to the server's `/web/github/*` and `/auth/github/*`
  * routes, which are behind the WorkOS auth gate and scoped to the logged-in
  * user. The browser never sees installation tokens — those live only inside the
  * server and the cloud sandbox.
@@ -46,7 +46,7 @@ export interface GithubRepo {
  */
 export async function fetchGithubStatus(): Promise<GithubStatus> {
   try {
-    const res = await fetch('/api/web/github/status', { headers: { Accept: 'application/json' } });
+    const res = await fetch('/web/github/status', { headers: { Accept: 'application/json' }, credentials: 'include' });
     if (res.status === 401) {
       return { enabled: false, connected: false, installations: [], authRequired: true };
     }
@@ -64,8 +64,8 @@ export function connectGithub(): void {
 
 /** List repos across the user's installations, optionally filtered by query. */
 export async function listGithubRepos(query?: string): Promise<GithubRepo[]> {
-  const url = query ? `/api/web/github/repos?q=${encodeURIComponent(query)}` : '/api/web/github/repos';
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  const url = query ? `/web/github/repos?q=${encodeURIComponent(query)}` : '/web/github/repos';
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (!res.ok) throw new Error(`Failed to list repos (${res.status})`);
   const body = (await res.json()) as { repos: GithubRepo[] };
   return body.repos;
@@ -76,8 +76,9 @@ export async function listGithubRepos(query?: string): Promise<GithubRepo[]> {
  * (no sandbox, no clone yet) and returns a `Project` payload of `source: github`.
  */
 export async function createProjectFromRepo(repo: GithubRepo): Promise<Project> {
-  const res = await fetch('/api/web/github/projects', {
+  const res = await fetch('/web/github/projects', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       repoFullName: repo.fullName,
@@ -116,8 +117,9 @@ export async function ensureRepoMaterialized(
   githubProjectId: string,
   onProgress?: (event: PrepareProgress) => void,
 ): Promise<MaterializeResult> {
-  const res = await fetch(`/api/web/github/projects/${encodeURIComponent(githubProjectId)}/ensure`, {
+  const res = await fetch(`/web/github/projects/${encodeURIComponent(githubProjectId)}/ensure`, {
     method: 'POST',
+    credentials: 'include',
     headers: { Accept: 'text/event-stream' },
   });
 
@@ -219,8 +221,9 @@ export interface GitOpError extends Error {
  * callers can react without re-implementing the parsing dance each time.
  */
 async function postProjectGitOp<T>(githubProjectId: string, action: string, payload: unknown): Promise<T> {
-  const res = await fetch(`/api/web/github/projects/${encodeURIComponent(githubProjectId)}/${action}`, {
+  const res = await fetch(`/web/github/projects/${encodeURIComponent(githubProjectId)}/${action}`, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload ?? {}),
   });

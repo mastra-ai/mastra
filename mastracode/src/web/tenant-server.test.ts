@@ -73,7 +73,7 @@ function buildApp(dispatcher: TenantDispatcher) {
   // Shared fallback route (the "auth disabled" / shared adapter path).
   app.get('/api/echo', c => c.json({ tenant: 'SHARED' }));
   // A custom web route that must NOT be forwarded to tenant apps.
-  app.get('/api/web/status', c => c.json({ route: 'web' }));
+  app.get('/web/status', c => c.json({ route: 'web' }));
   return app;
 }
 
@@ -150,12 +150,12 @@ describe('TenantDispatcher', () => {
     expect(builtStorages).toHaveLength(0);
   });
 
-  it('does not forward /api/web/* custom routes to tenant apps', async () => {
+  it('does not forward /web/* custom routes to tenant apps', async () => {
     const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
     const app = buildApp(dispatcher);
 
     mockWebAuthTenant.mockReturnValue({ userId: 'user_a' });
-    const res = await app.request('/api/web/status');
+    const res = await app.request('/web/status');
     expect(await res.json()).toEqual({ route: 'web' });
     expect(builtStorages).toHaveLength(0);
   });

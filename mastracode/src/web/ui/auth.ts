@@ -39,7 +39,7 @@ export function redirectToLogin(): void {
  */
 export async function fetchAuthState(): Promise<WebAuthState> {
   try {
-    const res = await fetch('/auth/me', { headers: { Accept: 'application/json' } });
+    const res = await fetch('/auth/me', { headers: { Accept: 'application/json' }, credentials: 'include' });
     if (res.status === 404) {
       return { authEnabled: false, authenticated: false };
     }
