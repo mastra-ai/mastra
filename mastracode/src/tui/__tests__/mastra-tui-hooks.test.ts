@@ -338,6 +338,25 @@ describe('MastraTUI hook wiring', () => {
     expect(runPermissionRequest).not.toHaveBeenCalled();
   });
 
+  it('does not fire PostToolUse from TUI tool_end events', async () => {
+    const runPostToolUse = vi.fn().mockResolvedValue(createHookResult());
+    const tui = createBareTui({ runPostToolUse });
+
+    await tui.handleEvent({
+      type: 'tool_end',
+      toolCallId: 'call-5',
+      result: { ok: true },
+      isError: false,
+    });
+
+    expect(runPostToolUse).not.toHaveBeenCalled();
+    expect(mocks.dispatchEvent).toHaveBeenCalledWith(
+      { type: 'tool_end', toolCallId: 'call-5', result: { ok: true }, isError: false },
+      {},
+      tui.state,
+    );
+  });
+
   it('fires SubagentStart on subagent_start with delegation context', async () => {
     const runSubagentStart = vi.fn().mockResolvedValue(createHookResult());
     const tui = createBareTui({ runSubagentStart });

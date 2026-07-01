@@ -324,8 +324,8 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 
 | Event | When it fires | Can block? |
 | - | - | - |
-| `PreToolUse` | Before a tool call executes | Yes |
-| `PostToolUse` | After a tool call completes | No |
+| `PreToolUse` | Before the agent tool hook wrapper allows a tool call to execute | Yes |
+| `PostToolUse` | After the agent tool hook wrapper observes a completed tool call | No |
 | `Stop` | When an agent response ends (`complete`, `aborted`, or `error`) | Yes |
 | `UserPromptSubmit` | When the user sends a message | Yes |
 | `SessionStart` | When a session begins | No |
@@ -341,7 +341,9 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 
 `UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
 
-Only `PreToolUse`, `Stop`, and `UserPromptSubmit` can block agent behavior. The remaining events are non-blocking lifecycle signals for logging and integration.
+`PreToolUse` and `PostToolUse` are emitted by the agent tool hook wrapper around tool execution. Run, permission, interrupt, and subagent events are emitted by the TUI lifecycle dispatcher.
+
+Only `PreToolUse`, `Stop`, and `UserPromptSubmit` can block agent behavior. `PostToolUse` and the lifecycle dispatcher events are non-blocking signals for logging and integration.
 
 ### Hook I/O protocol
 
