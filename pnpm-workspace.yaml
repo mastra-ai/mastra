@@ -256,4 +256,6 @@ allowBuilds:
   sqlite3: false
   ssh2: false
   unrs-resolver: false
+  '@mongodb-js/zstd': false
+  node-liblzma: false
   workerd: false
