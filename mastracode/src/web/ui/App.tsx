@@ -1,5 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
-import { Button, ButtonsGroup, Notice, Spinner, Textarea, Txt, useTheme } from '@mastra/playground-ui';
+import { Button, Notice, Spinner, Textarea, Txt, useTheme } from '@mastra/playground-ui';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Menu, Settings, Square } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -693,28 +693,6 @@ export default function App() {
               )}
             </form>
 
-            {modes.length > 0 && (
-              <div
-                role="group"
-                aria-label="Session mode"
-                className="flex shrink-0 items-center gap-2 border-t border-border1 bg-surface2 px-4 py-2"
-              >
-                <ButtonsGroup spacing="close">
-                  {modes.map(m => (
-                    <Button
-                      key={m.id}
-                      variant={transcript.modeId === m.id ? 'primary' : 'ghost'}
-                      size="sm"
-                      aria-pressed={transcript.modeId === m.id}
-                      onClick={() => void session.switchMode(m.id)}
-                    >
-                      {m.name ?? m.id}
-                    </Button>
-                  ))}
-                </ButtonsGroup>
-              </div>
-            )}
-
             <StatusLine
               status={status}
               modelId={transcript.modelId}
@@ -726,6 +704,9 @@ export default function App() {
               workspaceReady={transcript.workspaceReady}
               projectName={activeProject?.name}
               tokensPerSec={transcript.tokensPerSec}
+              modes={modes}
+              activeModeId={transcript.modeId}
+              onModeChange={modeId => void session.switchMode(modeId)}
             />
           </>
         )}

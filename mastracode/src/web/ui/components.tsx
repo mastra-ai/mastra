@@ -1,7 +1,8 @@
-import type { PlanResume, AgentControllerOMProgress } from '@mastra/client-js';
+import type { PlanResume, AgentControllerModeInfo, AgentControllerOMProgress } from '@mastra/client-js';
 import {
   Badge,
   Button,
+  ButtonsGroup,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -794,6 +795,9 @@ export function StatusLine({
   workspaceReady,
   projectName,
   tokensPerSec,
+  modes,
+  activeModeId,
+  onModeChange,
 }: {
   status: string;
   modelId?: string;
@@ -805,6 +809,9 @@ export function StatusLine({
   workspaceReady?: boolean;
   projectName?: string;
   tokensPerSec?: number;
+  modes?: AgentControllerModeInfo[];
+  activeModeId?: string;
+  onModeChange?: (modeId: string) => void;
 }) {
   // OM budgets, mirroring the TUI: msg = active message window before an
   // observation fires; mem = accumulated observations before a reflection fires.
@@ -814,6 +821,24 @@ export function StatusLine({
 
   return (
     <div className="flex shrink-0 items-center gap-3 border-t border-border1 bg-surface2 px-4 py-2 text-ui-sm text-icon3">
+      {modes && modes.length > 0 && onModeChange && (
+        <div role="group" aria-label="Session mode" className="shrink-0">
+          <ButtonsGroup spacing="close">
+            {modes.map(m => (
+              <Button
+                key={m.id}
+                variant={activeModeId === m.id ? 'primary' : 'ghost'}
+                size="sm"
+                aria-pressed={activeModeId === m.id}
+                onClick={() => onModeChange(m.id)}
+              >
+                {m.name ?? m.id}
+              </Button>
+            ))}
+          </ButtonsGroup>
+        </div>
+      )}
+
       <span className="text-icon3 tabular-nums">{modelId ? lastSegment(modelId) : 'no model'}</span>
 
       {showMsg && (
