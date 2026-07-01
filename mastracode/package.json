@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.27.0-alpha.8",
+  "version": "0.27.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -61,6 +61,16 @@
       "require": {
         "types": "./dist/headless/index.d.ts",
         "default": "./dist/headless.cjs"
+      }
+    },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.js"
+      },
+      "require": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.cjs"
       }
     },
     "./package.json": "./package.json"

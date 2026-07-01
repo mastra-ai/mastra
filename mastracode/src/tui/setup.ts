@@ -369,6 +369,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'plugins', description: 'Manage Mastra Code plugins' },
     { name: 'observability', description: 'Configure cloud observability' },
     {
       name: 'github',
@@ -443,10 +444,11 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    const configDir = (state.session.state.get() as { configDir?: string } | undefined)?.configDir;
+    const sessionState = state.session.state.get() as { configDir?: string; pluginCommandPaths?: string[] } | undefined;
+    const configDir = sessionState?.configDir;
     // Load from all sources (global and local)
     const globalCommands = await loadCustomCommands(undefined, configDir);
-    const localCommands = await loadCustomCommands(process.cwd(), configDir);
+    const localCommands = await loadCustomCommands(process.cwd(), configDir, sessionState?.pluginCommandPaths ?? []);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();
