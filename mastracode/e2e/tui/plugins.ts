@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,12 +19,14 @@ let currentTui: unknown;
 let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
+let githubInstallGhLogPath: string | undefined;
 
 function resetPluginScenarioState(): void {
   currentTui = undefined;
   hotReloadPluginDir = undefined;
   githubPollSourceDir = undefined;
   githubPollManager = undefined;
+  githubInstallGhLogPath = undefined;
 }
 
 function writeLocalPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
@@ -230,6 +232,49 @@ function writeGithubPluginRegistry(projectDir: string, checkoutName: string): vo
 
 function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
+}
+
+function prepareGithubInstallGhPlugin(projectDir: string): void {
+  const sourceDir = join(projectDir, 'fixtures', 'plugins', 'github-install-source');
+  const remoteDir = join(projectDir, 'fixtures', 'plugins', 'github-install-remote.git');
+  const fakeBinDir = join(projectDir, 'fixtures', 'bin');
+  const fakeGhPath = join(fakeBinDir, 'gh');
+  const ghLogPath = join(projectDir, 'fixtures', 'gh-calls.log');
+
+  writeHotReloadPluginSource(sourceDir, 'github-install');
+  git(sourceDir, ['init', '-b', 'main']);
+  git(sourceDir, ['config', 'user.email', 'e2e@example.com']);
+  git(sourceDir, ['config', 'user.name', 'Mastra Code E2E']);
+  git(sourceDir, ['add', '.']);
+  git(sourceDir, ['commit', '-m', 'initial plugin']);
+  git(projectDir, ['init', '--bare', remoteDir]);
+  git(sourceDir, ['remote', 'add', 'origin', remoteDir]);
+  git(sourceDir, ['push', '-u', 'origin', 'main']);
+
+  mkdirSync(fakeBinDir, { recursive: true });
+  writeFileSync(
+    fakeGhPath,
+    `#!/bin/sh
+set -eu
+printf '%s\\n' "$*" >> ${JSON.stringify(ghLogPath)}
+if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+  echo "gh version 2.0.0"
+  exit 0
+fi
+if [ "$#" -eq 2 ] && [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  exit 0
+fi
+if [ "$#" -eq 4 ] && [ "$1" = "repo" ] && [ "$2" = "clone" ] && [ "$3" = "acme/github-install-plugin" ]; then
+  mkdir -p "$4"
+  cp -R ${JSON.stringify(sourceDir)}/. "$4"/
+  exit 0
+fi
+echo "unexpected gh invocation: $*" >&2
+exit 1
+`,
+  );
+  chmodSync(fakeGhPath, 0o755);
+  githubInstallGhLogPath = ghLogPath;
 }
 
 function prepareGithubPollPlugin(projectDir: string): string {
@@ -449,6 +494,69 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
     }
     // The run() screen assertions wait for version-one and version-two, while the second AIMock follow-up response
     // deliberately avoids version-two. That ensures the visible updated version comes from the plugin tool result.
+  },
+};
+
+export const pluginsGithubInstallGhCliScenario: McE2eScenario = {
+  name: 'plugins-github-install-gh-cli',
+  description: 'Installs a GitHub plugin through /plugins by using a mocked gh CLI on PATH.',
+  testName: 'installs GitHub plugins through gh CLI in the TUI',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-local-tool.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    prepareGithubInstallGhPlugin(projectDir);
+  },
+  env({ projectDir }) {
+    return { PATH: `${join(projectDir, 'fixtures', 'bin')}:${process.env.PATH ?? ''}` };
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('../../src/plugins/manager.js');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('/plugins');
+    await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+    terminal.write('\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub URL:/i, terminal, 8_000);
+    await typeTextSlowly(terminal, 'https://github.com/acme/github-install-plugin');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Install scope:/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub plugins also auto-update/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(new RegExp(PLUGIN_ID), terminal, 10_000);
+    await runtime.waitForScreenText(/active/i, terminal, 8_000);
+    terminal.write('\x1b');
+
+    if (!githubInstallGhLogPath) throw new Error('GitHub install gh call log was not prepared');
+    const ghCalls = readFileSync(githubInstallGhLogPath, 'utf8');
+    if (!ghCalls.includes('repo clone acme/github-install-plugin')) {
+      throw new Error(`Expected gh repo clone call. Calls:\n${ghCalls}`);
+    }
+
+    terminal.submit(PROMPT);
+    await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 10_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const names = getToolNames(requests);
+    if (!names.includes(TOOL_NAME)) {
+      throw new Error(
+        `Expected provider request to expose GitHub-installed plugin tool ${TOOL_NAME}. Names: ${names.join(', ')}`,
+      );
+    }
   },
 };
 
