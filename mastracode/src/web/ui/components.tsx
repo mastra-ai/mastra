@@ -15,7 +15,6 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import {
   Bell,
-  Bot,
   Brain,
   ChevronRight,
   Eye,
@@ -78,11 +77,6 @@ const promptCardApproval = `${promptCardBase} border-l-4 border-l-warning1`;
 const promptCardSuspension = `${promptCardBase} border-l-4 border-l-accent2`;
 const promptTitle = 'mb-1.5 text-sm font-semibold text-icon6';
 const promptActions = 'mt-2 flex gap-2';
-
-// Message rows (user / assistant / system / signal).
-const msgRow = 'flex flex-col gap-1';
-const msgHead = 'inline-flex items-center gap-2';
-const msgRole = 'text-ui-xs font-bold uppercase tracking-wide text-icon3';
 
 // Status line items.
 const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
@@ -633,26 +627,20 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   const roles = useMemo<MessageRoleRenderers>(
     () => ({
       User: ({ children }) => (
-        <div className={`${msgRow} items-end`}>
-          <div className={msgHead}>
-            <span className={`${msgRole} ${entry.steer ? '!text-warning1' : ''}`}>{entry.steer ? 'Steer' : 'You'}</span>
-          </div>
+        <div className="flex w-full flex-col items-end">
           <div
-            className="rounded-lg border border-accent2/20 bg-accent2/10 px-3.5 py-2.5 shadow-sm"
-            style={{ maxWidth: 'min(82%, 660px)' }}
+            className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
+              entry.steer ? 'bg-warning1/10' : 'bg-surface3'
+            }`}
           >
             {children}
           </div>
         </div>
       ),
       Assistant: ({ children }) => (
-        <div className={`${msgRow} items-stretch`}>
-          <div className={msgHead}>
-            <span className="inline-grid h-5 w-5 place-items-center rounded-md border border-accent2/25 bg-accent2/10 text-accent2">
-              <Bot size={14} />
-            </span>
-            <span className={msgRole}>Agent</span>
-            {toolCount > 1 && (
+        <div className="max-w-full">
+          {toolCount > 1 && (
+            <div className="flex justify-end">
               <Button
                 variant="ghost"
                 size="xs"
@@ -661,27 +649,13 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
               >
                 {allExpanded ? 'Collapse all' : `Expand all (${toolCount})`}
               </Button>
-            )}
-          </div>
+            </div>
+          )}
           <div>{children}</div>
         </div>
       ),
-      System: ({ children }) => (
-        <div className={`${msgRow} items-stretch`}>
-          <div className={msgHead}>
-            <span className={msgRole}>System</span>
-          </div>
-          <div>{children}</div>
-        </div>
-      ),
-      Signal: ({ children }) => (
-        <div className={`${msgRow} items-stretch`}>
-          <div className={msgHead}>
-            <span className={msgRole}>Signal</span>
-          </div>
-          <div>{children}</div>
-        </div>
-      ),
+      System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
+      Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
     }),
     [allExpanded, entry.steer, toolCount],
   );
@@ -690,7 +664,9 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
     () => ({
       Text: (part: TextPart) =>
         entry.message.role === 'user' ? (
-          <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed">{part.text}</div>
+          <div className="prose">
+            <Markdown>{part.text}</Markdown>
+          </div>
         ) : (
           <div className="prose">
             <Markdown>{part.text}</Markdown>
