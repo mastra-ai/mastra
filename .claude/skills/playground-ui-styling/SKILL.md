@@ -1,17 +1,17 @@
 ---
 name: playground-ui-styling
-description: Design-system styling policy for Mastra Playground UI. This skill should be used when writing, reviewing, or refactoring UI code in packages/playground-ui and packages/playground to ensure design system consistency. Triggers on tasks involving components, Tailwind classes, or design tokens in those packages.
+description: Styling policy for the @mastra/playground-ui design system and every app built on it. This skill should be used when writing, reviewing, or refactoring UI code in packages/playground-ui, packages/playground, mastracode/src/web, or any other consumer of the design system. Triggers on tasks involving components, Tailwind classes, or design tokens in those surfaces.
 ---
 
 # Playground UI Styling
 
-Design-system policy for `packages/playground-ui` and `packages/playground`. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
+`packages/playground-ui` is the shared design system for all Mastra studio apps: local Studio (`packages/playground`), Cloud Studio (Next.js, separate repo), and the mastracode web UI (`mastracode/src/web/ui`). This policy applies wherever its components are consumed. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
 
 ## Wiring
 
 - `packages/playground-ui/src/index.css` imports Tailwind and `theme.css`, and declares the dark variant: `@custom-variant dark (&:is(.dark *))`.
 - The palette defaults to dark in `:root`; `html.light` flips the semantic variables. Theming is automatic through semantic tokens (`bg-surface4` adapts by itself) — never write `dark:` color overrides on semantic tokens; reserve `dark:` for rare structural differences.
-- Build conditional or merged class strings with `cn()` from `src/lib/utils.ts`. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-ui-md` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
+- Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-ui-md` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
 
 ## Decision ladder
 
