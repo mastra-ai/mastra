@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
   anthropicStripForeignReasoningContent,
+  anthropicToolIdFormat,
   cerebrasStripReasoningContent,
   isMaybeAnthropic,
   isMaybeCerebras,
@@ -682,5 +683,265 @@ describe('ProcessorRunner.runProcessLLMRequest', () => {
 
     const assistant = result.prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// anthropicToolIdFormat.applyToPrompt — preemptive tool-call ID rewriting
+// ---------------------------------------------------------------------------
+
+/** Helper: build a prompt with a tool-call / tool-result round-trip. */
+function promptWithToolCall(opts: {
+  toolCallId: string;
+  toolName?: string;
+  providerExecuted?: boolean;
+}): LanguageModelV2Prompt {
+  const { toolCallId, toolName = 'web_search', providerExecuted } = opts;
+  return [
+    { role: 'user', content: [{ type: 'text', text: 'search for cats' }] },
+    {
+      role: 'assistant',
+      content: [
+        {
+          type: 'tool-call' as const,
+          toolCallId,
+          toolName,
+          input: { query: 'cats' },
+          ...(providerExecuted !== undefined ? { providerExecuted } : {}),
+        },
+      ],
+    },
+    {
+      role: 'tool' as const,
+      content: [
+        {
+          type: 'tool-result' as const,
+          toolCallId,
+          toolName,
+          output: { type: 'text' as const, value: 'result' },
+        },
+      ],
+    },
+    { role: 'user', content: [{ type: 'text', text: 'thanks' }] },
+  ];
+}
+
+const anthropicModel = { provider: 'anthropic.messages', modelId: 'claude-fable-5' };
+const openaiModel = { provider: 'openai.chat', modelId: 'gpt-4o' };
+
+describe('anthropicToolIdFormat.applyToPrompt', () => {
+  // ------- Regular (client) tool IDs -------
+
+  it('sanitizes invalid chars in client tool-call IDs for Anthropic', () => {
+    const prompt = promptWithToolCall({ toolCallId: 'call:abc.123', providerExecuted: false });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeDefined();
+    const assistant = result!.find(m => m.role === 'assistant')!;
+    const toolCall = (assistant.content as any[]).find((p: any) => p.type === 'tool-call');
+    expect(toolCall.toolCallId).toBe('call_abc_123');
+    expect(toolCall.toolCallId).toMatch(/^[a-zA-Z0-9_-]+$/);
+  });
+
+  it('rewrites tool-result IDs to match sanitized tool-call IDs', () => {
+    const prompt = promptWithToolCall({ toolCallId: 'call:abc.123', providerExecuted: false });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeDefined();
+    const toolMsg = result!.find(m => m.role === 'tool')!;
+    const toolResult = (toolMsg.content as any[]).find((p: any) => p.type === 'tool-result');
+    expect(toolResult.toolCallId).toBe('call_abc_123');
+  });
+
+  it('does not modify already-valid client tool-call IDs', () => {
+    const prompt = promptWithToolCall({ toolCallId: 'toolu_01HWC62z9NwXv4mGdsXYHWTD', providerExecuted: false });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeUndefined();
+  });
+
+  // ------- Provider-executed (server) tool IDs -------
+
+  it('does not modify valid srvtoolu_ IDs for provider-executed tools', () => {
+    const prompt = promptWithToolCall({
+      toolCallId: 'srvtoolu_01CCzRTfJZM8D6kaPUPPZtEa',
+      providerExecuted: true,
+    });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('rewrites non-srvtoolu_ IDs for provider-executed tools to have the srvtoolu_ prefix', () => {
+    // Simulates a model switch: a provider-executed tool from a different provider
+    // has an ID that doesn't match ^srvtoolu_[a-zA-Z0-9_]+$
+    const prompt = promptWithToolCall({
+      toolCallId: 'call_abc123',
+      providerExecuted: true,
+    });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeDefined();
+    const assistant = result!.find(m => m.role === 'assistant')!;
+    const toolCall = (assistant.content as any[]).find((p: any) => p.type === 'tool-call');
+    expect(toolCall.toolCallId).toMatch(/^srvtoolu_[a-zA-Z0-9_]+$/);
+    // Must be deterministic — same input → same output
+    expect(toolCall.toolCallId).toBe('srvtoolu_call_abc123');
+  });
+
+  it('sanitizes invalid chars in provider-executed tool IDs and adds srvtoolu_ prefix', () => {
+    const prompt = promptWithToolCall({
+      toolCallId: 'call:server.tool',
+      providerExecuted: true,
+    });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeDefined();
+    const assistant = result!.find(m => m.role === 'assistant')!;
+    const toolCall = (assistant.content as any[]).find((p: any) => p.type === 'tool-call');
+    expect(toolCall.toolCallId).toMatch(/^srvtoolu_[a-zA-Z0-9_]+$/);
+    expect(toolCall.toolCallId).toBe('srvtoolu_call_server_tool');
+  });
+
+  it('strips hyphens from provider-executed tool IDs (srvtoolu_ pattern disallows hyphens)', () => {
+    const prompt = promptWithToolCall({
+      toolCallId: 'srvtoolu_01ABC-def_123',
+      providerExecuted: true,
+    });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeDefined();
+    const assistant = result!.find(m => m.role === 'assistant')!;
+    const toolCall = (assistant.content as any[]).find((p: any) => p.type === 'tool-call');
+    expect(toolCall.toolCallId).toBe('srvtoolu_01ABC_def_123');
+    expect(toolCall.toolCallId).toMatch(/^srvtoolu_[a-zA-Z0-9_]+$/);
+  });
+
+  it('keeps tool-result IDs in sync with rewritten provider-executed tool-call IDs', () => {
+    const prompt = promptWithToolCall({
+      toolCallId: 'call_abc123',
+      providerExecuted: true,
+    });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeDefined();
+    const toolMsg = result!.find(m => m.role === 'tool')!;
+    const toolResult = (toolMsg.content as any[]).find((p: any) => p.type === 'tool-result');
+    expect(toolResult.toolCallId).toBe('srvtoolu_call_abc123');
+  });
+
+  // ------- Provider scoping -------
+
+  it('returns undefined for non-Anthropic models (no rewrite needed)', () => {
+    const prompt = promptWithToolCall({ toolCallId: 'call:abc.123', providerExecuted: false });
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: openaiModel });
+
+    expect(result).toBeUndefined();
+  });
+
+  // ------- Determinism (prompt cache stability) -------
+
+  it('produces identical output across multiple invocations (deterministic)', () => {
+    const prompt = promptWithToolCall({ toolCallId: 'call:abc.123', providerExecuted: true });
+    const result1 = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+    const result2 = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result1).toEqual(result2);
+  });
+
+  // ------- Mixed tool types in one prompt -------
+
+  it('handles mixed client and provider-executed tools in the same prompt', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: 'do both' }] },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call:client.1',
+            toolName: 'find_files',
+            input: { path: 'src/' },
+          },
+          {
+            type: 'tool-call',
+            toolCallId: 'call:server.2',
+            toolName: 'web_search',
+            input: { query: 'test' },
+            providerExecuted: true,
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call:client.1',
+            toolName: 'find_files',
+            output: { type: 'text' as const, value: 'files' },
+          },
+        ],
+      },
+      // Provider-executed tool result is on the assistant message (inline),
+      // but we still need to test the tool-result on a tool message for completeness.
+    ];
+
+    const result = anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(result).toBeDefined();
+    const assistant = result!.find(m => m.role === 'assistant')!;
+    const calls = (assistant.content as any[]).filter((p: any) => p.type === 'tool-call');
+
+    // Client tool: chars sanitized
+    expect(calls[0].toolCallId).toBe('call_client_1');
+    expect(calls[0].toolCallId).toMatch(/^[a-zA-Z0-9_-]+$/);
+
+    // Provider-executed tool: srvtoolu_ prefix + chars sanitized
+    expect(calls[1].toolCallId).toBe('srvtoolu_call_server_2');
+    expect(calls[1].toolCallId).toMatch(/^srvtoolu_[a-zA-Z0-9_]+$/);
+
+    // Tool result for client tool matches
+    const toolMsg = result!.find(m => m.role === 'tool')!;
+    const results = (toolMsg.content as any[]).filter((p: any) => p.type === 'tool-result');
+    expect(results[0].toolCallId).toBe('call_client_1');
+  });
+
+  // ------- Immutability -------
+
+  it('does not mutate the original prompt', () => {
+    const prompt = promptWithToolCall({ toolCallId: 'call:abc.123', providerExecuted: true });
+    const originalJson = JSON.stringify(prompt);
+
+    anthropicToolIdFormat.applyToPrompt!({ prompt, model: anthropicModel });
+
+    expect(JSON.stringify(prompt)).toBe(originalJson);
+  });
+});
+
+describe('ProviderHistoryCompat.processLLMRequest (tool ID rewriting)', () => {
+  it('rewrites tool IDs preemptively for Anthropic models', () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt = promptWithToolCall({ toolCallId: 'call:abc.123', providerExecuted: true });
+    const args = makeRequestArgs(prompt, anthropicModel);
+
+    const result = handler.processLLMRequest(args);
+
+    expect(result).toBeDefined();
+    const rewritten = (result as { prompt: LanguageModelV2Prompt }).prompt;
+    const assistant = rewritten.find(m => m.role === 'assistant')!;
+    const toolCall = (assistant.content as any[]).find((p: any) => p.type === 'tool-call');
+    expect(toolCall.toolCallId).toBe('srvtoolu_call_abc_123');
+  });
+
+  it('does not rewrite tool IDs for non-Anthropic models', () => {
+    const handler = new ProviderHistoryCompat();
+    const prompt = promptWithToolCall({ toolCallId: 'call:abc.123', providerExecuted: true });
+    const args = makeRequestArgs(prompt, openaiModel);
+
+    const result = handler.processLLMRequest(args);
+
+    // Only reasoning rules apply; tool ID rewriting should not trigger for non-Anthropic
+    expect(result).toBeUndefined();
   });
 });
