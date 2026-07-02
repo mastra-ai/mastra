@@ -97,5 +97,25 @@ describe(
       const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
       expect(result.score).toBeCloseTo(testCases[3].expectedResult.score, 1);
     });
+
+    it('should preserve scale 0 when generating scores', () => {
+      const zeroScaleScorer = createToxicityScorer({ model, options: { scale: 0 } });
+      const generateScoreStep = zeroScaleScorer['steps'].find(step => step.name === 'generateScore');
+
+      const score = generateScoreStep?.definition?.({
+        results: {
+          analyzeStepResult: {
+            verdicts: [
+              {
+                verdict: 'yes',
+                reason: 'Toxic statement',
+              },
+            ],
+          },
+        },
+      } as any);
+
+      expect(score).toBe(0);
+    });
   },
 );

@@ -54,7 +54,7 @@ export function createToxicityScorer({
       }
 
       const score = toxicityCount / numberOfVerdicts;
-      return roundToTwoDecimals(score * (options?.scale || 1));
+      return roundToTwoDecimals(score * (options?.scale ?? 1));
     })
     .generateReason({
       description: 'Reason about the results',
