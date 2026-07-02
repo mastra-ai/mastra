@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
+import { Agent } from '../agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
 
@@ -59,6 +60,38 @@ describe('createGoalScorer tool support', () => {
     const scorer = createGoalScorer({ judgeModel, prompt: customPrompt, tools: { view: viewTool } });
     const instructions = scorer.config.judge?.instructions ?? '';
     expect(instructions).toBe(customPrompt);
+  });
+});
+
+describe('createGoalScorer JSON fallback', () => {
+  it('falls back to JSON prompt injection text when native structured output is unavailable', async () => {
+    const model = createMockModel({ mockText: { decision: 'done', reason: 'all requirements met' }, version: 'v2' });
+    const streamSpy = vi
+      .spyOn(Agent.prototype, 'stream')
+      .mockResolvedValueOnce({ object: Promise.resolve(undefined) } as any)
+      .mockResolvedValueOnce({
+        object: Promise.resolve(undefined),
+        text: Promise.resolve('{"decision":"done","reason":"all requirements met"}'),
+      } as any);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const scorer = createGoalScorer({ judgeModel: model as any });
+
+      const result = await scorer.run({
+        input: { originalTask: 'do the thing', currentText: 'I did the thing' },
+        output: 'I did the thing',
+      } as any);
+
+      expect(streamSpy).toHaveBeenCalledTimes(2);
+      expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
+      expect(((streamSpy.mock.calls as any)[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.reason).toBe('all requirements met');
+    } finally {
+      streamSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 });
 
