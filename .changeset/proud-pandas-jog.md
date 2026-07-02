@@ -6,6 +6,8 @@ Added storage retention support to PostgreSQL. When you set a `retention` config
 
 Deletes run in batches via `ctid` subqueries (bounded, resumable, and cancellable) so they stay safe on large tables, and anchor columns are indexed so the sweeps stay fast. `prune()` only deletes rows; PostgreSQL's autovacuum reclaims the dead tuples for reuse.
 
+The v-next observability domain (day-partitioned signal event tables: `spans`, `metrics`, `logs`, `scores`, `feedback`) is also covered: `prune()` drops whole day partitions — TimescaleDB chunks via `drop_chunks()`, pg_partman children and native partitions via detach + drop — that are entirely older than the cutoff, so aging out event data is a metadata operation instead of a row-by-row delete.
+
 ```typescript
 const storage = new PostgresStore({
   id: 'mastra-storage',

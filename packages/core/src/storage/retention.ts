@@ -117,6 +117,12 @@ export interface PruneResult {
  * definitions (`schedules`, one stable row per schedule). Hence the single
  * `'triggers'` key.
  *
+ * Note: for the `observability` domain, `spans` is supported by every adapter
+ * that implements retention, while `metrics` / `logs` / `scores` / `feedback`
+ * only exist on insert-only v-next adapters (e.g. Postgres v-next), which
+ * expire them by dropping whole day partitions / chunks rather than deleting
+ * rows. Adapters skip table keys they don't manage.
+ *
  * Note: for the `experiments` domain, an experiment is pruned as a whole unit —
  * the run and all of its `experiment_results` rows are deleted together (results
  * cascade with their parent, matching `deleteExperiment`). Results have no
@@ -130,7 +136,7 @@ export interface PruneResult {
 export interface DomainRetentionTables {
   memory: 'threads' | 'messages' | 'resources';
   threadState: 'threadState';
-  observability: 'spans';
+  observability: 'spans' | 'metrics' | 'logs' | 'scores' | 'feedback';
   scores: 'scorers';
   workflows: 'workflowSnapshot';
   backgroundTasks: 'backgroundTasks';
