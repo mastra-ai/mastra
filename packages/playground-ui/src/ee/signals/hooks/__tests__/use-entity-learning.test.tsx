@@ -78,18 +78,43 @@ describe('entity-learning hooks', () => {
   });
 
   describe('useEntityTopics', () => {
-    describe('when entityId, signalName and runId are all present', () => {
-      it('fetches the clusters for the signal run', async () => {
-        server.use(http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)));
+    describe('when a runId is provided', () => {
+      it('fetches the clusters for that run', async () => {
+        let capturedUrl: URL | undefined;
+        server.use(
+          http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+            capturedUrl = new URL(request.url);
+            return HttpResponse.json(topicsResponse);
+          }),
+        );
 
         const { result } = renderHook(() => useEntityTopics('entity_support', 'sentiment', '32'), { wrapper });
 
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(result.current.data).toEqual(topicsResponse);
+        expect(capturedUrl?.searchParams.get('runId')).toBe('32');
       });
     });
 
-    describe('when runId is missing', () => {
+    describe('when runId is omitted', () => {
+      it('fetches without a runId so the API resolves the latest run for the signal', async () => {
+        let capturedUrl: URL | undefined;
+        server.use(
+          http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+            capturedUrl = new URL(request.url);
+            return HttpResponse.json(topicsResponse);
+          }),
+        );
+
+        const { result } = renderHook(() => useEntityTopics('entity_support', 'sentiment'), { wrapper });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(capturedUrl?.searchParams.get('signalName')).toBe('sentiment');
+        expect(capturedUrl?.searchParams.has('runId')).toBe(false);
+      });
+    });
+
+    describe('when entityId is missing', () => {
       it('stays disabled and does not fetch', async () => {
         const onTopics = vi.fn<() => void>();
         server.use(
@@ -99,7 +124,7 @@ describe('entity-learning hooks', () => {
           }),
         );
 
-        const { result } = renderHook(() => useEntityTopics('entity_support', 'sentiment', undefined), { wrapper });
+        const { result } = renderHook(() => useEntityTopics(undefined, 'sentiment'), { wrapper });
 
         await new Promise(resolve => setTimeout(resolve, 50));
         expect(result.current.fetchStatus).toBe('idle');

@@ -4794,9 +4794,12 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "datasetId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -4808,7 +4811,10 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "datasetId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [
       "description",
       "groundTruthSchema",
@@ -4821,7 +4827,7 @@ export const API_ROUTE_METADATA = {
       "targetIds",
       "targetType"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -4833,9 +4839,12 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "datasetId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"

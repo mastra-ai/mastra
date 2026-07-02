@@ -1,5 +1,119 @@
 # @mastra/core
 
+## 1.49.0-alpha.4
+
+### Patch Changes
+
+- Added optional filter arguments to `Dataset.listExperiments()` and `Dataset.listExperimentResults()`. The storage layer already accepted these filters — they are now reachable from the `Dataset` handle. All new parameters are optional and existing callers are unaffected. ([#18769](https://github.com/mastra-ai/mastra/pull/18769))
+
+  **Before:**
+
+  ```typescript
+  const { experiments } = await dataset.listExperiments({ page: 0, perPage: 10 });
+  const baselineOnly = experiments.filter(e => e.agentVersion === 'v1');
+  ```
+
+  **After:**
+
+  ```typescript
+  const { experiments } = await dataset.listExperiments({
+    targetType: 'agent',
+    targetId: 'my-agent',
+    agentVersion: 'v1',
+    status: 'completed',
+    page: 0,
+    perPage: 10,
+  });
+  ```
+
+  `listExperiments` accepts: `targetType`, `targetId`, `agentVersion`, `status`, tenancy `filters`.
+  `listExperimentResults` accepts: `traceId`, `status`, tenancy `filters`.
+
+  Enables baseline vs variant read patterns without client-side filtering or bypassing `Dataset`.
+
+## 1.49.0-alpha.3
+
+### Minor Changes
+
+- Added opt-in storage retention. Declare per-table `maxAge` policies in the `retention` config, then call `storage.prune()` to delete rows older than their age. Anything you don't configure is kept forever, so there is no change until you opt in. ([#18733](https://github.com/mastra-ai/mastra/pull/18733))
+
+  Retention covers growth tables across ten domains — `memory` (threads, messages, resources), `threadState`, `observability` (spans), `scores`, `workflows` (run snapshots), `backgroundTasks`, `experiments`, `notifications`, `harness` (sessions), and `schedules` (fire history). Anchors are chosen so `maxAge` is honest: creation time for append-only logs, last activity for workflow snapshots and thread state, and completion time for background tasks and experiments (in-flight work is never pruned). User-authored artifacts and config (agents, skills, workspaces, datasets, schedule definitions, and so on) are not prunable.
+
+  `prune()` is safe on large tables: it deletes in bounded, batched, resumable, cancellable chunks and never locks the database for long. Call it from your own scheduler; when a result reports `done: false`, eligible rows remain and the next run continues. `prune()` only deletes rows — reclaiming disk to the OS is left to the underlying database and the operator.
+
+  ```typescript
+  const storage = new MastraCompositeStore({
+    id: 'composite',
+    retention: {
+      memory: { messages: { maxAge: '30d' }, threads: { maxAge: '90d' } },
+      observability: { spans: { maxAge: '7d' } },
+    },
+    domains: {
+      /* ... */
+    },
+  });
+
+  // Wire this to your own cron — Mastra never runs it for you.
+  const results = await storage.prune();
+  ```
+
+- File-based agents can now nest subagents up to three levels deep. A subagent directory can declare its own `subagents/`, and each level is assembled and wired into its parent as a delegation tool. Levels deeper than the cap are ignored with a warning. ([#18780](https://github.com/mastra-ai/mastra/pull/18780))
+
+  ```text
+  src/mastra/agents/
+    supervisor/            # depth 0
+      subagents/
+        researcher/        # depth 1
+          subagents/
+            summarizer/    # depth 2
+  ```
+
+### Patch Changes
+
+- Fixed signal drain parity for durable agents. Signals sent to a running durable agent (via sendSignal or sendMessage) are now consumed and echoed to the client stream, matching the behavior of regular agents. This includes initial signal echoes on the first model request, pre-run signal drain before the first LLM call, within-iteration signal drain between tool execution and task completion, and inter-iteration signal drain in the loop predicate that forces continuation so the LLM sees newly arrived signals. ([#18732](https://github.com/mastra-ai/mastra/pull/18732))
+
+- Fixed durable agent parity gaps: emit `start` chunk for correct stream ordering, handle TripWire from input processors during preparation, and port `onInputAvailable`/`onOutput` tool lifecycle hooks to the durable tool execution path. Removed stale test harness guards that were preventing `isTaskComplete`, `actor`, `savePerStep`, and `providerOptions` from reaching durable agent runs. These fixes enable 20+ scenario tests to run on the durable engine. ([#18806](https://github.com/mastra-ai/mastra/pull/18806))
+
+- Fixed RequestContext leaking auth tokens onto scorer_run span input. Added serializeForSpan() to RequestContext so deepClean uses a safe snapshot instead of walking the internal registry Map. Also fixed the MastraScorer.run() call site to pass the serialized snapshot into the span input. ([#18776](https://github.com/mastra-ai/mastra/pull/18776))
+
+- Fixed SystemPromptScrubber `processOutputStream` swallowing TripWire errors when strategy is `block`. The abort call now correctly propagates the TripWire to halt the agent stream, matching the existing behavior in `processOutputResult`. ([#18794](https://github.com/mastra-ai/mastra/pull/18794))
+
+- Fix evented workflow parallel steps re-running the wrong branch on restart. The parallel processor built each branch's execution path from its position in the filtered (active-only) list instead of its real index, so restarting a parallel step whose active branches were not a contiguous prefix routed to the wrong branch (and skipped the intended one). Branches are now addressed by their real index. Closes #18754. ([#18755](https://github.com/mastra-ai/mastra/pull/18755))
+
+- Fixed approved and declined tool approvals not round-tripping on recall. ([#18583](https://github.com/mastra-ai/mastra/pull/18583))
+
+  After a `requireApproval` tool call was approved or declined, `memory.recall()` lost the decision: a decline was stored as a normal successful result (`state: 'result'` with the rejection string) and an approval dropped the approval entirely. Now:
+  - **Declined** calls persist as `state: 'output-denied'` with `approval: { id, approved: false, reason }`, so recalled AI SDK v6 UI parts render as `output-denied`. In v4 and v5 (which have no denied state) the call downgrades to a single `output-available` (v5) / result (v4) part whose output is the decline reason — so the agent's onFinish memory save no longer throws `ToolInvocation must have a result`.
+  - **Approved** calls keep `approval: { id, approved: true }` alongside the result, so v6 UI parts carry the approval.
+
+  Approved and declined decisions now round-trip on recall consistently for both standard agents and durable agents (`DurableAgent`, including the Inngest durable agent).
+
+  Live approve/decline already worked; this was a write-path persistence gap. Fixes #17218.
+
+- Fixed a TypeScript error where auth provider instances (for example `new MastraAuthWorkos()`) could not be assigned to `server.auth` or `studio.auth`, failing with `Property '#private' is missing` (#18682). ([#18796](https://github.com/mastra-ai/mastra/pull/18796))
+
+  Auth providers are now typed with a new structural `IMastraAuthProvider` interface (exported from `@mastra/core/server` and `@mastra/auth`), so provider packages no longer need a shared class identity with `@mastra/core`. `CompositeAuth` also accepts any `IMastraAuthProvider` implementation. No code changes are required:
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { MastraAuthWorkos } from '@mastra/auth-workos';
+
+  // Previously failed to compile with TS2322, now works without casts
+  export const mastra = new Mastra({
+    server: {
+      auth: new MastraAuthWorkos(),
+    },
+  });
+  ```
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+- Fixed an internal Mastra instance leaking a scorer hook onto a shared, process-wide emitter. Agents that use a Workspace (or any unwired agent run) built a throwaway internal Mastra whose scorer hook was never removed, so it kept firing on every scorer run and flooded logs with "scorer not found" errors. The scorer still ran correctly on the real Mastra — the noise came from the orphaned handler, which is now released on teardown. ([#18763](https://github.com/mastra-ai/mastra/pull/18763))
+
+- Fixed durable agents to no longer persist `modelSettings.headers` to durable storage. Headers (which may contain sensitive API keys or auth tokens) are now stripped during serialization and kept in-process on the `RunRegistryEntry`, then merged back at LLM execution time. ([#18751](https://github.com/mastra-ai/mastra/pull/18751))
+
+  Also fixed missing model-config-level headers in the durable header merge pipeline.
+
 ## 1.49.0-alpha.2
 
 ### Patch Changes

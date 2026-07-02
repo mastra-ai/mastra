@@ -26,6 +26,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -34,7 +35,27 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
+
+/**
+ * Build additional `AND col = ?` conditions for a tenancy read-scope filter.
+ * Returned in the shape expected by the existing SQL builders in this file.
+ * When `filters` is undefined or empty, returns empty arrays (no scoping).
+ */
+function tenancyWhere(filters?: DatasetTenancyFilters): { conditions: string[]; params: InValue[] } {
+  const conditions: string[] = [];
+  const params: InValue[] = [];
+  if (filters?.organizationId !== undefined) {
+    conditions.push('organizationId = ?');
+    params.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push('projectId = ?');
+    params.push(filters.projectId);
+  }
+  return { conditions, params };
+}
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
@@ -224,8 +245,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
           version: 0,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
@@ -267,11 +288,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
+      const { conditions, params } = tenancyWhere(filters);
+      const whereSql = ['id = ?', ...conditions].join(' AND ');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE id = ?`,
-        args: [id],
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE ${whereSql}`,
+        args: [id, ...params],
       });
       return result.rows?.[0] ? this.transformDatasetRow(result.rows[0]) : null;
     } catch (error) {
@@ -288,7 +317,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -380,8 +409,16 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op on mismatch or missing row. Never throws on mismatch
+      // so we don't leak existence across tenants via error timing/text. The cascade
+      // DELETEs below are already datasetId-scoped, so gating at the parent is sufficient.
+      const { conditions, params } = tenancyWhere(filters);
+      const existsSql = `SELECT id FROM ${TABLE_DATASETS} WHERE ${['id = ?', ...conditions].join(' AND ')}`;
+      const exists = await this.#client.execute({ sql: existsSql, args: [id, ...params] });
+      if (!exists.rows?.[0]) return;
+
       // F3 fix: detach experiments (SET NULL) instead of deleting. Delete results for FK safety.
       // Each operation wrapped separately — experiment_results table may not exist even if experiments does.
       try {
@@ -443,6 +480,23 @@ export class DatasetsLibSQL extends DatasetsStorage {
       if (args.filters?.candidateId !== undefined) {
         filterConditions.push('candidateId = ?');
         filterParams.push(args.filters.candidateId);
+      }
+      if (args.filters?.targetType !== undefined) {
+        filterConditions.push('targetType = ?');
+        filterParams.push(args.filters.targetType);
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        const placeholders = args.filters.targetIds.map(() => '?').join(',');
+        // targetIds is stored as JSON text; check intersection via json_each.
+        filterConditions.push(
+          `EXISTS (SELECT 1 FROM json_each(${TABLE_DATASETS}.targetIds) WHERE value IN (${placeholders}))`,
+        );
+        for (const id of args.filters.targetIds) filterParams.push(id);
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        // Case-insensitive substring match (LIKE in SQLite is case-insensitive for ASCII)
+        filterConditions.push('LOWER(name) LIKE ?');
+        filterParams.push(`%${args.filters.name.toLowerCase()}%`);
       }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
 
@@ -670,7 +724,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       // Get current item — no-op if not found
       const existing = await this.getItemById({ id });

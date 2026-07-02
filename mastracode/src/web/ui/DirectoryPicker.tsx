@@ -1,4 +1,6 @@
-import { Breadcrumb, Button, Crumb, Txt } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Folder } from 'lucide-react';
 import { useState } from 'react';
 
@@ -65,12 +67,12 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
             const isCurrent = i === arr.length - 1;
             return (
               <Crumb
-                key={c.path}
                 as={isCurrent ? 'span' : 'button'}
                 isCurrent={isCurrent}
                 {...(isCurrent
                   ? { title: c.path }
                   : { type: 'button', title: c.path, onClick: () => void browse(c.path) })}
+                key={c.path}
               >
                 {c.label}
               </Crumb>

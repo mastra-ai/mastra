@@ -16,6 +16,7 @@ export function runScorer({
   entityType,
   threadId,
   resourceId,
+  projectId,
   ...observabilityContext
 }: {
   scorerId: string;
@@ -30,6 +31,7 @@ export function runScorer({
   entityType: ScoringEntityType;
   threadId?: string;
   resourceId?: string;
+  projectId?: string;
 } & ObservabilityContext) {
   let shouldExecute = false;
 
@@ -94,6 +96,7 @@ export function runScorer({
     entityType,
     threadId,
     resourceId,
+    projectId,
     ...observabilityContext,
   };
 

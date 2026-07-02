@@ -1033,6 +1033,15 @@
       "docUrl": "https://doc.302.ai",
       "gateway": "models.dev"
     },
+    "trustedrouter": {
+      "url": "https://api.trustedrouter.com/v1",
+      "apiKeyEnvVar": "TRUSTEDROUTER_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "TrustedRouter",
+      "models": ["auto", "cheap", "e2e", "fast", "synth", "synth-code", "zdr"],
+      "docUrl": "https://trustedrouter.com/docs",
+      "gateway": "models.dev"
+    },
     "zhipuai": {
       "url": "https://open.bigmodel.cn/api/paas/v4",
       "apiKeyEnvVar": "ZHIPU_API_KEY",
@@ -1181,7 +1190,16 @@
       "apiKeyEnvVar": "STEPFUN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "StepFun AI",
-      "models": ["step-3.5-flash", "step-3.5-flash-2603"],
+      "models": [
+        "step-1-32k",
+        "step-2-16k",
+        "step-3.5-flash",
+        "step-3.5-flash-2603",
+        "step-3.7-flash",
+        "step-tts-2",
+        "stepaudio-2.5-asr",
+        "stepaudio-2.5-tts"
+      ],
       "docUrl": "https://platform.stepfun.ai/docs/en/step-plan/integrations/open-code",
       "gateway": "models.dev"
     },
@@ -1519,6 +1537,8 @@
         "anthropic/claude-sonnet-4",
         "anthropic/claude-sonnet-4.5",
         "anthropic/claude-sonnet-4.6",
+        "anthropic/claude-sonnet-5",
+        "anthropic/claude-sonnet-5-free",
         "baidu/ernie-5.0-thinking-preview",
         "deepseek/deepseek-chat",
         "deepseek/deepseek-v3.2",
@@ -3008,7 +3028,16 @@
       "apiKeyEnvVar": "STEPFUN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "StepFun",
-      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash"],
+      "models": [
+        "step-1-32k",
+        "step-2-16k",
+        "step-3.5-flash",
+        "step-3.5-flash-2603",
+        "step-3.7-flash",
+        "step-tts-2",
+        "stepaudio-2.5-asr",
+        "stepaudio-2.5-tts"
+      ],
       "docUrl": "https://platform.stepfun.com/docs/zh/overview/concept",
       "gateway": "models.dev"
     },
@@ -4236,6 +4265,8 @@
         "perplexity/sonar-reasoning-pro",
         "poolside/laguna-m.1",
         "poolside/laguna-m.1:free",
+        "poolside/laguna-xs-2.1",
+        "poolside/laguna-xs-2.1:free",
         "poolside/laguna-xs.2",
         "poolside/laguna-xs.2:free",
         "qwen/qwen-2.5-72b-instruct",
@@ -6591,6 +6622,7 @@
       "qwen3-coder-480b-a35b-instruct",
       "qwen3-max-2025-09-23"
     ],
+    "trustedrouter": ["auto", "cheap", "e2e", "fast", "synth", "synth-code", "zdr"],
     "zhipuai": [
       "glm-4.5",
       "glm-4.5-air",
@@ -6702,7 +6734,16 @@
       "minimax-m2-7-highspeed",
       "qwen-3.6-plus"
     ],
-    "stepfun-ai": ["step-3.5-flash", "step-3.5-flash-2603"],
+    "stepfun-ai": [
+      "step-1-32k",
+      "step-2-16k",
+      "step-3.5-flash",
+      "step-3.5-flash-2603",
+      "step-3.7-flash",
+      "step-tts-2",
+      "stepaudio-2.5-asr",
+      "stepaudio-2.5-tts"
+    ],
     "vivgrid": [
       "deepseek-v3.2",
       "deepseek-v4-pro",
@@ -6936,6 +6977,8 @@
       "anthropic/claude-sonnet-4",
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-sonnet-4.6",
+      "anthropic/claude-sonnet-5",
+      "anthropic/claude-sonnet-5-free",
       "baidu/ernie-5.0-thinking-preview",
       "deepseek/deepseek-chat",
       "deepseek/deepseek-v3.2",
@@ -8107,7 +8150,16 @@
     ],
     "llmtr": ["gemma-4", "magibu-11b-v8", "medgemma-4b", "qwen3-6-35b", "sincap", "trendyol-7b"],
     "sarvam": ["sarvam-105b", "sarvam-30b"],
-    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash"],
+    "stepfun": [
+      "step-1-32k",
+      "step-2-16k",
+      "step-3.5-flash",
+      "step-3.5-flash-2603",
+      "step-3.7-flash",
+      "step-tts-2",
+      "stepaudio-2.5-asr",
+      "stepaudio-2.5-tts"
+    ],
     "hpc-ai": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
     "minimax-cn": [
       "MiniMax-M2",
@@ -9119,6 +9171,8 @@
       "perplexity/sonar-reasoning-pro",
       "poolside/laguna-m.1",
       "poolside/laguna-m.1:free",
+      "poolside/laguna-xs-2.1",
+      "poolside/laguna-xs-2.1:free",
       "poolside/laguna-xs.2",
       "poolside/laguna-xs.2:free",
       "qwen/qwen-2.5-72b-instruct",

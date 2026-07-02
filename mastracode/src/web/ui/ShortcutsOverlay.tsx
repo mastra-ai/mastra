@@ -1,4 +1,6 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, Kbd, Txt } from '@mastra/playground-ui';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 interface ShortcutsOverlayProps {
   onClose: () => void;

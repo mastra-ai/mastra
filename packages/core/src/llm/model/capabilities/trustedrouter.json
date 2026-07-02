@@ -1,0 +1,4 @@
+{
+  "attachment": ["auto", "cheap", "e2e", "fast", "synth", "synth-code", "zdr"],
+  "temperature": ["auto", "cheap", "e2e", "fast", "synth", "synth-code", "zdr"]
+}
