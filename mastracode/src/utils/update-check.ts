@@ -4,7 +4,8 @@
 
 import { execFile } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 declare const MASTRACODE_VERSION: string | undefined;
@@ -246,9 +247,12 @@ export interface UpdateResult {
  * in a location the PATH shim doesn't use) — verify with {@link locateOwnInstall}.
  */
 export function runUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateResult> {
-  const args = buildInstallArgs(pm, targetVersion);
+  return execUpdate(pm, buildInstallArgs(pm, targetVersion));
+}
+
+function execUpdate(cmd: string, args: string[]): Promise<UpdateResult> {
   return new Promise(resolve => {
-    execFile(pm, args, { timeout: 60_000 }, (error, _stdout, stderr) => {
+    execFile(cmd, args, { timeout: 60_000 }, (error, _stdout, stderr) => {
       const captured = (stderr ?? '').trim();
       if (error) {
         resolve({ ok: false, stderr: captured || error.message });
@@ -339,9 +343,11 @@ export function resolveUpdateOutcome(opts: {
   targetVersion: string;
   result: UpdateResult;
   install: { dir: string; version: string | null } | null;
+  /** Overrides the suggested manual command, e.g. when the update was delegated to the owning tool. */
+  manualCommand?: string;
 }): UpdateOutcome {
   const { pm, targetVersion, result, install } = opts;
-  const cmd = getInstallCommand(pm, targetVersion);
+  const cmd = opts.manualCommand ?? getInstallCommand(pm, targetVersion);
 
   if (!result.ok) {
     const details = formatUpdaterError(result.stderr);
@@ -351,10 +357,12 @@ export function resolveUpdateOutcome(opts: {
   }
 
   if (install?.version != null && install.version !== targetVersion) {
-    const message =
-      `The update installed, but the Mastra Code you are running (at ${install.dir}) is still ` +
-      `v${install.version} — it looks like it is managed by another tool. Update it with that tool, ` +
-      `or try \`${cmd}\`.`;
+    const message = opts.manualCommand
+      ? `The update ran, but the Mastra Code you are running (at ${install.dir}) is still ` +
+        `v${install.version}. Try \`${cmd}\` manually.`
+      : `The update installed, but the Mastra Code you are running (at ${install.dir}) is still ` +
+        `v${install.version} — it looks like it is managed by another tool. Update it with that tool, ` +
+        `or try \`${cmd}\`.`;
     return { status: 'unchanged', message };
   }
 
@@ -391,13 +399,57 @@ async function isOwnInstallManagedBy(pm: PackageManager, install: { dir: string 
   }
 }
 
+/** A tool (other than a package manager) known to own installs, recognized by install path. */
+interface InstallOwner {
+  name: string;
+  /** Command to run to update through the tool; omitted when we only suggest it to the user. */
+  update?: (version: string) => [cmd: string, args: string[]];
+  /** The manual update command shown to the user. */
+  command: (version: string) => string;
+}
+
+function findInstallOwner(dir: string): InstallOwner | null {
+  if (dir.startsWith(join(homedir(), '.vite-plus') + sep)) {
+    return {
+      name: 'vite-plus',
+      update: version => ['vp', ['install', '-g', `${PACKAGE_NAME}@${version}`]],
+      command: version => `vp install -g ${PACKAGE_NAME}@${version}`,
+    };
+  }
+  if (dir.startsWith('/opt/homebrew/Cellar/') || dir.startsWith('/usr/local/Cellar/')) {
+    // Not run automatically: brew formulas lag npm, and `brew upgrade` may pull unrelated updates.
+    return { name: 'Homebrew', command: () => `brew upgrade ${PACKAGE_NAME}` };
+  }
+  return null;
+}
+
 /**
- * Update mastracode and verify the result: skips the install when the running
- * binary isn't managed by `pm`, otherwise runs it and checks the on-disk
- * version actually changed.
+ * Update mastracode and verify the result: delegates to the tool that owns the
+ * running install when it's one we recognize, skips the install when it isn't
+ * managed by `pm`, otherwise runs the package manager — and in every executed
+ * case checks the on-disk version actually changed.
  */
 export async function performUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateOutcome> {
   const install = locateOwnInstall();
+
+  const owner = install ? findInstallOwner(install.dir) : null;
+  if (owner) {
+    if (!owner.update) {
+      const message =
+        `Your Mastra Code install (at ${install!.dir}) is managed by ${owner.name}. ` +
+        `Update it with \`${owner.command(targetVersion)}\`.`;
+      return { status: 'unchanged', message };
+    }
+    const [cmd, args] = owner.update(targetVersion);
+    const result = await execUpdate(cmd, args);
+    return resolveUpdateOutcome({
+      pm,
+      targetVersion,
+      result,
+      install: locateOwnInstall(),
+      manualCommand: owner.command(targetVersion),
+    });
+  }
 
   if (!(await isOwnInstallManagedBy(pm, install))) {
     const message =

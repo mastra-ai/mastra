@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { execFileMock, readFileSyncMock, realpathSyncMock } = vi.hoisted(() => ({
+const { execFileMock, homedirMock, readFileSyncMock, realpathSyncMock } = vi.hoisted(() => ({
   execFileMock: vi.fn(),
+  homedirMock: vi.fn(),
   readFileSyncMock: vi.fn(),
   realpathSyncMock: vi.fn(),
 }));
 
 vi.mock('node:child_process', () => ({ execFile: execFileMock }));
 vi.mock('node:fs', () => ({ readFileSync: readFileSyncMock, realpathSync: realpathSyncMock }));
+vi.mock('node:os', () => ({ homedir: homedirMock }));
 
 import {
   fetchChangelog,
@@ -320,6 +322,7 @@ describe('performUpdate', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    homedirMock.mockReturnValue('/home/tester');
   });
 
   afterEach(() => {
@@ -400,5 +403,71 @@ describe('performUpdate', () => {
 
     expect(outcome.status).toBe('unchanged');
     expect(outcome.message).toContain('still v1.0.0');
+  });
+
+  const VP_PKG_DIR = '/home/tester/.vite-plus/packages/mastracode/lib/node_modules/mastracode';
+
+  /** Mock an install under ~/.vite-plus whose on-disk version changes when `vp` runs. */
+  function mockVitePlusInstall(opts: { vpBumpsTo?: string; vpError?: { error: Error; stderr: string } }) {
+    let version = '1.0.0';
+    process.argv[1] = `${VP_PKG_DIR}/dist/cli.js`;
+    realpathSyncMock.mockImplementation((p: string) => p);
+    readFileSyncMock.mockImplementation((p: string) => {
+      if (p === `${VP_PKG_DIR}/package.json`) return JSON.stringify({ name: 'mastracode', version });
+      throw new Error('ENOENT');
+    });
+    execFileMock.mockImplementation((cmd: string, _args: string[], _opts: unknown, cb: any) => {
+      if (cmd !== 'vp') return cb(new Error(`unexpected command: ${cmd}`), '', '');
+      if (opts.vpError) return cb(opts.vpError.error, '', opts.vpError.stderr);
+      if (opts.vpBumpsTo) version = opts.vpBumpsTo;
+      cb(null, '', '');
+    });
+  }
+
+  it('delegates to vite-plus for an install under ~/.vite-plus and verifies it on disk', async () => {
+    mockVitePlusInstall({ vpBumpsTo: '2.0.0' });
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome).toEqual({ status: 'updated', message: 'Updated to v2.0.0. Please restart Mastra Code.' });
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+    expect(execFileMock).toHaveBeenCalledWith(
+      'vp',
+      ['install', '-g', 'mastracode@2.0.0'],
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  it('surfaces vite-plus stderr and the vp command when the delegated update fails', async () => {
+    mockVitePlusInstall({ vpError: { error: new Error('Command failed'), stderr: 'vp error: registry unreachable\n' } });
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('failed');
+    expect(outcome.message).toContain('vp install -g mastracode@2.0.0');
+    expect(outcome.message).toContain('vp error: registry unreachable');
+  });
+
+  it('reports unchanged with the vp command when vite-plus ran but the version did not change', async () => {
+    mockVitePlusInstall({});
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('unchanged');
+    expect(outcome.message).toContain('still v1.0.0');
+    expect(outcome.message).toContain('vp install -g mastracode@2.0.0');
+    expect(outcome.message).not.toContain('another tool');
+  });
+
+  it('suggests brew upgrade without running anything for a Homebrew install', async () => {
+    mockInstalledAt('/opt/homebrew/Cellar/mastracode/1.0.0/libexec/lib/node_modules/mastracode', '1.0.0');
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('unchanged');
+    expect(outcome.message).toContain('managed by Homebrew');
+    expect(outcome.message).toContain('brew upgrade mastracode');
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 });
