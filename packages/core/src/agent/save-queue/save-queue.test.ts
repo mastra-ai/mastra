@@ -41,6 +41,26 @@ describe('SaveQueueManager', () => {
     expect(saved.length).toBe(2);
   });
 
+  it('honors debounceMs 0 for immediate debounced saves', async () => {
+    vi.useFakeTimers();
+    try {
+      const immediateManager = new SaveQueueManager({ memory: mockMemory, debounceMs: 0 });
+      const list = new MessageList({ threadId: 'thread-immediate' });
+      list.add(makeTestMessage('m1', 'thread-immediate', 'user', 'Hello'), 'user');
+
+      const savePromise = immediateManager.batchMessages(list, 'thread-immediate');
+
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+
+      expect(immediateManager['debounceMs']).toBe(0);
+      expect(saveCalls).toBe(1);
+      await savePromise;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does nothing if no unsaved messages', async () => {
     const list = new MessageList({ threadId: 'thread-4' });
     await manager.flushMessages(list, 'thread-4');

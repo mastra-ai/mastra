@@ -12,7 +12,7 @@ export class SaveQueueManager {
 
   constructor({ logger, debounceMs, memory }: { logger?: IMastraLogger; debounceMs?: number; memory?: MastraMemory }) {
     this.logger = logger;
-    this.debounceMs = debounceMs || 100;
+    this.debounceMs = debounceMs ?? 100;
     this.memory = memory;
   }
   private saveQueues = new Map<string, Promise<void>>();
