@@ -747,7 +747,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private formatQuietEditPreview(): string {
-    return this.getLatestCodePreview('new_str') || this.getLatestCodePreview('new_string');
+    return (
+      this.getLatestCodePreview('new_str') ||
+      this.getLatestCodePreview('new_string') ||
+      this.getLatestCodePreview('old_str') ||
+      this.getLatestCodePreview('old_string')
+    );
   }
 
   private getLatestCodePreview(key: string): string {

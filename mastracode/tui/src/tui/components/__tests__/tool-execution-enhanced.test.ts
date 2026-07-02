@@ -131,6 +131,27 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible).not.toContain('WRITE_STREAM_00000');
   });
 
+  it('shows old_string while large quiet edit new_string has not streamed yet', () => {
+    const oldString = Array.from(
+      { length: 80 },
+      (_, index) => `const oldRow${index} = { id: ${index}, label: 'OLD_STREAM_${String(index).padStart(5, '0')}' };`,
+    ).join('\n');
+    const component = new ToolExecutionComponentEnhanced(
+      'string_replace_lsp',
+      { path: 'src/large.ts', old_string: oldString },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(120).join('\n');
+    const visible = stripAnsi(output);
+    expect(output).toContain('\u001b[');
+    expect(visible).toContain('edit');
+    expect(visible).toContain('src/large.ts');
+    expect(visible).toContain('OLD_STREAM_00079');
+    expect(visible).not.toContain('OLD_STREAM_00000');
+  });
+
   it('shows exactly the immediate dirname and filename once continuation paths are available', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
@@ -529,7 +550,9 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     );
 
     let lines = component.render(100);
-    expect(lines).toHaveLength(1);
+    expect(lines).toHaveLength(3);
+    expect(stripAnsi(lines[1]!)).toContain('old value');
+    expect(stripAnsi(lines[2]!)).toContain('╰──');
 
     component.updateArgs({ path: 'src/example.ts', old_string: 'old value', new_string: 'new value\nmore' });
     lines = component.render(100);
