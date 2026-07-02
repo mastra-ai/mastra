@@ -826,14 +826,18 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           tenancyParams.push(args.filters.projectId);
         }
         const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
-        const [result] = await this.pool.execute(
+        await this.pool.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
           [args.experimentId, ...tenancyParams],
         );
-        // affectedRows === 0 means either "no results existed" or "parent not
-        // in this tenant." Debug log covers both — grep-friendly for operators.
-        const affected = (result as { affectedRows?: number })?.affectedRows ?? 0;
-        if (affected === 0) {
+        // Log only when the parent doesn't exist under this tenancy. A parent
+        // that exists but legitimately has zero result rows must not emit a
+        // false-positive tenancy-miss log.
+        const [parentRows] = await this.pool.execute(
+          `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere} LIMIT 1`,
+          [args.experimentId, ...tenancyParams],
+        );
+        if (!Array.isArray(parentRows) || parentRows.length === 0) {
           logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
             id: args.experimentId,
             organizationId: args.filters?.organizationId,

@@ -42,6 +42,12 @@ function tenancyToken(id: string, organizationId: string | undefined, projectId:
 /**
  * Log a scoped read that returned null. Call only when `filters` was set and
  * the scoped SELECT did not match a row.
+ *
+ * Emits a `debug` log with shape `{ op, table, token }` where `token` is the
+ * first 8 hex chars of `sha256(id + ':' + organizationId + ':' + projectId)`
+ * — opaque, non-reversible, stable across calls for the same tuple. Missing
+ * dimensions hash as empty strings, so a token identifies the exact scope
+ * the caller passed.
  */
 export function logTenancyReadMiss(
   logger: IMastraLogger,
@@ -57,8 +63,14 @@ export function logTenancyReadMiss(
 }
 
 /**
- * Log a scoped delete that affected zero rows. Call only when `filters` was
- * set and the scoped DML did not delete a row.
+ * Log a scoped delete that did not affect the target row. Call only when
+ * `filters` was set and the scoped DML did not delete the parent row.
+ *
+ * Emits a `debug` log with shape `{ op, table, token }` where `token` is the
+ * first 8 hex chars of `sha256(id + ':' + organizationId + ':' + projectId)`
+ * — opaque, non-reversible, stable across calls for the same tuple. Missing
+ * dimensions hash as empty strings, so a token identifies the exact scope
+ * the caller passed.
  */
 export function logTenancyDeleteNoOp(
   logger: IMastraLogger,
