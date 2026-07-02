@@ -42,8 +42,8 @@ interface SettingsPanelProps {
   onModelChange: (modelId: string) => void;
   /** Merge behavior settings into the server-side session state. */
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
-  /** Read the session's current tool-permission rules. */
-  getPermissions: () => Promise<PermissionRules>;
+  permissions: PermissionRules | null;
+  pendingPermissionCategory: ToolCategory | null;
   /** Set a tool category's approval policy on the session. */
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
   onClose: () => void;
@@ -68,16 +68,15 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
  */
 export function SettingsPanel({
   theme,
-  density,
   models,
   currentModelId,
   settings,
   resourceId,
   onThemeChange,
-  onDensityChange,
   onModelChange,
   onBehaviorChange,
-  getPermissions,
+  permissions,
+  pendingPermissionCategory,
   setPermissionForCategory,
   onClose,
 }: SettingsPanelProps) {
@@ -85,13 +84,13 @@ export function SettingsPanel({
 
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
-      <DialogContent className="w-full max-w-4xl h-[80vh]" aria-label="Settings">
+      <DialogContent className="w-full max-w-4xl h-[80vh] grid-rows-[auto_1fr] items-stretch p-0" aria-label="Settings">
         <DialogHeader className="px-5 pt-4 pb-2">
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <Tabs<Tab> defaultTab="general" value={tab} onValueChange={setTab} className="flex flex-col min-h-0">
-          <TabList className="px-5">
+        <Tabs<Tab> defaultTab="general" value={tab} onValueChange={setTab} className="flex flex-col min-h-0 h-full">
+          <TabList className="px-5 shrink-0">
             {TABS.map(({ id, label, icon: Icon }) => (
               <Tab key={id} value={id}>
                 <Icon size={15} />
@@ -100,14 +99,9 @@ export function SettingsPanel({
             ))}
           </TabList>
 
-          <div className="min-h-0 overflow-y-auto px-5">
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
             <TabContent value="general">
-              <GeneralTab
-                theme={theme}
-                density={density}
-                onThemeChange={onThemeChange}
-                onDensityChange={onDensityChange}
-              />
+              <GeneralTab theme={theme} onThemeChange={onThemeChange} />
             </TabContent>
             <TabContent value="model">
               <ModelTab
@@ -128,7 +122,8 @@ export function SettingsPanel({
               <BehaviorTab
                 settings={settings}
                 onBehaviorChange={onBehaviorChange}
-                getPermissions={getPermissions}
+                permissions={permissions}
+                pendingPermissionCategory={pendingPermissionCategory}
                 setPermissionForCategory={setPermissionForCategory}
               />
             </TabContent>

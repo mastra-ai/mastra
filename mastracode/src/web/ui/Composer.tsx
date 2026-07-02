@@ -6,6 +6,7 @@ import type { KeyboardEvent } from 'react';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import type { Project } from './projects';
 import type { useAgentControllerSession } from './useAgentControllerSession';
+import { useTextareaAutoResize } from './useTextareaAutoResize';
 
 type Session = ReturnType<typeof useAgentControllerSession>;
 type Transcript = Session['transcript'];
@@ -68,12 +69,7 @@ export function Composer({
     onCommandApplied();
   }, [commandNameToApply, onCommandApplied]);
 
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-  }, [draft]);
+  useTextareaAutoResize(inputRef, draft);
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();

@@ -296,13 +296,10 @@ export function AppLayout({
             toast('Model updated', 'success');
           }}
           onBehaviorChange={updates => {
-            void (async () => {
-              await session.setState(updates);
-              await session.refreshSettings();
-              toast('Settings updated', 'success');
-            })();
+            void session.setState(updates).then(() => toast('Settings updated', 'success'));
           }}
-          getPermissions={session.getPermissions}
+          permissions={session.permissions}
+          pendingPermissionCategory={session.pendingPermissionCategory}
           setPermissionForCategory={session.setPermissionForCategory}
           onClose={() => setSettingsOpen(false)}
         />

@@ -10,8 +10,6 @@ import type { Theme } from '@mastra/playground-ui';
 import { Check } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { Density } from './theme';
-
 type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
 type NotificationMode = AgentControllerSessionSettings['notifications'];
 
@@ -31,38 +29,23 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
 
 interface GeneralTabProps {
   theme: Theme;
-  density: Density;
   onThemeChange: (theme: Theme) => void;
-  onDensityChange: (density: Density) => void;
 }
 
-export function GeneralTab({ theme, density, onThemeChange, onDensityChange }: GeneralTabProps) {
+export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
   return (
-    <>
-      <FieldRow label="Theme" hint="Color scheme for the interface">
-        <Segmented
-          ariaLabel="Theme"
-          value={theme}
-          options={[
-            { value: 'system', label: 'System' },
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
-          ]}
-          onChange={onThemeChange}
-        />
-      </FieldRow>
-      <FieldRow label="Density" hint="Spacing between messages and controls">
-        <Segmented
-          ariaLabel="Density"
-          value={density}
-          options={[
-            { value: 'comfortable', label: 'Comfortable' },
-            { value: 'compact', label: 'Compact' },
-          ]}
-          onChange={onDensityChange}
-        />
-      </FieldRow>
-    </>
+    <FieldRow label="Theme" hint="Color scheme for the interface">
+      <Segmented
+        ariaLabel="Theme"
+        value={theme}
+        options={[
+          { value: 'system', label: 'System' },
+          { value: 'light', label: 'Light' },
+          { value: 'dark', label: 'Dark' },
+        ]}
+        onChange={onThemeChange}
+      />
+    </FieldRow>
   );
 }
 
@@ -105,14 +88,16 @@ export function ModelTab({ models, currentModelId, settings, onModelChange, onBe
 interface BehaviorTabProps {
   settings: AgentControllerSessionSettings | null;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
-  getPermissions: () => Promise<PermissionRules>;
+  permissions: PermissionRules | null;
+  pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
 export function BehaviorTab({
   settings,
   onBehaviorChange,
-  getPermissions,
+  permissions,
+  pendingPermissionCategory,
   setPermissionForCategory,
 }: BehaviorTabProps) {
   return (
@@ -142,7 +127,11 @@ export function BehaviorTab({
           onChange={v => onBehaviorChange({ notifications: v })}
         />
       </FieldRow>
-      <PermissionsSection getPermissions={getPermissions} setPermissionForCategory={setPermissionForCategory} />
+      <PermissionsSection
+        permissions={permissions}
+        pendingPermissionCategory={pendingPermissionCategory}
+        setPermissionForCategory={setPermissionForCategory}
+      />
     </>
   );
 }
@@ -161,35 +150,12 @@ const PERMISSION_POLICIES: { value: PermissionPolicy; label: string }[] = [
 ];
 
 function PermissionsSection({
-  getPermissions,
+  permissions,
+  pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<BehaviorTabProps, 'getPermissions' | 'setPermissionForCategory'>) {
-  const [rules, setRules] = useState<PermissionRules | null>(null);
-  const [busy, setBusy] = useState<ToolCategory | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getPermissions().then(r => {
-      if (!cancelled) setRules(r);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [getPermissions]);
-
+}: Pick<BehaviorTabProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
   const update = async (category: ToolCategory, policy: PermissionPolicy) => {
-    setBusy(category);
-    setRules(prev => ({
-      ...prev,
-      categories: { ...prev?.categories, [category]: policy },
-    }));
-    try {
-      await setPermissionForCategory(category, policy);
-      const fresh = await getPermissions();
-      setRules(fresh);
-    } finally {
-      setBusy(null);
-    }
+    await setPermissionForCategory(category, policy);
   };
 
   return (
@@ -205,8 +171,8 @@ function PermissionsSection({
         <FieldRow key={value} label={label} hint={hint}>
           <Segmented
             ariaLabel={`${label} permission`}
-            value={rules?.categories?.[value] ?? 'ask'}
-            disabled={!rules || busy === value}
+            value={permissions?.categories?.[value] ?? 'ask'}
+            disabled={!permissions || pendingPermissionCategory === value}
             options={PERMISSION_POLICIES}
             onChange={policy => void update(value, policy)}
           />

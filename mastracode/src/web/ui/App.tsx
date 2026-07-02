@@ -1,16 +1,17 @@
 import type { PlanResume } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { AppLayout } from './AppLayout';
 import { SLASH_COMMANDS } from './commands';
 import type { SlashCommand } from './commands';
-import { applyDensity, loadDensity, saveDensity } from './theme';
-import type { Density } from './theme';
 import { useToast } from './toast';
 import { useActiveProject } from './useActiveProject';
 import { useAgentControllerSession } from './useAgentControllerSession';
+import { useDensityPreference } from './useDensityPreference';
+import { useGlobalShortcuts } from './useGlobalShortcuts';
+import { useProjectModalAutoOpen } from './useProjectModalAutoOpen';
 import { useProjectSessionSync } from './useProjectSessionSync';
 import { useTranscriptScroll } from './useTranscriptScroll';
 
@@ -58,70 +59,30 @@ export default function App() {
     );
 
   const { theme, setTheme } = useTheme();
-  const [density, setDensity] = useState<Density>(() => loadDensity());
-  useEffect(() => {
-    applyDensity(density);
-  }, [density]);
-  const changeDensity = (next: Density) => {
-    setDensity(next);
-    saveDensity(next);
-  };
+  const { density, changeDensity } = useDensityPreference();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const refreshSettings = session.refreshSettings;
-  useEffect(() => {
-    if (settingsOpen) void refreshSettings();
-  }, [settingsOpen, refreshSettings]);
-
   const [projectsOpen, setProjectsOpen] = useState(false);
-  useEffect(() => {
-    if (projects.length === 0) setProjectsOpen(true);
-  }, [projects.length]);
-
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const closeSidebar = () => setSidebarOpen(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen(o => !o);
-        return;
-      }
-      const target = e.target as HTMLElement | null;
-      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
-      if (e.key === '?' && !typing && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        setShortcutsOpen(o => !o);
-        return;
-      }
-      if (e.key === 'Escape') {
-        if (projectsOpen) return;
-        if (shortcutsOpen) {
-          setShortcutsOpen(false);
-          return;
-        }
-        if (settingsOpen) {
-          setSettingsOpen(false);
-          return;
-        }
-        if (paletteOpen) {
-          setPaletteOpen(false);
-          return;
-        }
-        if (sidebarOpen) {
-          setSidebarOpen(false);
-          return;
-        }
-        if (busy) void session.abort();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [paletteOpen, sidebarOpen, busy, session, settingsOpen, shortcutsOpen, projectsOpen]);
+  useProjectModalAutoOpen(projects.length, setProjectsOpen);
+  useGlobalShortcuts({
+    busy,
+    projectsOpen,
+    settingsOpen,
+    shortcutsOpen,
+    paletteOpen,
+    sidebarOpen,
+    setPaletteOpen,
+    setShortcutsOpen,
+    setSettingsOpen,
+    setSidebarOpen,
+    abort: session.abort,
+  });
 
   const runPaletteCommand = (command: SlashCommand) => {
     if (command.args) {

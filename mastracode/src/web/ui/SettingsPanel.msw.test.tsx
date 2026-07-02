@@ -32,7 +32,8 @@ function baseProps() {
     onDensityChange: vi.fn(),
     onModelChange: vi.fn(),
     onBehaviorChange: vi.fn(),
-    getPermissions: vi.fn(async () => ({ categories: { read: 'ask' as const }, tools: {} })),
+    permissions: { categories: { read: 'ask' as const }, tools: {} },
+    pendingPermissionCategory: null,
     setPermissionForCategory: vi.fn(),
     onClose: vi.fn(),
   };
@@ -40,15 +41,15 @@ function baseProps() {
 
 describe('SettingsPanel', () => {
   describe('when changing general preferences', () => {
-    it('calls theme and density callbacks from the extracted tab', async () => {
+    it('calls the theme callback and omits density controls', async () => {
       const props = baseProps();
       renderWithProviders(<SettingsPanel {...props} />);
 
       await userEvent.click(screen.getByRole('button', { name: 'Light' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Compact' }));
 
       expect(props.onThemeChange).toHaveBeenCalledWith('light');
-      expect(props.onDensityChange).toHaveBeenCalledWith('compact');
+      expect(screen.queryByText('Density')).not.toBeInTheDocument();
+      expect(screen.queryByText('Spacing between messages and controls')).not.toBeInTheDocument();
     });
   });
 
