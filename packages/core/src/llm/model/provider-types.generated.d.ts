@@ -291,6 +291,7 @@ export type ProviderModelsMap = {
     'amazon/nova-pro',
     'amazon/titan-embed-text-v2',
     'anthropic/claude-3.5-haiku',
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -301,6 +302,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
+    'anthropic/claude-sonnet-5',
     'arcee-ai/trinity-large-preview',
     'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-mini',
@@ -347,6 +349,7 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-flash-image',
     'google/gemini-3.1-flash-image-preview',
     'google/gemini-3.1-flash-lite',
+    'google/gemini-3.1-flash-lite-image',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'google/gemini-3.5-flash',
@@ -1853,6 +1856,7 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-6',
+    'claude-sonnet-5',
     'codestral-2508',
     'custom',
     'deepseek-v3.1',
@@ -2154,6 +2158,7 @@ export type ProviderModelsMap = {
     'kimi-k2.7-code-highspeed',
   ];
   readonly morph: readonly ['auto', 'morph-v3-fast', 'morph-v3-large'];
+  readonly sakana: readonly ['fugu', 'fugu-ultra', 'fugu-ultra-20260615'];
   readonly deepinfra: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo',
@@ -2173,6 +2178,7 @@ export type ProviderModelsMap = {
     'meta-llama/Llama-4-Scout-17B-16E-Instruct',
     'moonshotai/Kimi-K2.5',
     'moonshotai/Kimi-K2.6',
+    'moonshotai/Kimi-K2.7-Code',
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',
     'zai-org/GLM-4.6',
@@ -2182,7 +2188,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b', 'zai-glm-4.7'];
   readonly 'zai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5.2', 'glm-5v-turbo'];
   readonly nvidia: readonly [
     'abacusai/dracarys-llama-3_1-70b-instruct',
@@ -2307,6 +2313,7 @@ export type ProviderModelsMap = {
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
     'claude-sonnet-4-6',
+    'claude-sonnet-5',
   ];
   readonly 'tencent-coding-plan': readonly [
     'glm-5',
@@ -2332,6 +2339,7 @@ export type ProviderModelsMap = {
   ];
   readonly opencode: readonly [
     'big-pickle',
+    'claude-fable-5',
     'claude-haiku-4-5',
     'claude-opus-4-1',
     'claude-opus-4-5',
@@ -2341,6 +2349,7 @@ export type ProviderModelsMap = {
     'claude-sonnet-4',
     'claude-sonnet-4-5',
     'claude-sonnet-4-6',
+    'claude-sonnet-5',
     'deepseek-v4-flash',
     'deepseek-v4-flash-free',
     'deepseek-v4-pro',
@@ -2370,9 +2379,11 @@ export type ProviderModelsMap = {
     'grok-build-0.1',
     'kimi-k2.5',
     'kimi-k2.6',
+    'kimi-k2.7-code',
     'mimo-v2.5-free',
     'minimax-m2.5',
     'minimax-m2.7',
+    'minimax-m3',
     'nemotron-3-ultra-free',
     'north-mini-code-free',
     'qwen3.5-plus',
@@ -3193,6 +3204,7 @@ export type ProviderModelsMap = {
     'amazon/nova-pro-v1',
     'anthracite-org/magnum-v4-72b',
     'anthropic/claude-3-haiku',
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -3205,6 +3217,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
+    'anthropic/claude-sonnet-5',
     'arcee-ai/coder-large',
     'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-mini',
@@ -3246,6 +3259,7 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-flash-image',
     'google/gemini-3.1-flash-image-preview',
     'google/gemini-3.1-flash-lite',
+    'google/gemini-3.1-flash-lite-image',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
     'google/gemini-3.1-pro-preview-customtools',
@@ -3288,7 +3302,6 @@ export type ProviderModelsMap = {
     'meta-llama/llama-4-scout',
     'meta-llama/llama-guard-4-12b',
     'microsoft/phi-4',
-    'microsoft/phi-4-mini-instruct',
     'microsoft/wizardlm-2-8x22b',
     'minimax/minimax-01',
     'minimax/minimax-m1',
@@ -3407,7 +3420,6 @@ export type ProviderModelsMap = {
     'openrouter/bodybuilder',
     'openrouter/free',
     'openrouter/fusion',
-    'openrouter/owl-alpha',
     'openrouter/pareto-code',
     'perceptron/perceptron-mk1',
     'perplexity/sonar',
@@ -4571,6 +4583,7 @@ export type ProviderModelsMap = {
   ];
   readonly claudinio: readonly ['claudinio', 'claudius'];
   readonly netlify: readonly [
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
@@ -4582,6 +4595,7 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4-5',
     'anthropic/claude-sonnet-4-5-20250929',
     'anthropic/claude-sonnet-4-6',
+    'anthropic/claude-sonnet-5',
     'gemini/gemini-2.5-flash',
     'gemini/gemini-2.5-flash-image',
     'gemini/gemini-2.5-flash-lite',
@@ -4590,6 +4604,7 @@ export type ProviderModelsMap = {
     'gemini/gemini-3-pro-image',
     'gemini/gemini-3.1-flash-image',
     'gemini/gemini-3.1-flash-lite',
+    'gemini/gemini-3.1-flash-lite-image',
     'gemini/gemini-3.1-pro-preview',
     'gemini/gemini-3.1-pro-preview-customtools',
     'gemini/gemini-3.5-flash',

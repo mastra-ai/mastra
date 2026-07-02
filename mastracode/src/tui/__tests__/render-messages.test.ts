@@ -733,6 +733,54 @@ describe('renderExistingMessages tasks', () => {
 });
 
 describe('renderExistingMessages subagents', () => {
+  it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {
+    const message: AgentControllerMessage = {
+      id: 'assistant-plugin-renderer',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: [
+        {
+          type: 'tool_call',
+          id: 'tool-1',
+          name: 'mastra_expert',
+          args: { question: 'How does memory rendering work?' },
+        },
+        {
+          type: 'tool_result',
+          id: 'tool-1',
+          name: 'mastra_expert',
+          result: 'remembered answer',
+          isError: false,
+        },
+      ],
+    } as unknown as AgentControllerMessage;
+    const state = createState();
+    state.quietMode = true;
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria', modelId: 'openai/gpt-5.5' })),
+    } as unknown as TUIState['pluginManager'];
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: state.session,
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    expect(state.pluginManager?.getToolRenderConfig).toHaveBeenCalledWith('mastra_expert');
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(SubagentExecutionComponent);
+    const rendered = (state.chatContainer.children[0] as SubagentExecutionComponent)
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('alexandria openai/gpt-5.5');
+    expect(rendered).toContain('How does memory rendering work?');
+    expect(rendered).toContain('remembered answer');
+  });
+
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
     const message: AgentControllerMessage = {
       id: 'assistant-1',

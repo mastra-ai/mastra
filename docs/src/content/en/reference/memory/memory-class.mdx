@@ -19,6 +19,7 @@ import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
+  id: 'test-agent',
   name: 'test-agent',
   instructions: 'You are an agent with memory.',
   model: '__GATEWAY_OPENAI_MODEL__',

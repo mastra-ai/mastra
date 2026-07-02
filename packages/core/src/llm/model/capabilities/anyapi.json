@@ -25,5 +25,27 @@
     "perplexity/sonar-pro",
     "perplexity/sonar-reasoning-pro",
     "xai/grok-4.3"
+  ],
+  "temperature": [
+    "anthropic/claude-haiku-4-5",
+    "anthropic/claude-opus-4-6",
+    "anthropic/claude-sonnet-4-5",
+    "anthropic/claude-sonnet-4-6",
+    "cohere/command-r-plus-08-2024",
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-r1",
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-2.5-pro",
+    "google/gemini-3-flash-preview",
+    "google/gemini-3-pro-preview",
+    "mistralai/mistral-large-2512",
+    "openai/gpt-4.1",
+    "openai/gpt-4.1-mini",
+    "perplexity/sonar-pro",
+    "perplexity/sonar-reasoning-pro",
+    "xai/grok-4.3"
   ]
 }

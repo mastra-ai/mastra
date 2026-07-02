@@ -195,6 +195,7 @@ Use the `editor` field on a code-defined agent to control which fields the edito
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   editor: { instructions: true, tools: { description: true } },

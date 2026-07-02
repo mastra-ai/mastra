@@ -213,6 +213,7 @@ const hallucinationScorer = createHallucinationScorer({
 })
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   instructions: 'You are a helpful assistant.',

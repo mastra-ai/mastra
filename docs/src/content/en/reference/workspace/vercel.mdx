@@ -49,6 +49,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'dev-agent',
   name: 'dev-agent',
   model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   workspace,

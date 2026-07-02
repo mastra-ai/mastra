@@ -459,6 +459,27 @@ export const weatherTool = createTool({
                     isOptional: true,
                     description: 'MCP-specific context (elicitation, etc.)',
                   },
+                  {
+                    name: 'observe',
+                    type: 'ToolObserve',
+                    isOptional: false,
+                    description:
+                      "Observability helpers for recording child spans and structured logs from inside a tool's execute function. Always provided — when no tracing context is active, `span` runs the function directly and `log` is a no-op.",
+                    properties: [
+                      {
+                        name: 'span',
+                        type: '(name: string, fn: () => Promise<T> | T, attributes?: Record<string, unknown>) => Promise<T>',
+                        description:
+                          'Wraps a function in a child span for tracing. When no tracing context is active, runs the function directly.',
+                      },
+                      {
+                        name: 'log',
+                        type: "(level: 'debug' | 'info' | 'warn' | 'error' | 'fatal', message: string, data?: Record<string, unknown>) => void",
+                        description:
+                          'Emits a structured log event attached to the current span. No-op when tracing is inactive.',
+                      },
+                    ],
+                  },
                 ],
               },
             ],

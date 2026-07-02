@@ -61,6 +61,8 @@ class BrowserProcessorFixture extends MastraBrowser {
   }
 }
 
+let browserProcessorStatePath: string | undefined;
+
 function getRequestBody(request: unknown): unknown {
   if (request && typeof request === 'object' && 'body' in request) {
     return request.body;
@@ -78,9 +80,9 @@ export const stateSignalBrowserProcessorScenario = {
   aimockFixture: 'state-signal-browser-processor.json',
   prepare({ appDataDir, projectDir }) {
     mkdirSync(projectDir, { recursive: true });
-    const statePath = join(appDataDir, 'browser-state-processor.json');
+    browserProcessorStatePath = join(appDataDir, 'browser-state-processor.json');
     writeFileSync(
-      statePath,
+      browserProcessorStatePath,
       JSON.stringify({
         tabs: [{ url: 'https://example.test/browser-snapshot', title: 'Browser Snapshot E2E' }],
         activeTabIndex: 0,
@@ -109,11 +111,17 @@ export const stateSignalBrowserProcessorScenario = {
     await runtime.waitForScreenText(/Active tab URL: https:\/\/example\.test\/browser-snapshot/i, terminal, 10_000);
     await runtime.waitForScreenText(/Browser processor snapshot captured/i, terminal, 10_000);
 
-    terminal.submit(
-      `!node -e 'const fs=require("fs"); fs.writeFileSync(process.env.MASTRA_APP_DATA_DIR+"/browser-state-processor.json", JSON.stringify({tabs:[{url:"https://example.test/browser-delta",title:"Browser Delta E2E"},{url:"https://example.test/second-tab",title:"Second Tab"}],activeTabIndex:0})); console.log("BROWSER_PROCESSOR_STATE=delta-ready");'`,
+    if (!browserProcessorStatePath) throw new Error('Browser processor state path was not initialized');
+    writeFileSync(
+      browserProcessorStatePath,
+      JSON.stringify({
+        tabs: [
+          { url: 'https://example.test/browser-delta', title: 'Browser Delta E2E' },
+          { url: 'https://example.test/second-tab', title: 'Second Tab' },
+        ],
+        activeTabIndex: 0,
+      }),
     );
-    await runtime.waitForScreenText(/BROWSER_PROCESSOR_STATE=delta-ready/i, terminal, 8_000);
-    await runtime.waitForScreenText(/BROWSER_PROCESSOR_STATE=delta-ready[\s\S]*✓/i, terminal, 8_000);
 
     terminal.submit('Capture browser processor delta.');
     await runtime.waitForScreenText(/State delta: browser/i, terminal, 10_000);

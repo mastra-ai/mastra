@@ -9,7 +9,7 @@ import {
 import { SpanType } from '@mastra/core/observability';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import { MongoClient } from 'mongodb';
-import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, expect, it, test, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 
 import type { ConnectorHandler } from './connectors/base';
 import { MemoryStorageMongoDB } from './domains/memory';
@@ -896,3 +896,174 @@ createDomainIndexTests({
     columns: ['id'],
   },
 });
+
+// ─── Hardening: NODE-7556 ────────────────────────────────────────────────────
+describe('Hardening: NODE-7556', () => {
+  let store: MongoDBStore;
+
+  beforeAll(async () => {
+    store = new MongoDBStore(TEST_CONFIG);
+    await store.init();
+  });
+
+  afterAll(async () => {
+    try {
+      await store.close();
+    } catch {}
+  });
+
+  test('F5: batchCreateSpans with a duplicate span must not drop subsequent spans', async () => {
+    const observabilityStore = await store.getStore('observability');
+    expect(observabilityStore).toBeDefined();
+    await observabilityStore!.dangerouslyClearAll();
+
+    const traceId = `f5-trace-${Date.now()}`;
+    const baseSpan = {
+      spanId: 'f5-span-existing',
+      traceId,
+      name: 'existing span',
+      spanType: SpanType.AGENT_RUN,
+      startedAt: new Date(),
+      endedAt: new Date(),
+    };
+
+    // Write the span so it already exists in the DB
+    await observabilityStore!.createSpan({ span: baseSpan as any });
+
+    // Batch: duplicate first, then two new spans that must survive
+    await expect(
+      observabilityStore!.batchCreateSpans({
+        records: [
+          baseSpan as any,
+          { ...baseSpan, spanId: 'f5-span-new-1', name: 'new span 1' } as any,
+          { ...baseSpan, spanId: 'f5-span-new-2', name: 'new span 2' } as any,
+        ],
+      }),
+    ).resolves.not.toThrow();
+
+    // Both new spans must be persisted despite the leading duplicate
+    const span1 = await observabilityStore!.getSpan({ spanId: 'f5-span-new-1', traceId });
+    const span2 = await observabilityStore!.getSpan({ spanId: 'f5-span-new-2', traceId });
+    expect(span1).not.toBeNull();
+    expect(span2).not.toBeNull();
+  });
+
+  test('F10: saveMessages with messages from two threads must update both threads updatedAt', async () => {
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+
+    const past = new Date(Date.now() - 60_000);
+
+    // Create two threads with a known-old updatedAt
+    const threadA = {
+      id: `f10-thread-a-${Date.now()}`,
+      title: 'Thread A',
+      resourceId: 'f10-resource',
+      metadata: {},
+      createdAt: past,
+      updatedAt: past,
+    };
+    const threadB = {
+      id: `f10-thread-b-${Date.now()}`,
+      title: 'Thread B',
+      resourceId: 'f10-resource',
+      metadata: {},
+      createdAt: past,
+      updatedAt: past,
+    };
+    await memoryStore!.saveThread({ thread: threadA as any });
+    await memoryStore!.saveThread({ thread: threadB as any });
+
+    const before = new Date();
+
+    // Batch contains messages from both threads
+    await memoryStore!.saveMessages({
+      messages: [
+        {
+          id: `f10-msg-a-${Date.now()}`,
+          threadId: threadA.id,
+          resourceId: 'f10-resource',
+          role: 'user',
+          type: 'v2',
+          content: [{ type: 'text', text: 'hello from A' }],
+          createdAt: new Date(),
+        } as any,
+        {
+          id: `f10-msg-b-${Date.now()}`,
+          threadId: threadB.id,
+          resourceId: 'f10-resource',
+          role: 'user',
+          type: 'v2',
+          content: [{ type: 'text', text: 'hello from B' }],
+          createdAt: new Date(),
+        } as any,
+      ],
+    });
+
+    const updatedA = await memoryStore!.getThreadById({ threadId: threadA.id });
+    const updatedB = await memoryStore!.getThreadById({ threadId: threadB.id });
+
+    // Both threads must have their updatedAt refreshed by the saveMessages call
+    expect(updatedA!.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(updatedB!.updatedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+  });
+
+  test('F13: dangerouslyClearAll must also clear observational memory records', async () => {
+    const memoryStore = await store.getStore('memory');
+    expect(memoryStore).toBeDefined();
+
+    const resourceId = `f13-resource-${Date.now()}`;
+
+    await memoryStore!.initializeObservationalMemory({
+      threadId: null,
+      resourceId,
+      scope: 'resource',
+      config: {},
+    });
+
+    const before = await memoryStore!.getObservationalMemory(null, resourceId);
+    expect(before).not.toBeNull();
+
+    await memoryStore!.dangerouslyClearAll();
+
+    // Currently: OM record survives the clear
+    // After fix: getObservationalMemory returns null
+    const after = await memoryStore!.getObservationalMemory(null, resourceId);
+    expect(after).toBeNull();
+  });
+
+  test('F14: updateWorkflowState must throw when the persisted snapshot has no context field', async () => {
+    const workflowsStore = await store.getStore('workflows');
+    expect(workflowsStore).toBeDefined();
+
+    const workflowName = `f14-workflow-${Date.now()}`;
+    const runId = `f14-run-${Date.now()}`;
+
+    // Persist a snapshot intentionally missing the 'context' field — valid in some
+    // workflow states but causes the $exists filter to silently drop updates.
+    await workflowsStore!.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      snapshot: {
+        status: 'suspended',
+        value: {},
+        activePaths: [],
+        suspendedPaths: {},
+        runId,
+        timestamp: Date.now(),
+        // context intentionally omitted
+      } as any,
+    });
+
+    // Currently: $exists filter misses the doc, returns undefined with no error
+    // After fix: throws because the snapshot exists but has no context (mirrors pg/libsql)
+    await expect(
+      workflowsStore!.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'failed' } as any,
+      }),
+    ).rejects.toThrow();
+  });
+});
+// ─────────────────────────────────────────────────────────────────────────────

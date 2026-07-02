@@ -287,23 +287,31 @@ export interface StudioInjectionConfig {
  * source HTML) with the provided expression verbatim.
  */
 export function injectStudioHtmlConfig(html: string, config: StudioInjectionConfig): string {
-  html = html.replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
-  html = html.replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
-  html = html.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);
-  html = html.replace(`'%%MASTRA_API_PREFIX%%'`, config.apiPrefix);
-  html = html.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
-  html = html.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
-  html = html.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
-  html = html.replace(`'%%MASTRA_TEMPLATES%%'`, config.templates);
-  html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
-  html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
-  html = html.replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
-  html = html.replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
-  html = html.replace(`'%%MASTRA_SIGNALS_UI%%'`, config.signalsUI);
+  // `String.prototype.replace`/`replaceAll` treat `$` sequences ($$, $&, $`,
+  // $', $n) in the replacement string as special patterns. Config values are
+  // dynamic (e.g. request context presets), so use a replacement function to
+  // insert them verbatim.
+  const replace = (token: string, value: string) => {
+    html = html.replace(token, () => value);
+  };
+
+  replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
+  replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
+  replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);
+  replace(`'%%MASTRA_API_PREFIX%%'`, config.apiPrefix);
+  replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
+  replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
+  replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
+  replace(`'%%MASTRA_TEMPLATES%%'`, config.templates);
+  replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
+  replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
+  replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
+  replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
+  replace(`'%%MASTRA_SIGNALS_UI%%'`, config.signalsUI);
   if (config.autoDetectUrl) {
-    html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
+    replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }
-  html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
+  html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', () => config.basePath);
 
   return html;
 }

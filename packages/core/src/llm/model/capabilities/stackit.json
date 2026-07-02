@@ -1,3 +1,11 @@
 {
-  "attachment": ["Qwen/Qwen3-VL-235B-A22B-Instruct-FP8", "Qwen/Qwen3-VL-Embedding-8B", "google/gemma-3-27b-it"]
+  "attachment": ["Qwen/Qwen3-VL-235B-A22B-Instruct-FP8", "Qwen/Qwen3-VL-Embedding-8B", "google/gemma-3-27b-it"],
+  "temperature": [
+    "Qwen/Qwen3-VL-235B-A22B-Instruct-FP8",
+    "cortecs/Llama-3.3-70B-Instruct-FP8-Dynamic",
+    "google/gemma-3-27b-it",
+    "neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8",
+    "neuralmagic/Mistral-Nemo-Instruct-2407-FP8",
+    "openai/gpt-oss-120b"
+  ]
 }
