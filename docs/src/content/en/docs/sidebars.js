@@ -114,6 +114,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/structured-output',
           label: 'Structured Output',
         },
@@ -206,6 +214,14 @@ const sidebars = {
           type: 'doc',
           id: 'agents/signal-providers',
           label: 'Signal Providers',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/heartbeats',
+          label: 'Heartbeats',
           customProps: {
             tags: ['beta'],
           },
@@ -362,39 +378,39 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Harness',
+      label: 'AgentController',
       customProps: {
         tags: ['beta'],
       },
       items: [
         {
           type: 'doc',
-          id: 'harness/overview',
+          id: 'agent-controller/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'harness/session',
+          id: 'agent-controller/session',
           label: 'Session',
         },
         {
           type: 'doc',
-          id: 'harness/modes',
+          id: 'agent-controller/modes',
           label: 'Modes',
         },
         {
           type: 'doc',
-          id: 'harness/threads-and-state',
+          id: 'agent-controller/threads-and-state',
           label: 'Threads and State',
         },
         {
           type: 'doc',
-          id: 'harness/subagents',
+          id: 'agent-controller/subagents',
           label: 'Subagents',
         },
         {
           type: 'doc',
-          id: 'harness/tool-approvals',
+          id: 'agent-controller/tool-approvals',
           label: 'Tool Approvals',
         },
       ],
@@ -458,6 +474,9 @@ const sidebars = {
           type: 'doc',
           id: 'browser/recording',
           label: 'Recording',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -556,6 +575,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/fga',
               label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/google',
+              label: 'Google',
             },
             {
               type: 'doc',

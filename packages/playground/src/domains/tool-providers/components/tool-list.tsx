@@ -1,9 +1,13 @@
-import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
-import { Searchbar, SearchbarWrapper } from '@mastra/playground-ui/components/Searchbar';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { useState } from 'react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { SearchIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useDebouncedCallback } from 'use-debounce';
 
 import { useProviderTools } from '../hooks/use-provider-tools';
 
@@ -16,6 +20,12 @@ interface ToolListProps {
 
 export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolListProps) {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedCallback((value: string) => {
+    setSearch(value);
+  }, 300);
+
+  useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+
   const { data, isLoading } = useProviderTools(providerId, {
     toolkit,
     search: search || undefined,
@@ -24,9 +34,19 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-hidden">
-      <SearchbarWrapper>
-        <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools..." size="sm" />
-      </SearchbarWrapper>
+      <div className="px-3 py-2.5 border-b border-border1">
+        <InputGroup variant="outline" size="sm">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Search tools"
+            placeholder="Search tools..."
+            onChange={event => debouncedSearch(event.target.value)}
+          />
+        </InputGroup>
+      </div>
 
       <ScrollArea className="h-full">
         <div className="flex flex-col gap-1 p-3">

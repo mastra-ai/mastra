@@ -1,4 +1,3 @@
-import { AgentIcon, McpServerIcon, ScrollArea, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 import {
   CommandDialog,
   CommandEmpty,
@@ -10,7 +9,12 @@ import {
 } from '@mastra/playground-ui/components/Command';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import {
   Cpu,
   EyeIcon,
@@ -592,6 +596,7 @@ export const NavigationCommand = () => {
 
   const filterNavItem = React.useCallback(
     (item: NavItem) => {
+      if (item.hidden) return false;
       if (item.url === '/prompts' && !isCmsAvailable && !isCmsLoading) return false;
       if (isMastraPlatform && !item.isOnMastraPlatform) return false;
 

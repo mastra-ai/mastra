@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -137,7 +137,7 @@ function EditLayoutWrapper() {
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 

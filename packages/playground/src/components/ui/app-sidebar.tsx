@@ -1,8 +1,8 @@
-import { cn } from '@mastra/playground-ui';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
@@ -64,6 +64,7 @@ export function AppSidebar() {
   };
 
   const filterItem = (item: NavItem) => {
+    if (item.hidden) return false;
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     // While the user's permissions are still loading, hide permission-gated

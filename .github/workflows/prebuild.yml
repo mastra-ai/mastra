@@ -105,8 +105,8 @@ jobs:
             || true)
 
           if [ -z "$CHANGED" ]; then
-            echo "No src/ changes detected — running full suite."
-            echo "run_full=true" >> $GITHUB_OUTPUT
+            echo "No source file changes found — skipping unit and E2E test selection."
+            echo "run_full=false" >> $GITHUB_OUTPUT
             echo "test_files=" >> $GITHUB_OUTPUT
             echo "affected_store_tests=false" >> $GITHUB_OUTPUT
             echo "affected_workspace_tests=false" >> $GITHUB_OUTPUT
@@ -230,6 +230,48 @@ jobs:
     needs: [changes, e2e-check-changes, prebuild]
     if: always() && github.repository == 'mastra-ai/mastra' && needs.e2e-check-changes.outputs.e2e-changed == 'true' && needs.prebuild.result == 'success'
     uses: ./.github/workflows/e2e-tests.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+  mastracode-e2e-check-changes:
+    name: Detect Mastra Code E2E changes
+    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    needs: changes
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      mastracode-e2e-changed: ${{ steps.filter.outputs.mastracode_e2e }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes that require Mastra Code E2E
+        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        id: filter
+        with:
+          base: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          filters: |
+            mastracode_e2e:
+              - 'mastracode/**'
+              - 'packages/core/**'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/mastracode-e2e.yml'
+              - '!**/*.md'
+
+  mastracode-e2e:
+    name: Mastra Code E2E
+    needs: [changes, mastracode-e2e-check-changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.mastracode-e2e-check-changes.outputs.mastracode-e2e-changed == 'true' && needs.prebuild.result == 'success'
+    uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
     with:

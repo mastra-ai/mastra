@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
@@ -8,7 +8,10 @@ import { afterAll, beforeAll, describe } from 'vitest';
 
 import { getPerformanceTests } from './performance-tests';
 
-const __dirname = fileURLToPath(import.meta.url);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const dockerCwd = join(__dirname, '..', '..');
+const composeProjectName = process.env.COMPOSE_PROJECT_NAME ?? basename(dockerCwd);
+const perfPgVolumeName = `${composeProjectName}_perf_pg_data`;
 const connectionString = process.env.PERF_DB_URL || 'postgres://postgres:password@localhost:5435/mastra';
 
 const parseConnectionString = (url: string) => {
@@ -30,7 +33,7 @@ let vector: PgVector | undefined;
 describe('Memory with PostgresStore Performance', () => {
   beforeAll(async () => {
     await $({
-      cwd: join(__dirname, '..', '..'),
+      cwd: dockerCwd,
       stdio: 'inherit',
       detached: true,
     })`docker compose up -d perf-postgres --wait`;
@@ -40,9 +43,11 @@ describe('Memory with PostgresStore Performance', () => {
     // Gracefully close all PG pools before tearing down Docker
     await Promise.allSettled([storage?.close(), vector?.disconnect()]);
 
-    return $({
-      cwd: join(__dirname, '..', '..'),
-    })`docker compose down --volumes perf-postgres`;
+    await $({
+      cwd: dockerCwd,
+    })`docker compose rm --stop --force --volumes perf-postgres`;
+
+    await $`docker volume rm ${perfPgVolumeName}`.catch(() => undefined);
   });
 
   getPerformanceTests(() => {

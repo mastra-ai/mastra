@@ -1,4 +1,3 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
@@ -17,13 +16,9 @@ const { toastSuccess, toastError } = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
-vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = await importOriginal<typeof PlaygroundUi>();
-  return {
-    ...actual,
-    toast: { success: toastSuccess, error: toastError },
-  };
-});
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: toastSuccess, error: toastError },
+}));
 
 const BASE_URL = 'http://localhost:4111';
 

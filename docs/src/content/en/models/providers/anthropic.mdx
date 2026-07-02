@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "anthropic/claude-3-5-haiku-latest"
+  model: "anthropic/claude-fable-5"
 });
 
 // Generate a response
@@ -39,18 +39,6 @@ for await (const chunk of stream) {
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "anthropic/claude-3-5-haiku-latest",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 200000,
-    "maxOutput": 8192,
-    "inputCost": 0.8,
-    "outputCost": 4
-  },
   {
     "model": "anthropic/claude-fable-5",
     "imageInput": true,
@@ -254,6 +242,18 @@ for await (const chunk of stream) {
     "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "anthropic/claude-sonnet-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
   }
 ]}
 />
@@ -267,7 +267,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    id: "anthropic/claude-3-5-haiku-latest",
+    id: "anthropic/claude-fable-5",
     apiKey: process.env.ANTHROPIC_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -285,8 +285,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "anthropic/claude-sonnet-4-6"
-      : "anthropic/claude-3-5-haiku-latest";
+      ? "anthropic/claude-sonnet-5"
+      : "anthropic/claude-fable-5";
   }
 });
 ```

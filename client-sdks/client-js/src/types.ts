@@ -144,6 +144,19 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+
+/**
+ * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
+ * Date fields (e.g. `suspendedAt`) are ISO strings over the wire, matching
+ * the rest of the client SDK.
+ */
+export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
+
+export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
+
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
@@ -3023,17 +3036,15 @@ export interface ScheduleResponse {
 
 export type ScheduleTriggerOutcome =
   | 'published'
-  | 'failed'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
   | 'skipped'
-  | 'acked'
-  | 'alerted'
-  | 'deferred'
-  | 'appended-from-queue'
-  | 'dropped-stale'
-  | 'dropped-superseded'
-  | 'dropped-busy';
+  | 'aborted'
+  | 'failed';
 
-export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
 export interface ScheduleTriggerResponse {
   id?: string;
@@ -3066,6 +3077,128 @@ export interface ListScheduleTriggersParams {
 
 export interface ListScheduleTriggersResponse {
   triggers: ScheduleTriggerResponse[];
+}
+
+// ---------------------------------------------------------------------------
+// Heartbeats
+//
+// A Heartbeat is the user-facing view of a scheduled agent self-message. The
+// underlying storage is a Schedule + built-in workflow, but callers of the
+// SDK never see that — the server flattens the schedule's `inputData` onto
+// the top level so the SDK contract stays stable across implementations.
+// ---------------------------------------------------------------------------
+
+/** Attributes rendered onto the signal's XML tag. */
+export type HeartbeatSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+
+/** Behavior applied when the thread is already streaming. */
+export interface HeartbeatIfActive {
+  behavior?: 'deliver' | 'persist' | 'discard';
+  attributes?: HeartbeatSignalAttributes;
+}
+
+/**
+ * Behavior applied when the thread is idle, plus a serializable subset of
+ * stream options forwarded to the woken run.
+ */
+export interface HeartbeatIfIdle {
+  behavior?: 'wake' | 'persist' | 'discard';
+  attributes?: HeartbeatSignalAttributes;
+  streamOptions?: {
+    requestContext?: Record<string, unknown>;
+  };
+}
+
+export interface Heartbeat {
+  id: string;
+  agentId: string;
+  name?: string;
+  threadId?: string;
+  resourceId?: string;
+  prompt: string;
+  cron: string;
+  timezone?: string;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  signalType?: string;
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  lastRun?: ScheduleRunSummary;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Body for `client.createHeartbeat(...)`. Mirrors the public
+ * `CreateHeartbeatInput` shape on the core Heartbeats service. `agentId`
+ * names the agent the heartbeat fires as.
+ */
+export interface CreateHeartbeatInput {
+  /** Optional stable id; normalized to `hb_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  agentId: string;
+  cron: string;
+  prompt: string;
+  name?: string;
+  timezone?: string;
+  threadId?: string;
+  resourceId?: string;
+  signalType?: string;
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Patch body for `client.updateHeartbeat(...)`. `threadId` / `resourceId` are
+ * part of the heartbeat identity and cannot be changed — to retarget,
+ * delete and recreate.
+ */
+export interface UpdateHeartbeatOptions {
+  cron?: string;
+  prompt?: string;
+  name?: string;
+  timezone?: string;
+  signalType?: string;
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListHeartbeatsParams {
+  agentId?: string;
+  threadId?: string;
+  resourceId?: string;
+  name?: string;
+}
+
+export interface ListHeartbeatsResponse {
+  heartbeats: Heartbeat[];
+}
+
+/**
+ * Response for POST /heartbeats/:heartbeatId/run.
+ *
+ * The run runs asynchronously through the same HeartbeatWorker pipeline as
+ * scheduled fires. `claimId` is the trigger row's `runId` (used to look up
+ * the resulting trigger row).
+ */
+export interface RunHeartbeatResponse {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
 }
 
 export interface ExperimentReviewCounts {

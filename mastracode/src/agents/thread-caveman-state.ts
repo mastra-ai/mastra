@@ -1,18 +1,28 @@
-import type { HarnessThread, Session } from '@mastra/core/harness';
+import type { AgentControllerThread, Session } from '@mastra/core/agent-controller';
 
 interface ThreadStateSetting {
   key: string;
   isValid(value: unknown): boolean;
+  seedMissingFromCurrentState?: boolean;
+  clearValueWhenMissing?: unknown;
 }
 
 const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
   {
     key: 'cavemanObservations',
     isValid: (value: unknown): value is boolean => typeof value === 'boolean',
+    seedMissingFromCurrentState: true,
   },
   {
     key: 'observeAttachments',
     isValid: (value: unknown): value is 'auto' | boolean => value === 'auto' || typeof value === 'boolean',
+    seedMissingFromCurrentState: true,
+  },
+  {
+    key: 'sandboxAllowedPaths',
+    isValid: (value: unknown): value is string[] =>
+      Array.isArray(value) && value.every(item => typeof item === 'string'),
+    clearValueWhenMissing: [],
   },
 ];
 
@@ -21,17 +31,24 @@ function getStateValue(session: Session<Record<string, unknown>>, setting: Threa
   return setting.isValid(value) ? value : undefined;
 }
 
+function stateValuesEqual(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => item === right[index]);
+  }
+  return left === right;
+}
+
 async function findThread(
   session: Session<Record<string, unknown>>,
   threadId: string,
-): Promise<HarnessThread | undefined> {
+): Promise<AgentControllerThread | undefined> {
   const threads = await session.thread.list({ allResources: true });
   return threads.find(t => t.id === threadId);
 }
 
 /**
- * Restores MastraCode-owned per-thread OM settings for the given thread:
- * - If the thread already has a valid value in metadata, mirror it into harness state.
+ * Restores MastraCode-owned per-thread state for the given thread:
+ * - If the thread already has a valid value in metadata, mirror it into controller state.
  * - Otherwise, persist the current session.state value to the thread so future
  *   sessions see the user's last-selected setting.
  */
@@ -52,9 +69,19 @@ async function restoreSettingsForThread(session: Session<Record<string, unknown>
       continue;
     }
 
-    const current = getStateValue(session, setting);
-    if (current !== undefined) {
-      settingsToSeed.push({ key: setting.key, value: current });
+    if (setting.clearValueWhenMissing !== undefined) {
+      const current = getStateValue(session, setting);
+      if (current !== undefined && !stateValuesEqual(current, setting.clearValueWhenMissing)) {
+        updates[setting.key] = setting.clearValueWhenMissing;
+      }
+      continue;
+    }
+
+    if (setting.seedMissingFromCurrentState) {
+      const current = getStateValue(session, setting);
+      if (current !== undefined) {
+        settingsToSeed.push({ key: setting.key, value: current });
+      }
     }
   }
 
@@ -70,11 +97,11 @@ async function restoreSettingsForThread(session: Session<Record<string, unknown>
 }
 
 /**
- * Wires MastraCode-owned OM settings into harness thread events so they persist
+ * Wires MastraCode-owned state into controller thread events so it persists
  * per-thread and new threads inherit the most recent value.
  *
  * This is intentionally implemented in mastracode rather than core: these
- * settings are mastracode-specific OM concepts, so persistence stays scoped to
+ * settings are mastracode-specific concepts, so persistence stays scoped to
  * the host.
  */
 export function attachOMThreadStatePersistence(session: Session<Record<string, unknown>>): void {
@@ -84,6 +111,18 @@ export function attachOMThreadStatePersistence(session: Session<Record<string, u
       void restoreSettingsForThread(session, threadId).catch(() => {
         // Persistence is best-effort; don't crash the TUI if storage hiccups.
       });
+      return;
+    }
+
+    if (event.type === 'state_changed') {
+      for (const setting of THREAD_STATE_SETTINGS) {
+        if (!event.changedKeys.includes(setting.key)) continue;
+        const value = event.state[setting.key];
+        if (!setting.isValid(value)) continue;
+        void session.thread.setSetting({ key: setting.key, value }).catch(() => {
+          // Persistence is best-effort; don't crash the TUI if storage hiccups.
+        });
+      }
     }
   });
 }

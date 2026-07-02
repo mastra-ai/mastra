@@ -4,7 +4,7 @@ import type { Terminal as XtermTerminalType } from '@xterm/headless';
 import xterm from '@xterm/headless';
 
 import type { MastraCodeConfig } from '../../src/index.js';
-import { getScenario } from './scenarios/index.js';
+import { getScenario } from './tui/index.js';
 import type {
   McE2eInProcessApp,
   McE2ePrepareContext,
@@ -12,7 +12,7 @@ import type {
   McE2eStartMastraCodeAppOptions,
   McE2eTerminal,
   ScenarioName,
-} from './scenarios/types.js';
+} from './tui/types.js';
 
 export type TerminalRunConfig = {
   scenarioName: ScenarioName;
@@ -366,11 +366,12 @@ async function startMastraCodeApp(
   await options?.onCreated?.(result);
 
   const tui = new MastraTUI({
-    harness: result.harness,
+    controller: result.controller,
     session: result.session,
     hookManager: result.hookManager,
     authStorage: result.authStorage,
     mcpManager: result.mcpManager,
+    pluginManager: result.pluginManager,
     appName: 'Mastra Code',
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,
@@ -378,6 +379,7 @@ async function startMastraCodeApp(
     terminal,
     ...(options?.tui ?? {}),
   });
+  await options?.onTuiCreated?.(tui);
 
   void tui.run().catch(error => {
     process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
@@ -386,7 +388,7 @@ async function startMastraCodeApp(
   if (settings.browser.enabled) {
     const browser = await createBrowserFromSettings(settings.browser);
     if (browser) {
-      result.harness.setBrowser(browser);
+      result.controller.setBrowser(browser);
       await result.session.state.set({ activeBrowserSettings: settings.browser });
     }
   }
@@ -397,8 +399,8 @@ async function startMastraCodeApp(
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
-        result.harness.getMastra()?.stopWorkers(),
-        result.harness.stopHeartbeats(),
+        result.controller.getMastra()?.stopWorkers(),
+        result.controller.stopIntervals(),
         closeSignalsPubSub?.(),
       ]);
     },

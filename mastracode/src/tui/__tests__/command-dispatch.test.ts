@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   handleGithubCommand: vi.fn().mockResolvedValue(undefined),
   handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
   handleMcpCommand: vi.fn().mockResolvedValue(undefined),
+  handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -52,6 +53,7 @@ vi.mock('../commands/index.js', () => ({
   handleUpdateCommand: vi.fn(),
   handleMemoryGatewayCommand: vi.fn(),
   handleApiKeysCommand: vi.fn(),
+  handlePluginsCommand: mocks.handlePluginsCommand,
   handleFeedbackCommand: vi.fn(),
   handleObservabilityCommand: vi.fn(),
   handleGithubCommand: mocks.handleGithubCommand,
@@ -76,7 +78,7 @@ import { dispatchSlashCommand } from '../command-dispatch.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { createMockState } from './harness-mock.js';
+import { createMockState } from './agent-controller-mock.js';
 
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
@@ -88,6 +90,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleGithubCommand.mockClear();
     mocks.handleReportIssueCommand.mockClear();
     mocks.handleMcpCommand.mockClear();
+    mocks.handlePluginsCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -173,6 +176,17 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleGithubCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleGithubCommand).toHaveBeenCalledWith(ctx, ['mastra-ai/mastra#17447']);
+  });
+
+  it('routes /plugins to handlePluginsCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/plugins', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handlePluginsCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handlePluginsCommand).toHaveBeenCalledWith(ctx, []);
   });
 
   it('routes /report-issue to handleReportIssueCommand', async () => {
@@ -340,7 +354,7 @@ describe('dispatchSlashCommand models routing', () => {
     const ctx = {
       state,
       getResolvedWorkspace: vi.fn(() => undefined),
-      harness: {
+      controller: {
         hasWorkspace: vi.fn(() => true),
         resolveWorkspace: vi.fn().mockResolvedValue(workspace),
       },
@@ -349,7 +363,7 @@ describe('dispatchSlashCommand models routing', () => {
     const handled = await dispatchSlashCommand('/goal/review focus tests', state, () => ctx);
 
     expect(handled).toBe(true);
-    expect(ctx.harness.resolveWorkspace).toHaveBeenCalledTimes(1);
+    expect(ctx.controller.resolveWorkspace).toHaveBeenCalledTimes(1);
     expect(workspace.skills.get).toHaveBeenCalledWith('/skills/review');
     expect(mocks.startGoalWithDefaults).toHaveBeenCalledWith(
       ctx,

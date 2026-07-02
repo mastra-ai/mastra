@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
-import type { HarnessEventListener } from '@mastra/core/harness';
+import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
@@ -66,6 +66,7 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('user_interrupt').catch(() => {});
       state.session.abort();
     } else {
       const current = state.editor.getText();
@@ -139,7 +140,7 @@ export function setupKeyboardShortcuts(
     state.ui.requestRender();
   });
 
-  // Shift+Tab - cycle harness modes
+  // Shift+Tab - cycle controller modes
   state.editor.onAction('cycleMode', async () => {
     // Block mode switching while the agent is active or plan approval is pending
     if (state.session.run.isRunning()) {
@@ -151,7 +152,7 @@ export function setupKeyboardShortcuts(
       return;
     }
 
-    const modes = state.harness.listModes();
+    const modes = state.controller.listModes();
     if (modes.length <= 1) return;
     const currentId = state.session.mode.get();
     const currentIndex = modes.findIndex(m => m.id === currentId);
@@ -214,10 +215,11 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   if (!activeGoalJudge) return false;
 
   state.userInitiatedAbort = true;
+  state.hookManager?.runInterrupt('goal_judge_interrupt').catch(() => {});
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
   // Esc during an in-loop goal evaluation pauses the goal so it does not
-  // continue on the next iteration. Abort the active harness run too: the core
+  // continue on the next iteration. Abort the active controller run too: the core
   // scorer owns the judge stream, so the TUI-local controller alone only changes
   // the visual component and lets the judge continue in the background.
   state.session.abort();
@@ -257,7 +259,7 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
 
   const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
-  if (state.harness.listModes().length > 1) {
+  if (state.controller.listModes().length > 1) {
     hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
   hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
@@ -358,6 +360,10 @@ export function setupAutocomplete(state: TUIState): void {
       name: 'yolo',
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
+    {
+      name: 'voice',
+      description: 'Manage push-to-talk voice input (engine, provider, model)',
+    },
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
@@ -365,6 +371,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'plugins', description: 'Manage Mastra Code plugins' },
     { name: 'observability', description: 'Configure cloud observability' },
     {
       name: 'github',
@@ -394,7 +401,7 @@ export function setupAutocomplete(state: TUIState): void {
   ];
 
   // Only show /mode if there's more than one mode
-  const modes = state.harness.listModes();
+  const modes = state.controller.listModes();
   if (modes.length > 1) {
     slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
   }
@@ -439,10 +446,11 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    const configDir = (state.session.state.get() as { configDir?: string } | undefined)?.configDir;
+    const sessionState = state.session.state.get() as { configDir?: string; pluginCommandPaths?: string[] } | undefined;
+    const configDir = sessionState?.configDir;
     // Load from all sources (global and local)
     const globalCommands = await loadCustomCommands(undefined, configDir);
-    const localCommands = await loadCustomCommands(process.cwd(), configDir);
+    const localCommands = await loadCustomCommands(process.cwd(), configDir, sessionState?.pluginCommandPaths ?? []);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();
@@ -471,9 +479,9 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
  */
 export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
-    let workspace = state.harness.getWorkspace() ?? state.workspace;
-    if (!workspace && state.harness.hasWorkspace()) {
-      workspace = await state.harness.resolveWorkspace({ session: state.session });
+    let workspace = state.controller.getWorkspace() ?? state.workspace;
+    if (!workspace && state.controller.hasWorkspace()) {
+      workspace = await state.controller.resolveWorkspace({ session: state.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];
@@ -519,13 +527,21 @@ export function setupKeyHandlers(
     }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      return;
     }
-    state.activeInlinePlanApproval = undefined;
-    state.activeInlineQuestion = undefined;
-    state.pendingInlineQuestions.length = 0;
-    state.pendingAskUserComponents?.clear();
-    state.userInitiatedAbort = true;
-    state.session.abort();
+
+    if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('process_sigint').catch(() => {});
+      state.session.abort();
+    }
   };
   process.on('SIGINT', sigintHandler);
 
@@ -541,12 +557,12 @@ export function setupKeyHandlers(
 }
 
 // =============================================================================
-// Harness Subscription
+// AgentController Subscription
 // =============================================================================
 
-export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
+export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
-  const listener: HarnessEventListener = event => {
+  const listener: AgentControllerEventListener = event => {
     eventQueue = eventQueue.then(async () => {
       try {
         await handleEvent(event);

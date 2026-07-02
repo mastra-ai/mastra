@@ -3,9 +3,12 @@
  * Loads from:
  *   1. .claude/settings.local.json  (Claude Code compat — lowest priority)
  *   2. ~/.mastracode/mcp.json       (global)
- *   3. .mastracode/mcp.json         (project — highest priority)
+ *   3. .mcp.json                    (project root — Claude Code compatible)
+ *   4. .mastracode/mcp.json         (project — highest priority)
  *
- * Project overrides global by server name. Claude Code config is lowest priority.
+ * Higher-priority configs override lower ones by server name. The project root
+ * `.mcp.json` is read so a project that already keeps MCP servers there for
+ * Claude Code does not need to duplicate them under `.mastracode/`.
  */
 
 import * as fs from 'node:fs';
@@ -17,13 +20,18 @@ import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer }
 export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
+  const rootConfig = loadSingleConfig(getRootMcpPath(projectDir));
   const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir, configDirName));
 
-  return mergeConfigs(claudeConfig, globalConfig, projectConfig);
+  return mergeConfigs(claudeConfig, globalConfig, rootConfig, projectConfig);
 }
 
 export function getProjectMcpPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
   return path.join(projectDir, configDirName, 'mcp.json');
+}
+
+export function getRootMcpPath(projectDir: string): string {
+  return path.join(projectDir, '.mcp.json');
 }
 
 export function getGlobalMcpPath(configDirName = DEFAULT_CONFIG_DIR): string {
@@ -92,6 +100,19 @@ function expandHeaderEnvVars(headers: Record<string, unknown>): Record<string, s
 }
 
 /**
+ * Expand `${VAR}` and `$VAR` references in every string-valued environment
+ * variable passed to a stdio server, so that secrets can be referenced from the
+ * host environment instead of being hardcoded in `mcp.json`.
+ */
+function expandEnvValues(env: Record<string, unknown>): Record<string, string> {
+  const expanded: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') expanded[key] = expandEnvVars(value);
+  }
+  return expanded;
+}
+
+/**
  * Classify a raw server entry as stdio, http, or skip (with reason).
  */
 export function classifyServerEntry(raw: unknown): { kind: 'stdio' | 'http' | 'skip'; reason?: string } {
@@ -113,7 +134,7 @@ export function classifyServerEntry(raw: unknown): { kind: 'stdio' | 'http' | 's
 
   if (hasUrl) {
     try {
-      new URL(obj.url as string);
+      new URL(expandEnvVars(obj.url as string));
     } catch {
       return { kind: 'skip', reason: `Invalid URL: "${obj.url}"` };
     }
@@ -141,7 +162,8 @@ export function validateConfig(raw: unknown): McpConfig {
       servers[name] = {
         command: e.command as string,
         args: Array.isArray(e.args) ? (e.args as string[]) : undefined,
-        env: typeof e.env === 'object' && e.env !== null ? (e.env as Record<string, string>) : undefined,
+        env:
+          typeof e.env === 'object' && e.env !== null ? expandEnvValues(e.env as Record<string, unknown>) : undefined,
       };
     } else if (classification.kind === 'http') {
       const e = entry as Record<string, unknown>;
@@ -151,7 +173,7 @@ export function validateConfig(raw: unknown): McpConfig {
         continue;
       }
       servers[name] = {
-        url: e.url as string,
+        url: expandEnvVars(e.url as string),
         headers:
           typeof e.headers === 'object' && e.headers !== null
             ? expandHeaderEnvVars(e.headers as Record<string, unknown>)
