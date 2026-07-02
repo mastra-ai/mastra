@@ -1,5 +1,9 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
-import { Avatar, Badge, Button, Input, Txt } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronsUpDown, Circle, Folder, LogOut, MoreHorizontal, Plus, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 

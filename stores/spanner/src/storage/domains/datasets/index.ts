@@ -22,6 +22,7 @@ import type {
   DatasetItem,
   DatasetItemRow,
   DatasetRecord,
+  DatasetTenancyFilters,
   DatasetVersion,
   ListDatasetItemsInput,
   ListDatasetItemsOutput,
@@ -31,6 +32,7 @@ import type {
   ListDatasetVersionsOutput,
   UpdateDatasetInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -143,7 +145,15 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.alterTable({
       tableName: TABLE_DATASETS,
       schema: TABLE_SCHEMAS[TABLE_DATASETS],
-      ifNotExists: ['organizationId', 'projectId', 'candidateKey', 'candidateId'],
+      ifNotExists: [
+        'organizationId',
+        'projectId',
+        'candidateKey',
+        'candidateId',
+        'targetType',
+        'targetIds',
+        'scorerIds',
+      ],
     });
     await this.db.alterTable({
       tableName: TABLE_DATASET_ITEMS,
@@ -259,9 +269,29 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async getDatasetById(args: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null> {
     try {
-      const row = await this.db.load<Record<string, any>>({ tableName: TABLE_DATASETS, keys: { id: args.id } });
+      const hasTenancy = args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined;
+      if (!hasTenancy) {
+        const row = await this.db.load<Record<string, any>>({ tableName: TABLE_DATASETS, keys: { id: args.id } });
+        return row ? rowToDataset(row) : null;
+      }
+      const conditions: string[] = [`${quoteIdent('id', 'column name')} = @id`];
+      const params: Record<string, any> = { id: args.id };
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        params.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.projectId !== undefined) {
+        conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        params.projectId = args.filters.projectId;
+      }
+      const [rows] = await this.database.run({
+        sql: `SELECT * FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${conditions.join(' AND ')} LIMIT 1`,
+        params,
+        json: true,
+      });
+      const row = (rows as Array<Record<string, any>>)[0];
       return row ? rowToDataset(row) : null;
     } catch (error) {
       throw new MastraError(
@@ -293,7 +323,7 @@ export class DatasetsSpanner extends DatasetsStorage {
 
       await this.db.update({ tableName: TABLE_DATASETS, keys: { id: args.id }, data });
 
-      const updated = await this.getDatasetById({ id: args.id });
+      const updated = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('SPANNER', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -318,8 +348,14 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async deleteDataset(args: { id: string }): Promise<void> {
+  async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op on mismatch or missing dataset. Never throws
+      // so we don't leak cross-tenant existence via error timing/text. Cascade
+      // deletes below are datasetId-scoped, so gating the parent is sufficient.
+      const gate = await this.getDatasetById({ id: args.id, filters: args.filters });
+      if (!gate) return;
+
       // Best-effort detach of experiments referencing this dataset. These tables
       // may not exist when datasets is used standalone, so failures are swallowed.
       try {
@@ -399,11 +435,35 @@ export class DatasetsSpanner extends DatasetsStorage {
         filterConditions.push(`${quoteIdent('candidateId', 'column name')} = @candidateId`);
         filterParams.candidateId = args.filters.candidateId;
       }
+      if (args.filters?.targetType !== undefined) {
+        filterConditions.push(`${quoteIdent('targetType', 'column name')} = @targetType`);
+        filterParams.targetType = args.filters.targetType;
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // Spanner stores `targetIds` as a JSON array column; unnest it and intersect
+        // with the supplied IDs. This matches dataset rows whose targetIds overlap
+        // with any of the supplied values.
+        filterConditions.push(
+          `EXISTS (SELECT 1 FROM UNNEST(JSON_QUERY_ARRAY(${quoteIdent('targetIds', 'column name')})) AS t WHERE JSON_VALUE(t) IN UNNEST(@targetIds))`,
+        );
+        filterParams.targetIds = args.filters.targetIds;
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        filterConditions.push(`LOWER(${quoteIdent('name', 'column name')}) LIKE LOWER(@nameSubstring)`);
+        filterParams.nameSubstring = `%${args.filters.name}%`;
+      }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
+      // Spanner cannot infer the element type of empty arrays, so declare ARRAY<STRING>
+      // for `targetIds` whenever the filter is in play.
+      const filterTypes: Record<string, any> =
+        args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0
+          ? { targetIds: { type: 'array', child: { type: 'string' } } }
+          : {};
 
       const [countRows] = await this.database.run({
         sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereClause}`,
         params: filterParams,
+        types: filterTypes,
         json: true,
       });
       const total = Number((countRows as Array<{ count: number | string }>)[0]?.count ?? 0);
@@ -416,6 +476,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...filterParams, limit, offset },
+        types: filterTypes,
         json: true,
       });
       const datasets = (rows as Array<Record<string, any>>).map(rowToDataset);
@@ -692,7 +753,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem(args: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem(args: DeleteDatasetItemInput): Promise<void> {
     try {
       const existing = await this.loadCurrentItemRow(args.id);
       if (!existing) return;

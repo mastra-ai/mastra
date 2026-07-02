@@ -1,5 +1,8 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
-import { Badge, Button, Input, Txt } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, Plus } from 'lucide-react';
 import { useState } from 'react';
 

@@ -1,5 +1,6 @@
 import type { AgentControllerModeInfo, AgentControllerOMProgress } from '@mastra/client-js';
-import { Button, ButtonsGroup } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Brain, Target } from 'lucide-react';
 
 import type { GoalSnapshot, OMPhase } from '../services/transcript';

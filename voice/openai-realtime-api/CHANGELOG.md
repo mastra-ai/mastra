@@ -1,5 +1,11 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
 ## 0.13.3-alpha.0
 
 ### Patch Changes

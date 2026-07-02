@@ -1,4 +1,5 @@
-import { Button, Textarea } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ArrowUp, Square } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';

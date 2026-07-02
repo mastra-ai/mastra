@@ -167,6 +167,52 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       const { messageList, tools, model: resolvedModel, modelList: resolvedModelList } = resolved;
 
+      // 1b. Check for tripwire from processInput (initial input processing).
+      // If an input processor called abort() during preparation, the tripwire
+      // data is stored on the registry entry. Emit a tripwire chunk and bail
+      // immediately — the model must never be called.
+      const registryTripwire = globalRunRegistry.get(runId)?.tripwire;
+      if (registryTripwire) {
+        // Clear it so it doesn't fire again on a subsequent iteration (shouldn't
+        // happen since the loop will stop, but belt-and-suspenders).
+        const entry = globalRunRegistry.get(runId);
+        if (entry) entry.tripwire = undefined;
+
+        logger?.warn?.('Input processor tripwire triggered (from preparation)', {
+          agent: agentId,
+          reason: registryTripwire.reason,
+          processorId: registryTripwire.processorId,
+          retry: registryTripwire.retry,
+        });
+
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tripwire',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              reason: registryTripwire.reason || '',
+              retry: registryTripwire.retry,
+              metadata: registryTripwire.metadata,
+              processorId: registryTripwire.processorId,
+            },
+          });
+        }
+
+        return {
+          messageListState: messageList.serialize(),
+          text: '',
+          toolCalls: [],
+          stepResult: {
+            reason: 'tripwire' as const,
+            warnings: [],
+            isContinued: false,
+          },
+          metadata: {},
+          state: typedInput.state,
+        } satisfies DurableLLMStepOutput;
+      }
+
       // 2. Determine if we have a model list for fallback support
       const hasModelList = typedInput.modelList && typedInput.modelList.length > 0;
 
@@ -282,52 +328,125 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 agentName: typedInput.agentName ?? typedInput.agentId,
                 processorStates: registryEntry?.processorStates,
               });
-              const processInputStepResult = await runner.runProcessInputStep({
-                messageList,
-                stepNumber: stepIndex,
-                steps: (inputData as any).accumulatedSteps ?? [],
-                tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                requestContext,
-                memory: registryEntry?.memory,
-                resourceId: typedInput.state?.resourceId,
-                threadId: typedInput.state?.threadId,
-                model: currentModel,
-                messageId: currentMessageId,
-                rotateResponseMessageId: () => {
-                  currentMessageId = crypto.randomUUID();
-                  return currentMessageId;
-                },
-                tools: currentTools,
-                toolChoice: currentToolChoice,
-                providerOptions: currentProviderOptions,
-                activeTools: currentActiveTools,
-                modelSettings: currentModelSettings,
-                structuredOutput: structuredOutput as any,
-                retryCount: (inputData as any).processorRetryCount ?? 0,
-                abortSignal: executionAbortSignal,
-                writer: inputStepWriter,
-              });
-              const merged = composeStepInput(
-                {
-                  messageId: currentMessageId,
+              try {
+                const processInputStepResult = await runner.runProcessInputStep({
+                  messageList,
+                  stepNumber: stepIndex,
+                  steps: (inputData as any).accumulatedSteps ?? [],
+                  tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+                  requestContext,
+                  memory: registryEntry?.memory,
+                  resourceId: typedInput.state?.resourceId,
+                  threadId: typedInput.state?.threadId,
                   model: currentModel,
+                  messageId: currentMessageId,
+                  rotateResponseMessageId: () => {
+                    currentMessageId = crypto.randomUUID();
+                    return currentMessageId;
+                  },
                   tools: currentTools,
                   toolChoice: currentToolChoice,
-                  activeTools: currentActiveTools,
                   providerOptions: currentProviderOptions,
+                  activeTools: currentActiveTools,
                   modelSettings: currentModelSettings,
-                  structuredOutput,
-                },
-                processInputStepResult,
-              );
-              currentMessageId = merged.messageId;
-              currentModel = merged.model as typeof currentModel;
-              currentTools = merged.tools as ToolSet;
-              currentToolChoice = merged.toolChoice as ToolChoice<ToolSet> | undefined;
-              currentActiveTools = merged.activeTools;
-              currentProviderOptions = merged.providerOptions;
-              currentModelSettings = merged.modelSettings;
-              structuredOutput = merged.structuredOutput;
+                  structuredOutput: structuredOutput as any,
+                  retryCount: (inputData as any).processorRetryCount ?? 0,
+                  abortSignal: executionAbortSignal,
+                  writer: inputStepWriter,
+                });
+                const merged = composeStepInput(
+                  {
+                    messageId: currentMessageId,
+                    model: currentModel,
+                    tools: currentTools,
+                    toolChoice: currentToolChoice,
+                    activeTools: currentActiveTools,
+                    providerOptions: currentProviderOptions,
+                    modelSettings: currentModelSettings,
+                    structuredOutput,
+                  },
+                  processInputStepResult,
+                );
+                currentMessageId = merged.messageId;
+                currentModel = merged.model as typeof currentModel;
+                currentTools = merged.tools as ToolSet;
+                currentToolChoice = merged.toolChoice as ToolChoice<ToolSet> | undefined;
+                currentActiveTools = merged.activeTools;
+                currentProviderOptions = merged.providerOptions;
+                currentModelSettings = merged.modelSettings;
+                structuredOutput = merged.structuredOutput;
+              } catch (error) {
+                // Handle TripWire from processInputStep — emit tripwire chunk and
+                // bail the step, mirroring the regular agent's buildTripWireBailResponse.
+                // Return a bail output with reason: 'tripwire' so the dowhile loop
+                // stops gracefully and emits a proper finish event.
+                if (error instanceof TripWire) {
+                  logger?.warn?.('Streaming input processor tripwire triggered', {
+                    reason: error.message,
+                    processorId: error.processorId,
+                    retry: error.options?.retry,
+                  });
+                  if (pubsub) {
+                    await emitChunkEvent(pubsub, runId, {
+                      type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
+                      payload: {
+                        processorId: error.processorId,
+                        reason: error.message,
+                        retry: error.options?.retry,
+                        metadata: error.options?.metadata,
+                      },
+                    });
+                  }
+                  // Return a bail response instead of throwing — the dowhile
+                  // predicate will see isContinued: false and stop the loop,
+                  // then emitFinishEvent will emit reason: 'tripwire'.
+                  return {
+                    messageListState: messageList.serialize(),
+                    text: '',
+                    toolCalls: [],
+                    stepResult: {
+                      reason: 'tripwire' as const,
+                      warnings: [],
+                      isContinued: false,
+                    },
+                    metadata: {
+                      modelId: currentModel.modelId,
+                    },
+                    state: typedInput.state,
+                  } satisfies DurableLLMStepOutput;
+                }
+                logger?.error?.('Error in processInputStep processors:', error);
+                throw error;
+              }
+            }
+
+            // ── Signal echo & pre-run drain ───────────────────────────────
+            // Mirror the non-durable llm-execution-step:
+            //  1. Echo initialSignalEchoes (signals that were part of the input
+            //     messages, e.g. from persisted memory) so the client sees them.
+            //  2. Pre-run signals: if this is the first model request of the run
+            //     (stepIndex === 0), drain signals that were queued before the
+            //     run made its first request. These must be added to messageList
+            //     BEFORE inputMessages is materialized so the model sees them.
+            if (pubsub) {
+              const initialSignalEchoes = registryEntry?.initialSignalEchoes?.splice(0) ?? [];
+              for (const initialSignal of initialSignalEchoes) {
+                await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
+              }
+
+              const isFirstModelRequest = stepIndex === 0;
+              if (isFirstModelRequest && registryEntry?.drainPendingSignals) {
+                const preRunSignals = registryEntry.drainPendingSignals('pre-run');
+                if (preRunSignals.length > 0) {
+                  currentMessageId = mastra?.generateId?.() ?? crypto.randomUUID();
+                }
+                for (const preRunSignal of preRunSignals) {
+                  const signalForTranscript = messageList.addSignal(preRunSignal);
+                  await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
+                }
+              }
             }
 
             // `downloadRetries` / `downloadConcurrency` are internal-only on the
@@ -415,21 +534,37 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   logger?.warn?.('Streaming request processor tripwire triggered', {
                     reason: error.message,
                     processorId: error.processorId,
-                    retry: (error as any).options?.retry,
+                    retry: error.options?.retry,
                   });
-                  // On TripWire during processLLMRequest, emit a tripwire chunk
-                  // and bail the LLM step so the loop can retry or stop.
+                  // Emit a tripwire chunk and return a bail response so the
+                  // dowhile loop stops gracefully with reason: 'tripwire'.
                   if (pubsub) {
                     await emitChunkEvent(pubsub, runId, {
                       type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
                       payload: {
                         processorId: error.processorId,
                         reason: error.message,
-                        retry: (error as any).options?.retry,
+                        retry: error.options?.retry,
+                        metadata: error.options?.metadata,
                       },
-                    } as any);
+                    });
                   }
-                  throw error;
+                  return {
+                    messageListState: messageList.serialize(),
+                    text: '',
+                    toolCalls: [],
+                    stepResult: {
+                      reason: 'tripwire' as const,
+                      warnings: [],
+                      isContinued: false,
+                    },
+                    metadata: {
+                      modelId: currentModel.modelId,
+                    },
+                    state: typedInput.state,
+                  } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMRequest processors:', error);
                 throw error;
@@ -633,7 +768,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     threadId: typedInput.state?.threadId,
                     resourceId: typedInput.state?.resourceId,
                   }),
-                  callTimeHeaders: currentModelSettings.headers as Record<string, string> | undefined,
+                  modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
+                  callTimeHeaders:
+                    registryEntry?.callTimeHeaders || currentModelSettings.headers
+                      ? {
+                          ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
+                          ...(currentModelSettings.headers as Record<string, string> | undefined),
+                        }
+                      : undefined,
                 }),
                 modelSettings: {
                   ...currentModelSettings,
@@ -647,14 +789,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   request = r || {};
                   rawResponse = rr || {};
                   modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
-
-                  if (pubsub) {
-                    void emitStepStartEvent(pubsub, runId, {
-                      stepId: DurableStepIds.LLM_EXECUTION,
-                      request,
-                      warnings,
-                    });
-                  }
                 },
               });
             }
@@ -697,8 +831,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             try {
+              let stepStartEmitted = false;
               for await (const rawChunk of trackedStream) {
                 if (!rawChunk) continue;
+
+                // Emit step-start before the first stream chunk so the
+                // ordering matches the regular agent: start → step-start → response-metadata → …
+                // onResult has already fired by the time the first chunk arrives,
+                // so `request` and `warnings` are populated.
+                if (!stepStartEmitted && pubsub) {
+                  stepStartEmitted = true;
+                  await emitStepStartEvent(pubsub, runId, {
+                    stepId: DurableStepIds.LLM_EXECUTION,
+                    request,
+                    warnings,
+                  });
+                }
 
                 // Enrich tool-related chunks with the in-process payload transform
                 // policy (mirrors the non-durable agentic-execution layer). The
@@ -968,19 +1116,35 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   logger?.warn?.('Streaming response processor tripwire triggered', {
                     reason: error.message,
                     processorId: error.processorId,
-                    retry: (error as any).options?.retry,
+                    retry: error.options?.retry,
                   });
                   if (pubsub) {
                     await emitChunkEvent(pubsub, runId, {
                       type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
                       payload: {
                         processorId: error.processorId,
                         reason: error.message,
-                        retry: (error as any).options?.retry,
+                        retry: error.options?.retry,
+                        metadata: error.options?.metadata,
                       },
-                    } as any);
+                    });
                   }
-                  throw error;
+                  return {
+                    messageListState: messageList.serialize(),
+                    text: textDeltas.join(''),
+                    toolCalls: [],
+                    stepResult: {
+                      reason: 'tripwire' as const,
+                      warnings,
+                      isContinued: false,
+                    },
+                    metadata: {
+                      modelId: currentModel.modelId,
+                    },
+                    state: typedInput.state,
+                  } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMResponse processors:', error);
                 throw error;

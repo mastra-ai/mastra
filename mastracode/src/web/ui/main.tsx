@@ -1,4 +1,5 @@
-import { ThemeProvider, TooltipProvider } from '@mastra/playground-ui';
+import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

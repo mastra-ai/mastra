@@ -88,6 +88,46 @@ export function createScoresTest({
       expect(nonExistentScores?.scores).toHaveLength(0);
     });
 
+    if (capabilities.deterministicScorePagination === true) {
+      it('should paginate scores by scorer id in descending creation order', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+
+        const { score: oldest } = await scoresStorage.saveScore(
+          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+        );
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        const { score: middle } = await scoresStorage.saveScore(
+          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+        );
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        const { score: newest } = await scoresStorage.saveScore(
+          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+        );
+
+        const firstPage = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 0, perPage: 1 },
+        });
+        const secondPage = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 1, perPage: 1 },
+        });
+        const thirdPage = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 2, perPage: 1 },
+        });
+
+        expect(firstPage.scores.map(score => score.id)).toEqual([newest.id]);
+        expect(secondPage.scores.map(score => score.id)).toEqual([middle.id]);
+        expect(thirdPage.scores.map(score => score.id)).toEqual([oldest.id]);
+        expect(firstPage.pagination.hasMore).toBe(true);
+        expect(secondPage.pagination.hasMore).toBe(true);
+        expect(thirdPage.pagination.hasMore).toBe(false);
+      });
+    }
+
     it('should return score payload matching the saved score', async () => {
       const scorerId = `scorer-${randomUUID()}`;
       const score = createSampleScore({ scorerId });
@@ -355,5 +395,74 @@ export function createScoresTest({
         }
       });
     }
+
+    describe('multi-tenant filters', () => {
+      it('persists organizationId and projectId on saved scores', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const score = createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-1' });
+
+        const { score: saved } = await scoresStorage.saveScore(score);
+
+        expect(saved.organizationId).toBe('org-a');
+        expect(saved.projectId).toBe('proj-1');
+      });
+
+      it('round-trips batch and dataset provenance fields', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const { score: saved } = await scoresStorage.saveScore(
+          createSampleScore({
+            scorerId,
+            batchId: 'batch-1',
+            datasetId: 'dataset-1',
+            datasetItemId: 'item-1',
+          }),
+        );
+
+        const loaded = await scoresStorage.getScoreById({ id: saved.id });
+
+        expect(loaded?.batchId).toBe('batch-1');
+        expect(loaded?.datasetId).toBe('dataset-1');
+        expect(loaded?.datasetItemId).toBe('item-1');
+      });
+
+      it('filters listScoresByScorerId by organizationId and projectId', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-1' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-a', projectId: 'proj-2' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, organizationId: 'org-b', projectId: 'proj-1' }));
+
+        const byOrg = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-a' },
+        });
+        expect(byOrg.scores).toHaveLength(2);
+
+        const byProject = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-a', projectId: 'proj-1' },
+        });
+        expect(byProject.scores).toHaveLength(1);
+        expect(byProject.scores[0]?.organizationId).toBe('org-a');
+        expect(byProject.scores[0]?.projectId).toBe('proj-1');
+      });
+
+      it('filters listScoresByEntityId by tenancy', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+        const entityId = `agent-${randomUUID()}`;
+        await scoresStorage.saveScore(createSampleScore({ scorerId, entityId, organizationId: 'org-a' }));
+        await scoresStorage.saveScore(createSampleScore({ scorerId, entityId, organizationId: 'org-b' }));
+
+        const result = await scoresStorage.listScoresByEntityId({
+          entityId,
+          entityType: 'AGENT',
+          pagination: { page: 0, perPage: 10 },
+          filters: { organizationId: 'org-b' },
+        });
+        expect(result.scores).toHaveLength(1);
+        expect(result.scores[0]?.organizationId).toBe('org-b');
+      });
+    });
   });
 }
