@@ -467,20 +467,24 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing row. Never throws so we don't
-      // leak existence across tenants via error timing/text. The cascade delete below
-      // is already experimentId-scoped, so gating at the parent is sufficient.
+      // Tenancy predicate applied on every destructive query (not only the
+      // pre-check). Silent no-op on mismatch.
       const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
       const existing = await experimentsCollection.findOne(gateQuery);
       if (!existing) return;
 
-      // Delete results first (FK semantics)
+      // Delete results first (FK semantics). Scope on the results collection too
+      // — result rows carry organizationId/projectId of the owning experiment.
       const resultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      await resultsCollection.deleteMany({ experimentId: id });
+      const resultsQuery: Record<string, any> = { experimentId: id };
+      applyTenancyFilter(resultsQuery, filters);
+      await resultsCollection.deleteMany(resultsQuery);
 
-      await experimentsCollection.deleteOne({ id });
+      const parentDeleteQuery: Record<string, any> = { id };
+      applyTenancyFilter(parentDeleteQuery, filters);
+      await experimentsCollection.deleteOne(parentDeleteQuery);
     } catch (error) {
       throw new MastraError(
         {
@@ -710,8 +714,9 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     filters?: ExperimentTenancyFilters;
   }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op if the parent experiment does not match the
-      // caller's scope. Prevents wiping another tenant's results via a leaked id.
+      // Tenancy predicate applied on the destructive deleteMany itself. Result
+      // rows carry organizationId/projectId of the owning experiment. Silent
+      // no-op on mismatch.
       if (filters?.organizationId !== undefined || filters?.projectId !== undefined) {
         const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
         const gateQuery: Record<string, any> = { id: experimentId };
@@ -720,7 +725,9 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         if (!parent) return;
       }
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      await collection.deleteMany({ experimentId });
+      const deleteQuery: Record<string, any> = { experimentId };
+      applyTenancyFilter(deleteQuery, filters);
+      await collection.deleteMany(deleteQuery);
     } catch (error) {
       throw new MastraError(
         {

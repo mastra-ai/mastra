@@ -410,24 +410,46 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
   async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing experiment. Never throws
-      // so we don't leak cross-tenant existence via error timing/text. The cascade
-      // DELETE below is experimentId-scoped, so gating at the parent is sufficient.
-      const gate = await this.getExperimentById({ id: args.id, filters: args.filters });
-      if (!gate) return;
+      // Atomic gate + cascade inside a single read-write transaction; tenancy
+      // predicate folded into both DELETE DMLs. Silent no-op on mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: Record<string, any> = {};
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        tenancyParams.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        tenancyParams.projectId = args.filters.projectId;
+      }
+      const gateWhere = [`${quoteIdent('id', 'column name')} = @id`, ...tenancyConditions].join(' AND ');
 
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            const [gateRows] = await tx.run({
+              sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                    WHERE ${gateWhere} LIMIT 1`,
+              params: { id: args.id, ...tenancyParams },
+              json: true,
+            });
+            if (!Array.isArray(gateRows) || gateRows.length === 0) {
+              await tx.commit();
+              return;
+            }
+            const cascadeWhere = [
+              `${quoteIdent('experimentId', 'column name')} = @id`,
+              // Result rows carry the same organizationId/projectId as their parent,
+              // so applying tenancy here makes the cascade itself tenant-scoped.
+              ...tenancyConditions,
+            ].join(' AND ');
             await tx.runUpdate({
-              sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
-                    WHERE ${quoteIdent('experimentId', 'column name')} = @id`,
-              params: { id: args.id },
+              sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} WHERE ${cascadeWhere}`,
+              params: { id: args.id, ...tenancyParams },
             });
             await tx.runUpdate({
-              sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
-                    WHERE ${quoteIdent('id', 'column name')} = @id`,
-              params: { id: args.id },
+              sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')} WHERE ${gateWhere}`,
+              params: { id: args.id, ...tenancyParams },
             });
             await tx.commit();
           } catch (err) {
@@ -701,11 +723,24 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
   async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op if the parent experiment does not match the
-      // caller's scope. Prevents wiping another tenant's results via a leaked id.
+      // Tenancy predicate folded directly into the DELETE DML. Silent no-op on
+      // mismatch.
       if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
-        const parent = await this.getExperimentById({ id: args.experimentId, filters: args.filters });
-        if (!parent) return;
+        const conditions: string[] = [`${quoteIdent('experimentId', 'column name')} = @experimentId`];
+        const params: Record<string, any> = { experimentId: args.experimentId };
+        if (args.filters?.organizationId !== undefined) {
+          conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+          params.organizationId = args.filters.organizationId;
+        }
+        if (args.filters?.projectId !== undefined) {
+          conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+          params.projectId = args.filters.projectId;
+        }
+        await this.db.runDml({
+          sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} WHERE ${conditions.join(' AND ')}`,
+          params,
+        });
+        return;
       }
       await this.db.runDml({
         sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}

@@ -34,7 +34,7 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 import { cutoffFor, runBatchedDelete } from '../../retention';
-import { tenancyWhere } from '../utils';
+import { buildScopedWhere, tenancyWhere } from '../utils';
 
 const DEFAULT_PRUNE_BATCH_SIZE = 1000;
 
@@ -372,11 +372,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
-      const { conditions, params } = tenancyWhere(args.filters);
-      const whereSql = ['id = ?', ...conditions].join(' AND ');
+      const scoped = buildScopedWhere('id', args.id, args.filters);
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE ${whereSql}`,
-        args: [args.id, ...params],
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE ${scoped.sql}`,
+        args: scoped.args,
       });
       return result.rows?.[0] ? this.transformExperimentRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
@@ -480,23 +479,22 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing row. Never throws on mismatch
-      // so we don't leak existence across tenants via error timing/text. The cascade
-      // DELETE below is already experimentId-scoped, so gating at the parent is sufficient.
+      // Tenancy predicate folded into both DELETEs; batch runs as one transaction.
+      // Silent no-op on mismatch.
+      const parentScoped = buildScopedWhere('id', args.id, args.filters);
       const { conditions, params } = tenancyWhere(args.filters);
-      const existsSql = `SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')}`;
-      const exists = await this.#client.execute({ sql: existsSql, args: [args.id, ...params] });
-      if (!exists.rows?.[0]) return;
+      const cascadeWhere = conditions.length
+        ? `experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')})`
+        : `experimentId = ?`;
+      const cascadeArgs = conditions.length ? [args.id, ...params] : [args.id];
 
-      // Delete results first (foreign key semantics)
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId = ?`,
-        args: [args.id],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_EXPERIMENTS} WHERE id = ?`,
-        args: [args.id],
-      });
+      await this.#client.batch(
+        [
+          { sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${cascadeWhere}`, args: cascadeArgs },
+          { sql: `DELETE FROM ${TABLE_EXPERIMENTS} WHERE ${parentScoped.sql}`, args: parentScoped.args },
+        ],
+        'write',
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -647,11 +645,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     filters?: ExperimentTenancyFilters;
   }): Promise<ExperimentResult | null> {
     try {
-      const { conditions, params } = tenancyWhere(args.filters);
-      const whereSql = ['id = ?', ...conditions].join(' AND ');
+      const scoped = buildScopedWhere('id', args.id, args.filters);
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${whereSql}`,
-        args: [args.id, ...params],
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${scoped.sql}`,
+        args: scoped.args,
       });
       return result.rows?.[0] ? this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
@@ -743,13 +740,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op if the parent experiment does not match the
-      // caller's scope. Prevents wiping another tenant's results via a leaked id.
-      if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
-        const { conditions, params } = tenancyWhere(args.filters);
-        const existsSql = `SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')}`;
-        const parent = await this.#client.execute({ sql: existsSql, args: [args.experimentId, ...params] });
-        if (!parent.rows?.[0]) return;
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
+      const { conditions, params } = tenancyWhere(args.filters);
+      if (conditions.length) {
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')})`,
+          args: [args.experimentId, ...params],
+        });
+        return;
       }
 
       await this.#client.execute({

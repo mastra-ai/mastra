@@ -544,16 +544,18 @@ export class ExperimentsPG extends ExperimentsStorage {
       });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
-      // Tenancy gate: silent no-op on mismatch (does not throw). The cascade DELETE
-      // below is already experimentId-scoped by FK, so gating at the parent is sufficient.
+      // Tenancy gate + cascade run in a single transaction with SELECT ... FOR UPDATE,
+      // so a concurrent delete/recreate cannot let a scoped delete hit another tenant's row.
+      // Silent no-op on tenancy mismatch (does not throw).
       const { conditions, params } = tenancyWhere(filters, 2);
-      const existsSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')}`;
-      const existing = await this.#db.client.oneOrNone(existsSql, [id, ...params]);
-      if (!existing) return;
+      const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
 
-      // Delete results first (FK semantics)
-      await this.#db.client.none(`DELETE FROM ${resultsTable} WHERE "experimentId" = $1`, [id]);
-      await this.#db.client.none(`DELETE FROM ${experimentsTable} WHERE "id" = $1`, [id]);
+      await this.#db.client.tx(async t => {
+        const parent = await t.oneOrNone(gateSql, [id, ...params]);
+        if (!parent) return;
+        await t.none(`DELETE FROM ${resultsTable} WHERE "experimentId" = $1`, [id]);
+        await t.none(`DELETE FROM ${experimentsTable} WHERE "id" = $1`, [id]);
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -801,13 +803,18 @@ export class ExperimentsPG extends ExperimentsStorage {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
 
-      // Tenancy gate: silent no-op if the parent experiment does not match the
-      // caller's scope. Prevents wiping another tenant's results via a leaked id.
+      // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
+      // tenancy mismatch.
       if (filters?.organizationId !== undefined || filters?.projectId !== undefined) {
         const { conditions, params } = tenancyWhere(filters, 2);
-        const existsSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')}`;
-        const parent = await this.#db.client.oneOrNone(existsSql, [experimentId, ...params]);
-        if (!parent) return;
+        const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
+
+        await this.#db.client.tx(async t => {
+          const parent = await t.oneOrNone(gateSql, [experimentId, ...params]);
+          if (!parent) return;
+          await t.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);
+        });
+        return;
       }
 
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);

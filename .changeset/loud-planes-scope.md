@@ -13,7 +13,7 @@ Tenancy-scope experiments `getById` and `delete*` on `ExperimentsStorage`.
 
 - On tenancy mismatch, `get*` returns `null` at the storage layer.
 - On tenancy mismatch, `delete*` is a silent no-op.
-- The `deleteExperiment` cascade to results and the `deleteExperimentResults` bulk delete are gated on the parent experiment matching the caller's scope, so a leaked id cannot wipe another tenant's rows.
+- The tenancy predicate is folded into the destructive DML itself (scoped `WHERE` on the DELETE, an atomic gate + delete inside a transaction, or a scoped subquery for the results cascade). A concurrent tenant swap of the same id between a pre-check and the DELETE cannot let a scoped delete hit another tenant's row.
 
 Both behaviors match how a missing id already responds, so existence does not leak through error timing or messages.
 
@@ -21,4 +21,22 @@ Both behaviors match how a missing id already responds, so existence does not le
 
 Legacy calls that omit `filters` are unchanged, so this is fully backwards-compatible.
 
+```ts
+// Before: any caller who knew the id could read/delete across tenants.
+await store.experiments.getExperimentById({ id: experimentId });
+await store.experiments.deleteExperiment({ id: experimentId });
+
+// After: pass the caller's scope; wrong tenant gets null / silent no-op.
+await store.experiments.getExperimentById({
+  id: experimentId,
+  filters: { organizationId, projectId },
+});
+await store.experiments.deleteExperiment({
+  id: experimentId,
+  filters: { organizationId, projectId },
+});
+```
+
 Related: [MASTRA-4445](https://linear.app/kepler-crm/issue/MASTRA-4445)
+</content>
+</invoke>

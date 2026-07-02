@@ -466,22 +466,31 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing row. Never throws so we don't
-      // leak experiment existence across tenants via error timing/text. The cascade DELETE
-      // below is already experimentId-scoped, so gating at the parent is sufficient.
-      const existing = await this.operations.load<{ id: string }>({
-        tableName: TABLE_EXPERIMENTS,
-        keys: {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        },
-      });
-      if (!existing) return;
+      // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
+      // tenancy mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: any[] = [];
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.organizationId);
+      }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.projectId);
+      }
+      const gateWhere = ['id = ?', ...tenancyConditions].join(' AND ');
 
       const connection = await this.pool.getConnection();
       try {
         await connection.beginTransaction();
+        const [gateRows] = await connection.execute(
+          `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${gateWhere} FOR UPDATE`,
+          [args.id, ...tenancyParams],
+        );
+        if (!Array.isArray(gateRows) || gateRows.length === 0) {
+          await connection.commit();
+          return;
+        }
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
           [args.id],
@@ -777,18 +786,25 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op if the parent experiment does not match the
-      // caller's scope. Prevents wiping another tenant's results via a leaked id.
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
       if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
-        const parent = await this.operations.load<{ id: string }>({
-          tableName: TABLE_EXPERIMENTS,
-          keys: {
-            id: args.experimentId,
-            organizationId: args.filters?.organizationId,
-            projectId: args.filters?.projectId,
-          },
-        });
-        if (!parent) return;
+        const tenancyConditions: string[] = [];
+        const tenancyParams: any[] = [];
+        if (args.filters?.organizationId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.organizationId);
+        }
+        if (args.filters?.projectId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.projectId);
+        }
+        const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+        await this.pool.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
+          [args.experimentId, ...tenancyParams],
+        );
+        return;
       }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,

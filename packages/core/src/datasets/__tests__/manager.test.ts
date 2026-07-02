@@ -214,7 +214,7 @@ describe('DatasetsManager', () => {
     }
   });
 
-  // --- Tenancy scoping on manager.get / manager.delete (MASTRA-4438) ---
+  // --- Tenancy scoping on manager.get / manager.delete ---
   describe('tenancy scoping', () => {
     it('get forwards organizationId + projectId to storage', async () => {
       const created = await mgr.create({

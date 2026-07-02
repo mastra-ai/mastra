@@ -1,4 +1,4 @@
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { DatasetTenancyFilters, ExperimentTenancyFilters, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
@@ -122,13 +122,10 @@ export function transformFromSqlRow<T>({
 
 /**
  * Tenancy scope shape shared by domains that carry `organizationId` / `projectId`
- * columns (datasets, experiments, etc.). Structurally compatible with
- * `DatasetTenancyFilters` and `ExperimentTenancyFilters` in `@mastra/core/storage`.
+ * columns (datasets, experiments, ...). Aliases the core tenancy filter types so
+ * this helper stays in sync if the core shape ever changes.
  */
-export type TenancyScope = {
-  organizationId?: string;
-  projectId?: string;
-};
+export type TenancyScope = DatasetTenancyFilters | ExperimentTenancyFilters;
 
 /**
  * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
