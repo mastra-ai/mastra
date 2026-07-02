@@ -460,36 +460,41 @@ export class DatasetsPG extends DatasetsStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      // Tenancy gate: silent no-op on mismatch (does not throw). The cascade DELETEs
-      // below are already datasetId-scoped by FK, so gating at the parent is sufficient.
+      // Atomic gate + cascade under a single transaction; the tenancy predicate
+      // is folded into a SELECT ... FOR UPDATE lock and the parent DELETE, so
+      // a concurrent delete/recreate under a different tenant cannot let a
+      // scoped delete hit another tenant's row. Silent no-op on mismatch.
       const { conditions, params } = tenancyWhere(filters, 2);
-      const existsSql = `SELECT "id" FROM ${datasetsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')}`;
-      const existing = await this.#db.client.oneOrNone(existsSql, [id, ...params]);
-      if (!existing) return;
+      const scopedWhere = ['"id" = $1', ...conditions].join(' AND ');
 
-      // Detach experiments — each wrapped in try/catch because experiment tables may not exist yet
-      try {
-        await this.#db.client.none(
-          `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
-      try {
-        await this.#db.client.none(
-          `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
-
-      // Cascade delete — atomic transaction
       await this.#db.client.tx(async t => {
+        const locked = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE ${scopedWhere} FOR UPDATE`, [
+          id,
+          ...params,
+        ]);
+        if (!locked) return;
+
+        // Detach experiments — try/catch because experiment tables may not exist yet
+        try {
+          await t.none(
+            `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
+            [id],
+          );
+        } catch {
+          /* table may not exist */
+        }
+        try {
+          await t.none(
+            `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
+            [id],
+          );
+        } catch {
+          /* table may not exist */
+        }
+
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
-        await t.none(`DELETE FROM ${datasetsTable} WHERE "id" = $1`, [id]);
+        await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;

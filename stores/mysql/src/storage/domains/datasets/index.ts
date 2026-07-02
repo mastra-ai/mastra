@@ -416,22 +416,33 @@ export class DatasetsMySQL extends DatasetsStorage {
   }
 
   async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
-    // Tenancy gate: silent no-op on mismatch or missing row. Never throws so we don't
-    // leak dataset existence across tenants via error timing/text. The cascade DELETEs
-    // below are already datasetId-scoped by FK, so gating at the parent is sufficient.
-    const existing = await this.operations.load<{ id: string }>({
-      tableName: TABLE_DATASETS,
-      keys: {
-        id,
-        organizationId: filters?.organizationId,
-        projectId: filters?.projectId,
-      },
-    });
-    if (!existing) return;
+    // Atomic gate + cascade under SELECT ... FOR UPDATE, so a concurrent
+    // delete/recreate under a different tenant cannot let a scoped delete hit
+    // another tenant's row. Silent no-op on tenancy mismatch.
+    const filterCols: string[] = [];
+    const filterVals: any[] = [];
+    if (filters?.organizationId !== undefined) {
+      filterCols.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+      filterVals.push(filters.organizationId);
+    }
+    if (filters?.projectId !== undefined) {
+      filterCols.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+      filterVals.push(filters.projectId);
+    }
+    const scopedWhere = ['id = ?', ...filterCols].join(' AND ');
 
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
+
+      const [rows] = await connection.execute<any[]>(
+        `SELECT id FROM ${formatTableName(TABLE_DATASETS)} WHERE ${scopedWhere} FOR UPDATE`,
+        [id, ...filterVals],
+      );
+      if (!Array.isArray(rows) || rows.length === 0) {
+        await connection.commit();
+        return;
+      }
 
       try {
         await connection.execute(
@@ -458,7 +469,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         `DELETE FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
         [id],
       );
-      await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)} WHERE id = ?`, [id]);
+      await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)} WHERE ${scopedWhere}`, [
+        id,
+        ...filterVals,
+      ]);
 
       await connection.commit();
     } catch (error) {

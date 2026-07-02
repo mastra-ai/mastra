@@ -394,16 +394,21 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing row. Never throws on mismatch
-      // so we don't leak existence across tenants via error timing/text. The cascade
-      // DELETEs below are already datasetId-scoped, so gating at the parent is sufficient.
+      // Atomic gate via scoped existence check + tenancy folded into the parent
+      // DELETE, so the destructive statement is itself tenant-scoped rather
+      // than relying only on a pre-check. Silent no-op on mismatch. libsql is
+      // single-writer serialized, so the check + delete cannot race.
       const { conditions, params } = tenancyWhere(filters);
-      const existsSql = `SELECT id FROM ${TABLE_DATASETS} WHERE ${['id = ?', ...conditions].join(' AND ')}`;
-      const exists = await this.#client.execute({ sql: existsSql, args: [id, ...params] });
+      const scopedWhere = ['id = ?', ...conditions].join(' AND ');
+
+      const exists = await this.#client.execute({
+        sql: `SELECT id FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`,
+        args: [id, ...params],
+      });
       if (!exists.rows?.[0]) return;
 
-      // F3 fix: detach experiments (SET NULL) instead of deleting. Delete results for FK safety.
-      // Each operation wrapped separately — experiment_results table may not exist even if experiments does.
+      // Detach experiments (SET NULL) + delete their results for FK safety.
+      // Each wrapped separately — experiment tables may not exist.
       try {
         await this.#client.execute({
           sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
@@ -421,12 +426,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
         // experiments table may not exist
       }
 
-      // Dataset cascade — atomic batch (T3.18)
+      // Dataset cascade — atomic batch, parent DELETE scoped by tenancy
       await this.#client.batch(
         [
           { sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] },
           { sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASETS} WHERE id = ?`, args: [id] },
+          { sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] },
         ],
         'write',
       );

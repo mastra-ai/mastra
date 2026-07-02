@@ -17,6 +17,8 @@ Tenancy-scope experiments `getById` and `delete*` on `ExperimentsStorage`.
 
 Both behaviors match how a missing id already responds, so existence does not leak through error timing or messages.
 
+The same atomic-DML pattern is also applied to `DatasetsStorage.deleteDataset` across all 5 store adapters, closing a TOCTOU window between the pre-check and the parent DELETE that was introduced when tenancy filters were originally added.
+
 `Dataset.getExperiment` and the shared experiment-ownership gate on `Dataset` now forward the dataset's tenancy scope to storage, so experiment reads and downstream mutations (list results, update result, delete experiment) reached through a dataset handle are automatically scoped to the owning tenant.
 
 Legacy calls that omit `filters` are unchanged, so this is fully backwards-compatible.
