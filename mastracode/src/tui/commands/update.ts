@@ -4,9 +4,7 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
-  locateOwnInstall,
-  resolveUpdateOutcome,
-  runUpdate,
+  performUpdate,
 } from '../../utils/update-check.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
@@ -76,13 +74,7 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
 
   if (answer === 'Yes') {
     ctx.showInfo(`Updating to v${latestVersion}…`);
-    const result = await runUpdate(pm, latestVersion);
-    const outcome = resolveUpdateOutcome({
-      pm,
-      targetVersion: latestVersion,
-      result,
-      install: locateOwnInstall(),
-    });
+    const outcome = await performUpdate(pm, latestVersion);
     if (outcome.status === 'updated') {
       ctx.showInfo(outcome.message);
       ctx.stop();

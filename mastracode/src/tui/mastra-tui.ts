@@ -29,9 +29,7 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
-  locateOwnInstall,
-  resolveUpdateOutcome,
-  runUpdate,
+  performUpdate,
 } from '../utils/update-check.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
@@ -1600,13 +1598,7 @@ export class MastraTUI {
 
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
-      const result = await runUpdate(pm, latestVersion);
-      const outcome = resolveUpdateOutcome({
-        pm,
-        targetVersion: latestVersion,
-        result,
-        install: locateOwnInstall(),
-      });
+      const outcome = await performUpdate(pm, latestVersion);
       if (outcome.status === 'updated') {
         showInfo(this.state, outcome.message);
         this.stop();

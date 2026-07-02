@@ -9,7 +9,14 @@ const { execFileMock, readFileSyncMock, realpathSyncMock } = vi.hoisted(() => ({
 vi.mock('node:child_process', () => ({ execFile: execFileMock }));
 vi.mock('node:fs', () => ({ readFileSync: readFileSyncMock, realpathSync: realpathSyncMock }));
 
-import { fetchChangelog, locateOwnInstall, parseChangelog, resolveUpdateOutcome, runUpdate } from '../update-check.js';
+import {
+  fetchChangelog,
+  locateOwnInstall,
+  parseChangelog,
+  performUpdate,
+  resolveUpdateOutcome,
+  runUpdate,
+} from '../update-check.js';
 
 describe('parseChangelog', () => {
   const SAMPLE_CHANGELOG = [
@@ -305,5 +312,93 @@ describe('resolveUpdateOutcome', () => {
     expect(outcome.message).toContain('/opt/vite-plus/mastracode');
     expect(outcome.message).not.toContain('Updated to v');
     expect(outcome.message).toContain('npm install -g mastracode@2.0.0');
+  });
+});
+
+describe('performUpdate', () => {
+  const originalArgv1 = process.argv[1];
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    process.argv[1] = originalArgv1;
+  });
+
+  /** Mock execFile so `npm root -g` answers with `globalRoot` and installs succeed. */
+  function mockPackageManager(globalRoot: string | Error) {
+    execFileMock.mockImplementation((_cmd: string, args: string[], _opts: unknown, cb: any) => {
+      if (args[0] === 'root') {
+        return globalRoot instanceof Error ? cb(globalRoot, '', '') : cb(null, `${globalRoot}\n`, '');
+      }
+      cb(null, '', '');
+    });
+  }
+
+  function mockInstalledAt(pkgDir: string, version: string) {
+    process.argv[1] = `${pkgDir}/dist/cli.js`;
+    realpathSyncMock.mockImplementation((p: string) => {
+      if (p === `${pkgDir}/dist/cli.js` || p === pkgDir) return p;
+      throw new Error('ENOENT');
+    });
+    readFileSyncMock.mockImplementation((p: string) => {
+      if (p === `${pkgDir}/package.json`) return JSON.stringify({ name: 'mastracode', version });
+      throw new Error('ENOENT');
+    });
+  }
+
+  it('runs the install and reports updated when the running install is managed by the pm', async () => {
+    mockPackageManager('/global/root');
+    mockInstalledAt('/global/root/mastracode', '2.0.0');
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('updated');
+    expect(execFileMock).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'mastracode@2.0.0'],
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  it('skips the install and explains when the running install is managed by another tool', async () => {
+    mockPackageManager('/global/root');
+    mockInstalledAt('/opt/vite-plus/mastracode', '1.0.0');
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('unchanged');
+    expect(outcome.message).toContain('/opt/vite-plus/mastracode');
+    expect(outcome.message).toContain('not managed by npm');
+    expect(outcome.message).toContain('npm install -g mastracode@2.0.0');
+    const installCalls = execFileMock.mock.calls.filter(([, args]) => args[0] === 'install');
+    expect(installCalls).toHaveLength(0);
+  });
+
+  it('proceeds with the install when the global root cannot be determined', async () => {
+    mockPackageManager(new Error('spawn failed'));
+    mockInstalledAt('/opt/vite-plus/mastracode', '2.0.0');
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('updated');
+    expect(execFileMock).toHaveBeenCalledWith(
+      'npm',
+      ['install', '-g', 'mastracode@2.0.0'],
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  it('still reports unchanged when the pre-check passes but the on-disk version did not change', async () => {
+    mockPackageManager('/global/root');
+    mockInstalledAt('/global/root/mastracode', '1.0.0');
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('unchanged');
+    expect(outcome.message).toContain('still v1.0.0');
   });
 });

@@ -360,3 +360,53 @@ export function resolveUpdateOutcome(opts: {
 
   return { status: 'updated', message: `Updated to v${targetVersion}. Please restart Mastra Code.` };
 }
+
+/** Global node_modules directory the package manager installs into, or null when unknown. */
+function getGlobalRoot(pm: PackageManager): Promise<string | null> {
+  const args = pm === 'yarn' ? ['global', 'dir'] : ['root', '-g'];
+  return new Promise(res => {
+    execFile(pm, args, { timeout: 10_000 }, (error, stdout) => {
+      const out = (stdout ?? '').trim().split('\n').pop()?.trim();
+      if (error || !out) return res(null);
+      res(pm === 'yarn' ? resolve(out, 'node_modules') : out);
+    });
+  });
+}
+
+/**
+ * Whether updating via `pm` would touch the install the running binary uses.
+ * Fail-open: returns true when either side can't be determined, so the update
+ * proceeds and the post-install verification has the final word.
+ */
+async function isOwnInstallManagedBy(pm: PackageManager, install: { dir: string } | null): Promise<boolean> {
+  if (!install) return true;
+  const root = await getGlobalRoot(pm);
+  if (!root) return true;
+  try {
+    return realpathSync(resolve(root, PACKAGE_NAME)) === install.dir;
+  } catch {
+    // The package doesn't exist in the pm's global root — installing there
+    // can't affect the running binary.
+    return false;
+  }
+}
+
+/**
+ * Update mastracode and verify the result: skips the install when the running
+ * binary isn't managed by `pm`, otherwise runs it and checks the on-disk
+ * version actually changed.
+ */
+export async function performUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateOutcome> {
+  const install = locateOwnInstall();
+
+  if (!(await isOwnInstallManagedBy(pm, install))) {
+    const message =
+      `Your Mastra Code install (at ${install!.dir}) is not managed by ${pm} — it looks like it was ` +
+      `installed by another tool. Update it with that tool, or try \`${getInstallCommand(pm, targetVersion)}\`.`;
+    return { status: 'unchanged', message };
+  }
+
+  const result = await runUpdate(pm, targetVersion);
+  // Re-locate so the version reflects what the install just wrote to disk.
+  return resolveUpdateOutcome({ pm, targetVersion, result, install: locateOwnInstall() });
+}
