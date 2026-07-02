@@ -15,12 +15,12 @@ import { deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
-import { TripWire } from '../trip-wire';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal } from '../signals';
+import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
   AgentMethodType,

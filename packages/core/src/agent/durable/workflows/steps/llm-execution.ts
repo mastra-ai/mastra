@@ -389,13 +389,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (pubsub) {
                     await emitChunkEvent(pubsub, runId, {
                       type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
                       payload: {
                         processorId: error.processorId,
                         reason: error.message,
                         retry: error.options?.retry,
                         metadata: error.options?.metadata,
                       },
-                    } as any);
+                    });
                   }
                   // Return a bail response instead of throwing — the dowhile
                   // predicate will see isContinued: false and stop the loop,
@@ -532,20 +534,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   logger?.warn?.('Streaming request processor tripwire triggered', {
                     reason: error.message,
                     processorId: error.processorId,
-                    retry: (error as any).options?.retry,
+                    retry: error.options?.retry,
                   });
                   // Emit a tripwire chunk and return a bail response so the
                   // dowhile loop stops gracefully with reason: 'tripwire'.
                   if (pubsub) {
                     await emitChunkEvent(pubsub, runId, {
                       type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
                       payload: {
                         processorId: error.processorId,
                         reason: error.message,
-                        retry: (error as any).options?.retry,
+                        retry: error.options?.retry,
                         metadata: error.options?.metadata,
                       },
-                    } as any);
+                    });
                   }
                   return {
                     messageListState: messageList.serialize(),
@@ -1112,18 +1116,20 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   logger?.warn?.('Streaming response processor tripwire triggered', {
                     reason: error.message,
                     processorId: error.processorId,
-                    retry: (error as any).options?.retry,
+                    retry: error.options?.retry,
                   });
                   if (pubsub) {
                     await emitChunkEvent(pubsub, runId, {
                       type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
                       payload: {
                         processorId: error.processorId,
                         reason: error.message,
-                        retry: (error as any).options?.retry,
+                        retry: error.options?.retry,
                         metadata: error.options?.metadata,
                       },
-                    } as any);
+                    });
                   }
                   return {
                     messageListState: messageList.serialize(),
