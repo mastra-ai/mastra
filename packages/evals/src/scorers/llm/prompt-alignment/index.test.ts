@@ -114,6 +114,45 @@ describe('Prompt Alignment Scorer', () => {
       // The scale is applied internally in the generateScore function
     });
 
+    it('should preserve scale 0 when generating scores', () => {
+      const scorer = createPromptAlignmentScorerLLM({
+        model: mockModel,
+        options: { scale: 0 },
+      });
+      const generateScoreStep = scorer['steps'].find(step => step.name === 'generateScore');
+
+      const score = generateScoreStep?.definition?.({
+        results: {
+          analyzeStepResult: {
+            intentAlignment: {
+              score: 1,
+              primaryIntent: 'Answer the question',
+              isAddressed: true,
+              reasoning: 'Fully addressed',
+            },
+            requirementsFulfillment: {
+              requirements: [],
+              overallScore: 1,
+            },
+            completeness: {
+              score: 1,
+              missingElements: [],
+              reasoning: 'Complete',
+            },
+            responseAppropriateness: {
+              score: 1,
+              formatAlignment: true,
+              toneAlignment: true,
+              reasoning: 'Appropriate',
+            },
+            overallAssessment: 'Fully aligned',
+          },
+        },
+      } as any);
+
+      expect(score).toBe(0);
+    });
+
     it('should work with default scale', () => {
       const scorer = createPromptAlignmentScorerLLM({
         model: mockModel,

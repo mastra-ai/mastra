@@ -78,7 +78,7 @@ export function createPromptAlignmentScorerLLM({
   model: MastraModelConfig;
   options?: PromptAlignmentOptions;
 }) {
-  const scale = options?.scale || 1;
+  const scale = options?.scale ?? 1;
   const evaluationMode = options?.evaluationMode || 'both';
 
   return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
