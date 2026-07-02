@@ -15,7 +15,7 @@ The spectrum has three tiers:
 | **Declarative** | The agent emits a structured spec; the frontend composes it from a catalog you registered. | A2UI (fixed schema and dynamic) |
 | **Open-ended** | The UI is invented elsewhere (an MCP server) and you sandbox it. | MCP Apps |
 
-Each tier is a Mastra agent exposed through `registerCopilotKit()` (see [Get started](/guides/build-your-ui/copilotkit/get-started)) plus the matching CopilotKit hook on the frontend. For the full concept, see CopilotKit's [generative UI spectrum](https://www.copilotkit.ai/generative-ui-spectrum) and [generative UI overview](https://docs.copilotkit.ai/concepts/generative-ui-overview).
+Each tier is a Mastra agent exposed through `registerCopilotKit()` (see [Get started](/guides/build-your-ui/copilotkit)) plus the matching CopilotKit hook on the frontend. For the full concept, see CopilotKit's [generative UI spectrum](https://www.copilotkit.ai/generative-ui-spectrum) and [generative UI overview](https://docs.copilotkit.ai/concepts/generative-ui-overview).
 
 :::tip
 
@@ -25,7 +25,7 @@ Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) has working CopilotKit exampl
 
 ## Controlled
 
-You ship a fixed set of components and the agent chooses which to render, with what data. This is the workhorse of the spectrum: predictable and brand-safe, the right tool for high-traffic surfaces.
+You ship a fixed set of components and the agent chooses which to render, with what data. This is the workhorse of the spectrum: predictable and brand-safe, the right tool for high-traffic surfaces. The Controlled primitives use CopilotKit's v2 API, imported from `@copilotkit/react-core/v2`.
 
 ### Tool call rendering
 
@@ -43,25 +43,28 @@ export const weatherAgent = new Agent({
 })
 ```
 
-On the frontend, use `useCopilotAction` with `available: "disabled"` to render the tool without letting the frontend execute it. The `render` function receives the tool's `args`, `result`, and `status`:
+On the frontend, register a renderer for the tool by name with `useRenderTool`. It is render-only (it does not execute the tool); the `render` function receives the tool call's `status` and, once the agent returns, its `result`:
 
 ```tsx title="app/page.tsx"
+import { z } from 'zod'
 import { CopilotChat } from '@copilotkit/react-ui'
-import { CopilotKit, useCopilotAction } from '@copilotkit/react-core'
+import { CopilotKit, useRenderTool } from '@copilotkit/react-core/v2'
 import { Weather } from '@/components/weather'
 
 function Chat() {
-  useCopilotAction({
-    name: 'weatherTool',
-    available: 'disabled',
-    parameters: [{ name: 'location', type: 'string', required: true }],
-    render: ({ result, status }) => {
-      if (status !== 'complete') {
-        return <div>Retrieving weather...</div>
-      }
-      return <Weather {...result} />
+  useRenderTool(
+    {
+      name: 'weatherTool',
+      parameters: z.object({ location: z.string() }),
+      render: ({ status, result }) => {
+        if (status !== 'complete') {
+          return <div>Retrieving weather...</div>
+        }
+        return <Weather {...result} />
+      },
     },
-  })
+    [],
+  )
 
   return <CopilotChat labels={{ title: 'Weather Assistant' }} />
 }
@@ -76,8 +79,6 @@ export default function Page() {
 ```
 
 Because Mastra streams tool-call arguments incrementally, the `render` function is called repeatedly as the arguments arrive, so the UI can paint progressively while the agent works.
-
-The Controlled tier has three more primitives. These use CopilotKit's v2 API, imported from `@copilotkit/react-core/v2`.
 
 ### Components as tools
 
@@ -173,7 +174,7 @@ When the agent calls an MCP App tool, CopilotKit fetches and renders that tool's
 
 ## Related: app control and interactivity
 
-Some capabilities sit next to the spectrum rather than on it: they control your app or gate a run instead of rendering agent output. Both are covered in [Get started](/guides/build-your-ui/copilotkit/get-started#app-control-and-interactivity):
+Some capabilities sit next to the spectrum rather than on it: they control your app or gate a run instead of rendering agent output. Both are covered in [Get started](/guides/build-your-ui/copilotkit#app-control-and-interactivity):
 
 - **Frontend tools** (`useFrontendTool`): let the agent act on your application. This is part of CopilotKit's separate [App Control](https://docs.copilotkit.ai/) concept, alongside shared state and agent context.
 - **Human-in-the-loop**: pause a run and wait for user approval or edits. Backend side, see Mastra's [Agent approval](/docs/agents/agent-approval); frontend side, see CopilotKit's [`useHumanInTheLoop`](https://docs.copilotkit.ai/reference/hooks/useHumanInTheLoop).

@@ -15,7 +15,7 @@ The full setup lives in the [CopilotKit bot documentation](https://docs.copilotk
 
 ## How it fits together
 
-Your Mastra agent stays where it is, exposed through `registerCopilotKit()` as described in [Get started](/guides/build-your-ui/copilotkit/get-started). The bot is a separate process built with `@copilotkit/bot`: you attach one or more platform adapters and point the bot at your agent. `createBot` takes an array of adapters, so a single bot can serve several platforms at once.
+Your Mastra agent stays where it is, exposed through `registerCopilotKit()` as described in [Get started](/guides/build-your-ui/copilotkit). The bot is a separate process built with `@copilotkit/bot`: you attach one or more platform adapters and point the bot at your agent. `createBot` takes an array of adapters, so a single bot can serve several platforms at once.
 
 ```typescript title="bot.ts"
 import { createBot } from '@copilotkit/bot'
