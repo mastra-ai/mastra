@@ -474,5 +474,26 @@ describe('HallucinationMetric', () => {
       // With empty context, factual claims are considered hallucinations
       expect(result.score).toBe(testCase.expectedResult.score);
     });
+
+    it('should preserve scale 0 when generating scores', () => {
+      const zeroScaleScorer = createHallucinationScorer({ model, options: { context: ['Supported fact'], scale: 0 } });
+      const generateScoreStep = zeroScaleScorer['steps'].find(step => step.name === 'generateScore');
+
+      const score = generateScoreStep?.definition?.({
+        results: {
+          analyzeStepResult: {
+            verdicts: [
+              {
+                statement: 'Unsupported claim',
+                verdict: 'yes',
+                reason: 'Contradicted by context',
+              },
+            ],
+          },
+        },
+      } as any);
+
+      expect(score).toBe(0);
+    });
   });
 });

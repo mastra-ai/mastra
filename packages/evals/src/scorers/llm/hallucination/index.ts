@@ -95,7 +95,7 @@ export function createHallucinationScorer({
         return 0;
       }
 
-      const score = (contradictedStatements / totalStatements) * (options?.scale || 1);
+      const score = (contradictedStatements / totalStatements) * (options?.scale ?? 1);
 
       return roundToTwoDecimals(score);
     })
@@ -114,7 +114,7 @@ export function createHallucinationScorer({
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
           context,
           score,
-          scale: options?.scale || 1,
+          scale: options?.scale ?? 1,
           verdicts: results.analyzeStepResult?.verdicts || [],
         });
         return prompt;
