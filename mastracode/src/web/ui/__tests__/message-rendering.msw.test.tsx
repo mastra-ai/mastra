@@ -139,16 +139,28 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-tools',
-          role: 'assistant',
-          content: [
-            { type: 'tool_call', id: 'tool-a', name: 'view', args: { path: 'a.ts' } },
-            { type: 'tool_result', id: 'tool-a', name: 'view', result: 'a' },
-            { type: 'tool_call', id: 'tool-b', name: 'search', args: { pattern: 'x' } },
-            { type: 'tool_result', id: 'tool-b', name: 'search', result: 'b' },
-          ],
-        },
+        dbMessage('assistant-tools', 'assistant', [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-a',
+              toolName: 'view',
+              args: { path: 'a.ts' },
+              result: 'a',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-b',
+              toolName: 'search',
+              args: { pattern: 'x' },
+              result: 'b',
+            },
+          },
+        ]),
       ],
     });
 
@@ -229,14 +241,18 @@ describe('MastraCode message rendering', () => {
       seedProject();
       useAgentControllerHandlers({
         messages: [
-          {
-            id: 'assistant-args',
-            role: 'assistant',
-            content: [
-              { type: 'tool_call', id: 'tool-args', name: 'view', args: { path: 'src/deep/config.ts' } },
-              { type: 'tool_result', id: 'tool-args', name: 'view', result: 'file contents' },
-            ],
-          },
+          dbMessage('assistant-args', 'assistant', [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-args',
+                toolName: 'view',
+                args: { path: 'src/deep/config.ts' },
+                result: 'file contents',
+              },
+            },
+          ]),
         ],
       });
 

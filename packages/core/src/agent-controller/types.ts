@@ -763,7 +763,7 @@ export type AgentControllerEvent =
       providerMetadata?: Record<string, unknown>;
     }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
+  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'usage_update'; usage: TokenUsage }

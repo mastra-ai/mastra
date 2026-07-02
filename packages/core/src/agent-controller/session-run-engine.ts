@@ -439,9 +439,7 @@ export class SessionRunEngine {
           this.#session.emit({
             type: 'tool_input_delta',
             toolCallId,
-            argsTextDelta: hasTransformedToolPayload(transform)
-              ? (getString(transform.transformed) ?? argsTextDelta)
-              : argsTextDelta,
+            argsTextDelta: hasTransformedToolPayload(transform) ? transform.transformed : argsTextDelta,
             toolName,
           });
         }

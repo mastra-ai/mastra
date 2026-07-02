@@ -792,26 +792,15 @@ describe('renderExistingMessages tasks', () => {
 
 describe('renderExistingMessages subagents', () => {
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {
-    const message: AgentControllerMessage = {
-      id: 'assistant-plugin-renderer',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: [
-        {
-          type: 'tool_call',
-          id: 'tool-1',
-          name: 'mastra_expert',
-          args: { question: 'How does memory rendering work?' },
-        },
-        {
-          type: 'tool_result',
-          id: 'tool-1',
-          name: 'mastra_expert',
-          result: 'remembered answer',
-          isError: false,
-        },
-      ],
-    } as unknown as AgentControllerMessage;
+    const message = assistantToolMessage('assistant-plugin-renderer', [
+      {
+        id: 'tool-1',
+        name: 'mastra_expert',
+        args: { question: 'How does memory rendering work?' },
+        result: 'remembered answer',
+        isError: false,
+      },
+    ]);
     const state = createState();
     state.quietMode = true;
     state.pluginManager = {

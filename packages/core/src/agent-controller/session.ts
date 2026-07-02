@@ -2181,7 +2181,7 @@ export class SessionDisplayState {
 
       case 'tool_input_delta': {
         const buf = ds.toolInputBuffers.get(event.toolCallId);
-        if (buf) {
+        if (buf && typeof event.argsTextDelta === 'string') {
           buf.text += event.argsTextDelta;
         }
         break;
