@@ -1,9 +1,10 @@
+import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '../../../ds/components/Button';
 import { DataList } from '../../../ds/components/DataList/data-list';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '../../../ds/components/InputGroup';
 import { ScatterPlotChart } from '../../../ds/components/ScatterPlotChart';
-import { Searchbar } from '../../../ds/components/Searchbar';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import { cn } from '../../../lib/utils';
@@ -172,14 +173,20 @@ export function SignalTraceListTab({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Topic trace summaries">
-      <Searchbar
-        label="Search traces"
-        placeholder="Search traces"
-        onSearch={value => {
-          setSearch(value);
-          setPage(1);
-        }}
-      />
+      <InputGroup variant="outline">
+        <InputGroupAddon align="inline-start">
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput
+          type="search"
+          aria-label="Search traces"
+          placeholder="Search traces"
+          onChange={event => {
+            setSearch(event.target.value);
+            setPage(1);
+          }}
+        />
+      </InputGroup>
 
       <DataList
         columns="minmax(12rem,1fr)"
@@ -357,7 +364,7 @@ export function SignalDetailsPage({
     isLoading: topicsLoading,
     isError: topicsError,
   } = useEntityTopics(resolvedEntity?.entityId, signalId);
-  const topics: EntityLearningTopic[] = useMemo(() => topicsData?.topics ?? [], [topicsData]);
+  const topics = useMemo<EntityLearningTopic[]>(() => topicsData?.topics ?? [], [topicsData?.topics]);
   const runId = topicsData?.run?.runId;
 
   const topicSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}:${initialTopicId ?? ''}`;

@@ -18,6 +18,8 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
+import type { CreatedAgentSignal } from '../signals';
+import { mastraDBMessageToSignal } from '../signals';
 import type {
   AgentInstructions,
   AgentMethodType,
@@ -72,6 +74,19 @@ function convertInstructionsToString(instructions: AgentInstructions | undefined
 }
 
 /**
+ * Extract signal messages already present in the messageList at run start
+ * (from persisted history) so they can be echoed as data-signal stream parts
+ * on the first LLM step. Mirrors `prepare-memory-step.ts#getInitialSignalEchoes`.
+ */
+function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] {
+  const inputMessageIds = messageList.makeMessageSourceChecker().input;
+  return messageList.get.all
+    .db()
+    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
+    .map(mastraDBMessageToSignal);
+}
+
+/**
  * Interface for the Agent methods needed during durable preparation.
  * This provides proper typing for the public Agent methods we call.
  */
@@ -105,6 +120,7 @@ interface DurablePreparationAgent {
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
   __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
 }
@@ -590,6 +606,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           model: entry.model,
           maxRetries: entry.maxRetries ?? 0,
           enabled: entry.enabled ?? true,
+          headers: entry.headers,
         }))
       : undefined,
     workspace,
@@ -617,9 +634,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // real (toolName, args) on each call. The boolean shadow on the
     // serialized workflow input is the cross-process fallback.
     requireToolApproval: execOptions?.requireToolApproval,
+    // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
+    // Non-serializable; cross-process engines lose it and signals go undelivered.
+    drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    // Signal messages already in the messageList at run start (from persisted
+    // history). Echoed as data-signal parts on the first LLM step so the client
+    // sees them without refetching. Spliced once, never re-emitted.
+    initialSignalEchoes: getInitialSignalEchoes(messageList),
     // Agent-level goal config (judge resolver, tools resolver, scorer).
     // Non-serializable — cross-process engines skip goal evaluation.
     goal: agent.__getGoalConfig(),
+    // Call-time headers from modelSettings.headers. Kept off the serialized
+    // workflow input so they never reach durable storage; the durable
+    // llm-execution step reads them from this registry slot instead.
+    callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
     cleanup: () => {},
   };
 
@@ -632,4 +660,22 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     threadId,
     resourceId,
   };
+}
+
+/**
+ * Extract string-valued headers from `modelSettings.headers` for storage on the
+ * in-process `RunRegistryEntry`. Returns `undefined` when no valid headers are
+ * present so the registry slot stays empty rather than carrying an empty object.
+ */
+function extractCallTimeHeaders(
+  modelSettings: Record<string, unknown> | undefined,
+): Record<string, string> | undefined {
+  const raw = (modelSettings as Record<string, unknown> | undefined)?.headers;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string') headers[key] = value;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
 }

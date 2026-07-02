@@ -121,6 +121,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
           model: entry.model,
           maxRetries: entry.maxRetries ?? 0,
           enabled: entry.enabled ?? true,
+          headers: entry.headers,
         }));
       }
 
