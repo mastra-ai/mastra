@@ -93,8 +93,8 @@ Action items:
   **Prior maintainer notes:**
   - <reuse/supersede/update decision, or `None found.`>
 
+- At any stop/final prompt, include the applicable posting/fix-up options below, even if notes are only provisional or not ready.
 - Ask the user whether to post the maintainer notes after review.
-- If concrete author action is needed, ask whether to post an author-facing comment.
 - If maintainer fix-up candidates exist, ask whether to fix conflicts, relevant lint/check/CI failures, or inline suggestions before/with maintainer notes.
 - Do not post comments or modify code without explicit user approval.
 ```
