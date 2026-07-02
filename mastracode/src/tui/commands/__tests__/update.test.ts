@@ -170,6 +170,7 @@ describe('handleUpdateCommand', () => {
 
   it('confirms success and restarts when the update is verified on disk', async () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const logSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     performUpdateMock.mockResolvedValue({
       status: 'updated',
       message: 'Updated to v0.2.0. Please restart Mastra Code.',
@@ -181,9 +182,11 @@ describe('handleUpdateCommand', () => {
     ctx.state.activeInlineQuestion.config.onSubmit('Yes');
     await command;
 
-    expect(ctx.showInfo).toHaveBeenCalledWith('Updated to v0.2.0. Please restart Mastra Code.');
+    // The confirmation is printed after the TUI stops so it survives the exit.
     expect(ctx.stop).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith('Updated to v0.2.0. Please restart Mastra Code.');
     expect(exitSpy).toHaveBeenCalledWith(0);
+    logSpy.mockRestore();
     exitSpy.mockRestore();
   });
 });

@@ -1600,8 +1600,10 @@ export class MastraTUI {
       showInfo(this.state, `Updating to v${latestVersion}…`);
       const outcome = await performUpdate(pm, latestVersion);
       if (outcome.status === 'updated') {
-        showInfo(this.state, outcome.message);
+        // Print after the TUI is torn down — a message rendered in the TUI is
+        // lost in the exit race and the user never sees the confirmation.
         this.stop();
+        console.info(outcome.message);
         process.exit(0);
       } else {
         showError(this.state, outcome.message);
