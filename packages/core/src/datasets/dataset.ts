@@ -472,7 +472,10 @@ export class Dataset {
   async #assertExperimentOwnership(experimentId: string): Promise<void> {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
-    const experiment = await experimentsStore.getExperimentById({ id: experimentId });
+    const experiment = await experimentsStore.getExperimentById({
+      id: experimentId,
+      filters: this.#scope,
+    });
     if (!experiment || experiment.datasetId !== this.id) {
       throw new MastraError({
         id: 'EXPERIMENT_NOT_FOUND',
@@ -489,7 +492,10 @@ export class Dataset {
   async getExperiment(args: { experimentId: string }) {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
-    const experiment = await experimentsStore.getExperimentById({ id: args.experimentId });
+    const experiment = await experimentsStore.getExperimentById({
+      id: args.experimentId,
+      filters: this.#scope,
+    });
     if (!experiment || experiment.datasetId !== this.id) return null;
     return experiment;
   }
@@ -546,10 +552,16 @@ export class Dataset {
 
   /**
    * Delete an experiment (run) by ID.
+   *
+   * The ownership check above already refuses cross-tenant / cross-dataset
+   * requests, but we still forward `this.#scope` to storage so the delete
+   * is defense-in-depth: a leaked handle or race that skipped the assertion
+   * still cannot delete another tenant's experiment (storage silently no-ops
+   * on tenancy mismatch).
    */
   async deleteExperiment(args: { experimentId: string }) {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
-    return experimentsStore.deleteExperiment({ id: args.experimentId });
+    return experimentsStore.deleteExperiment({ id: args.experimentId, filters: this.#scope });
   }
 }

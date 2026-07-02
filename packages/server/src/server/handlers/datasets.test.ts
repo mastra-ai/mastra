@@ -245,7 +245,7 @@ describe('Datasets Handlers', () => {
 
       // Scoped delete on wrong tenant must NOT throw — silent no-op matches the
       // storage contract so cross-tenant existence is not leaked via error
-      // timing or status. See MASTRA-4438 and _test-utils/datasets.
+      // timing or status.
       const result = (await DELETE_DATASET_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         datasetId: created.id,

@@ -220,11 +220,19 @@ export class DatasetsManager {
   // ---------------------------------------------------------------------------
 
   /**
-   * Get a specific experiment (run) by ID.
+   * Get a specific experiment (run) by ID, optionally scoped to a tenant.
+   *
+   * When `organizationId` / `projectId` are provided, the read is scoped to
+   * that tenancy: an experiment row that exists but belongs to a different
+   * tenant returns `null` (same as a truly missing row) rather than leaking
+   * cross-tenant existence via error timing/text.
    */
-  async getExperiment(args: { experimentId: string }) {
+  async getExperiment(args: { experimentId: string; organizationId?: string; projectId?: string }) {
     const experimentsStore = await this.#getExperimentsStore();
-    return experimentsStore.getExperimentById({ id: args.experimentId });
+    return experimentsStore.getExperimentById({
+      id: args.experimentId,
+      filters: scopeFromArgs(args),
+    });
   }
 
   /**

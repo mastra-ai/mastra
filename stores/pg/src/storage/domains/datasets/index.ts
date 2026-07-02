@@ -41,34 +41,11 @@ import type {
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
-}
-
-/**
- * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
- * Uses double-quoted PG identifiers and continues numbering from `startIndex`.
- * Returns empty arrays and unchanged `nextIndex` when no filters apply.
- */
-function tenancyWhere(
-  filters: DatasetTenancyFilters | undefined,
-  startIndex: number,
-): { conditions: string[]; params: any[]; nextIndex: number } {
-  const conditions: string[] = [];
-  const params: any[] = [];
-  let idx = startIndex;
-  if (filters?.organizationId !== undefined) {
-    conditions.push(`"organizationId" = $${idx++}`);
-    params.push(filters.organizationId);
-  }
-  if (filters?.projectId !== undefined) {
-    conditions.push(`"projectId" = $${idx++}`);
-    params.push(filters.projectId);
-  }
-  return { conditions, params, nextIndex: idx };
 }
 
 export class DatasetsPG extends DatasetsStorage {
@@ -483,36 +460,43 @@ export class DatasetsPG extends DatasetsStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      // Tenancy gate: silent no-op on mismatch (does not throw). The cascade DELETEs
-      // below are already datasetId-scoped by FK, so gating at the parent is sufficient.
+      // Atomic gate + cascade under a single transaction; the tenancy predicate
+      // is folded into a SELECT ... FOR UPDATE lock and the parent DELETE, so
+      // a concurrent delete/recreate under a different tenant cannot let a
+      // scoped delete hit another tenant's row. Silent no-op on mismatch.
       const { conditions, params } = tenancyWhere(filters, 2);
-      const existsSql = `SELECT "id" FROM ${datasetsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')}`;
-      const existing = await this.#db.client.oneOrNone(existsSql, [id, ...params]);
-      if (!existing) return;
+      const scopedWhere = ['"id" = $1', ...conditions].join(' AND ');
 
-      // Detach experiments — each wrapped in try/catch because experiment tables may not exist yet
-      try {
-        await this.#db.client.none(
-          `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
-      try {
-        await this.#db.client.none(
-          `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
-
-      // Cascade delete — atomic transaction
       await this.#db.client.tx(async t => {
+        const locked = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE ${scopedWhere} FOR UPDATE`, [
+          id,
+          ...params,
+        ]);
+        if (!locked) return;
+
+        // Detach experiments only if their tables exist. We probe with
+        // to_regclass instead of try/catch inside the transaction, because a
+        // failed DML in Postgres puts the connection into an aborted state
+        // (SQLSTATE 25P02), which would cause every subsequent DELETE below
+        // to fail and roll back the whole transaction.
+        const experimentTablesExist = await t.oneOrNone<{ exists: boolean }>(
+          `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
+          [experimentResultsTable, experimentsTable],
+        );
+        if (experimentTablesExist?.exists) {
+          await t.none(
+            `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
+            [id],
+          );
+          await t.none(
+            `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
+            [id],
+          );
+        }
+
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
-        await t.none(`DELETE FROM ${datasetsTable} WHERE "id" = $1`, [id]);
+        await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
