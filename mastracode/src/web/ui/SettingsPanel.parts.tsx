@@ -5,8 +5,13 @@ import type {
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
-import { Badge, Button, ButtonsGroup, Input, Switch, Txt } from '@mastra/playground-ui';
-import type { Theme } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
