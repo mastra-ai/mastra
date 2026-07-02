@@ -29,7 +29,7 @@ export class UpstashTransport extends LoggerTransport {
     this.upstashUrl = opts.upstashUrl;
     this.upstashToken = opts.upstashToken;
     this.listName = opts.listName || 'application-logs';
-    this.maxListLength = opts.maxListLength || 10000;
+    this.maxListLength = opts.maxListLength ?? 10000;
     this.batchSize = opts.batchSize || 100;
     this.flushInterval = opts.flushInterval || 10000;
 

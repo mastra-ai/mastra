@@ -91,6 +91,29 @@ describe('UpstashTransport', () => {
     });
   });
 
+  it('should allow disabling log trimming with maxListLength 0', async () => {
+    const noTrimTransport = new UpstashTransport({
+      ...defaultOptions,
+      maxListLength: 0,
+    });
+    const logger = new PinoLogger({
+      name: 'test-logger',
+      level: LogLevel.INFO,
+      transports: {
+        upstash: noTrimTransport,
+      },
+    });
+
+    logger.info('message without trim');
+    await noTrimTransport._flush();
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(noTrimTransport.maxListLength).toBe(0);
+    expect(body[0]).not.toContain('LTRIM');
+
+    noTrimTransport._destroy(new Error('test'), () => {});
+  });
+
   it('should properly clean up resources on destroy', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());
