@@ -440,7 +440,9 @@ describe('performUpdate', () => {
   });
 
   it('surfaces vite-plus stderr and the vp command when the delegated update fails', async () => {
-    mockVitePlusInstall({ vpError: { error: new Error('Command failed'), stderr: 'vp error: registry unreachable\n' } });
+    mockVitePlusInstall({
+      vpError: { error: new Error('Command failed'), stderr: 'vp error: registry unreachable\n' },
+    });
 
     const outcome = await performUpdate('npm', '2.0.0');
 
