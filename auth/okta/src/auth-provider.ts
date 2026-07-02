@@ -182,7 +182,11 @@ export class MastraAuthOkta
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     // Normalize trailing slashes so a stray `OKTA_ISSUER=https://domain/` doesn't produce `.../oauth2//v1/...`
-    this.issuer = (issuer ?? `https://${domain}/oauth2/default`).replace(/\/+$/, '');
+    // (index scan instead of regex to avoid backtracking — CodeQL js/polynomial-redos)
+    const rawIssuer = issuer ?? `https://${domain}/oauth2/default`;
+    let issuerEnd = rawIssuer.length;
+    while (issuerEnd > 0 && rawIssuer[issuerEnd - 1] === '/') issuerEnd--;
+    this.issuer = rawIssuer.slice(0, issuerEnd);
     // Org authorization servers use issuer `https://{domain}` but serve endpoints under `/oauth2/v1/*`.
     // Custom authorization servers use issuer `https://{domain}/oauth2/<name>` and serve endpoints under `<issuer>/v1/*`.
     // `issuer` is still used verbatim for JWT `iss`-claim validation on both server types.

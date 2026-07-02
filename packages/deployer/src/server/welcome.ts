@@ -1,6 +1,12 @@
 export function welcomeHtml(apiPrefix: string = '/api') {
-  // Normalize: ensure single leading slash, no trailing slash
-  const prefix = '/' + apiPrefix.replace(/^\/+|\/+$/g, '');
+  // Normalize: ensure single leading slash, no trailing slash.
+  // Index scans instead of regex to avoid backtracking on adversarial
+  // inputs (CodeQL js/polynomial-redos).
+  let start = 0;
+  let end = apiPrefix.length;
+  while (start < end && apiPrefix[start] === '/') start++;
+  while (end > start && apiPrefix[end - 1] === '/') end--;
+  const prefix = '/' + apiPrefix.slice(start, end);
   const prefixNoSlash = prefix.slice(1);
   return `
 <!doctype html>

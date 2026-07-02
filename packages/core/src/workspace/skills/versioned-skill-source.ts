@@ -46,11 +46,15 @@ export class VersionedSkillSource implements SkillSource {
 
   /**
    * Normalize a path by stripping leading/trailing slashes and dots.
+   * Uses index scans instead of regex to avoid backtracking on adversarial
+   * inputs (CodeQL js/polynomial-redos).
    */
   #normalizePath(path: string): string {
-    let normalized = path.replace(/^[./\\]+|[/\\]+$/g, '');
-    if (normalized === '') return '';
-    return normalized;
+    let start = 0;
+    let end = path.length;
+    while (start < end && (path[start] === '.' || path[start] === '/' || path[start] === '\\')) start++;
+    while (end > start && (path[end - 1] === '/' || path[end - 1] === '\\')) end--;
+    return path.slice(start, end);
   }
 
   async exists(path: string): Promise<boolean> {
