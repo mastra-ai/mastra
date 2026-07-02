@@ -17,6 +17,7 @@ export const worktreeThreadScopingScenario: McE2eScenario = {
   description:
     'Verify that starting MC in a git worktree does NOT auto-resume untagged threads or threads tagged for a different path.',
   testName: 'worktree filters out untagged and mismatched-path threads on startup',
+  projectFixture: 'manual',
   env() {
     return { MASTRA_RESOURCE_ID: RESOURCE_ID };
   },

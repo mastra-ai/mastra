@@ -1,4 +1,5 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
+import { Button, ButtonsGroup, Input, Txt } from '@mastra/playground-ui';
 import { useState } from 'react';
 
 import type { OMConfigInfo } from '../../shared/api/types';
@@ -13,6 +14,9 @@ type OMConfig = OMConfigInfo;
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
+const SELECT_CLASS =
+  'h-form-default w-full rounded-full border border-border1 bg-surface-overlay-soft px-3 text-ui-md text-neutral6 outline-hidden focus-visible:border-neutral5/50 disabled:opacity-50 disabled:cursor-not-allowed';
+
 function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === true) return 'on';
   if (value === false) return 'off';
@@ -23,6 +27,22 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   if (choice === 'on') return true;
   if (choice === 'off') return false;
   return 'auto';
+}
+
+function Field({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col">
+        <Txt as="span" variant="ui-sm" className="text-icon5">
+          {label}
+        </Txt>
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          {hint}
+        </Txt>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -97,7 +117,7 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
 
   const modelSelect = (value: string, onChange: (v: string) => void) => (
     <select
-      className="pack-select"
+      className={SELECT_CLASS}
       value={value}
       disabled={busy || !resourceId}
       onChange={e => onChange(e.target.value)}
@@ -114,56 +134,55 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
 
   if (!resourceId) {
     return (
-      <div className="providers-pane">
-        <p className="provider-caption">
+      <div className="flex flex-col gap-3">
+        <Txt as="p" variant="ui-sm" className="text-icon3">
           Observational memory. Mirrors the TUI <code>/om</code> command.
-        </p>
-        <div className="provider-caption">Open a project to view and change its OM settings.</div>
+        </Txt>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Open a project to view and change its OM settings.
+        </Txt>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="providers-pane">
-        <div className="provider-loading">Loading OM settings…</div>
-      </div>
+      <Txt as="p" variant="ui-sm" className="text-icon3">
+        Loading OM settings…
+      </Txt>
     );
   }
 
   const attachmentChoice: AttachmentChoice = config ? attachmentToChoice(config.observeAttachments) : 'auto';
+  const attachmentOptions: { value: AttachmentChoice; label: string }[] = [
+    { value: 'auto', label: 'Auto' },
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
+  ];
 
   return (
-    <div className="providers-pane">
-      <p className="provider-caption">
+    <div className="flex flex-col gap-4">
+      <Txt as="p" variant="ui-sm" className="text-icon3">
         Observer and reflector models, their token thresholds, and attachment observation. Mirrors the TUI{' '}
         <code>/om</code> command.
-      </p>
-      {error && <div className="provider-error">{error}</div>}
+      </Txt>
+      {error && (
+        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+          {error}
+        </Txt>
+      )}
 
-      <div className="settings-field first">
-        <div className="settings-field-label">
-          <span>Observer model</span>
-          <span className="settings-hint">Summarizes the conversation into observations</span>
-        </div>
+      <Field label="Observer model" hint="Summarizes the conversation into observations">
         {modelSelect(config?.observerModelId ?? '', v => switchModel('observer', v))}
-      </div>
+      </Field>
 
-      <div className="settings-field">
-        <div className="settings-field-label">
-          <span>Reflector model</span>
-          <span className="settings-hint">Distills observations into longer-term memory</span>
-        </div>
+      <Field label="Reflector model" hint="Distills observations into longer-term memory">
         {modelSelect(config?.reflectorModelId ?? '', v => switchModel('reflector', v))}
-      </div>
+      </Field>
 
-      <div className="settings-field">
-        <div className="settings-field-label">
-          <span>Observation threshold</span>
-          <span className="settings-hint">Tokens in the message window before an observation fires</span>
-        </div>
-        <input
-          className="provider-search-input om-threshold-input"
+      <Field label="Observation threshold" hint="Tokens in the message window before an observation fires">
+        <Input
+          size="sm"
           type="number"
           min={1}
           step={1000}
@@ -175,15 +194,11 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
         />
-      </div>
+      </Field>
 
-      <div className="settings-field">
-        <div className="settings-field-label">
-          <span>Reflection threshold</span>
-          <span className="settings-hint">Accumulated observation tokens before a reflection fires</span>
-        </div>
-        <input
-          className="provider-search-input om-threshold-input"
+      <Field label="Reflection threshold" hint="Accumulated observation tokens before a reflection fires">
+        <Input
+          size="sm"
           type="number"
           min={1}
           step={1000}
@@ -195,30 +210,27 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
         />
-      </div>
+      </Field>
 
-      <div className="settings-field">
-        <div className="settings-field-label">
-          <span>Observe attachments</span>
-          <span className="settings-hint">Whether attached files are fed to the observer</span>
-        </div>
-        <div className="seg" role="group" aria-label="Observe attachments">
-          {(['auto', 'on', 'off'] as AttachmentChoice[]).map(choice => (
-            <button
-              key={choice}
-              className={`seg-btn ${attachmentChoice === choice ? 'active' : ''}`}
-              aria-pressed={attachmentChoice === choice}
+      <Field label="Observe attachments" hint="Whether attached files are fed to the observer">
+        <ButtonsGroup spacing="close" role="group" aria-label="Observe attachments">
+          {attachmentOptions.map(o => (
+            <Button
+              key={o.value}
+              variant={attachmentChoice === o.value ? 'primary' : 'outline'}
+              size="sm"
+              aria-pressed={attachmentChoice === o.value}
               disabled={busy}
               onClick={() => {
                 setLocalError(null);
-                attachmentsMutation.mutate({ value: choiceToAttachment(choice) });
+                attachmentsMutation.mutate({ value: choiceToAttachment(o.value) });
               }}
             >
-              {choice === 'auto' ? 'Auto' : choice === 'on' ? 'On' : 'Off'}
-            </button>
+              {o.label}
+            </Button>
           ))}
-        </div>
-      </div>
+        </ButtonsGroup>
+      </Field>
     </div>
   );
 }

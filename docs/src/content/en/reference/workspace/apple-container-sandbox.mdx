@@ -1,0 +1,420 @@
+---
+title: "Reference: AppleContainerSandbox | Workspace"
+description: "API reference for AppleContainerSandbox, a local Apple container CLI sandbox for workspace command execution."
+packages:
+  - "@mastra/apple-container"
+---
+
+# AppleContainerSandbox
+
+Executes commands inside local OCI Linux containers through Apple's [`container`](https://github.com/apple/container) CLI. The provider starts a long-lived container and uses `container exec` for workspace commands.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/apple-container
+```
+
+Requires an Apple silicon Mac running macOS 26 or newer with Apple's `container` CLI installed. Start the container system before using the provider:
+
+```bash
+container system start
+```
+
+## Usage
+
+Add an `AppleContainerSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { AppleContainerSandbox } from '@mastra/apple-container'
+
+const workspace = new Workspace({
+  sandbox: new AppleContainerSandbox({
+    image: 'node:22-slim',
+    volumes: {
+      '/Users/me/project': '/workspace',
+    },
+    workingDir: '/workspace',
+  }),
+})
+
+const agent = new Agent({
+  id: 'dev-agent',
+  name: 'Dev Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+
+const response = await agent.generate('Run `node --version`.')
+console.log(response.text)
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      'Apple container name passed to `container run --name`. Characters outside `[a-zA-Z0-9_.-]` are replaced with `-` and the result is prefixed if it would not start with an alphanumeric character.',
+    isOptional: true,
+    defaultValue: 'The sandbox `id`',
+  },
+  {
+    name: 'image',
+    type: 'string',
+    description: 'OCI image to use for the container.',
+    isOptional: true,
+    defaultValue: "'node:22-slim'",
+  },
+  {
+    name: 'command',
+    type: 'string[]',
+    description: 'Container init command. Must keep the container alive for exec-based command execution.',
+    isOptional: true,
+    defaultValue: "['sleep', 'infinity']",
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables to set in the container and on command execs.',
+    isOptional: true,
+  },
+  {
+    name: 'volumes',
+    type: 'Record<string, string>',
+    description: 'Host-to-container bind mounts. Keys are host paths, values are container paths.',
+    isOptional: true,
+  },
+  {
+    name: 'mounts',
+    type: 'string[]',
+    description: 'Raw `container run --mount` specs.',
+    isOptional: true,
+  },
+  {
+    name: 'network',
+    type: 'string',
+    description: 'Apple container network attachment spec.',
+    isOptional: true,
+  },
+  {
+    name: 'publishedPorts',
+    type: 'string[]',
+    description: 'Port publish specs passed as `--publish`.',
+    isOptional: true,
+  },
+  {
+    name: 'publishedSockets',
+    type: 'string[]',
+    description: 'Socket publish specs passed as `--publish-socket`.',
+    isOptional: true,
+  },
+  {
+    name: 'cpus',
+    type: 'number | string',
+    description: 'Number of CPUs to allocate.',
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: 'string',
+    description: "Memory allocation, for example '1G'.",
+    isOptional: true,
+  },
+  {
+    name: 'platform',
+    type: 'string',
+    description: "OCI platform, for example 'linux/arm64'.",
+    isOptional: true,
+  },
+  {
+    name: 'arch',
+    type: 'string',
+    description: 'Image architecture when selecting a multi-arch image.',
+    isOptional: true,
+  },
+  {
+    name: 'os',
+    type: 'string',
+    description: 'Image operating system when selecting a multi-platform image.',
+    isOptional: true,
+  },
+  {
+    name: 'rosetta',
+    type: 'boolean',
+    description: 'Enable Rosetta in the container.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'readonlyRootfs',
+    type: 'boolean',
+    description: 'Mount the container root filesystem as read-only.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'ssh',
+    type: 'boolean',
+    description: 'Forward the host SSH agent socket.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'init',
+    type: 'boolean',
+    description: "Enable Apple's init process in the container.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'virtualization',
+    type: 'boolean',
+    description: 'Expose virtualization capabilities to the container.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'capAdd',
+    type: 'string[]',
+    description: 'Linux capabilities to add.',
+    isOptional: true,
+  },
+  {
+    name: 'capDrop',
+    type: 'string[]',
+    description: 'Linux capabilities to drop.',
+    isOptional: true,
+  },
+  {
+    name: 'tmpfs',
+    type: 'string[]',
+    description: 'tmpfs destination paths passed as `--tmpfs`, for example `/tmp`.',
+    isOptional: true,
+  },
+  {
+    name: 'dns',
+    type: 'string[]',
+    description: 'DNS nameserver IPs.',
+    isOptional: true,
+  },
+  {
+    name: 'dnsSearch',
+    type: 'string[]',
+    description: 'DNS search domains.',
+    isOptional: true,
+  },
+  {
+    name: 'noDns',
+    type: 'boolean',
+    description: 'Do not configure DNS in the container.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'labels',
+    type: 'Record<string, string>',
+    description: 'Additional container labels. Mastra labels (mastra.sandbox, mastra.sandbox.id) are always included.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDir',
+    type: 'string',
+    description: 'Working directory inside the container.',
+    isOptional: true,
+    defaultValue: "'/workspace'",
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default command timeout in milliseconds.',
+    isOptional: true,
+    defaultValue: '300000 (5 minutes)',
+  },
+  {
+    name: 'deleteOnDestroy',
+    type: 'boolean',
+    description:
+      'Delete the Apple container when the sandbox is destroyed. When false, destroy stops the container instead.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'containerBinary',
+    type: 'string',
+    description: 'Path or name for the Apple container CLI.',
+    isOptional: true,
+    defaultValue: "'container'",
+  },
+  {
+    name: 'instructions',
+    type: 'string | function',
+    description:
+      'Custom instructions that override the default instructions returned by getInstructions(). Pass an empty string to suppress instructions.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('AppleContainerSandbox').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('apple-container').",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
+  },
+  {
+    name: 'containerId',
+    type: 'string',
+    description: 'Apple container ID when known, otherwise the configured container name.',
+  },
+]}
+/>
+
+## Environment variables
+
+Set environment variables at the container level with `env`. Per-command environment variables can also be passed through `executeCommand` options:
+
+```typescript
+const sandbox = new AppleContainerSandbox({
+  image: 'node:22-slim',
+  env: {
+    NODE_ENV: 'development',
+  },
+})
+
+await sandbox.executeCommand('node', ['-e', 'console.log(process.env.TASK_ID)'], {
+  env: { TASK_ID: '42' },
+})
+```
+
+## Bind mounts
+
+Mount host directories into the container using the `volumes` option:
+
+```typescript
+const sandbox = new AppleContainerSandbox({
+  image: 'node:22-slim',
+  volumes: {
+    '/Users/me/project': '/workspace/project',
+    '/Users/me/.npm': '/root/.npm',
+  },
+})
+```
+
+Bind mounts are applied at container creation time. The host paths must exist before the sandbox starts.
+
+## Resource and platform options
+
+Apple container CLI options can be passed through the constructor:
+
+```typescript
+const sandbox = new AppleContainerSandbox({
+  image: 'node:22-slim',
+  volumes: {
+    '/Users/me/project': '/workspace',
+  },
+  cpus: 2,
+  memory: '2G',
+  platform: 'linux/arm64',
+  readonlyRootfs: true,
+  tmpfs: ['/tmp'],
+})
+```
+
+These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
+Apple `--tmpfs` accepts container paths only, such as `/tmp`; it does not accept Docker-style option specs like `/tmp:rw,size=256m`.
+When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
+
+## Security model
+
+`AppleContainerSandbox` runs local containers through the host Apple `container` service. Treat constructor options as trusted server-side configuration:
+
+- `volumes`, `mounts`, and `publishedSockets` can expose host paths to containerized code.
+- `publishedPorts` can expose in-container services on the host or network; bind to `127.0.0.1` when only local access is intended.
+- `ssh` forwards the host SSH agent socket.
+- `capAdd` and `virtualization` can expand what containerized code can do.
+- `containerBinary` is a constructor-only escape hatch for trusted code and is not part of the serializable editor provider schema.
+
+Use the narrowest mounts and capabilities your workload needs. Existing containers are only reconnected when they carry Mastra ownership labels for the sandbox ID. Containers created by this provider also include a config-hash label; when that label is present, reconnect fails if immutable runtime options such as image, command, mounts, ports, capabilities, or working directory changed.
+
+## Limitations
+
+`AppleContainerSandbox` implements foreground workspace command execution with `executeCommand()`. It does not yet expose a `SandboxProcessManager` for background processes or LSP sessions.
+
+Command timeouts are enforced inside the container so timed-out commands are cleaned up by the container runtime. Abort signals cancel the host CLI wait path and should not be used as a substitute for command timeouts when in-container cleanup matters.
+
+## Reconnection
+
+`AppleContainerSandbox` reconnects by inspecting a container with the configured name. When `start()` is called:
+
+- A running container is reused.
+- A stopped container is restarted.
+- A missing container is created from the configured image.
+- A container with the configured name but without matching Mastra ownership labels fails instead of being managed.
+- A Mastra-owned container with a config-hash label that does not match immutable runtime options fails instead of being reused.
+
+```typescript
+const sandbox = new AppleContainerSandbox({ id: 'persistent-sandbox' })
+await sandbox.start()
+
+const sandbox2 = new AppleContainerSandbox({ id: 'persistent-sandbox' })
+await sandbox2.start()
+```
+
+## Editor provider
+
+Register the provider with `MastraEditor` to hydrate stored sandbox configs:
+
+```typescript
+import { MastraEditor } from '@mastra/editor'
+import { appleContainerSandboxProvider } from '@mastra/apple-container'
+
+const editor = new MastraEditor({
+  sandboxes: {
+    [appleContainerSandboxProvider.id]: appleContainerSandboxProvider,
+  },
+})
+```
+
+## Related
+
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [DockerSandbox reference](/reference/workspace/docker-sandbox)
+- [LocalSandbox reference](/reference/workspace/local-sandbox)
+- [Workspace overview](/docs/workspace/overview)

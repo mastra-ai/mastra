@@ -20,6 +20,7 @@ import { Agent } from '@mastra/core/agent'
 import { StreamErrorRetryProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'openai-agent',
   name: 'openai-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
@@ -56,6 +57,7 @@ const isECONNRESET = (error: unknown) => {
 }
 
 export const agent = new Agent({
+  id: 'resilient-agent',
   name: 'resilient-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',

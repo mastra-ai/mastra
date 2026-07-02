@@ -113,7 +113,7 @@ describe('CustomProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<CustomProvidersSection />);
 
-      const row = (await screen.findByText('my-llm')).closest('.provider-row') as HTMLElement;
+      const row = (await screen.findByText('my-llm')).closest('[role="listitem"]') as HTMLElement;
       await user.click(within(row).getByRole('button', { name: 'Remove' }));
 
       await waitFor(() => expect(removed).toBe(true));

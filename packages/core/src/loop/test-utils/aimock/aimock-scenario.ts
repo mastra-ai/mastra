@@ -353,30 +353,31 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       : {};
 
   // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor; stopWhen is not supported.
+  // inputProcessors/outputProcessors are on the agent constructor, not call-time options;
+  // abortSignal is inapplicable (durable workflows manage their own lifecycle).
   const isDurable = engine === 'durable';
 
   const streamOptions = {
-    ...(stopWhen && !isDurable ? { stopWhen } : {}),
+    ...(stopWhen ? { stopWhen } : {}),
     ...(maxSteps ? { maxSteps } : {}),
     // Durable needs maxSteps as a fallback when stopWhen was the only bound
     ...(!maxSteps && stopWhen && isDurable ? { maxSteps: 10 } : {}),
-    ...(isTaskComplete && !isDurable ? { isTaskComplete } : {}),
+    ...(isTaskComplete ? { isTaskComplete } : {}),
     ...(structuredOutput ? { structuredOutput } : {}),
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors && !isDurable ? { outputProcessors } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
-    ...(prepareStep && !isDurable ? { prepareStep } : {}),
+    ...(prepareStep ? { prepareStep } : {}),
     ...(requestContext ? { requestContext } : {}),
-    ...(delegation && !isDurable ? { delegation } : {}),
-    ...(onIterationComplete && !isDurable ? { onIterationComplete } : {}),
+    ...(delegation ? { delegation } : {}),
+    ...(onIterationComplete ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
     ...(onError ? { onError } : {}),
-    ...(savePerStep !== undefined && !isDurable ? { savePerStep } : {}),
-    ...(actor && !isDurable ? { actor } : {}),
+    ...(savePerStep !== undefined ? { savePerStep } : {}),
+    ...(actor ? { actor } : {}),
     ...(abortSignal && !isDurable ? { abortSignal } : {}),
-    ...(providerOptions && !isDurable ? { providerOptions } : {}),
+    ...(providerOptions ? { providerOptions } : {}),
     ...(modelSettings ? { modelSettings } : {}),
     ...(toolsets ? { toolsets } : {}),
     ...(clientTools ? { clientTools } : {}),

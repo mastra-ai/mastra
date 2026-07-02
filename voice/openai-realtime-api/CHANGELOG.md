@@ -1,5 +1,12 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3-alpha.0
+
 ## 0.13.2
 
 ### Patch Changes

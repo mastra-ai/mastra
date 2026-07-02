@@ -15,6 +15,10 @@ function providersResponse(providers: ProviderInfo[]) {
   return HttpResponse.json({ providers });
 }
 
+function rowFor(name: string): HTMLElement {
+  return screen.getByText(name).closest('[role="listitem"]') as HTMLElement;
+}
+
 describe('ProvidersSection', () => {
   describe('when providers load', () => {
     it('renders the configured providers', async () => {
@@ -63,14 +67,14 @@ describe('ProvidersSection', () => {
 
       // `none` providers only appear via search.
       await user.type(screen.getByLabelText('Search providers'), 'openai');
-      const row = (await screen.findByText('openai')).closest('.provider-row') as HTMLElement;
+      const row = rowFor('openai');
 
       await user.click(within(row).getByRole('button', { name: 'Add key' }));
       await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
       await user.click(screen.getByRole('button', { name: 'Save' }));
 
       await waitFor(() => expect(putBody).toEqual({ key: 'sk-test' }));
-      await waitFor(() => expect(within(row).getByText('Key saved')).toBeInTheDocument());
+      await waitFor(() => expect(within(rowFor('openai')).getByText('Key saved')).toBeInTheDocument());
     });
   });
 
@@ -90,7 +94,8 @@ describe('ProvidersSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ProvidersSection />);
 
-      const row = (await screen.findByText('openai')).closest('.provider-row') as HTMLElement;
+      await screen.findByText('openai');
+      const row = rowFor('openai');
       await user.click(within(row).getByRole('button', { name: 'Remove' }));
 
       await waitFor(() => expect(removed).toBe(true));

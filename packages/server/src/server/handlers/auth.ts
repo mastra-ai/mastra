@@ -16,7 +16,7 @@ import type {
   SSOCallbackResult,
 } from '@mastra/core/auth';
 import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProvider } from '@mastra/core/server';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 
 import { z } from 'zod/v4';
 import { supportsSessionRefresh } from '../auth/helpers';
@@ -77,14 +77,14 @@ function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> 
  * use it exclusively. Otherwise, Studio requests fall back to server.auth for
  * backward compatibility.
  */
-function getAuthProvider(mastra: any, isStudio?: boolean): MastraAuthProvider | null {
+function getAuthProvider(mastra: any, isStudio?: boolean): IMastraAuthProvider | null {
   // Check if studio.auth is explicitly configured
   const studioConfig = mastra.getStudio?.();
   const hasStudioAuth = studioConfig?.auth && typeof studioConfig.auth.authenticateToken === 'function';
 
   // If this is a Studio request AND studio.auth is configured, use it exclusively
   if (isStudio && hasStudioAuth) {
-    return studioConfig.auth as MastraAuthProvider;
+    return studioConfig.auth as IMastraAuthProvider;
   }
 
   // Otherwise (non-studio request, OR studio request without studio.auth configured),
@@ -95,7 +95,7 @@ function getAuthProvider(mastra: any, isStudio?: boolean): MastraAuthProvider | 
   // Auth can be either MastraAuthConfig or MastraAuthProvider
   // If it has authenticateToken method, it's a provider
   if (typeof serverConfig.auth.authenticateToken === 'function') {
-    return serverConfig.auth as MastraAuthProvider;
+    return serverConfig.auth as IMastraAuthProvider;
   }
 
   return null;

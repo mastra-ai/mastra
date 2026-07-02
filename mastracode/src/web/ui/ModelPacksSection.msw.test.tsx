@@ -61,7 +61,7 @@ describe('ModelPacksSection', () => {
       // No resourceId means the request is unscoped.
       expect(queryString).toBe('');
 
-      const row = screen.getByText('Builtin Pack').closest('.provider-row') as HTMLElement;
+      const row = screen.getByText('Builtin Pack').closest('[role="listitem"]') as HTMLElement;
       expect(within(row).getByRole('button', { name: 'Activate' })).toBeDisabled();
     });
   });
@@ -82,7 +82,7 @@ describe('ModelPacksSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
 
-      const row = (await screen.findByText('Builtin Pack')).closest('.provider-row') as HTMLElement;
+      const row = (await screen.findByText('Builtin Pack')).closest('[role="listitem"]') as HTMLElement;
       await user.click(within(row).getByRole('button', { name: 'Activate' }));
 
       await waitFor(() => expect(activateBody).toEqual({ resourceId: RESOURCE_ID }));
@@ -148,7 +148,7 @@ describe('ModelPacksSection', () => {
       const user = userEvent.setup();
       renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
 
-      const row = (await screen.findByText('My Pack')).closest('.provider-row') as HTMLElement;
+      const row = (await screen.findByText('My Pack')).closest('[role="listitem"]') as HTMLElement;
       await user.click(within(row).getByRole('button', { name: 'Remove' }));
 
       await waitFor(() => expect(removed).toBe(true));

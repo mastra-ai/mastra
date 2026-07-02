@@ -223,7 +223,7 @@ const sidebars = {
           id: 'agents/heartbeats',
           label: 'Heartbeats',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -474,6 +474,9 @@ const sidebars = {
           type: 'doc',
           id: 'browser/recording',
           label: 'Recording',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',

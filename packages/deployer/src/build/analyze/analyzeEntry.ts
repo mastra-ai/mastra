@@ -1,4 +1,4 @@
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
@@ -8,6 +8,7 @@ import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
 import { getPackageMetadata, getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
@@ -26,7 +27,6 @@ function getInputPlugins(
   mastraEntry: string,
   { sourcemapEnabled }: { sourcemapEnabled: boolean },
 ): Plugin[] {
-  const normalizedMastraEntry = slash(mastraEntry);
   let virtualPlugin = null;
   if (isVirtualFile) {
     virtualPlugin = virtual({
@@ -42,22 +42,10 @@ function getInputPlugins(
 
   plugins.push(
     ...[
-      tsConfigPaths(),
       protocolExternalResolver(),
-      {
-        name: 'custom-alias-resolver',
-        resolveId(id: string) {
-          if (id === '#server') {
-            return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
-          }
-          if (id === '#mastra') {
-            return normalizedMastraEntry;
-          }
-          if (id.startsWith('@mastra/server')) {
-            return fileURLToPath(import.meta.resolve(id));
-          }
-        },
-      } satisfies Plugin,
+      mastraInternalAliasPlugin(mastraEntry),
+      mastraToolsAliasPlugin(),
+      tsConfigPaths(),
       json(),
       esbuild(),
       commonjs({
@@ -191,17 +179,26 @@ async function captureDependenciesToOptimize(
         }
 
         for (const [innerDep, innerMeta] of analysis.dependencies) {
-          /**
-           * Only add to depsToOptimize if:
-           * - It's a workspace package
-           * - We haven't already processed it
-           * - We haven't already discovered it at the beginning
-           */
-          if (innerMeta.isWorkspace && !internalMap.has(innerDep) && !depsToOptimize.has(innerDep)) {
-            depsToOptimize.set(innerDep, innerMeta);
-            internalMap.set(innerDep, innerMeta);
-            hasAddedDeps = true;
+          if (!innerMeta.isWorkspace) {
+            continue;
           }
+
+          const existingMeta = depsToOptimize.get(innerDep);
+          if (existingMeta) {
+            depsToOptimize.set(innerDep, {
+              ...existingMeta,
+              exports: [...new Set([...existingMeta.exports, ...innerMeta.exports])],
+            });
+            continue;
+          }
+
+          if (internalMap.has(innerDep)) {
+            continue;
+          }
+
+          depsToOptimize.set(innerDep, innerMeta);
+          internalMap.set(innerDep, innerMeta);
+          hasAddedDeps = true;
         }
       } catch (err) {
         logger.error('Failed to resolve or analyze dependency', { dep, error: (err as Error).message });

@@ -324,15 +324,26 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 
 | Event | When it fires | Can block? |
 | - | - | - |
-| `PreToolUse` | Before a tool call executes | Yes |
-| `PostToolUse` | After a tool call completes | No |
+| `PreToolUse` | Before the agent tool hook wrapper allows a tool call to execute | Yes |
+| `PostToolUse` | After the agent tool hook wrapper observes a completed tool call | No |
 | `Stop` | When an agent response ends (`complete`, `aborted`, or `error`) | Yes |
 | `UserPromptSubmit` | When the user sends a message | Yes |
 | `SessionStart` | When a session begins | No |
 | `SessionEnd` | When a session ends | No |
 | `Notification` | When the TUI fires a notification | No |
+| `AgentStart` | When an agent run begins | No |
+| `AgentEnd` | When an agent run ends (`complete`, `aborted`, `error`, or `suspended`) | No |
+| `PermissionRequest` | When a tool, sandbox access request, or plan approval requires user permission | No |
+| `PermissionResult` | When a user approves, declines, or dismisses a permission gate | No |
+| `Interrupt` | When a running run is aborted by the user, goal judge, or a process signal | No |
+| `SubagentStart` | When a subagent begins a delegated task | No |
+| `SubagentEnd` | When a subagent finishes its delegated task | No |
 
 `UserPromptSubmit` runs before a non-command prompt is sent to the agent. If a hook blocks, the prompt is not sent.
+
+`PreToolUse` and `PostToolUse` are emitted by the agent tool hook wrapper around tool execution. Run, permission, interrupt, and subagent events are emitted by the TUI lifecycle dispatcher.
+
+Only `PreToolUse`, `Stop`, and `UserPromptSubmit` can block agent behavior. `PostToolUse` and the lifecycle dispatcher events are non-blocking signals for logging and integration.
 
 ### Hook I/O protocol
 
@@ -345,6 +356,23 @@ Hook processes receive a JSON payload on stdin with context about the event:
   "hook_event_name": "PreToolUse",
   "tool_name": "execute_command",
   "tool_input": { "command": "npm test" }
+}
+```
+
+During an active agent run, all hook payloads include a `run_id` that identifies the current run. The same `run_id` appears on `AgentStart`, tool hooks, `PermissionRequest`, `PermissionResult`, `Interrupt`, `SubagentStart`, `SubagentEnd`, `AgentEnd`, and `Stop` for that run, so external integrations can correlate events.
+
+A `PermissionRequest` payload includes the permission kind and call context. `permission_kind` can be `tool_approval`, `sandbox_access`, or `plan_approval`. `tool_name` and `tool_input` describe the gated tool call when the request comes from a tool approval, sandbox access request, or plan approval.
+
+```json
+{
+  "session_id": "thread-abc123",
+  "cwd": "/path/to/project",
+  "hook_event_name": "PermissionRequest",
+  "run_id": "run-uuid",
+  "permission_kind": "tool_approval",
+  "tool_call_id": "call-1",
+  "tool_name": "execute_command",
+  "tool_input": { "command": "rm -rf /" }
 }
 ```
 
