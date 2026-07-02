@@ -39,12 +39,12 @@ export async function resolveTarget(
   const customHeaders = parseHeaders(options.header);
   const apiPrefix = resolveApiPrefix(options);
 
-  if (isObservabilityPath(path)) {
-    return resolveObservabilityTarget(options, customHeaders, timeoutMs);
-  }
-
   if (options.url) {
     return { baseUrl: options.url, headers: customHeaders, timeoutMs, apiPrefix };
+  }
+
+  if (isObservabilityPath(path)) {
+    return resolveObservabilityTarget(options, customHeaders, timeoutMs);
   }
 
   if (await canReachLocal(timeoutMs, fetchFn, apiPrefix)) {
