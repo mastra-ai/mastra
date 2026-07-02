@@ -330,7 +330,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
       // Tenancy predicate is applied on the destructive parent deleteOne (not
       // only the pre-check), so a concurrent delete/recreate under a different
@@ -340,7 +340,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
       const gateHit = await datasetsCollectionForGate.findOne(gateQuery, { projection: { id: 1 } });
-      if (!gateHit) return false;
+      if (!gateHit) return;
 
       // Detach experiments — tolerate missing collections (NamespaceNotFound)
       // but rethrow real operational failures
@@ -377,8 +377,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       await itemsCollection.deleteMany({ datasetId: id });
       const parentDeleteQuery: Record<string, any> = { id };
       applyTenancyFilter(parentDeleteQuery, filters);
-      const result = await datasetsCollection.deleteOne(parentDeleteQuery);
-      return (result.deletedCount ?? 0) > 0;
+      await datasetsCollection.deleteOne(parentDeleteQuery);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

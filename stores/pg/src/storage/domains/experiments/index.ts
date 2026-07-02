@@ -537,7 +537,7 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
+  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
       const resultsTable = getTableName({
         indexName: TABLE_EXPERIMENT_RESULTS,
@@ -551,14 +551,12 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
 
-      const deleted = await this.#db.client.tx(async t => {
+      await this.#db.client.tx(async t => {
         const parent = await t.oneOrNone(gateSql, [id, ...params]);
-        if (!parent) return false;
+        if (!parent) return;
         await t.none(`DELETE FROM ${resultsTable} WHERE "experimentId" = $1`, [id]);
         await t.none(`DELETE FROM ${experimentsTable} WHERE "id" = $1`, [id]);
-        return true;
       });
-      return deleted;
     } catch (error) {
       throw new MastraError(
         {
@@ -802,7 +800,7 @@ export class ExperimentsPG extends ExperimentsStorage {
   }: {
     experimentId: string;
     filters?: ExperimentTenancyFilters;
-  }): Promise<boolean> {
+  }): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
@@ -813,17 +811,15 @@ export class ExperimentsPG extends ExperimentsStorage {
         const { conditions, params } = tenancyWhere(filters, 2);
         const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
 
-        const scoped = await this.#db.client.tx(async t => {
+        await this.#db.client.tx(async t => {
           const parent = await t.oneOrNone(gateSql, [experimentId, ...params]);
-          if (!parent) return false;
+          if (!parent) return;
           await t.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);
-          return true;
         });
-        return scoped;
+        return;
       }
 
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);
-      return true;
     } catch (error) {
       throw new MastraError(
         {

@@ -146,7 +146,7 @@ export function createDatasetsTests({
 
           await expect(
             datasetsStorage.deleteDataset({ id: ds.id, filters: { organizationId: 'org_b' } }),
-          ).resolves.toBe(false);
+          ).resolves.toBeUndefined();
 
           // Dataset must still exist.
           const stillThere = await datasetsStorage.getDatasetById({ id: ds.id });
@@ -161,11 +161,10 @@ export function createDatasetsTests({
             projectId: 'proj_1',
           });
 
-          const deleted = await datasetsStorage.deleteDataset({
+          await datasetsStorage.deleteDataset({
             id: ds.id,
             filters: { organizationId: 'org_a', projectId: 'proj_2' },
           });
-          expect(deleted).toBe(false);
 
           expect(await datasetsStorage.getDatasetById({ id: ds.id })).not.toBeNull();
         });
@@ -178,11 +177,10 @@ export function createDatasetsTests({
           });
           await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' } });
 
-          const deleted = await datasetsStorage.deleteDataset({
+          await datasetsStorage.deleteDataset({
             id: ds.id,
             filters: { organizationId: 'org_a', projectId: 'proj_1' },
           });
-          expect(deleted).toBe(true);
 
           expect(await datasetsStorage.getDatasetById({ id: ds.id })).toBeNull();
         });

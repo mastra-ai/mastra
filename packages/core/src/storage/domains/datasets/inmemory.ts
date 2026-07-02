@@ -149,10 +149,10 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetRecord(updated);
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     const existing = this.db.datasets.get(id);
-    if (!existing) return false;
-    if (!matchesTenancy(existing, filters)) return false;
+    if (!existing) return;
+    if (!matchesTenancy(existing, filters)) return;
 
     // Cascade: delete items and versions
     for (const [itemId, rows] of this.db.datasetItems) {
@@ -174,7 +174,6 @@ export class DatasetsInMemory extends DatasetsStorage {
     }
 
     this.db.datasets.delete(id);
-    return true;
   }
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {

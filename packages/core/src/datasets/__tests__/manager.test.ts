@@ -59,6 +59,12 @@ describe('DatasetsManager', () => {
       getScorerById: vi.fn(),
       getWorkflowById: vi.fn(),
       getWorkflow: vi.fn(),
+      getLogger: vi.fn().mockReturnValue({
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      }),
     } as unknown as Mastra;
 
     mgr = new DatasetsManager(mastra);

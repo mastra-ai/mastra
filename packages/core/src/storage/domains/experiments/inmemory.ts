@@ -136,14 +136,14 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     };
   }
 
-  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     const existing = this.db.experiments.get(args.id);
-    if (!existing) return false;
+    if (!existing) return;
     const orgMismatch =
       args.filters?.organizationId !== undefined && (existing.organizationId ?? null) !== args.filters.organizationId;
     const projMismatch =
       args.filters?.projectId !== undefined && (existing.projectId ?? null) !== args.filters.projectId;
-    if (orgMismatch || projMismatch) return false;
+    if (orgMismatch || projMismatch) return;
     this.db.experiments.delete(args.id);
     // Also delete associated results
     for (const [resultId, result] of this.db.experimentResults) {
@@ -151,7 +151,6 @@ export class ExperimentsInMemory extends ExperimentsStorage {
         this.db.experimentResults.delete(resultId);
       }
     }
-    return true;
   }
 
   // Results (per-item)
@@ -247,25 +246,24 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     };
   }
 
-  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     // Gate the cascade on the parent experiment's tenancy — if the experiment
     // exists but belongs to a different tenant, silently no-op instead of
     // wiping another tenant's results.
     if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
       const parent = this.db.experiments.get(args.experimentId);
-      if (!parent) return false;
+      if (!parent) return;
       const orgMismatch =
         args.filters?.organizationId !== undefined && (parent.organizationId ?? null) !== args.filters.organizationId;
       const projMismatch =
         args.filters?.projectId !== undefined && (parent.projectId ?? null) !== args.filters.projectId;
-      if (orgMismatch || projMismatch) return false;
+      if (orgMismatch || projMismatch) return;
     }
     for (const [resultId, result] of this.db.experimentResults) {
       if (result.experimentId === args.experimentId) {
         this.db.experimentResults.delete(resultId);
       }
     }
-    return true;
   }
 
   async getReviewSummary(): Promise<ExperimentReviewCounts[]> {

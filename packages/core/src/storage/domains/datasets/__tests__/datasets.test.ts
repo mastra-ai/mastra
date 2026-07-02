@@ -907,48 +907,4 @@ describe('DatasetsInMemory', () => {
       expect(item.source?.referenceId).toBe('verdict-123');
     });
   });
-
-  describe('deleteDataset boolean return', () => {
-    it('returns true when the row was deleted', async () => {
-      const created = await storage.createDataset({ name: 'd' });
-      const deleted = await storage.deleteDataset({ id: created.id });
-      expect(deleted).toBe(true);
-    });
-
-    it('returns false when no row matched (missing id)', async () => {
-      const deleted = await storage.deleteDataset({ id: 'does-not-exist' });
-      expect(deleted).toBe(false);
-    });
-
-    it('returns false on tenancy mismatch and preserves the row', async () => {
-      const created = await storage.createDataset({
-        name: 'd',
-        organizationId: 'org-a',
-        projectId: 'proj-a',
-      });
-      const deleted = await storage.deleteDataset({
-        id: created.id,
-        filters: { organizationId: 'org-b' },
-      });
-      expect(deleted).toBe(false);
-      const stillThere = await storage.getDatasetById({
-        id: created.id,
-        filters: { organizationId: 'org-a', projectId: 'proj-a' },
-      });
-      expect(stillThere).not.toBeNull();
-    });
-
-    it('returns true when scoped delete matches', async () => {
-      const created = await storage.createDataset({
-        name: 'd',
-        organizationId: 'org-a',
-        projectId: 'proj-a',
-      });
-      const deleted = await storage.deleteDataset({
-        id: created.id,
-        filters: { organizationId: 'org-a', projectId: 'proj-a' },
-      });
-      expect(deleted).toBe(true);
-    });
-  });
 });

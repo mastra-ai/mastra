@@ -364,7 +364,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
+  async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
       // Atomic gate + cascade inside a single read-write transaction. The
       // gate SELECT locks the parent row within the tx, and the tenancy
@@ -391,13 +391,9 @@ export class DatasetsSpanner extends DatasetsStorage {
       // existence up front avoids running detach DMLs against missing tables.
       const experimentTablesExist = await this.experimentTablesExist();
 
-      let gateHit = false;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            // Reset per attempt so a stale hit from an aborted-then-retried
-            // transaction can't suppress the delete-no-op log on the final retry.
-            gateHit = false;
             const [rows] = await tx.run({
               sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${scopedWhere}`,
               params: { id: args.id, ...tenancyParams },
@@ -407,7 +403,6 @@ export class DatasetsSpanner extends DatasetsStorage {
               await tx.commit();
               return;
             }
-            gateHit = true;
 
             if (experimentTablesExist) {
               await tx.runUpdate({
@@ -443,7 +438,6 @@ export class DatasetsSpanner extends DatasetsStorage {
           }
         }),
       );
-      return gateHit;
     } catch (error) {
       throw new MastraError(
         {

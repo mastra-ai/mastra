@@ -406,20 +406,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // Atomic gate via scoped existence check + tenancy folded into the parent
-      // DELETE, so the destructive statement is itself tenant-scoped rather
-      // than relying only on a pre-check. Silent no-op on mismatch. libsql is
-      // single-writer serialized, so the check + delete cannot race.
+      // Tenancy folded into the parent DELETE, so the destructive statement is
+      // itself tenant-scoped rather than relying on a pre-check. Silent no-op
+      // on mismatch. libsql is single-writer serialized, so the cascade batch
+      // runs atomically.
       const { conditions, params } = tenancyWhere(filters);
       const scopedWhere = ['id = ?', ...conditions].join(' AND ');
-
-      const exists = await this.#client.execute({
-        sql: `SELECT id FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`,
-        args: [id, ...params],
-      });
-      if (!exists.rows?.[0]) return false;
 
       // Detach experiments (SET NULL) + delete their results for FK safety.
       // Probe sqlite_master rather than swallowing "no such table" errors.
@@ -442,9 +436,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       statements.push({ sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] });
       statements.push({ sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] });
       statements.push({ sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] });
-      const batchResults = await this.#client.batch(statements, 'write');
-      const parentRowsAffected = Number(batchResults[batchResults.length - 1]?.rowsAffected ?? 0);
-      return parentRowsAffected > 0;
+      await this.#client.batch(statements, 'write');
     } catch (error) {
       throw new MastraError(
         {

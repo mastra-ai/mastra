@@ -50,14 +50,21 @@ export abstract class DatasetsStorage extends StorageDomain {
    */
   abstract getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null>;
   /**
-   * Delete a dataset. Returns `true` if a row was deleted, `false` otherwise.
+   * Delete a dataset.
    *
    * When `filters` is provided, the delete is a silent no-op if the row does
-   * not match the tenancy filters (returns `false`). Never throws on mismatch,
-   * and a `false` result does not distinguish "no such id" from "wrong tenant"
-   * — both look the same to preserve the cross-tenant existence contract.
+   * not match the tenancy filters. Never throws on mismatch — cross-tenant
+   * existence is not leaked via error timing/text. Implementers must fold the
+   * tenancy predicate into the destructive DML itself; a pre-check followed
+   * by an unscoped DELETE is unsafe under concurrent id reuse across tenants.
+   *
+   * Hit-vs-miss is not exposed through this contract by design (matches the
+   * convention of the other `delete*` methods in storage domains). Callers
+   * that need to distinguish "deleted" from "not found / wrong tenant" should
+   * do so at a higher layer (e.g. the manager) via a scoped `getDatasetById`
+   * before invoking this method.
    */
-  abstract deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean>;
+  abstract deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void>;
   abstract listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput>;
 
   /**

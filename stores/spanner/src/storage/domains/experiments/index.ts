@@ -409,7 +409,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
       // Atomic gate + cascade inside a single read-write transaction; tenancy
       // predicate folded into both DELETE DMLs. Silent no-op on mismatch.
@@ -425,13 +425,9 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       }
       const gateWhere = [`${quoteIdent('id', 'column name')} = @id`, ...tenancyConditions].join(' AND ');
 
-      let gateHit = false;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            // Reset per attempt so a stale hit from an aborted-then-retried
-            // transaction can't suppress the delete-no-op log on the final retry.
-            gateHit = false;
             const [gateRows] = await tx.run({
               sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
                     WHERE ${gateWhere} LIMIT 1`,
@@ -442,7 +438,6 @@ export class ExperimentsSpanner extends ExperimentsStorage {
               await tx.commit();
               return;
             }
-            gateHit = true;
             const cascadeWhere = [
               `${quoteIdent('experimentId', 'column name')} = @id`,
               // Result rows carry the same organizationId/projectId as their parent,
@@ -464,7 +459,6 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           }
         }),
       );
-      return gateHit;
     } catch (error) {
       throw new MastraError(
         {
@@ -729,30 +723,12 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
       // Tenancy predicate folded directly into the DELETE DML. Silent no-op on
-      // mismatch.
+      // mismatch — result rows carry the same organizationId/projectId as
+      // their parent experiment.
       if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
-        // Probe parent to distinguish "parent absent / wrong tenant" (return
-        // false) from "parent exists but has zero result rows" (return true).
-        const parentConds: string[] = [`${quoteIdent('id', 'column name')} = @experimentId`];
-        const parentParams: Record<string, any> = { experimentId: args.experimentId };
-        if (args.filters?.organizationId !== undefined) {
-          parentConds.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
-          parentParams.organizationId = args.filters.organizationId;
-        }
-        if (args.filters?.projectId !== undefined) {
-          parentConds.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
-          parentParams.projectId = args.filters.projectId;
-        }
-        const [parentRows] = await this.database.run({
-          sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')} WHERE ${parentConds.join(' AND ')} LIMIT 1`,
-          params: parentParams,
-          json: true,
-        });
-        if (!Array.isArray(parentRows) || parentRows.length === 0) return false;
-
         const conditions: string[] = [`${quoteIdent('experimentId', 'column name')} = @experimentId`];
         const params: Record<string, any> = { experimentId: args.experimentId };
         if (args.filters?.organizationId !== undefined) {
@@ -767,14 +743,13 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} WHERE ${conditions.join(' AND ')}`,
           params,
         });
-        return true;
+        return;
       }
       await this.db.runDml({
         sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
               WHERE ${quoteIdent('experimentId', 'column name')} = @experimentId`,
         params: { experimentId: args.experimentId },
       });
-      return true;
     } catch (error) {
       throw new MastraError(
         {

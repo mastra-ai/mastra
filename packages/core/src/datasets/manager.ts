@@ -221,9 +221,17 @@ export class DatasetsManager {
   async delete(args: { id: string; organizationId?: string; projectId?: string }): Promise<boolean> {
     const store = await this.#getDatasetsStore();
     const scope = scopeFromArgs(args);
-    const deleted = await store.deleteDataset({ id: args.id, filters: scope });
+    // Probe under scope so the manager can tell the caller (and the server
+    // handler) whether the delete matched a row. The storage adapter's own
+    // delete stays a silent no-op on mismatch — the boolean lives only at the
+    // manager layer, not on the abstract storage contract. Small TOCTOU
+    // window between get and delete only affects the boolean fidelity of a
+    // rare concurrent recreate, not correctness or existence-leak safety.
+    const existing = await store.getDatasetById({ id: args.id, filters: scope });
+    await store.deleteDataset({ id: args.id, filters: scope });
+    const deleted = existing !== null;
     if (!deleted && scope) {
-      this.#mastra.getLogger?.().debug?.('datasets: scoped delete matched no record', {
+      this.#mastra.getLogger().debug('datasets: scoped delete matched no record', {
         op: 'DatasetsManager.delete',
         id: args.id,
         organizationId: args.organizationId,

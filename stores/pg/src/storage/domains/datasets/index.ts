@@ -447,7 +447,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
@@ -468,12 +468,12 @@ export class DatasetsPG extends DatasetsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const scopedWhere = ['"id" = $1', ...conditions].join(' AND ');
 
-      const deleted = await this.#db.client.tx(async t => {
+      await this.#db.client.tx(async t => {
         const locked = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE ${scopedWhere} FOR UPDATE`, [
           id,
           ...params,
         ]);
-        if (!locked) return false;
+        if (!locked) return;
 
         // Detach experiments only if their tables exist. We probe with
         // to_regclass instead of try/catch inside the transaction, because a
@@ -498,9 +498,7 @@ export class DatasetsPG extends DatasetsStorage {
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
-        return true;
       });
-      return deleted;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

@@ -465,7 +465,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
       // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
       // tenancy mismatch.
@@ -490,7 +490,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         );
         if (!Array.isArray(gateRows) || gateRows.length === 0) {
           await connection.commit();
-          return false;
+          return;
         }
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
@@ -498,7 +498,6 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         );
         await connection.execute(`DELETE FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE id = ?`, [args.id]);
         await connection.commit();
-        return true;
       } catch (error) {
         try {
           await connection.rollback();
@@ -787,14 +786,11 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Fold the parent-existence gate and the cascade DELETE into a single
-      // RW transaction with SELECT ... FOR UPDATE so the parent can't be
-      // deleted between the gate and the cascade. The scoped call returns
-      // `true` iff the parent existed under scope at the moment the gate ran
-      // (the cascade may legitimately affect zero rows if the parent had no
-      // results yet).
+      // When scoped, fold the tenancy predicate into the cascade DELETE via a
+      // subquery on the parent — the destructive statement is itself scoped,
+      // so a tenancy miss silently affects zero rows.
       if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
         const tenancyConditions: string[] = [];
         const tenancyParams: any[] = [];
@@ -806,49 +802,18 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
           tenancyParams.push(args.filters.projectId);
         }
-        const gateWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+        const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
 
-        const connection = await this.pool.getConnection();
-        try {
-          await connection.beginTransaction();
-          const [gateRows] = await connection.execute(
-            `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${gateWhere} FOR UPDATE`,
-            [args.experimentId, ...tenancyParams],
-          );
-          if (!Array.isArray(gateRows) || gateRows.length === 0) {
-            await connection.commit();
-            return false;
-          }
-          await connection.execute(
-            `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
-            [args.experimentId],
-          );
-          await connection.commit();
-          return true;
-        } catch (error) {
-          try {
-            await connection.rollback();
-          } catch (rollbackError) {
-            throw new MastraError(
-              {
-                id: 'MYSQL_DELETE_EXPERIMENT_RESULTS_ROLLBACK_FAILED',
-                domain: ErrorDomain.STORAGE,
-                category: ErrorCategory.THIRD_PARTY,
-                details: { experimentId: args.experimentId },
-              },
-              rollbackError,
-            );
-          }
-          throw error;
-        } finally {
-          connection.release();
-        }
+        await this.pool.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
+          [args.experimentId, ...tenancyParams],
+        );
+        return;
       }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
         [args.experimentId],
       );
-      return true;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;

@@ -430,7 +430,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     // Atomic gate + cascade under SELECT ... FOR UPDATE, so a concurrent
     // delete/recreate under a different tenant cannot let a scoped delete hit
     // another tenant's row. Silent no-op on tenancy mismatch.
@@ -462,7 +462,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       );
       if (!Array.isArray(rows) || rows.length === 0) {
         await connection.commit();
-        return false;
+        return;
       }
 
       if (experimentTablesExist) {
@@ -490,7 +490,6 @@ export class DatasetsMySQL extends DatasetsStorage {
       ]);
 
       await connection.commit();
-      return true;
     } catch (error) {
       await connection.rollback();
       throw new MastraError(
