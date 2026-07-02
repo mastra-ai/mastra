@@ -81,6 +81,24 @@ describe('tool event handlers', () => {
     expect(requestRender).toHaveBeenCalledOnce();
   });
 
+  it('does not stream incomplete task_write items into the task progress component', async () => {
+    const { ctx } = createContext('', 'task_write');
+    const updateTasks = vi.fn();
+    ctx.state.taskProgress = { getTasks: () => [], updateTasks };
+
+    handleToolInputDelta(ctx, 'call-1', '{"tasks":[{"id":"task-1","content":"Fix crash","status":"in_progress"');
+    await flushParser();
+
+    expect(updateTasks).not.toHaveBeenCalled();
+
+    handleToolInputDelta(ctx, 'call-1', ',"activeForm":"Fixing crash"}]}');
+    await flushParser();
+
+    expect(updateTasks).toHaveBeenCalledWith([
+      { id: 'task-1', content: 'Fix crash', status: 'in_progress', activeForm: 'Fixing crash' },
+    ]);
+  });
+
   it('ignores deltas for calls without a display-state buffer', () => {
     const { ctx, updateArgs, requestRender } = createContext(undefined);
 

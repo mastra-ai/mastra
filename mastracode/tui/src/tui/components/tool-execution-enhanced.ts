@@ -50,6 +50,7 @@ const CODE_HIGHLIGHT_THEME: HighlightTheme = {
 const COMPACT_TOOL_COLOR = mastra.orange;
 const COMPACT_TOOL_ARGS_BG = '#141414';
 const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
+const QUIET_CODE_PREVIEW_MAX_CHARS = 2_000;
 
 function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
@@ -735,7 +736,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.STRING_REPLACE_LSP:
         return this.formatQuietEditPreview();
       case MC_TOOLS.WRITE_FILE:
-        return this.getMultilinePreview('content', Number.POSITIVE_INFINITY, false);
+        return this.getMultilinePreview('content', QUIET_CODE_PREVIEW_MAX_CHARS, false);
       case MC_TOOLS.SEARCH_CONTENT:
         return this.formatSearchDetail();
       case MC_TOOLS.LSP_INSPECT:
@@ -747,8 +748,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private formatQuietEditPreview(): string {
     return (
-      this.getMultilinePreview('new_str', Number.POSITIVE_INFINITY, false) ||
-      this.getMultilinePreview('new_string', Number.POSITIVE_INFINITY, false)
+      this.getMultilinePreview('new_str', QUIET_CODE_PREVIEW_MAX_CHARS, false) ||
+      this.getMultilinePreview('new_string', QUIET_CODE_PREVIEW_MAX_CHARS, false)
     );
   }
 

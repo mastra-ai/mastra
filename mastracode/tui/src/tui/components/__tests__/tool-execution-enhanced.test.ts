@@ -110,6 +110,21 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(output)).toContain('│ const value =');
   });
 
+  it('caps quiet write previews before highlighting large streamed content', () => {
+    const hugeContent = `${'a'.repeat(2_500)}END_SHOULD_NOT_RENDER`;
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: 'src/large.ts', content: hugeContent },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      ui,
+    );
+
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('write');
+    expect(output).toContain('src/large.ts');
+    expect(output).not.toContain('END_SHOULD_NOT_RENDER');
+  });
+
   it('shows exactly the immediate dirname and filename once continuation paths are available', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',

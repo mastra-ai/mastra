@@ -112,6 +112,24 @@ function isJsonObject(value: unknown): value is JsonObject {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isTaskStatus(value: unknown): value is TaskItemInput['status'] {
+  return value === 'pending' || value === 'in_progress' || value === 'completed';
+}
+
+function isRenderableTask(value: unknown): value is TaskItemInput {
+  if (!isJsonObject(value) || !isTaskStatus(value.status)) return false;
+  if (typeof value.content !== 'string' || value.content.length === 0) return false;
+  if (value.status === 'in_progress' && (typeof value.activeForm !== 'string' || value.activeForm.length === 0)) {
+    return false;
+  }
+  return true;
+}
+
+function getRenderableTasks(value: unknown): TaskItemInput[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isRenderableTask);
+}
+
 function createToolInputParser(toolCallId: string): ToolInputParserState {
   const queue = new AsyncStringQueue();
   const state: ToolInputParserState = {
@@ -636,8 +654,8 @@ function applyParsedToolArgs(
   }
 
   if (toolName === 'task_write' && state.taskProgress) {
-    const tasks = (partialArgs as { tasks?: TaskItemInput[] }).tasks;
-    if (tasks && tasks.length > 0) {
+    const tasks = getRenderableTasks(partialArgs.tasks);
+    if (tasks.length > 0) {
       const existing = state.taskProgress.getTasks();
       const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
       if (allExistingDone) {
@@ -647,7 +665,6 @@ function applyParsedToolArgs(
         // Merge only completed items (exclude the last still-streaming one)
         const merged = [...existing];
         for (const task of tasks.slice(0, -1)) {
-          if (!task.content) continue;
           const idx = task.id
             ? merged.findIndex(t => t.id === task.id)
             : merged.findIndex(t => !t.id && t.content === task.content);
