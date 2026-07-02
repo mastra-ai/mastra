@@ -37,5 +37,3 @@ return null on a legit 404 don't emit noise.
 
 No behavior change to any storage contract, no return-shape change, no new
 public API surface beyond three internal helpers on the storage domain.
-
-Related: MASTRA-4454.
