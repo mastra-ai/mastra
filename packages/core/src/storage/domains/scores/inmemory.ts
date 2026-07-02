@@ -1,8 +1,15 @@
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
 import { calculatePagination, normalizePerPage } from '../../base';
-import type { StoragePagination } from '../../types';
+import type { ScoreTenancyFilters, StoragePagination } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
 import { ScoresStorage } from './base';
+
+function matchesTenancy(score: ScoreRowData, filters?: ScoreTenancyFilters): boolean {
+  if (!filters) return true;
+  if (filters.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
+  if (filters.projectId !== undefined && score.projectId !== filters.projectId) return false;
+  return true;
+}
 
 export class ScoresInMemory extends ScoresStorage {
   private db: InMemoryDB;
@@ -32,12 +39,14 @@ export class ScoresInMemory extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     const scores = Array.from(this.db.scores.values()).filter(score => {
       let baseFilter = score.scorerId === scorerId;
@@ -54,7 +63,7 @@ export class ScoresInMemory extends ScoresStorage {
         baseFilter = baseFilter && score.source === source;
       }
 
-      return baseFilter;
+      return baseFilter && matchesTenancy(score, filters);
     });
 
     // Match the pg/libsql adapters (and the sibling listScoresBySpan), which
@@ -80,11 +89,15 @@ export class ScoresInMemory extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
-    const scores = Array.from(this.db.scores.values()).filter(score => score.runId === runId);
+    const scores = Array.from(this.db.scores.values()).filter(
+      score => score.runId === runId && matchesTenancy(score, filters),
+    );
 
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
@@ -106,15 +119,17 @@ export class ScoresInMemory extends ScoresStorage {
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     const scores = Array.from(this.db.scores.values()).filter(score => {
       const baseFilter = score.entityId === entityId && score.entityType === entityType;
 
-      return baseFilter;
+      return baseFilter && matchesTenancy(score, filters);
     });
 
     const { page, perPage: perPageInput } = pagination;
@@ -137,13 +152,15 @@ export class ScoresInMemory extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     const scores = Array.from(this.db.scores.values()).filter(
-      score => score.traceId === traceId && score.spanId === spanId,
+      score => score.traceId === traceId && score.spanId === spanId && matchesTenancy(score, filters),
     );
     scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
