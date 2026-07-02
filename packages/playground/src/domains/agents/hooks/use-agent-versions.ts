@@ -14,7 +14,7 @@ import { usePlaygroundStore } from '@/store/playground-store';
 export type { ListAgentVersionsParams, CreateAgentVersionParams };
 
 type UseAgentVersionsParams = {
-  agentId?: string | null;
+  agentId?: string;
   params?: ListAgentVersionsParams;
   enabled?: boolean;
 };
@@ -22,19 +22,13 @@ type UseAgentVersionsParams = {
 /**
  * Hook to list versions of a stored agent
  */
-export const useAgentVersions = ({
-  agentId,
-  params,
-  enabled = true,
-}: UseAgentVersionsParams) => {
+export const useAgentVersions = ({ agentId, params, enabled = true }: UseAgentVersionsParams) => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
-  const queryFn = agentId ? () => client.getStoredAgent(agentId).listVersions(params, requestContext) : skipToken;
-
   return useQuery<ListAgentVersionsResponse>({
     queryKey: ['agent-versions', agentId, params, requestContext],
-    queryFn,
+    queryFn: agentId ? () => client.getStoredAgent(agentId).listVersions(params, requestContext) : skipToken,
     enabled,
   });
 };

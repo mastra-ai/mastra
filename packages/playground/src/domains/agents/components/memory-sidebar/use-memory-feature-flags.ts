@@ -1,7 +1,7 @@
 import type { GetMemoryConfigResponse } from '@mastra/client-js';
 import { useMemoryConfig } from '@/domains/memory/hooks';
 
-type LastMessagesConfig = GetMemoryConfigResponse['config']['lastMessages'];
+type LastMessagesConfig = NonNullable<GetMemoryConfigResponse['config']>['lastMessages'];
 
 export interface MemoryFeatureFlags {
   /** Size of the recent-message window, or `undefined` when history is off. */
