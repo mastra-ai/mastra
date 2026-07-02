@@ -291,6 +291,7 @@ export type ProviderModelsMap = {
     'amazon/nova-pro',
     'amazon/titan-embed-text-v2',
     'anthropic/claude-3.5-haiku',
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -2187,7 +2188,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b', 'zai-glm-4.7'];
   readonly 'zai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5.2', 'glm-5v-turbo'];
   readonly nvidia: readonly [
     'abacusai/dracarys-llama-3_1-70b-instruct',
@@ -2338,6 +2339,7 @@ export type ProviderModelsMap = {
   ];
   readonly opencode: readonly [
     'big-pickle',
+    'claude-fable-5',
     'claude-haiku-4-5',
     'claude-opus-4-1',
     'claude-opus-4-5',
@@ -3202,6 +3204,7 @@ export type ProviderModelsMap = {
     'amazon/nova-pro-v1',
     'anthracite-org/magnum-v4-72b',
     'anthropic/claude-3-haiku',
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -4580,6 +4583,7 @@ export type ProviderModelsMap = {
   ];
   readonly claudinio: readonly ['claudinio', 'claudius'];
   readonly netlify: readonly [
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',
