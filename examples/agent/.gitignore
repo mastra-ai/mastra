@@ -4,5 +4,6 @@ node_modules
 .vercel
 .mastra.mastra
 database.sqlite
+hitl-approval-recall.db*
 .duckdb
 .duckdb.wal

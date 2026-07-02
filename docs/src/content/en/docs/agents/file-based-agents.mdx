@@ -230,7 +230,7 @@ Naming rules:
 File-based and code-based agents coexist with deterministic rules:
 
 - **Code wins on name collisions:** If an agent name exists in both code and the filesystem, the code-registered agent is kept and a warning is logged.
-- **A folder can hold a code agent:** If `config.ts` exports `new Agent({...})`, that instance is used as-is. Sibling `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, and `subagents/` entries are ignored with warnings.
+- **A folder can hold a code agent:** If `config.ts` exports a configured `new Agent({ id: 'file-based-agent', ... })`, that instance is used as-is. Sibling `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, and `subagents/` entries are ignored with warnings.
 - **Instructions:** Dynamic function instructions in `config.ts` win over `instructions.md`. Otherwise, `instructions.md` wins over a static `instructions` string. If neither is present, the build fails for that agent.
 - **Model:** A missing `model` fails the build and names the agent directory.
 - **Tools:** Tools from `tools/*.ts` merge with `config.tools`. On a key collision, `config.tools` wins and a warning is logged. If `config.tools` is a function, discovered tools are ignored with a warning.

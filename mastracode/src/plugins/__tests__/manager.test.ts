@@ -195,8 +195,16 @@ describe('PluginManager', () => {
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(pluginTools.github_tool?.description).toBe('second');
-    expect(execaMock).toHaveBeenCalledWith('git', ['fetch', 'origin'], { cwd: checkoutDir });
-    expect(execaMock).toHaveBeenCalledWith('git', ['reset', '--hard', 'origin/main'], { cwd: checkoutDir });
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['fetch', 'origin'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'origin/main'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
   });
 
   it('backs up divergent GitHub plugin checkouts before forcing them to origin', async () => {
@@ -244,7 +252,11 @@ describe('PluginManager', () => {
     const branchCall = execaMock.mock.calls.find(call => call[1][0] === 'branch');
     expect(branchCall?.[1][1]).toMatch(/^mastracode\/plugin-backup\/.*-abc12345$/);
     expect(branchCall?.[1][2]).toBe('HEAD');
-    expect(execaMock).toHaveBeenCalledWith('git', ['reset', '--hard', 'origin/main'], { cwd: checkoutDir });
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'origin/main'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
     expect(manager.getPluginTools().github_tool?.description).toBe('second');
   });
 
@@ -304,8 +316,16 @@ describe('PluginManager', () => {
     expect(execaMock.mock.calls.find(call => call[1][0] === 'switch')?.[1][2]).toMatch(
       /^mastracode\/plugin-backup\/.*-abc12345$/,
     );
-    expect(execaMock).toHaveBeenCalledWith('git', ['switch', 'main'], { cwd: checkoutDir });
-    expect(execaMock).toHaveBeenCalledWith('git', ['reset', '--hard', 'origin/main'], { cwd: checkoutDir });
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['switch', 'main'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'origin/main'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
   });
 
   it('removes GitHub checkout directories when uninstalling GitHub plugins', async () => {

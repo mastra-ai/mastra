@@ -166,6 +166,7 @@ const semanticRecall = new SemanticRecall({
 })
 
 export const agent = new Agent({
+  id: 'semantic-memory-agent',
   name: 'semantic-memory-agent',
   instructions: 'You are a helpful assistant with semantic memory recall',
   model: '__GATEWAY_OPENAI_MODEL__',
