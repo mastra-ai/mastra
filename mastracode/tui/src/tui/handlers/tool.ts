@@ -21,6 +21,7 @@ import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
 import { showModalOverlay } from '../overlay.js';
+import { requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
 
@@ -191,7 +192,7 @@ export function createStaticSubagentComponent(
   ctx.addChildBeforeFollowUps(state.streamingComponent);
 
   reconcileToolBoundaries(ctx);
-  state.ui.requestRender();
+  flushRender(state);
   return component;
 }
 
@@ -220,7 +221,7 @@ function handleSubagentProgress(
   }
 
   reconcileToolBoundaries(ctx);
-  state.ui.requestRender();
+  requestRender(state);
   return true;
 }
 
@@ -355,7 +356,7 @@ export function handleToolApprovalRequired(
   // Show the dialog as an overlay
   showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
   dialog.focused = true;
-  state.ui.requestRender();
+  flushRender(state);
 }
 
 export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, toolName: string, args: unknown): void {
@@ -396,7 +397,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
 
     if (toolName === 'submit_plan') {
       ensureSubmitPlanComponent(ctx, toolCallId, args);
-      state.ui.requestRender();
+      flushRender(state);
       return;
     }
 
@@ -413,7 +414,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       state.pendingTaskToolIds?.add(toolCallId);
       state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
       ctx.addChildBeforeFollowUps(state.streamingComponent);
-      state.ui.requestRender();
+      flushRender(state);
       return;
     }
 
@@ -434,7 +435,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
-    state.ui.requestRender();
+    flushRender(state);
   }
 
   // File modification tracking is handled by the AgentController display state
@@ -454,7 +455,7 @@ export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, p
     };
     component.updateResult(result, true);
     reconcileToolBoundaries(ctx);
-    state.ui.requestRender();
+    requestRender(state);
   }
 }
 
@@ -472,7 +473,7 @@ export function handleShellOutput(
   if (component?.appendStreamingOutput) {
     component.appendStreamingOutput(output);
     reconcileToolBoundaries(ctx);
-    state.ui.requestRender();
+    requestRender(state);
   }
 }
 
@@ -504,7 +505,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
   // and ask_user (uses AskQuestionInlineComponent)
   if (toolName === 'submit_plan') {
     ensureSubmitPlanComponent(ctx, toolCallId);
-    state.ui.requestRender();
+    flushRender(state);
   } else if (toolName === 'ask_user') {
     if (state.goalManager?.isActive()) {
       return;
@@ -519,7 +520,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
-    state.ui.requestRender();
+    flushRender(state);
   } else if (isTaskMutationTool(toolName)) {
     // Record position so task_updated can place inline completed/cleared display here
     state.taskToolInsertIndex = state.chatContainer.children.length;
@@ -538,7 +539,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     // to split the streaming component so getTrailingContentParts doesn't overwrite it)
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
-    state.ui.requestRender();
+    flushRender(state);
   } else if (toolName !== 'subagent') {
     if (createStaticSubagentComponent(ctx, toolCallId, toolName, {})) {
       return;
@@ -561,7 +562,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
     ctx.addChildBeforeFollowUps(state.streamingComponent);
 
-    state.ui.requestRender();
+    flushRender(state);
   }
 }
 
@@ -628,7 +629,7 @@ function applyParsedToolArgs(
     }
   }
 
-  state.ui.requestRender();
+  requestRender(state);
 }
 
 async function processToolInputParser(
@@ -686,7 +687,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
       subagentComponent.finish(isError, 0, resultText);
       state.pendingSubagents.delete(toolCallId);
       pluginSubagentToolCallIds.delete(toolCallId);
-      state.ui.requestRender();
+      flushRender(state);
     } else {
       // We'll need to wait for subagent_end to set this
       // Store it temporarily
@@ -722,6 +723,6 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
 
     state.pendingTools.delete(toolCallId);
     state.pendingTaskToolIds?.delete(toolCallId);
-    state.ui.requestRender();
+    flushRender(state);
   }
 }

@@ -43,6 +43,7 @@ import {
   clearToolInputParsers,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
@@ -199,7 +200,7 @@ export async function dispatchEvent(
       state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
-        state.ui.requestRender();
+        flushRender(state);
       }
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
