@@ -152,4 +152,61 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(part).toEqual({ type: 'data-signal', data: payload });
     expect(message.content.metadata?.signal).toEqual(payload);
   });
+
+  it('Given a user-message signal after assistant text, When it arrives, Then it ends the assistant and emits a separate signal message', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+    const payload = { id: 'user-signal-1', message: 'next input', createdAt: '2026-01-02T03:04:05.000Z' };
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'text-delta', payload: { id: 't1', text: 'assistant text' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: payload }), ctx);
+
+    const messageEnds = events.filter(event => event.type === 'message_end');
+    expect(messageEnds).toHaveLength(2);
+    expect(messageEnds[0].message.role).toBe('assistant');
+    expect(messageEnds[0].message.content).toMatchObject({
+      format: 2,
+      parts: [{ type: 'text', text: 'assistant text' }],
+      metadata: { stopReason: 'complete' },
+    });
+    expect(messageEnds[1].message).toMatchObject({
+      id: 'user-signal-1',
+      role: 'signal',
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: payload }],
+        metadata: { signal: payload },
+      },
+    });
+    expect(messageEnds[1].message.createdAt.toISOString()).toBe('2026-01-02T03:04:05.000Z');
+  });
+
+  it('Given a non-success finish reason, When the stream finishes, Then terminal state lives on message metadata', async () => {
+    const { engine, events } = createHarness();
+
+    const result = await engine.processStream(
+      {
+        fullStream: (async function* () {
+          yield chunk({ type: 'text-start', payload: { id: 't1' } });
+          yield chunk({ type: 'text-delta', payload: { id: 't1', text: 'partial' } });
+          yield chunk({ type: 'finish', payload: { stepResult: { reason: 'content-filter' } } });
+        })(),
+      },
+      requestContext(),
+    );
+
+    expect(result?.message.content.format).toBe(2);
+    expect(result?.message.content.parts).toEqual([{ type: 'text', text: 'partial' }]);
+    expect(result?.message.content.metadata?.stopReason).toBe('error');
+    expect(result?.message.content.metadata?.errorMessage).toEqual(expect.stringContaining('content filter'));
+    const messageEnd = events.find(event => event.type === 'message_end');
+    expect(messageEnd?.message.content.metadata?.stopReason).toBe('error');
+    expect(events).toContainEqual({ type: 'agent_end', reason: 'error' });
+  });
 });

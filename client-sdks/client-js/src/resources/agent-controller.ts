@@ -1,3 +1,6 @@
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+export type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '@mastra/core/agent-controller';
+
 import type { ClientOptions } from '../types';
 
 import { BaseResource } from './base';
@@ -19,43 +22,6 @@ import { BaseResource } from './base';
 
 export interface AgentControllerInfo {
   id: string;
-}
-
-/**
- * A single part of a {@link MastraDBMessage}'s nested content. This mirrors the
- * persisted AI-SDK-v4 `UIMessage`-style part shape: a discriminated `type`
- * (`text`, `reasoning`, `tool-invocation`, `data-signal`, `data-*`, …) plus
- * type-specific fields. Harness-only UI signals arrive as `data-*` parts on
- * `role: 'signal'` messages rather than as a flattened union.
- */
-export interface MastraMessagePart {
-  type: string;
-  text?: string;
-  [key: string]: unknown;
-}
-
-/** The persisted `MastraMessageContentV2` shape: `format: 2` plus nested `parts`. */
-export interface MastraMessageContentV2 {
-  format: 2;
-  parts: MastraMessagePart[];
-  metadata?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
-/**
- * The canonical persisted message shape exposed by the agent controller. This is
- * `MastraDBMessage` from `@mastra/core`: shared fields plus DB-native nested
- * `content.parts`. Streaming `message_*` events carry in-flight `stopReason` /
- * `errorMessage` under `content.metadata`.
- */
-export interface MastraDBMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
-  content: MastraMessageContentV2;
-  createdAt?: string;
-  threadId?: string;
-  resourceId?: string;
-  type?: string;
 }
 
 /**
