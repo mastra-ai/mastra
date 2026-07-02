@@ -136,5 +136,23 @@ describe('FileTransport', () => {
       logs = await fileLogger.listLogsByRunId({ runId: 'test-run-id' });
       expect(logs.total).toBe(1);
     });
+
+    it('should find logs by runId beyond the first listLogs page', async () => {
+      const logLines = Array.from({ length: 120 }, (_, index) =>
+        JSON.stringify({
+          level: LogLevel.INFO,
+          msg: `message-${index}`,
+          runId: index >= 110 ? 'target-run-id' : 'other-run-id',
+          time: Date.now() + index,
+        }),
+      );
+      fs.writeFileSync(testPath, `${logLines.join('\n')}\n`);
+
+      const logs = await fileLogger.listLogsByRunId({ runId: 'target-run-id' });
+
+      expect(logs.total).toBe(10);
+      expect(logs.logs).toHaveLength(10);
+      expect(logs.logs.every(log => log.runId === 'target-run-id')).toBe(true);
+    });
   });
 });
