@@ -15,6 +15,7 @@ import type { DesktopState, DesktopTab, MastraDesktopApi, ProbeModelsResult } fr
 
 import { Launcher } from './launcher';
 import type { LauncherActions } from './launcher';
+import { SettingsPanel } from './settings-panel';
 
 declare global {
   interface Window {
@@ -25,16 +26,19 @@ declare global {
 const api = window.mastraDesktop;
 const tabStrip = document.querySelector<HTMLDivElement>('#tab-strip');
 const newTabButton = document.querySelector<HTMLButtonElement>('#new-tab-button');
+const settingsButton = document.querySelector<HTMLButtonElement>('#settings-button');
 const launcher = document.querySelector<HTMLElement>('#launcher');
 const webviews = document.querySelector<HTMLElement>('#webviews');
 const bootLoader = document.querySelector<HTMLElement>('#boot-loader');
+const settingsMount = document.querySelector<HTMLElement>('#settings-root');
 
-if (!tabStrip || !newTabButton || !launcher || !webviews || !bootLoader) {
+if (!tabStrip || !newTabButton || !settingsButton || !launcher || !webviews || !bootLoader || !settingsMount) {
   throw new Error('Mastra Studio shell failed to mount');
 }
 
 const launcherRoot = createRoot(launcher);
 const bootLoaderRoot = createRoot(bootLoader);
+const settingsRoot = createRoot(settingsMount);
 
 bootLoaderRoot.render(<BrandLoader aria-label="Loading Mastra Studio" size="lg" />);
 
@@ -49,6 +53,7 @@ let localModelFieldsDirty = false;
 let localModelProbe: ProbeModelsResult | undefined;
 let environmentRows: EnvironmentVariableRow[] = [{ key: '', value: '' }];
 let runtimeEnvironmentDirty = false;
+let settingsOpen = false;
 let busyAction: string | undefined;
 let lastError: string | undefined;
 
@@ -233,6 +238,10 @@ function launcherActions(): LauncherActions {
     onOpenTemplate: () => {
       void runAction('open-template', () => api.createManagedTab());
     },
+    onOpenSettings: () => {
+      settingsOpen = true;
+      render();
+    },
     onPlatformBaseUrlChange: value => {
       platformBaseUrl = value;
       render();
@@ -286,6 +295,25 @@ function launcherActions(): LauncherActions {
   };
 }
 
+function runtimeSettingsProps() {
+  const current = state;
+  if (!current) return undefined;
+
+  return {
+    actions: launcherActions(),
+    busyAction,
+    current,
+    environmentRows,
+    isLocalModelApplied: currentModelMatchesSettings(current),
+    localModelApiKey,
+    localModelId,
+    localModelProbe,
+    localModelUrl,
+    localProviderId,
+    runtimeEnvironmentDirty,
+  };
+}
+
 function renderLauncher() {
   const current = state;
   const active = activeTab();
@@ -318,10 +346,28 @@ function renderLauncher() {
   );
 }
 
+function renderSettingsPanel() {
+  const props = runtimeSettingsProps();
+
+  settingsRoot.render(
+    props ? (
+      <SettingsPanel
+        {...props}
+        open={settingsOpen}
+        onClose={() => {
+          settingsOpen = false;
+          render();
+        }}
+      />
+    ) : null,
+  );
+}
+
 function render() {
   renderTabs();
   renderStudioHost();
   renderLauncher();
+  renderSettingsPanel();
   renderBootLoader();
 }
 
@@ -342,6 +388,18 @@ tabStrip.addEventListener('click', event => {
 
 newTabButton.addEventListener('click', () => {
   void runAction('new-tab', () => api.createLauncherTab());
+});
+
+settingsButton.addEventListener('click', () => {
+  settingsOpen = true;
+  render();
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && settingsOpen) {
+    settingsOpen = false;
+    render();
+  }
 });
 
 void api.getState().then(initialState => {

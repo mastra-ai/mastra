@@ -15,11 +15,15 @@
       <header class="chrome">
         <div id="tab-strip" class="tab-strip"></div>
         <button id="new-tab-button" class="icon-button" type="button" title="New tab" aria-label="New tab">+</button>
+        <button id="settings-button" class="settings-button" type="button" title="Settings" aria-label="Settings">
+          Settings
+        </button>
       </header>
       <main class="surface">
         <section id="launcher" class="launcher" hidden></section>
         <section id="webviews" class="webviews"></section>
       </main>
+      <section id="settings-root"></section>
     </div>
     <script type="module" src="./main.tsx"></script>
   </body>
