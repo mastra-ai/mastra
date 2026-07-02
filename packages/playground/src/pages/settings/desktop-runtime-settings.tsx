@@ -146,12 +146,14 @@ function RuntimeBadge({ state }: { state: DesktopRuntimeState }) {
 function probeStatusLabel(probe: ProbeModelsResult | undefined, isPending: boolean) {
   if (isPending) return 'Detecting models...';
   if (!probe) return undefined;
-  if (!probe.ok) return probe.error ?? 'Model server unavailable';
+  if (!probe.ok) return 'Not reachable';
   if (probe.models.length === 0) return 'No models detected';
   return `${probe.models.length} detected`;
 }
 
 function modelOptionsFor(probe: ProbeModelsResult | undefined, modelId: string) {
+  if (!probe?.ok || probe.models.length === 0) return [];
+
   const detected = probe?.ok ? probe.models : [];
   if (modelId.trim() && !detected.includes(modelId)) return [...detected, modelId];
   return detected;

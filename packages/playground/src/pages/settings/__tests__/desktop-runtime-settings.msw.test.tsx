@@ -74,6 +74,29 @@ describe('DesktopRuntimeSettingsSection', () => {
     });
   });
 
+  describe('when the local model probe fails', () => {
+    it('keeps the configured model editable without presenting it as a detected model option', async () => {
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+      server.use(
+        http.get('*/__desktop/state', () => HttpResponse.json(desktopRuntimeState)),
+        http.post('*/__desktop/probe-models', () =>
+          HttpResponse.json({
+            ok: false,
+            modelUrl: 'http://localhost:1234/v1',
+            models: [],
+            error: 'fetch failed',
+          }),
+        ),
+      );
+
+      renderDesktopRuntimeSettings();
+
+      expect(await screen.findByText('Not reachable')).not.toBeNull();
+      expect(screen.getByDisplayValue('lmstudio/openai/gpt-oss-20b').tagName).toBe('INPUT');
+      expect(screen.queryByRole('combobox')).toBeNull();
+    });
+  });
+
   describe('when the Studio is not served by Mastra Studio Desktop', () => {
     it('does not render desktop-only controls', () => {
       renderDesktopRuntimeSettings();
