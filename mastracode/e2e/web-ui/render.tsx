@@ -1,4 +1,5 @@
-import { ThemeProvider, TooltipProvider } from '@mastra/playground-ui';
+import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, renderHook, waitFor } from '@testing-library/react';
 import type { RenderHookOptions } from '@testing-library/react';
