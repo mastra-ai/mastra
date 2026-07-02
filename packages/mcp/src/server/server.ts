@@ -1794,13 +1794,14 @@ export class MCPServer extends MCPServerBase {
       // If headers haven't been sent, send an error response
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
+        // Error details are logged above; don't echo them to the client
+        // (CodeQL js/stack-trace-exposure)
         res.end(
           JSON.stringify({
             jsonrpc: '2.0',
             error: {
               code: -32603,
               message: 'Internal server error',
-              data: error instanceof Error ? error.message : String(error),
             },
             id: null,
           }),

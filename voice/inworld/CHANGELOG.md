@@ -1,5 +1,35 @@
 # @mastra/voice-inworld
 
+## 0.4.1-alpha.0
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+## 0.4.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 0.4.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 0.3.3
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 0.3.3-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
 ## 0.3.0
 
 ### Minor Changes

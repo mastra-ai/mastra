@@ -119,6 +119,10 @@ export const mastra = new Mastra({
 
 This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
 
+#### Retention
+
+Storage grows without bound by default. To cap growth, declare per-table `maxAge` policies in the `retention` config and call `storage.prune()` from your own scheduler to delete old rows. Anything you don't configure is kept forever. See [Storage retention](/reference/storage/retention) for `prune()` and the full config shape.
+
 ### Agent-level storage
 
 Agent-level storage overrides storage configured at the instance level. Add storage to a specific agent when you need to keep data separate or use different providers per agent.

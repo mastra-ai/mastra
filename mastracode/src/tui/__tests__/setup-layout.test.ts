@@ -15,8 +15,15 @@ vi.mock('node:fs', () => ({
   default: {},
 }));
 
-vi.mock('@mariozechner/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', () => ({
+  Box: class {},
   CombinedAutocompleteProvider: class {},
+  Container: class {
+    children: unknown[] = [];
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
+  },
   Spacer: class {
     type = 'spacer';
     constructor(public height: number) {}
@@ -57,11 +64,19 @@ vi.mock('../../utils/project.js', () => ({
 }));
 
 import { renderBanner } from '../components/banner.js';
-import { buildLayout } from '../setup.js';
+import { buildLayout, subscribeToAgentController } from '../setup.js';
 import { updateStatusLine } from '../status-line.js';
 
 function textOf(child: unknown) {
   return stripAnsi((child as { text?: string }).text ?? '');
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
 }
 
 function createState(modeCount = 2) {
@@ -81,7 +96,7 @@ function createState(modeCount = 2) {
         mainRepoPath: '/repos/main',
         rootPath: '/repos/demo',
       },
-      harness: {
+      controller: {
         listModes: vi.fn(() => Array.from({ length: modeCount }, (_, i) => ({ id: `mode-${i}` }))),
       },
       ui: {
@@ -142,5 +157,39 @@ describe('buildLayout startup header', () => {
     buildLayout(state, vi.fn());
 
     expect(textOf(uiChildren[4])).toBe('  /help info & shortcuts');
+  });
+
+  it('serializes controller event handling so abort cleanup cannot interleave with stream updates', async () => {
+    let listener: ((event: { type: string }) => Promise<void>) | undefined;
+    const state = {
+      session: {
+        subscribe: vi.fn((handler: typeof listener) => {
+          listener = handler;
+          return vi.fn();
+        }),
+      },
+    } as any;
+    const releaseFirst = createDeferred<void>();
+    const order: string[] = [];
+    const handleEvent = vi.fn(async (event: { type: string }) => {
+      order.push(`start:${event.type}`);
+      if (event.type === 'message_update') {
+        await releaseFirst.promise;
+      }
+      order.push(`end:${event.type}`);
+    });
+
+    subscribeToAgentController(state, handleEvent);
+    const first = listener?.({ type: 'message_update' });
+    const second = listener?.({ type: 'agent_end' });
+    await Promise.resolve();
+
+    expect(order).toEqual(['start:message_update']);
+
+    releaseFirst.resolve();
+    await first;
+    await second;
+
+    expect(order).toEqual(['start:message_update', 'end:message_update', 'start:agent_end', 'end:agent_end']);
   });
 });

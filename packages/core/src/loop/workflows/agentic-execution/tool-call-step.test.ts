@@ -512,8 +512,14 @@ describe('createToolCallStep tool approval workflow', () => {
 
     const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
 
+    // A declined approval returns the decision (not a `result` string) so it persists as
+    // `output-denied` with the approval object; the reason carries the existing message.
     expect(result).toEqual({
-      result: 'Tool call was not approved by the user',
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'Tool call was not approved by the user',
+      },
       ...inputData,
     });
     expectNoToolExecution();
@@ -551,9 +557,15 @@ describe('createToolCallStep tool approval workflow', () => {
       }),
     );
     expect(suspend).not.toHaveBeenCalled();
+    // An approved approval-gated tool tags its result with the approval grant so it
+    // round-trips on recall as `approval: { approved: true }`.
     expect(result).toEqual({
       result: toolResult,
       ...inputData,
+      approval: {
+        id: inputData.toolCallId,
+        approved: true,
+      },
     });
   });
 });

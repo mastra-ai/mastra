@@ -16,6 +16,16 @@ Mastra templates are pre-built project structures that demonstrate specific use 
 - **Educational resources**: Learn Mastra patterns through real implementations
 - **Quickstarts**: Bootstrap projects faster than building from scratch
 
+## Available templates
+
+The following templates demonstrate Gateway-first Mastra applications:
+
+- `template-docs-expert`: Answers documentation questions with Mastra Gateway web search, citations, memory, and structured responses.
+- `template-browser-agent`: Uses AgentBrowser to browse, inspect, and interact with web pages.
+- `template-meeting-notes`: Turns Zoom transcripts or uploaded transcripts into structured notes with decisions and action items.
+- `template-company-knowledge`: Indexes Linear and Notion content into pgvector and answers internal knowledge questions.
+- `template-claw-assistant`: Operates a workspace with filesystem, sandbox, browser, and web-search tools.
+
 ## Using templates
 
 ### Installation
@@ -136,6 +146,7 @@ We recommend using OpenAI, Anthropic, or Google model providers for templates. C
 import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
+  id: 'example-agent',
   name: 'example-agent',
   model: '__GATEWAY_OPENAI_MODEL__', // or other provider strings
   instructions: 'Your agent instructions here',

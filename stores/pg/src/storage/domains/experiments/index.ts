@@ -25,10 +25,18 @@ import type {
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
   CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName } from '../utils';
+
+const DEFAULT_PRUNE_BATCH_SIZE = 1000;
 
 export class ExperimentsPG extends ExperimentsStorage {
   #db: PgDB;
@@ -37,6 +45,18 @@ export class ExperimentsPG extends ExperimentsStorage {
   #indexes?: CreateIndexOptions[];
 
   static readonly MANAGED_TABLES = [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS] as const;
+
+  /**
+   * Experiments prune as whole units: an aged experiment and its result rows go
+   * together, mirroring `deleteExperiment`. Anchored on `completedAt` (not the
+   * `completedAtZ` mirror, which carries a `DEFAULT NOW()` this domain never
+   * overrides — it holds insert time even for running rows). `completedAt` is
+   * written as a UTC ISO string and stays NULL while running, so
+   * `completedAt < cutoff` is false for in-flight experiments.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    experiments: { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+  };
 
   constructor(config: PgDomainConfig) {
     super();
@@ -69,15 +89,95 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion'],
+      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags'],
+      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(ExperimentsPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Delete experiments whose `completedAt` is older than the policy's `maxAge`.
+   *
+   * Each batch selects up to `batchSize` aged experiments and deletes their
+   * `experiment_results` rows and the experiment rows in one transaction —
+   * mirroring `deleteExperiment` — so hitting `maxBatches`/`maxRows` or the
+   * abort signal between batches never leaves a run hollow (parent kept,
+   * results gone). NULL `completedAt` (still running) is excluded by the
+   * `< cutoff` predicate. Bounds count whole experiments, not rows.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const policy = policies['experiments'];
+    if (!policy || options?.signal?.aborted) {
+      return policy
+        ? [
+            { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: 0, done: false },
+            { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
+          ]
+        : [];
+    }
+
+    await this.ensureRetentionIndexes(policies);
+
+    // `completedAt` is a naive TIMESTAMP holding UTC ISO strings, so bind the
+    // cutoff as a UTC ISO string too — a Date would be serialized with the
+    // session's local offset and compared against the wrong wall time.
+    const rawCutoff = cutoffFor(policy, 'timestamp');
+    const cutoff = rawCutoff instanceof Date ? rawCutoff.toISOString() : rawCutoff;
+    const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
+
+    let childDeleted = 0;
+    const parent = await runBatchedDelete({
+      deleteBatch: async limit => {
+        const { parents, children } = await this.#db.pruneUnitsBatch({
+          parentTable: TABLE_EXPERIMENTS,
+          parentKey: 'id',
+          parentColumn: 'completedAt',
+          childTable: TABLE_EXPERIMENT_RESULTS,
+          childForeignKey: 'experimentId',
+          cutoff,
+          limit,
+        });
+        childDeleted += children;
+        return parents;
+      },
+      batchSize,
+      options,
+    });
+
+    return [
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: childDeleted, done: parent.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
+    ];
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
@@ -89,6 +189,17 @@ export class ExperimentsPG extends ExperimentsStorage {
         table: TABLE_EXPERIMENT_RESULTS,
         columns: ['experimentId', 'itemId'],
         unique: true,
+      },
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
+      {
+        name: 'idx_experiments_org_project',
+        table: TABLE_EXPERIMENTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_experiment_results_org_project',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['organizationId', 'projectId'],
       },
     ];
   }
@@ -126,6 +237,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       agentVersion: (row.agentVersion as string | null) ?? null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       status: row.status as Experiment['status'],
@@ -146,6 +259,8 @@ export class ExperimentsPG extends ExperimentsStorage {
       experimentId: row.experimentId as string,
       itemId: row.itemId as string,
       itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input),
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
@@ -156,6 +271,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,
+      toolMockReport: row.toolMockReport ? safelyParseJSON(row.toolMockReport) : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
   }
@@ -178,6 +294,8 @@ export class ExperimentsPG extends ExperimentsStorage {
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
           agentVersion: input.agentVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
           status: 'pending',
@@ -200,6 +318,8 @@ export class ExperimentsPG extends ExperimentsStorage {
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
         agentVersion: input.agentVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         status: 'pending',
@@ -352,6 +472,17 @@ export class ExperimentsPG extends ExperimentsStorage {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
       }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -434,6 +565,8 @@ export class ExperimentsPG extends ExperimentsStorage {
           experimentId: input.experimentId,
           itemId: input.itemId,
           itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           input: input.input,
           output: input.output ?? null,
           groundTruth: input.groundTruth ?? null,
@@ -444,6 +577,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags ?? null,
+          toolMockReport: input.toolMockReport ?? null,
           createdAt: nowIso,
         },
       });
@@ -453,6 +587,8 @@ export class ExperimentsPG extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         input: input.input,
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
@@ -463,6 +599,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolMockReport: input.toolMockReport ?? null,
         createdAt: now,
       };
     } catch (error) {
@@ -574,6 +711,17 @@ export class ExperimentsPG extends ExperimentsStorage {
       if (args.status) {
         conditions.push(`"status" = $${paramIndex++}`);
         queryParams.push(args.status);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`"organizationId" = $${paramIndex++}`);
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
+        }
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;

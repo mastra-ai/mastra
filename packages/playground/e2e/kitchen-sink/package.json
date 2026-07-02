@@ -17,8 +17,7 @@
     "@mastra/memory": "latest",
     "ai": "^5.0.196",
     "mastra": "latest",
-    "msw": "^2.14.6",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "22.19.20",

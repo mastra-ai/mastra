@@ -162,6 +162,7 @@ export function buildMessagesFromChunks({
         if (detail && detail.type === 'text') {
           detail.text += p.text;
         }
+        ref.reasoning = (ref.reasoning || '') + p.text;
         if (p.providerMetadata) {
           ref.providerMetadata = p.providerMetadata;
         }

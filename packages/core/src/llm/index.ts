@@ -83,6 +83,7 @@ export {
   parseModelString,
   getProviderConfig,
   modelSupportsAttachments,
+  modelSupportsTemperature,
 } from './model/provider-registry.js';
 export type {
   ModelRouterModelId,
