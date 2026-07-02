@@ -663,23 +663,37 @@ describe('injectStudioHtmlConfig', () => {
 });
 
 describe('escapeStudioHtmlValue', () => {
-  it('escapes quotes and backslashes so values stay inside the JS string literal', () => {
-    expect(escapeStudioHtmlValue("org'; window.pwned = true; //")).toBe("org\\'; window.pwned = true; //");
-    expect(escapeStudioHtmlValue('back\\slash')).toBe('back\\\\slash');
+  const hostileValues = [
+    "org'; globalThis.pwned = true; //",
+    '</script><script>alert(1)</script>',
+    'back\\slash',
+    'line\nbreak\rreturn',
+    'sep\u2028and\u2029',
+    'proj-$&-dollar',
+    'org-123',
+    'https://observability.example.com',
+  ];
+
+  it('round-trips every value through a single-quoted JS string literal unchanged', () => {
+    for (const value of hostileValues) {
+      // Evaluate the literal exactly as the browser would evaluate the
+      // injected `window.X = '<escaped>'` assignment.
+
+      const roundTripped = new Function(`return '${escapeStudioHtmlValue(value)}';`)();
+      expect(roundTripped).toBe(value);
+    }
   });
 
-  it('unicode-escapes angle brackets so a value cannot close the script tag', () => {
-    expect(escapeStudioHtmlValue('</script><script>alert(1)</script>')).toBe(
-      '\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e',
-    );
+  it('never emits characters that could terminate the string literal or the script block', () => {
+    for (const value of hostileValues) {
+      const escaped = escapeStudioHtmlValue(value);
+      expect(escaped).not.toMatch(/[<>\n\r\u2028\u2029]/);
+      // Every remaining quote must be escaped, so the literal cannot close early.
+      expect(escaped.replaceAll("\\'", '')).not.toContain("'");
+    }
   });
 
-  it('escapes newlines and JS line separators', () => {
-    expect(escapeStudioHtmlValue('a\nb\rc')).toBe('a\\nb\\rc');
-    expect(escapeStudioHtmlValue('a\u2028b\u2029c')).toBe('a\\u2028b\\u2029c');
-  });
-
-  it('returns benign values unchanged', () => {
+  it('leaves benign values byte-identical', () => {
     expect(escapeStudioHtmlValue('org-123')).toBe('org-123');
     expect(escapeStudioHtmlValue('https://observability.example.com')).toBe('https://observability.example.com');
   });
