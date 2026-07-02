@@ -11,6 +11,7 @@ import {
   normalizeStudioBase,
   detectRuntime,
   injectStudioHtmlConfig,
+  escapeStudioHtmlValue,
 } from './utils';
 
 describe('getPackageName', () => {
@@ -658,5 +659,28 @@ describe('injectStudioHtmlConfig', () => {
     });
 
     expect(result).toBe("window.MASTRA_SIGNALS_UI = 'true';");
+  });
+});
+
+describe('escapeStudioHtmlValue', () => {
+  it('escapes quotes and backslashes so values stay inside the JS string literal', () => {
+    expect(escapeStudioHtmlValue("org'; window.pwned = true; //")).toBe("org\\'; window.pwned = true; //");
+    expect(escapeStudioHtmlValue('back\\slash')).toBe('back\\\\slash');
+  });
+
+  it('unicode-escapes angle brackets so a value cannot close the script tag', () => {
+    expect(escapeStudioHtmlValue('</script><script>alert(1)</script>')).toBe(
+      '\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e',
+    );
+  });
+
+  it('escapes newlines and JS line separators', () => {
+    expect(escapeStudioHtmlValue('a\nb\rc')).toBe('a\\nb\\rc');
+    expect(escapeStudioHtmlValue('a\u2028b\u2029c')).toBe('a\\u2028b\\u2029c');
+  });
+
+  it('returns benign values unchanged', () => {
+    expect(escapeStudioHtmlValue('org-123')).toBe('org-123');
+    expect(escapeStudioHtmlValue('https://observability.example.com')).toBe('https://observability.example.com');
   });
 });

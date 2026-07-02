@@ -228,6 +228,36 @@ describe('studio base path support', () => {
     }
   });
 
+  it('escapes platform env values so they cannot break out of the injected script', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    process.env.MASTRA_ORGANIZATION_ID = "org'; window.pwned = true; //";
+    process.env.MASTRA_PLATFORM_PROJECT_ID = 'proj-$&-dollar';
+    process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'https://x.example</script><script>alert(1)</script>';
+    const studioDir = createStudioFixture();
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const htmlResponse = await request(`http://127.0.0.1:${port}/agents`);
+
+      expect(htmlResponse.status).toBe(200);
+      // The single quote stays escaped inside the JS string literal.
+      expect(htmlResponse.body).toContain("window.MASTRA_ORGANIZATION_ID = 'org\\'; window.pwned = true; //'");
+      // `$&` must not be expanded into the surrounding HTML by String.replaceAll.
+      expect(htmlResponse.body).toContain("window.MASTRA_PLATFORM_PROJECT_ID = 'proj-$&-dollar'");
+      // Angle brackets are unicode-escaped, so no tag can terminate the script block.
+      expect(htmlResponse.body).not.toContain('<script>alert(1)</script>');
+      expect(htmlResponse.body).toContain(
+        "window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'https://x.example\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e'",
+      );
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
   it('preserves the full query string when rewriting asset requests', async () => {
     process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
     const studioDir = createStudioFixture();
