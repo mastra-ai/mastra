@@ -11,9 +11,13 @@ import type {
 } from './entity-learning-types';
 
 export type EntityLearningServiceConfig = {
-  /** Platform observability endpoint, e.g. `https://observability.mastra.ai`. */
+  /**
+   * Platform observability query-service origin (mobs-query), e.g.
+   * `https://observability.mastra.ai`. Agent Learning routes are served
+   * session-authenticated under `/api/learning` on this origin — the same
+   * origin and auth model as the `/api/observability/*` routes.
+   */
   baseUrl: string;
-  organizationId?: string;
   projectId?: string;
 };
 
@@ -41,20 +45,20 @@ export type EntityLearningService = ReturnType<typeof createEntityLearningServic
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
 /**
- * Network layer for the platform Entity-Learning API. The base URL is the
- * observability endpoint; every route is scoped under `/entity-learning`.
+ * Network layer for the platform Agent Learning API served by the
+ * observability query service (mobs-query) under `/api/learning`.
+ *
+ * Auth follows the observability pattern: the WorkOS session cookie is sent
+ * via `credentials: 'include'`, and the org/project scope is resolved
+ * server-side from the session. `projectId` is passed as the
+ * `X-Mastra-Project-Id` header so the server scopes reads to that project;
+ * caller-supplied scope can never widen access beyond the session.
  */
 export function createEntityLearningService(config: EntityLearningServiceConfig) {
-  const root = `${trimTrailingSlash(config.baseUrl)}/entity-learning`;
+  const root = `${trimTrailingSlash(config.baseUrl)}/api/learning`;
 
   const buildUrl = (path: string, params?: Record<string, string | number | boolean | undefined>) => {
     const url = new URL(`${root}${path}`);
-    if (config.organizationId) {
-      url.searchParams.set('organizationId', config.organizationId);
-    }
-    if (config.projectId) {
-      url.searchParams.set('projectId', config.projectId);
-    }
     if (params) {
       for (const [key, value] of Object.entries(params)) {
         if (value !== undefined) {
@@ -66,7 +70,10 @@ export function createEntityLearningService(config: EntityLearningServiceConfig)
   };
 
   async function getJson<T>(url: string): Promise<T> {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      credentials: 'include',
+      headers: config.projectId ? { 'X-Mastra-Project-Id': config.projectId } : undefined,
+    });
     if (!res.ok) {
       throw new Error(`Entity-Learning request failed (${res.status}): ${url}`);
     }

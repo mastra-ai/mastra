@@ -10,7 +10,7 @@ import { entitiesResponse, pointsResponse, topicsResponse } from '../../services
 import { useEntities, useEntityPoints, useEntityTopics } from '../use-entity-learning';
 
 const BASE_URL = 'https://observability.test';
-const ROOT = `${BASE_URL}/entity-learning`;
+const ROOT = `${BASE_URL}/api/learning`;
 
 const server = setupServer();
 
@@ -30,7 +30,9 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
-  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
+  // The injected endpoint is the trace-ingest URL; the client must derive
+  // the query-service origin from it and call /api/learning on that origin.
+  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = `${BASE_URL}/v1/traces`;
   w.MASTRA_ORGANIZATION_ID = 'org-1';
   w.MASTRA_PLATFORM_PROJECT_ID = 'proj-1';
 });
@@ -134,11 +136,13 @@ describe('entity-learning hooks', () => {
   });
 
   describe('useEntityPoints', () => {
-    it('forwards includeOutliers to the request', async () => {
+    it('forwards includeOutliers to the request and scopes via the project header', async () => {
       let capturedUrl: URL | undefined;
+      let capturedProjectHeader: string | null = null;
       server.use(
         http.get(`${ROOT}/entities/:entityId/points`, ({ request }) => {
           capturedUrl = new URL(request.url);
+          capturedProjectHeader = request.headers.get('X-Mastra-Project-Id');
           return HttpResponse.json(pointsResponse);
         }),
       );
@@ -150,7 +154,10 @@ describe('entity-learning hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(capturedUrl?.searchParams.get('includeOutliers')).toBe('true');
-      expect(capturedUrl?.searchParams.get('organizationId')).toBe('org-1');
+      // Scope comes from the session server-side; the client only narrows by
+      // project via the header, never query params.
+      expect(capturedUrl?.searchParams.has('organizationId')).toBe(false);
+      expect(capturedProjectHeader).toBe('proj-1');
     });
   });
 });
