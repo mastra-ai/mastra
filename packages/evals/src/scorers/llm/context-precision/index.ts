@@ -130,7 +130,7 @@ export function createContextPrecisionScorer({
 
       // Mean Average Precision = sum_of_precisions / total_relevant_items
       const map = sumPrecision / relevantCount;
-      const score = map * (options.scale || 1);
+      const score = map * (options.scale ?? 1);
 
       return roundToTwoDecimals(score);
     })
@@ -148,7 +148,7 @@ export function createContextPrecisionScorer({
           output,
           context,
           score,
-          scale: options.scale || 1,
+          scale: options.scale ?? 1,
           verdicts: (results.analyzeStepResult?.verdicts || []) as {
             context_index: number;
             verdict: string;

@@ -266,6 +266,33 @@ describe('createContextPrecisionScorer', () => {
     expect(result.score).toBe(10.0); // Perfect score with scale 10
   });
 
+  it('should preserve scale 0 when generating scores', () => {
+    const scorer = createContextPrecisionScorer({
+      model: mockModel,
+      options: {
+        context: ['Photosynthesis converts sunlight to energy.'],
+        scale: 0,
+      },
+    });
+    const generateScoreStep = scorer['steps'].find(step => step.name === 'generateScore');
+
+    const score = generateScoreStep?.definition?.({
+      results: {
+        analyzeStepResult: {
+          verdicts: [
+            {
+              context_index: 0,
+              verdict: 'yes',
+              reason: 'Relevant',
+            },
+          ],
+        },
+      },
+    } as any);
+
+    expect(score).toBe(0);
+  });
+
   it('should handle empty analyze results', async () => {
     const scorer = createContextPrecisionScorer({
       model: mockModel,
