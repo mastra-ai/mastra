@@ -9,7 +9,7 @@ On every change to this package, you MUST ALWAYS follow these instructions:
 - use `playground-msw-tests` skill — PRIMARY testing strategy for components and hooks
 - use `e2e-tests-studio` skill — only when MSW cannot model the journey
 - use `react-best-practices` skill
-- use `playground-ui-styling` and `tailwind-v4` skills
+- use `mastra-frontend` and `tailwind-v4` skills
 
 ## Testing Priority (highest first)
 
