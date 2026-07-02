@@ -91,7 +91,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     this.structuredOutputOptions = options.structuredOutputOptions;
 
     // Initialize instructions after customPatterns is set
-    this.instructions = options.instructions || this.getDefaultInstructions();
+    this.instructions = options.instructions ?? this.getDefaultInstructions();
 
     // Store the model for lazy initialization
     this.model = options.model;

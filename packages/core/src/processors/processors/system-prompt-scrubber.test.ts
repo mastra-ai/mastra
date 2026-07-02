@@ -432,6 +432,15 @@ describe('SystemPromptScrubber', () => {
       expect(processor['instructions']).toBe(customInstructions);
     });
 
+    it('should preserve empty custom instructions', async () => {
+      processor = new SystemPromptScrubber({
+        model: mockModel,
+        instructions: '',
+      });
+
+      expect(processor['instructions']).toBe('');
+    });
+
     it('should require model in constructor', () => {
       expect(() => {
         new SystemPromptScrubber({} as any);
