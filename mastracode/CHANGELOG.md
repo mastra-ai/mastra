@@ -1,5 +1,14 @@
 # mastracode
 
+## 0.28.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0f5ebf7`](https://github.com/mastra-ai/mastra/commit/0f5ebf761bca5bb34bd13a82513a65dede006bc7)]:
+  - @mastra/libsql@1.15.0-alpha.2
+  - @mastra/pg@1.15.0-alpha.2
+  - @mastra/hono@1.5.4-alpha.5
+
 ## 0.28.0-alpha.5
 
 ### Patch Changes
