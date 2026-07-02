@@ -45,7 +45,6 @@ export * from './ds/components/PropertyFilter';
 export * from './ds/components/RadioGroup';
 export * from './ds/components/ScrollArea';
 export * from './ds/components/PendingIndicator';
-export * from './ds/components/Searchbar';
 export * from './ds/components/Select';
 export * from './ds/components/Shimmer';
 export * from './ds/components/Skeleton';

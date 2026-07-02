@@ -16,6 +16,11 @@ export function registerHook(hook: `${AvailableHooks}`, action: Handler<any>): v
   hooks.on(hook, action);
 }
 
+export function deregisterHook(hook: AvailableHooks.ON_SCORER_RUN, action: Handler<ScoringHookInput>): void;
+export function deregisterHook(hook: `${AvailableHooks}`, action: Handler<any>): void {
+  hooks.off(hook, action);
+}
+
 export function executeHook(hook: AvailableHooks.ON_SCORER_RUN, action: ScoringHookInput): void;
 export function executeHook(hook: `${AvailableHooks}`, data: unknown): void {
   // do not block the main thread

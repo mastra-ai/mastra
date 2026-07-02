@@ -82,11 +82,20 @@ export interface FsAgentEntry {
    * Declared subagents discovered under `agents/<name>/subagents/<childId>/`.
    * Each entry is assembled into its own `Agent` and wired into the parent's
    * `agents` map under its directory name, becoming a model-visible delegation
-   * tool. Subagents are one level deep — entries here carry no further
-   * `subagents` of their own.
+   * tool. Subagents may declare their own `subagents`, up to
+   * `MAX_FS_SUBAGENT_DEPTH` levels below the top-level agent; deeper entries
+   * are ignored with a warning.
    */
   subagents?: FsAgentEntry[];
 }
+
+/**
+ * Maximum nesting depth for declared subagents. A top-level agent is depth 0;
+ * its subagents are depth 1, and so on. Subagents declared deeper than this
+ * are ignored with a warning. The cap keeps delegation trees a sane size and
+ * guards `assembleAgentFromFsEntry` against cyclic entry objects.
+ */
+export const MAX_FS_SUBAGENT_DEPTH = 3;
 
 /**
  * Assemble a single `Agent` from already-loaded file-system entries for one
@@ -116,6 +125,10 @@ export interface FsAgentEntry {
  * `new Agent(...)` without the loader trying to re-wrap the latter.
  */
 export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn?: (message: string) => void }): Agent {
+  return assembleAtDepth(entry, 0, options);
+}
+
+function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?: (message: string) => void }): Agent {
   const {
     name,
     config = {},
@@ -178,7 +191,7 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
   const mergedSkills = mergeSkills(name, skills, config.skills, onWarn);
   const mergedWorkspace = mergeWorkspace(name, workspace, config.workspace, defaultWorkspaceBasePath, onWarn);
   const mergedMemory = mergeMemory(name, memory, config.memory, onWarn);
-  const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, options);
+  const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, depth, options);
 
   const assembled = {
     ...config,
@@ -294,9 +307,9 @@ function mergeSkills(
 /**
  * Assemble discovered subagents and merge them into the parent's `agents` map.
  *
- * Each discovered subagent is assembled independently via
- * `assembleAgentFromFsEntry` (one level deep — its own `subagents` are not
- * threaded further). Rules:
+ * Each discovered subagent is assembled independently, recursing into its own
+ * `subagents` up to `MAX_FS_SUBAGENT_DEPTH` levels below the top-level agent
+ * (deeper entries are ignored with a warning). Rules:
  * - Each subagent's `config.ts` must resolve a non-empty `description`;
  *   otherwise a dir-scoped build error is thrown.
  * - A subagent id that collides with a resolved tool key on the same parent, or
@@ -310,9 +323,17 @@ function mergeSubAgents(
   fsSubAgents: FsAgentEntry[],
   configAgents: FsAgentConfig['agents'],
   mergedTools: ToolsInput | undefined,
+  depth: number,
   options?: { onWarn?: (message: string) => void },
 ): FsAgentConfig['agents'] | undefined {
   const onWarn = options?.onWarn ?? (() => {});
+
+  if (fsSubAgents.length > 0 && depth >= MAX_FS_SUBAGENT_DEPTH) {
+    onWarn(
+      `Agent "${name}": ignoring its subagents — subagents may only nest ${MAX_FS_SUBAGENT_DEPTH} levels below a top-level agent.`,
+    );
+    fsSubAgents = [];
+  }
 
   // Dynamic config.agents (a function) can't be statically merged; it wins
   // wholesale and discovered subagents are ignored with a warning.
@@ -353,8 +374,7 @@ function mergeSubAgents(
       });
     }
 
-    // One level deep: a subagent's own `subagents` are not threaded further.
-    const child = assembleAgentFromFsEntry({ ...childEntry, subagents: undefined }, options);
+    const child = assembleAtDepth(childEntry, depth + 1, options);
 
     const description = child.getDescription();
     if (!description || description.trim() === '') {

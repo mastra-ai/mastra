@@ -270,6 +270,26 @@ describe('E2BSandbox', () => {
       );
     });
 
+    it('forwards network options to Sandbox.create', async () => {
+      const { Sandbox } = await import('e2b');
+      const network = {
+        rules: {
+          'api.example.com': [
+            {
+              transform: {
+                headers: { Authorization: 'Bearer token' },
+              },
+            },
+          ],
+        },
+      };
+      const sandbox = new E2BSandbox({ network });
+
+      await sandbox._start();
+
+      expect(Sandbox.create).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ network }));
+    });
+
     it('reconnects to existing sandbox by metadata', async () => {
       const { Sandbox } = await import('e2b');
 

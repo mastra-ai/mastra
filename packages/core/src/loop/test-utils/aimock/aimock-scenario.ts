@@ -353,8 +353,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       : {};
 
   // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor; stopWhen/delegation/onIterationComplete
-  // are now supported by durable and forwarded below.
+  // inputProcessors/outputProcessors are on the agent constructor, not call-time options;
+  // abortSignal is inapplicable (durable workflows manage their own lifecycle).
   const isDurable = engine === 'durable';
 
   const streamOptions = {
@@ -362,7 +362,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(maxSteps ? { maxSteps } : {}),
     // Durable needs maxSteps as a fallback when stopWhen was the only bound
     ...(!maxSteps && stopWhen && isDurable ? { maxSteps: 10 } : {}),
-    ...(isTaskComplete && !isDurable ? { isTaskComplete } : {}),
+    ...(isTaskComplete ? { isTaskComplete } : {}),
     ...(structuredOutput ? { structuredOutput } : {}),
     ...(activeTools ? { activeTools } : {}),
     ...(outputProcessors && !isDurable ? { outputProcessors } : {}),
@@ -374,10 +374,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
     ...(onError ? { onError } : {}),
-    ...(savePerStep !== undefined && !isDurable ? { savePerStep } : {}),
-    ...(actor && !isDurable ? { actor } : {}),
+    ...(savePerStep !== undefined ? { savePerStep } : {}),
+    ...(actor ? { actor } : {}),
     ...(abortSignal && !isDurable ? { abortSignal } : {}),
-    ...(providerOptions && !isDurable ? { providerOptions } : {}),
+    ...(providerOptions ? { providerOptions } : {}),
     ...(modelSettings ? { modelSettings } : {}),
     ...(toolsets ? { toolsets } : {}),
     ...(clientTools ? { clientTools } : {}),

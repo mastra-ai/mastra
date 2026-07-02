@@ -14,4 +14,17 @@ export const queryKeys = {
   modelPacksAll: () => ['model-packs'] as const,
   om: (resourceId: string | undefined) => ['om', resourceId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
+  agentControllerModels: (agentControllerId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'models'] as const,
+  agentControllerSession: (agentControllerId: string | undefined, resourceId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null] as const,
+  agentControllerSettings: (agentControllerId: string | undefined, resourceId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'settings'] as const,
+  agentControllerPermissions: (agentControllerId: string | undefined, resourceId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'permissions'] as const,
+  agentControllerThreads: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'threads', projectPath ?? null] as const,
 } as const;

@@ -597,10 +597,40 @@ describe('injectStudioHtmlConfig', () => {
       experimentalUI: "'true'",
       agentSignals: "'true'",
       signalsUI: "'false'",
+      organizationId: "''",
+      platformProjectId: "''",
+      platformObservabilityEndpoint: "''",
       autoDetectUrl: "'false'",
     });
 
     expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
+  });
+
+  it('should inject MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT placeholder', () => {
+    const html = "window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      signalsUI: "'false'",
+      organizationId: "'org-123'",
+      platformProjectId: "'proj-456'",
+      platformObservabilityEndpoint: "'https://observability.example.com'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'https://observability.example.com';");
   });
 
   it('should inject MASTRA_SIGNALS_UI placeholder', () => {
@@ -621,6 +651,9 @@ describe('injectStudioHtmlConfig', () => {
       experimentalUI: "'false'",
       agentSignals: "'true'",
       signalsUI: "'true'",
+      organizationId: "''",
+      platformProjectId: "''",
+      platformObservabilityEndpoint: "''",
       autoDetectUrl: "'false'",
     });
 

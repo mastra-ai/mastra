@@ -14,7 +14,8 @@ import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForA
  * Uses shared agent+storage across calls to preserve suspension state.
  *
  * Regression classes:
- * - Declined `requireApproval` tool returns 'not approved' result without executing
+ * - Declined `requireApproval` tool is recorded as `output-denied` (not executed), with the
+ *   not-approved reason on its approval metadata, and emits no tool-result (issue #17218)
  * - Agent can retry the declined tool in a subsequent turn
  * - Second approval succeeds and tool executes with correct arguments
  * - Shared storage preserves thread context across decline/retry cycles
@@ -155,7 +156,7 @@ describeForAllEngines(
       expect(result.path).toBe('/tmp/test.conf');
     });
 
-    it('declined tool returns not-approved result message', async () => {
+    it('declined tool is recorded as output-denied with the not-approved reason', async () => {
       const sensitiveTool = createTool({
         id: 'sensitive-op',
         description: 'Performs a sensitive operation',
@@ -213,14 +214,23 @@ describeForAllEngines(
         // drain
       }
 
-      // Check the decline result has a not-approved message
+      // A declined tool no longer emits a tool-result chunk: it is persisted as `output-denied`
+      // with the not-approved reason on its approval metadata (issue #17218). So it must NOT
+      // surface as a live tool-result...
       const toolResults = await declineResult.toolResults;
-      expect(toolResults).toBeDefined();
       const sensResult = toolResults?.find((r: any) => r.payload.toolName === 'sensitive-op');
-      expect(sensResult).toBeDefined();
-      // When declined, the result should indicate it was not approved
-      const result = sensResult?.payload.result;
-      expect(typeof result === 'string' ? result.toLowerCase().includes('not approved') : false).toBe(true);
+      expect(sensResult).toBeUndefined();
+
+      // ...and the recalled invocation must carry the decline as `output-denied` + the reason.
+      const { messages } = await sharedMemory.recall({ threadId, resourceId });
+      const declined = messages
+        .flatMap((m: any) => m.content?.parts ?? [])
+        .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'sensitive-op')
+        ?.toolInvocation as { state?: string; approval?: { approved?: boolean; reason?: string } } | undefined;
+      expect(declined).toBeDefined();
+      expect(declined?.state).toBe('output-denied');
+      expect(declined?.approval?.approved).toBe(false);
+      expect(declined?.approval?.reason?.toLowerCase()).toContain('not approved');
     });
   },
   { skip: ['durable', 'fs'] },

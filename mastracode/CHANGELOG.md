@@ -1,5 +1,18 @@
 # mastracode
 
+## 0.27.1-alpha.2
+
+### Patch Changes
+
+- Fixed GitHub plugin installs so they use GitHub CLI auth and no longer prompt inside the TUI. ([#18764](https://github.com/mastra-ai/mastra/pull/18764))
+
+- Updated dependencies [[`c4f43f3`](https://github.com/mastra-ai/mastra/commit/c4f43f37a6720658810c91ef3435d59941691262), [`1340fb7`](https://github.com/mastra-ai/mastra/commit/1340fb76262a3ca062130aa71859f07257a0a5a4)]:
+  - @mastra/railway@0.3.0-alpha.0
+  - @mastra/core@1.49.0-alpha.2
+  - @mastra/react@1.2.2-alpha.2
+  - @mastra/server@1.49.0-alpha.2
+  - @mastra/hono@1.5.4-alpha.2
+
 ## 0.27.1-alpha.1
 
 ### Patch Changes
