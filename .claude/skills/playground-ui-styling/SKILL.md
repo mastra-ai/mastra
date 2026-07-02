@@ -1,11 +1,13 @@
 ---
 name: playground-ui-styling
-description: Styling policy for the @mastra/playground-ui design system. This skill should be used when writing, reviewing, or refactoring any frontend application UI — in this repo or in an external consumer of the design system. The docs site has its own styling and is out of scope. Triggers on tasks involving components, Tailwind classes, or design tokens in frontend UI.
+description: How to build frontend UI with the @mastra/playground-ui design system. This skill should be used when writing, reviewing, or refactoring any frontend application UI that consumes the design system, in this repo or outside it. The docs site has its own styling and is out of scope. Triggers on tasks involving components, Tailwind classes, or design tokens in frontend UI.
 ---
 
-# Playground UI Styling
+# Building UI with the Design System
 
-`packages/playground-ui` is the design system for Mastra frontend interfaces. Every application UI builds on it — inside this repo and in external consumers of the package. Do not hand-roll product UI outside the design system. Exception: the docs site, which has its own styling. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
+How to consume the `@mastra/playground-ui` design system. Every Mastra frontend application UI builds on it — do not hand-roll product UI outside it. Exception: the docs site, which has its own styling. This skill is for consumers; changing the design system itself (tokens, `ds/` components, variants) is a separate, explicitly-approved task — the rules below keep the boundary. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
+
+Note: code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — these rules apply there too.
 
 ## Wiring
 

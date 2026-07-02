@@ -43,6 +43,6 @@ e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/pla
 mastra-docs
 react-best-practices
 tailwind-v4 Tailwind v4 usage and v3-to-v4 differences for any Tailwind code
-playground-ui-styling design-system styling policy for any frontend app UI (docs site excluded)
+playground-ui-styling how to build frontend UI with the design system, for any app UI (docs site excluded)
 mastra-smoke-test
 smoke-test create Mastra project and smoke test studio
