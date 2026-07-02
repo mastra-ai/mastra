@@ -4,7 +4,7 @@ import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, MastraOnFinishCallback, MastraOnStepFinishCallback } from '../../stream/types';
 import { MessageList } from '../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
 import type {
@@ -48,8 +48,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-  /** Callback when execution finishes */
-  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+  /** Callback when execution finishes — routed through MastraModelOutput for rich step data */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  /** Lifecycle hook called after the FINISH event closes the stream (for cleanup scheduling) */
+  onStreamFinished?: () => void | Promise<void>;
   /** Callback on error */
   onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends */
@@ -102,6 +104,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onChunk,
     onStepFinish,
     onFinish,
+    onStreamFinished,
     onError,
     onSuspended,
     onAbort,
@@ -190,11 +193,47 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           } as ChunkType<OUTPUT>;
           safeEnqueue(controller, finishChunk);
           safeClose(controller);
-          // Call callback after closing stream (errors don't prevent closure)
+
+          // Build rich onFinish payload from finish event data.
+          // The pubsub FINISH event carries output.text, output.steps, and
+          // stepResult — enough to reconstruct the fields scenario tests expect
+          // (text, steps, toolResults, finishReason, usage).
+          if (onFinish) {
+            try {
+              const steps = (data.output?.steps ?? []) as any[];
+              const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
+              const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
+              await onFinish({
+                text: data.output?.text ?? '',
+                steps,
+                toolResults: allToolResults,
+                toolCalls: allToolCalls,
+                dynamicToolCalls: [],
+                dynamicToolResults: [],
+                staticToolCalls: [],
+                staticToolResults: [],
+                files: [],
+                sources: [],
+                reasoning: [],
+                content: [],
+                finishReason: data.stepResult?.reason ?? 'stop',
+                usage: data.output?.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                totalUsage: data.output?.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                warnings: data.stepResult?.warnings ?? [],
+                request: { body: undefined },
+                response: {},
+                reasoningText: undefined,
+                providerMetadata: undefined,
+              });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
+            }
+          }
+
           try {
-            await onFinish?.(data);
+            await onStreamFinished?.();
           } catch (callbackError) {
-            logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
+            logError(`[DurableAgentStream] onStreamFinished callback error:`, callbackError);
           }
           break;
         }
@@ -324,7 +363,15 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     controller = null;
   };
 
-  // Create the MastraModelOutput
+  // Create the MastraModelOutput.
+  // onStepFinish is passed to MastraModelOutput so it fires during stream
+  // consumption (the harness and user code iterate fullStream, which drives
+  // consumeStream internally). The pubsub STEP_FINISH event is not emitted
+  // by the durable workflow, so the pubsub handler alone is not sufficient.
+  //
+  // onFinish is called from the pubsub FINISH handler (above) with a
+  // payload built from the event data. This ensures it fires even when
+  // nobody iterates the stream (e.g. resume flows with delay-only waits).
   const output = new MastraModelOutput<OUTPUT>({
     model,
     stream,
@@ -332,6 +379,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     messageId,
     options: {
       runId,
+      onStepFinish: onStepFinish as MastraOnStepFinishCallback<OUTPUT> | undefined,
     },
   });
 

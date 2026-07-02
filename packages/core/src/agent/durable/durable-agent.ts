@@ -6,7 +6,7 @@ import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -19,7 +19,6 @@ import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
 import type {
-  AgentFinishEventData,
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
@@ -87,8 +86,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-  /** Callback when execution finishes */
-  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+  /** Callback when execution finishes — receives rich step data (text, steps, toolResults) */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback on error */
   onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
@@ -725,10 +724,8 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
@@ -813,7 +810,7 @@ export class DurableAgent<
     options?: {
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
       /**
@@ -924,10 +921,8 @@ export class DurableAgent<
       offset: resumeOffset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
@@ -1151,10 +1146,8 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
@@ -1301,7 +1294,7 @@ export class DurableAgent<
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
@@ -1342,10 +1335,8 @@ export class DurableAgent<
       offset: options?.offset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
