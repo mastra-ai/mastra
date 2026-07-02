@@ -42,6 +42,7 @@ playground-msw-tests PRIMARY test approach for packages/playground packages/play
 e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/playground
 mastra-docs
 react-best-practices
-tailwind-best-practices
+tailwind-v4 Tailwind v4 usage and v3-to-v4 differences for any Tailwind code
+playground-ui-styling design-system styling policy for packages/playground-ui packages/playground
 mastra-smoke-test
 smoke-test create Mastra project and smoke test studio
