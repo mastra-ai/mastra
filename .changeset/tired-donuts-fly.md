@@ -19,5 +19,3 @@ Added optional `organizationId` and `projectId` query parameters to the dataset 
 GET /datasets/abc123?organizationId=org_a&projectId=proj_1
 DELETE /datasets/abc123?organizationId=org_a
 ```
-
-Related: [MASTRA-4438](https://linear.app/kepler-crm/issue/MASTRA-4438)
