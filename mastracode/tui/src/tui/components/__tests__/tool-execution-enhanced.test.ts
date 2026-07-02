@@ -957,6 +957,25 @@ Test plan:
     expect(output).toContain(chalk.white("'done'"));
   });
 
+  it('highlights shell control words and numbers outside quoted strings', () => {
+    const command = 'for item in 1 2 3; do echo "while 99"; done';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(command);
+    expect(output).toContain(chalk.blue('for'));
+    expect(output).toContain(chalk.blue('in'));
+    expect(output).toContain(chalk.white('1'));
+    expect(output).toContain(chalk.white('3'));
+    expect(output).toContain(chalk.white('"while 99"'));
+    expect(output).not.toContain(chalk.blue('while'));
+  });
+
   it('keeps quoted shell strings highlighted after wrapping', () => {
     const command = `echo "${'quoted '.repeat(40)}if then fi"`;
     const component = new ToolExecutionComponentEnhanced(

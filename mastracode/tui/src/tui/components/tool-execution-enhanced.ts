@@ -520,6 +520,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (token === '(' || token === ')' || token === '<' || token === '>') {
       return theme.fg('muted', token);
     }
+    if (/^\d+(?:\.\d+)?$/.test(token)) return chalk.white(token);
     if (SHELL_CONTROL_WORDS.has(token)) return chalk.blue(token);
     return theme.fg('toolArgs', token);
   }
@@ -535,8 +536,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     const flushPlain = () => {
       if (!plain) return;
-      highlighted += plain.replace(/&&|\|\||[|;&()<>]|-{1,2}[a-zA-Z0-9_.=/-]+|\b[a-zA-Z_][a-zA-Z0-9_]*\b/g, token =>
-        this.highlightQuietShellCommandToken(token),
+      highlighted += plain.replace(
+        /&&|\|\||[|;&()<>]|-{1,2}[a-zA-Z0-9_.=/-]+|\b\d+(?:\.\d+)?\b|\b[a-zA-Z_][a-zA-Z0-9_]*\b/g,
+        token => this.highlightQuietShellCommandToken(token),
       );
       plain = '';
     };
