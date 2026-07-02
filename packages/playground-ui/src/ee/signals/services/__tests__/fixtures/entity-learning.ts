@@ -124,6 +124,33 @@ export const topicsResponse: EntityLearningTopicsResponse = {
   ],
 };
 
+/**
+ * Latest `behavior` run for entity_support. Runs are per-signal, so this run
+ * ('31') differs from the entity-wide `latestRunId` ('32', a `sentiment` run).
+ */
+export const behaviorTopicsResponse: EntityLearningTopicsResponse = {
+  run: {
+    runId: '31',
+    signalName: 'behavior',
+    topicCount: 1,
+    sourceItemCount: 50,
+    groupedItemCount: 45,
+    outlierItemCount: 5,
+  },
+  topics: [
+    {
+      topicId: '77',
+      runId: '31',
+      signalName: 'behavior',
+      name: 'Repeated retries',
+      description: 'Users retrying the same failing action.',
+      itemCount: 45,
+      coverage: 0.9,
+      score: 0.7,
+    },
+  ],
+};
+
 export const topicResponse: EntityLearningTopicResponse = {
   topic: topicsResponse.topics[0],
 };

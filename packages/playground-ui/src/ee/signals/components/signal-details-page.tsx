@@ -348,14 +348,17 @@ export function SignalDetailsPage({
 }: SignalDetailsPageProps) {
   const { data: entities = [], isLoading: entitiesLoading, isError: entitiesError } = useEntities();
   const resolvedEntity = entities.find(item => item.entityId === entity?.entityId);
-  const runId = resolvedEntity?.latestRunId;
 
+  // No runId: the API resolves the latest run for this signal (the entity-wide
+  // `latestRunId` belongs to a single signal). Examples/points below reuse the
+  // run resolved by the topics response so all three queries hit the same run.
   const {
     data: topicsData,
     isLoading: topicsLoading,
     isError: topicsError,
-  } = useEntityTopics(resolvedEntity?.entityId, signalId, runId);
-  const topics: EntityLearningTopic[] = topicsData?.topics ?? [];
+  } = useEntityTopics(resolvedEntity?.entityId, signalId);
+  const topics: EntityLearningTopic[] = useMemo(() => topicsData?.topics ?? [], [topicsData]);
+  const runId = topicsData?.run.runId;
 
   const topicSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}:${initialTopicId ?? ''}`;
   const chartSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}`;
