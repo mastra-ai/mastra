@@ -15,7 +15,7 @@ Do not produce walls of text. Every response should be short, dense, and end wit
 **Shell note:** `gh` output often contains ANSI color codes that break `jq`. Use `gh`'s built-in `--jq` flag instead of piping to `jq`, or prefix commands with `NO_COLOR=1`.
 
 1. Parse the PR number and optional `--working-file <path>` from `$ARGUMENTS`.
-2. If `--working-file` is present, verify the file exists and read it first. Use the same file as the only artifact and update it before ending. Before any stop/final prompt, include relevant options from the working file. If the file does not exist, tell the user and end.
+2. If `--working-file` is present, verify the file exists and read it first. Use the same file as the only artifact and update it before ending. Before any stop/final menu, include relevant options from the working file. If the file does not exist, tell the user and end.
 3. Verify the checked-out branch matches the PR head branch.
 4. Run `gh pr view --json title,body,commits,files,labels,number,headRefName,author` to get PR metadata.
 5. Run `gh pr diff` to get the full diff.
@@ -82,7 +82,7 @@ This PR isn't ready for detailed review yet:
 
 A) Review it anyway — I want to understand what's here
 B) Help me draft feedback to the author about what needs fixing
-C) Stop here
+C) Stop here — include working-file options first if `--working-file` is present
 ```
 
 If the PR passes the bar (or the user chooses to proceed anyway), move to history.
