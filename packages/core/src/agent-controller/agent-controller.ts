@@ -32,7 +32,7 @@ import {
 } from './tools';
 import type {
   AvailableModel,
-  HeartbeatHandler,
+  IntervalHandler,
   AgentControllerConfig,
   AgentControllerMode,
   AgentControllerRequestContext,
@@ -167,7 +167,7 @@ export class AgentController<TState = {}> {
   private initPromise: Promise<void> | undefined = undefined;
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
-  private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
+  private intervalTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
   /**
    * The mode every new session starts in. Resolved once at construction from
    * `config.defaultModeId` (or the configured default/first mode) and reused by
@@ -733,7 +733,7 @@ export class AgentController<TState = {}> {
       this.propagateRuntimeServicesToAgent(agent);
     }
 
-    this.startHeartbeats();
+    this.startIntervals();
   }
 
   private async getMemoryStorage(): Promise<MemoryStorage> {
@@ -1474,6 +1474,17 @@ export class AgentController<TState = {}> {
       memory: { thread: session.thread.getId(), resource: session.identity.getResourceId() },
       abortSignal: session.run.ensureAbortController().signal,
       requestContext,
+      outputWriter: async (chunk: { type?: string; data?: unknown }) => {
+        if (chunk.type !== 'data-mastracode-tool-progress') return;
+        const data = chunk.data as { toolCallId?: string; progress?: unknown } | undefined;
+        if (!data?.toolCallId || data.progress === undefined) return;
+
+        session.emit({ type: 'tool_update', toolCallId: data.toolCallId, partialResult: data.progress });
+        const output = this.formatToolProgressOutput(data.progress);
+        if (output) {
+          session.emit({ type: 'shell_output', toolCallId: data.toolCallId, output, stream: 'stdout' });
+        }
+      },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
@@ -1490,6 +1501,17 @@ export class AgentController<TState = {}> {
     }
 
     return streamOptions;
+  }
+
+  private formatToolProgressOutput(progress: unknown): string {
+    if (typeof progress === 'string') return progress.endsWith('\n') ? progress : `${progress}\n`;
+    if (typeof progress !== 'object' || progress === null) return `${String(progress)}\n`;
+
+    const record = progress as { status?: unknown; detail?: unknown };
+    const parts = [record.status, record.detail].filter(
+      (part): part is string => typeof part === 'string' && part.length > 0,
+    );
+    return parts.length > 0 ? `${parts.join(': ')}\n` : '';
   }
 
   /**
@@ -1828,42 +1850,42 @@ export class AgentController<TState = {}> {
   }
 
   // ===========================================================================
-  // Heartbeat Handlers
+  // Interval Handlers
   // ===========================================================================
 
-  private startHeartbeats(): void {
-    const handlers = [...(this.config.heartbeatHandlers ?? [])];
+  private startIntervals(): void {
+    const handlers = [...(this.config.intervalHandlers ?? [])];
     if (!handlers.length) return;
 
-    for (const hb of handlers) {
-      if (this.heartbeatTimers.has(hb.id)) continue;
+    for (const iv of handlers) {
+      if (this.intervalTimers.has(iv.id)) continue;
 
       const run = async () => {
         try {
-          await hb.handler();
+          await iv.handler();
         } catch (error) {
-          console.error(`[Heartbeat:${hb.id}] failed:`, error);
+          console.error(`[Interval:${iv.id}] failed:`, error);
         }
       };
 
-      if (hb.immediate !== false) {
+      if (iv.immediate !== false) {
         void run();
       }
 
-      const timer = setInterval(run, hb.intervalMs);
+      const timer = setInterval(run, iv.intervalMs);
       timer.unref();
-      this.heartbeatTimers.set(hb.id, { timer, shutdown: hb.shutdown });
+      this.intervalTimers.set(iv.id, { timer, shutdown: iv.shutdown });
     }
   }
 
-  registerHeartbeat(handler: HeartbeatHandler): void {
-    void this.removeHeartbeat({ id: handler.id });
+  registerInterval(handler: IntervalHandler): void {
+    void this.removeInterval({ id: handler.id });
 
     const run = async () => {
       try {
         await handler.handler();
       } catch (error) {
-        console.error(`[Heartbeat:${handler.id}] failed:`, error);
+        console.error(`[Interval:${handler.id}] failed:`, error);
       }
     };
 
@@ -1873,32 +1895,32 @@ export class AgentController<TState = {}> {
 
     const timer = setInterval(run, handler.intervalMs);
     timer.unref();
-    this.heartbeatTimers.set(handler.id, { timer, shutdown: handler.shutdown });
+    this.intervalTimers.set(handler.id, { timer, shutdown: handler.shutdown });
   }
 
-  async removeHeartbeat({ id }: { id: string }): Promise<void> {
-    const entry = this.heartbeatTimers.get(id);
+  async removeInterval({ id }: { id: string }): Promise<void> {
+    const entry = this.intervalTimers.get(id);
     if (entry) {
       clearInterval(entry.timer);
-      this.heartbeatTimers.delete(id);
+      this.intervalTimers.delete(id);
       try {
         await entry.shutdown?.();
       } catch (error) {
-        console.error(`[Heartbeat:${id}] shutdown failed:`, error);
+        console.error(`[Interval:${id}] shutdown failed:`, error);
       }
     }
   }
 
-  async stopHeartbeats(): Promise<void> {
-    const entries = [...this.heartbeatTimers.entries()];
-    this.heartbeatTimers.clear();
+  async stopIntervals(): Promise<void> {
+    const entries = [...this.intervalTimers.entries()];
+    this.intervalTimers.clear();
 
     for (const [id, entry] of entries) {
       clearInterval(entry.timer);
       try {
         await entry.shutdown?.();
       } catch (error) {
-        console.error(`[Heartbeat:${id}] shutdown failed:`, error);
+        console.error(`[Interval:${id}] shutdown failed:`, error);
       }
     }
   }
@@ -1911,7 +1933,7 @@ export class AgentController<TState = {}> {
     // The AgentController owns no session; per-session teardown (thread-subscription
     // cleanup) is the caller's responsibility via `session.thread.*`. Here we
     // only tear down AgentController-shared resources.
-    await this.stopHeartbeats();
+    await this.stopIntervals();
   }
 
   // ===========================================================================

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.21.3-alpha.1",
+  "version": "1.22.1-alpha.0",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -56,7 +56,8 @@
     "lru-cache": "^11.2.7",
     "probe-image-size": "^7.2.3",
     "tokenx": "^1.3.0",
-    "xxhash-wasm": "^1.1.0"
+    "xxhash-wasm": "^1.1.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",
@@ -77,8 +78,7 @@
     "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",
-    "vitest": "catalog:",
-    "zod": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.4.1-0 <3.0.0-0"

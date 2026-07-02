@@ -520,7 +520,7 @@ export class AIV4Adapter {
             {
               const part: MastraDBMessage['content']['parts'][number] = {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: aiV4Part.text,
                 details: [{ type: 'text', text: aiV4Part.text, signature: aiV4Part.signature }],
               };
               if (aiV4Part.providerOptions) {

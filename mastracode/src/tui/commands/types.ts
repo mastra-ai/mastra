@@ -8,6 +8,7 @@ import type { MastraCodeAnalytics } from '../../analytics.js';
 import type { AuthStorage } from '../../auth/storage.js';
 import type { HookManager } from '../../hooks/index.js';
 import type { McpManager } from '../../mcp/manager.js';
+import type { PluginManager } from '../../plugins/manager.js';
 import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
 import type { TUIState } from '../state.js';
 
@@ -17,6 +18,7 @@ export interface SlashCommandContext {
   session: Session<any>;
   hookManager?: HookManager;
   mcpManager?: McpManager;
+  pluginManager?: PluginManager;
   analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
   customSlashCommands: SlashCommandMetadata[];

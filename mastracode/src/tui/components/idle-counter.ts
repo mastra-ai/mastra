@@ -1,18 +1,18 @@
 /**
- * Live idle-time indicator shown above the user input after an agent run completes.
+ * Live work/idle-time indicator shown above the user input.
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
+import type { TUIState } from '../state.js';
+import { formatStatusDuration } from '../status-duration.js';
 import { BOX_INDENT, theme } from '../theme.js';
 
+export { formatStatusDuration } from '../status-duration.js';
+
 const MINUTE_MS = 60_000;
-const HOUR_MINUTES = 60;
-const DAY_MINUTES = HOUR_MINUTES * 24;
-const MONTH_MINUTES = DAY_MINUTES * 30;
-const YEAR_MINUTES = DAY_MINUTES * 365;
 
 export class IdleCounterComponent extends Container {
-  private idleStartedAt?: number;
+  private timingState?: Pick<TUIState, 'lastAgentRunDurationMs' | 'lastAgentRunEndedAt' | 'lastAgentRunEndReason'>;
   private textChild: Text;
 
   constructor() {
@@ -21,24 +21,23 @@ export class IdleCounterComponent extends Container {
     this.addChild(this.textChild);
   }
 
-  setIdleStartedAt(idleStartedAt: number | undefined, now = Date.now()): void {
-    this.idleStartedAt = idleStartedAt;
+  setTimingState(
+    timingState: Pick<TUIState, 'lastAgentRunDurationMs' | 'lastAgentRunEndedAt' | 'lastAgentRunEndReason'> | undefined,
+    now = Date.now(),
+  ): void {
+    this.timingState = timingState;
     this.update(now);
   }
 
   update(now = Date.now()): void {
-    if (this.idleStartedAt === undefined) {
+    const segments = this.timingState ? formatIdleStatusTimingSegments(this.timingState, now) : null;
+    if (!segments) {
       this.textChild.setText('');
       return;
     }
 
-    const idleMinutes = Math.floor((now - this.idleStartedAt) / MINUTE_MS);
-    if (idleMinutes < 1) {
-      this.textChild.setText('');
-      return;
-    }
-
-    this.textChild.setText(theme.fg('dim', `  ${formatIdleDuration(idleMinutes)} idle`));
+    const idle = segments.idle ? theme.fg('dim', segments.idle) : '';
+    this.textChild.setText(idle ? `  ${idle}` : '');
   }
 
   render(width: number): string[] {
@@ -47,32 +46,25 @@ export class IdleCounterComponent extends Container {
   }
 }
 
-export function formatIdleDuration(totalMinutes: number): string {
-  const minutes = Math.max(1, Math.floor(totalMinutes));
-  const units = [
-    { name: 'year', minutes: YEAR_MINUTES },
-    { name: 'month', minutes: MONTH_MINUTES },
-    { name: 'day', minutes: DAY_MINUTES },
-    { name: 'hour', minutes: HOUR_MINUTES },
-    { name: 'minute', minutes: 1 },
-  ];
+type IdleStatusTimingState = Pick<TUIState, 'lastAgentRunDurationMs' | 'lastAgentRunEndedAt' | 'lastAgentRunEndReason'>;
 
-  let remaining = minutes;
-  const parts: string[] = [];
-
-  for (const unit of units) {
-    const value = Math.floor(remaining / unit.minutes);
-    if (value === 0) continue;
-
-    parts.push(formatUnit(value, unit.name));
-    remaining %= unit.minutes;
-
-    if (parts.length === 2) break;
+export function formatIdleStatusTimingSegments(
+  state: IdleStatusTimingState,
+  now = Date.now(),
+): { summary: string; idle: string } | null {
+  if (state.lastAgentRunEndedAt === undefined) {
+    return null;
   }
 
-  return parts.join(' ');
+  const idleMs = now - state.lastAgentRunEndedAt;
+  const idle = idleMs >= MINUTE_MS ? `${formatStatusDuration(idleMs)} idle` : '';
+  return idle ? { summary: '', idle } : null;
 }
 
-function formatUnit(value: number, unit: string): string {
-  return `${value} ${unit}${value === 1 ? '' : 's'}`;
+export function formatIdleStatusTiming(state: IdleStatusTimingState, now = Date.now()): string {
+  const segments = formatIdleStatusTimingSegments(state, now);
+  if (!segments) return '';
+  return segments.summary && segments.idle
+    ? `${segments.summary} · ${segments.idle}`
+    : segments.summary || segments.idle;
 }

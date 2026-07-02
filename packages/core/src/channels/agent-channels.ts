@@ -656,9 +656,11 @@ export class AgentChannels {
 
   /**
    * Returns channel output processors that render the agent's stream to the
-   * originating chat platform. The processor is a no-op for runs that didn't
-   * come in through the channels path (it keys off a marker on
-   * `requestContext` set by `processChatMessage`).
+   * originating chat platform. The processor resolves its render context from
+   * the inbound `requestContext` marker set by `processChatMessage` when
+   * present, and otherwise reconstructs it from the run's thread via the bound
+   * `AgentChannels` (so heartbeat / Studio / custom-UI runs on a channel-backed
+   * thread still post back). Non-channel runs pass through untouched.
    *
    * Skipped if the user already added a processor with the same id.
    */
@@ -673,7 +675,7 @@ export class AgentChannels {
   getOutputProcessors(configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
     if (hasProcessor) return [];
-    return [new ChatChannelOutputProcessor()];
+    return [new ChatChannelOutputProcessor(this)];
   }
 
   /**
@@ -1169,6 +1171,51 @@ export class AgentChannels {
       formatError: adapterConfig?.formatError,
       approvalContext,
     };
+  }
+
+  /**
+   * Reconstruct a {@link ChatChannelRenderContext} for a Mastra thread that is
+   * backed by a channel, without an inbound platform event.
+   *
+   * The inbound webhook paths (`processChatMessage`, approve/decline) stash a
+   * render context on `requestContext` because they already hold the live
+   * `Thread` handle from `event.thread`. Runs that did NOT originate from a
+   * platform message (heartbeats, Studio, custom UI, user code) have no such
+   * handle, so `ChatChannelOutputProcessor` calls this to rebuild it from the
+   * thread's persisted channel coordinates.
+   *
+   * Returns `null` when the thread is not channel-backed (no `channel_platform`
+   * metadata) or its platform adapter isn't configured on this instance — the
+   * processor then passes the run through untouched.
+   *
+   * Delegates to the same {@link _buildRenderContext} used by the inbound paths,
+   * so both paths produce an identical render context (single source of truth).
+   * The only per-fire inputs are `platform` (a persisted string) and the live
+   * `Thread` handle, which the Chat SDK materializes from the stored external id
+   * via `chat.thread(externalThreadId)`.
+   */
+  async buildRenderContextForThread(threadId: string): Promise<ChatChannelRenderContext | null> {
+    const mastra = this.agent?.getMastraInstance();
+    const storage = mastra?.getStorage();
+    if (!storage) return null;
+
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) return null;
+
+    const thread = await memoryStore.getThreadById({ threadId });
+    if (!thread) return null;
+
+    const platform = thread.metadata?.channel_platform;
+    const externalThreadId = thread.metadata?.channel_externalThreadId;
+    if (typeof platform !== 'string' || platform.length === 0) return null;
+    if (typeof externalThreadId !== 'string' || externalThreadId.length === 0) return null;
+    if (!this.adapters[platform]) return null;
+
+    const chat = this.chat;
+    if (!chat) return null;
+
+    const chatThread = chat.thread(externalThreadId);
+    return this._buildRenderContext(chatThread, platform);
   }
 
   /**

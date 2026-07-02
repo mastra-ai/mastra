@@ -18,6 +18,7 @@ import { getAssistantRenderParts } from '../db-message-parts.js';
 import type { ToolRenderPart } from '../db-message-parts.js';
 import { getMarkdownTheme } from '../theme.js';
 
+import { createStaticSubagentComponent } from './tool.js';
 import type { EventHandlerContext } from './types.js';
 
 type MessageContent = Exclude<MastraDBMessage['content'], string>;
@@ -167,23 +168,32 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
 
   // Check for new tool calls
   for (const tool of toolParts) {
-    // For subagent calls, freeze the current streaming component with content
-    // before the tool call, then create a new one. SubagentExecutionComponent
-    // handles the visual rendering. Check subagentToolCallIds separately since
-    // handleToolStart may have already added the ID to seenToolCallIds.
-    if (tool.toolName === 'subagent' && !state.subagentToolCallIds.has(tool.toolCallId)) {
-      state.seenToolCallIds.add(tool.toolCallId);
-      state.subagentToolCallIds.add(tool.toolCallId);
-      const preParts = getPartsBeforeTool(message, tool.toolCallId, state.seenToolCallIds);
-      state.streamingComponent.updateContent(withParts(message, preParts));
-      state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-      ctx.addChildBeforeFollowUps(state.streamingComponent);
-      createdStreamingComponent = true;
-      continue;
-    }
-
     if (!state.seenToolCallIds.has(tool.toolCallId)) {
       state.seenToolCallIds.add(tool.toolCallId);
+
+      const preParts = getPartsBeforeTool(message, tool.toolCallId, state.seenToolCallIds);
+      state.streamingComponent.updateContent(withParts(message, preParts));
+
+      const staticSubagent = createStaticSubagentComponent(ctx, tool.toolCallId, tool.toolName, tool.args);
+      if (staticSubagent) {
+        state.subagentToolCallIds.add(tool.toolCallId);
+        createdStreamingComponent = true;
+        continue;
+      }
+
+      // For built-in subagent calls without a plugin renderer, freeze the current
+      // assistant slice before the tool and continue text in a fresh component.
+      if (tool.toolName === 'subagent' && !state.subagentToolCallIds.has(tool.toolCallId)) {
+        state.subagentToolCallIds.add(tool.toolCallId);
+        state.streamingComponent = new AssistantMessageComponent(
+          undefined,
+          state.hideThinkingBlock,
+          getMarkdownTheme(),
+        );
+        ctx.addChildBeforeFollowUps(state.streamingComponent);
+        createdStreamingComponent = true;
+        continue;
+      }
 
       const component = new ToolExecutionComponentEnhanced(
         tool.toolName,

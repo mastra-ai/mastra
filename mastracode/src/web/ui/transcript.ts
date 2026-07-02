@@ -1,13 +1,10 @@
 import type {
   AgentControllerEvent,
   KnownAgentControllerEvent,
-  AgentControllerMessage,
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
-import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
-
-import { toMastraDBMessage } from './agent-controller-message-accumulator';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
 /**
  * Transcript model + reducer.
@@ -210,7 +207,7 @@ type Action =
     }
   | {
       type: 'hydrate';
-      messages: AgentControllerMessage[];
+      messages: MastraDBMessage[];
       modeId?: string;
       modelId?: string;
       threadId?: string;
@@ -238,11 +235,12 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         entries: [
           ...state.entries,
           toMessageEntry(
-            toMastraDBMessage({
+            {
               id: `local-${Date.now()}-${noticeSeq++}`,
               role: 'user',
-              content: [{ type: 'text', text: action.text }],
-            }),
+              createdAt: new Date(),
+              content: { format: 2, parts: [{ type: 'text', text: action.text }] },
+            },
             { steer: action.steer },
           ),
         ],
@@ -273,7 +271,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
 
     case 'message_start':
     case 'message_update': {
-      const next = upsertAssistant(state, event.message, true);
+      const next = upsertAssistant(state, event.message as MastraDBMessage, true);
       // Only streamed assistant content opens the decode window — empty or
       // tool-only updates must not count toward tokens/sec.
       if (!hasAssistantText(next)) {
@@ -519,14 +517,14 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
  * call (matched to its result) as part of the same assistant entry.
  */
 function hydrate(
-  messages: AgentControllerMessage[],
+  messages: MastraDBMessage[],
   modeId?: string,
   modelId?: string,
   threadId?: string,
   omProgress?: AgentControllerOMProgress,
   usage?: UsageSnapshot,
 ): TranscriptState {
-  const entries = messages.map(message => toMessageEntry(toMastraDBMessage(message), { streaming: false }));
+  const entries = messages.map(message => toMessageEntry(message, { streaming: false }));
   return { ...initialTranscript, entries, modeId, modelId, threadId, omProgress, usage };
 }
 
@@ -544,7 +542,7 @@ function toMessageEntry(
   };
 }
 
-function upsertAssistant(state: TranscriptState, message: AgentControllerMessage, streaming: boolean): TranscriptState {
+function upsertAssistant(state: TranscriptState, message: MastraDBMessage, streaming: boolean): TranscriptState {
   if (message.role !== 'assistant') return state;
   const entries = [...state.entries];
   let idx = entries.findIndex(e => e.kind === 'message' && e.message.role === 'assistant' && e.id === message.id);
@@ -557,7 +555,7 @@ function upsertAssistant(state: TranscriptState, message: AgentControllerMessage
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
-  const nextMessage = preserveRuntimeToolParts(toMastraDBMessage(message), prevEntry?.message);
+  const nextMessage = preserveRuntimeToolParts(message, prevEntry?.message);
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
   if (idx === -1) entries.push(entry);
@@ -611,11 +609,12 @@ function withTool(
   const entries = [...state.entries];
   let idx = latestAssistantIndex(entries);
   if (idx === -1) {
-    const message = toMastraDBMessage({
+    const message: MastraDBMessage = {
       id: `assistant-tools-${Date.now()}`,
       role: 'assistant',
-      content: [],
-    });
+      createdAt: new Date(),
+      content: { format: 2, parts: [] },
+    };
     entries.push(toMessageEntry(message, { streaming: false }));
     idx = entries.length - 1;
   }

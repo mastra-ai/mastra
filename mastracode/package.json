@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.27.0-alpha.5",
+  "version": "0.27.1-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -53,25 +53,47 @@
         "default": "./dist/acp.cjs"
       }
     },
+    "./headless": {
+      "import": {
+        "types": "./dist/headless/index.d.ts",
+        "default": "./dist/headless.js"
+      },
+      "require": {
+        "types": "./dist/headless/index.d.ts",
+        "default": "./dist/headless.cjs"
+      }
+    },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.js"
+      },
+      "require": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "cli": "tsx src/main.ts",
     "check": "tsc --noEmit && pnpm check:ui",
     "check:ui": "tsc --noEmit -p src/web/ui/tsconfig.json",
-    "web:dev": "concurrently --kill-others-on-fail --names server,ui \"tsx src/web/server.ts\" \"vite --config src/web/vite.config.ts\"",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "web:dev": "concurrently --kill-others-on-fail --names server,ui \"tsx --env-file-if-exists=src/web/.env src/web/server.ts\" \"vite --config src/web/vite.config.ts\"",
+    "web:dev:github": "pnpm db:up && pnpm web:dev",
     "web:ui:build": "vite --config src/web/vite.config.ts build",
     "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "web:ui:test": "vitest run --config e2e/web-ui/vitest.config.ts",
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "tsx ../scripts/generate-package-docs.ts",
-    "build:watch": "pnpm build --watch",
     "test": "vitest",
     "lint": "eslint .",
     "e2e:list": "tsx e2e-list.ts",
     "e2e:smoke": "vitest run --config e2e/vitest.shards.config.ts",
     "e2e:test": "MC_E2E_VITEST_SCENARIOS=all vitest run --config e2e/vitest.shards.config.ts",
-    "web:start": "pnpm web:ui:build && tsx src/web/server.ts"
+    "web:start": "pnpm web:ui:build && tsx --env-file-if-exists=src/web/.env src/web/server.ts"
   },
   "keywords": [],
   "author": "",
@@ -87,6 +109,7 @@
     "@earendil-works/pi-tui": "^0.79.4",
     "@hono/node-server": "^1.19.11",
     "@mastra/agent-browser": "workspace:*",
+    "@mastra/auth-workos": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
@@ -97,19 +120,27 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/railway": "workspace:*",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mastra/server": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
+    "@mastra/voice-deepgram": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
+    "@octokit/auth-app": "^8.0.0",
+    "@octokit/rest": "^22.0.1",
     "@tanstack/react-query": "^5.90.21",
+    "@tursodatabase/api": "2.0.4",
     "ai": "^6.0.176",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
+    "drizzle-orm": "^0.45.0",
     "execa": "^9.6.1",
     "fastest-levenshtein": "^1.0.16",
     "hono": "^4.12.8",
     "partial-json": "^0.1.7",
+    "pg": "^8.21.0",
     "posthog-node": "^5.37.0",
     "strip-ansi": "^7.2.0",
     "tokenx": "^1.3.0",
@@ -128,6 +159,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.5.2",
     "@types/node": "22.19.21",
+    "@types/pg": "^8.18.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.4",
@@ -135,6 +167,7 @@
     "@vitest/ui": "catalog:",
     "@xterm/headless": "6.0.0",
     "concurrently": "^9.1.2",
+    "drizzle-kit": "^0.31.0",
     "eslint": "^10.4.1",
     "highlight.js": "^11.11.0",
     "jsdom": "^26.1.0",

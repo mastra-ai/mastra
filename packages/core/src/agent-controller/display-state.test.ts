@@ -319,6 +319,55 @@ describe('tool lifecycle', () => {
     });
   });
 
+  it('maps Mastra Code tool progress data chunks to tool updates', async () => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    await (session as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'plugin_tool',
+                args: {},
+              },
+            });
+            controller.enqueue({
+              type: 'data-mastracode-tool-progress',
+              runId: 'run-1',
+              from: ChunkFrom.USER,
+              data: {
+                toolCallId: 'call-1',
+                progress: { status: 'thinking', detail: 'Agent is answering…' },
+              },
+              transient: true,
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_update',
+        toolCallId: 'call-1',
+        partialResult: { status: 'thinking', detail: 'Agent is answering…' },
+      }),
+    );
+    expect(session.displayState.get().activeTools.get('call-1')!.partialResult).toBe(
+      '{"status":"thinking","detail":"Agent is answering…"}',
+    );
+  });
+
   it('uses display transforms while processing tool stream chunks', async () => {
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {

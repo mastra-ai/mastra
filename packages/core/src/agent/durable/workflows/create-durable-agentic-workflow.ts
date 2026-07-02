@@ -29,6 +29,7 @@ import {
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
+  createDurableGoalStep,
   createDurableIsTaskCompleteStep,
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
@@ -63,6 +64,9 @@ const durableAgenticInputSchema = z.object({
   // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
+  // JSON-safe snapshot of requestContext.entries() so durable steps can read
+  // it (e.g. is-task-complete scorers pass it as customContext).
+  requestContextEntries: z.record(z.string(), z.any()).optional(),
 });
 
 // Re-export shared output schema (identical across implementations)
@@ -111,6 +115,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
   // so it shows up in workflow traces and produces a proper state transition.
   const isTaskCompleteStep = createDurableIsTaskCompleteStep(maxSteps);
+
+  // Create the goal evaluation step — mirrors the non-durable
+  // `createGoalStep`. Runs after isTaskComplete so the goal judge
+  // sees whether isTaskComplete already stopped the loop.
+  const goalStep = createDurableGoalStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   // Note: foreach runs with concurrency: 1 (sequential) because tool approval
@@ -227,6 +236,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     // messageListState before the dowhile predicate decides whether to loop
     // again. No-op when the run has no policy configured.
     .then(isTaskCompleteStep)
+    // Step 9: Goal evaluation. Mirrors the non-durable createGoalStep — judges
+    // whether the thread's active objective is satisfied or should continue.
+    // No-op when no goal is configured or no active objective exists.
+    .then(goalStep)
     .commit();
 
   // Create the main agentic loop workflow with dowhile
@@ -275,10 +288,24 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       )
       // Run the agentic loop with dowhile
       .dowhile(singleIterationWorkflow, async params => {
-        const { inputData } = params;
+        const { inputData, mastra } = params;
         const state = inputData as IterationState;
         const initData = params.getInitData() as DurableAgenticWorkflowInput;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+        const registryEntry = globalRunRegistry.get(state.runId);
+
+        // Two-phase stop: if onIterationComplete returned { continue: false, feedback }
+        // on the previous iteration, we allowed one more LLM turn with that feedback.
+        // Now that the turn has completed, stop the loop unconditionally.
+        let hasFinishedSteps = false;
+        // Hard-stop tracks reasons that onIterationComplete must NOT override.
+        // pendingFeedbackStop and delegationBailed are unconditional stops.
+        let hardStop = false;
+        if (state.pendingFeedbackStop) {
+          hasFinishedSteps = true;
+          hardStop = true;
+          state.pendingFeedbackStop = false;
+        }
 
         // Continuation check. isTaskComplete (when configured) runs as a
         // proper step inside singleIterationWorkflow and may have already
@@ -294,8 +321,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // engines (Inngest after worker restart) won't have the registry entry
         // and fall back to maxSteps only.
         let stopWhenMatched = false;
-        if (shouldContinue && underMaxSteps) {
-          const registryEntry = globalRunRegistry.get(state.runId);
+        if (shouldContinue && underMaxSteps && !hasFinishedSteps) {
           const stopWhen = registryEntry?.stopWhen;
           if (stopWhen && state.accumulatedSteps.length > 0) {
             const conditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
@@ -307,13 +333,166 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           }
         }
 
-        const isFinal = !shouldContinue || !underMaxSteps || stopWhenMatched;
+        if (stopWhenMatched) {
+          hasFinishedSteps = true;
+        }
+
+        // Check if a delegation hook called ctx.bail() during this iteration.
+        // The flag was set by the mapping step and propagated via iteration state.
+        const delegationBailed = !!(state as any).delegationBailed;
+        if (delegationBailed) {
+          hasFinishedSteps = true;
+          hardStop = true;
+          // Reset the flag so it doesn't carry forward
+          (state as any).delegationBailed = false;
+        }
+
+        let isFinal = !shouldContinue || !underMaxSteps || hasFinishedSteps;
+
+        // Call onIterationComplete hook if provided (for every iteration, not
+        // just continued ones). Mirrors the regular agentic-loop predicate:
+        // the handler can return { continue: false } to stop, { continue: true }
+        // to force-continue (if under maxSteps), and/or { feedback } to inject
+        // a message before the next turn.
+        const onIterationComplete = registryEntry?.onIterationComplete;
+        if (onIterationComplete && !state.backgroundTaskPending) {
+          const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+
+          try {
+            // Deserialize messageList for the callback's messages snapshot
+            const callbackMessageList = new MessageList();
+            try {
+              callbackMessageList.deserialize(state.messageListState);
+            } catch {
+              // If deserialization fails, callback sees empty messages
+            }
+
+            const iterationContext = {
+              iteration: state.accumulatedSteps.length,
+              maxIterations: runMaxSteps,
+              text: lastStep?.text ?? '',
+              toolCalls: (lastStep?.toolCalls ?? []).map((tc: any) => ({
+                id: tc.toolCallId || tc.id || '',
+                name: tc.toolName || tc.name || '',
+                args: (tc.args || {}) as Record<string, unknown>,
+              })),
+              toolResults: (lastStep?.toolResults ?? []).map((tr: any) => ({
+                id: tr.toolCallId || tr.id || '',
+                name: tr.toolName || tr.name || '',
+                result: tr.result,
+                error: tr.error,
+              })),
+              isFinal,
+              finishReason: lastStep?.finishReason ?? 'unknown',
+              runId: state.runId,
+              threadId: initData.state?.threadId,
+              resourceId: initData.state?.resourceId,
+              agentId: state.agentId,
+              agentName: state.agentName ?? state.agentId,
+              messages: callbackMessageList.get.all.db(),
+            };
+
+            const iterationResult = await onIterationComplete(iterationContext);
+
+            if (iterationResult) {
+              // Determine whether we can run another turn. Hard stops
+              // (pendingFeedbackStop, delegationBailed) are unconditional —
+              // onIterationComplete cannot override them.
+              const canRunAnotherTurn =
+                !hardStop && underMaxSteps && (shouldContinue || iterationResult.continue === true);
+
+              if (iterationResult.feedback && canRunAnotherTurn) {
+                // Inject feedback as a synthetic assistant message so the LLM
+                // sees it on the next turn. Mirror the regular agent: mark it
+                // with completionResult.suppressFeedback so isTaskComplete
+                // scorers skip it.
+                const feedbackId =
+                  (mastra as Mastra | undefined)?.generateId?.() ??
+                  globalThis.crypto?.randomUUID?.() ??
+                  `msg_${Date.now()}`;
+                callbackMessageList.add(
+                  {
+                    id: feedbackId,
+                    createdAt: new Date(),
+                    type: 'text',
+                    role: 'assistant',
+                    content: {
+                      parts: [{ type: 'text', text: iterationResult.feedback }],
+                      metadata: {
+                        mode: 'stream',
+                        completionResult: { suppressFeedback: true },
+                      },
+                      format: 2,
+                    },
+                  } as any,
+                  'response',
+                );
+                // Re-serialize the updated messageList
+                state.messageListState = callbackMessageList.serialize();
+
+                if (iterationResult.continue === false) {
+                  // Two-phase stop: let one more LLM turn run with the feedback,
+                  // then stop on the next predicate evaluation.
+                  state.pendingFeedbackStop = true;
+                  isFinal = false;
+                } else if (!hasFinishedSteps && underMaxSteps) {
+                  isFinal = false;
+                  if (state.lastStepResult) {
+                    state.lastStepResult.isContinued = true;
+                  }
+                }
+              } else if (iterationResult.continue === false && !hasFinishedSteps) {
+                hasFinishedSteps = true;
+                isFinal = true;
+              } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
+                if (underMaxSteps || !runMaxSteps) {
+                  hasFinishedSteps = false;
+                  isFinal = false;
+                  if (state.lastStepResult) {
+                    state.lastStepResult.isContinued = true;
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            // Log error but don't fail the iteration
+            const logger = (mastra as Mastra | undefined)?.getLogger?.();
+            logger?.error('Error in onIterationComplete hook:', error);
+          }
+        }
+
+        // Rotate messageId for the next iteration. Each iteration's assistant
+        // response is a distinct message, mirroring the non-durable agentic
+        // loop which calls rotateResponseMessageId() between iterations. The
+        // mutated state.messageId flows into the next singleIterationWorkflow
+        // input via map-to-llm-input.
+        //
+        // We also mark the current MessageList's last assistant message as a
+        // response boundary so MessageMerger won't collapse the next
+        // iteration's assistant content into it. Without this, persisted
+        // memory keeps a single assistant message and the rotated id is never
+        // observable to consumers.
+        if (!isFinal) {
+          const nextMessageId =
+            (mastra as Mastra | undefined)?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
+          state.messageId = nextMessageId;
+
+          try {
+            const boundaryList = new MessageList();
+            boundaryList.deserialize(state.messageListState);
+            boundaryList.markResponseMessageBoundary();
+            state.messageListState = boundaryList.serialize();
+          } catch {
+            // Boundary marking is best-effort; if deserialization fails the
+            // next iteration will still run with the un-marked state.
+          }
+        }
 
         // Emit an iteration-complete event for observability. This fires after
-        // every iteration (including the last one) so client callbacks can
-        // track progress. continue/feedback return values are not honored —
-        // the loop's continuation is governed by isContinued + maxSteps +
-        // stopWhen above.
+        // every iteration (including the last one) so client-side callbacks
+        // (via stream-adapter) can track progress. The in-process callback
+        // above has already been evaluated and its result applied to the
+        // continuation decision.
         if (pubsub) {
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           await emitIterationCompleteEvent(pubsub, state.runId, {

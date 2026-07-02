@@ -36,7 +36,7 @@ async function listScorersFromSystem({
       agentNames: string[];
       workflowIds: string[];
       isRegistered: boolean;
-      source: 'code' | 'stored';
+      source: 'code' | 'stored' | 'fs';
     }
   >();
 

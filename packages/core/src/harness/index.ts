@@ -59,7 +59,7 @@ export type {
   AgentControllerSubagent,
   AgentControllerSubagentHistoryEntry,
   AgentControllerThread,
-  HeartbeatHandler,
+  IntervalHandler,
   ModelAuthStatus,
   ModelUseCountProvider,
   ModelUseCountTracker,

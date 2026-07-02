@@ -1,4 +1,4 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { describe, expect, it } from 'vitest';
 
 import { initialTranscript, transcriptReducer } from './transcript';
@@ -7,6 +7,10 @@ type MessageEntryFixture = {
   kind: 'message';
   message: { content: { parts: unknown[] } };
 };
+
+function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
+  return { id, role, createdAt: new Date(), content: { format: 2, parts } };
+}
 
 function messageParts(entry: unknown): unknown[] {
   return isMessageEntry(entry) ? entry.message.content.parts : [];
@@ -19,19 +23,27 @@ function isMessageEntry(entry: unknown): entry is MessageEntryFixture {
 }
 
 describe('transcript reducer message entries', () => {
-  it('hydrates controller messages as ordered MastraDBMessage entries', () => {
-    const messages: AgentControllerMessage[] = [
-      { id: 'user-1', role: 'user', content: [{ type: 'text', text: 'Inspect this' }] },
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'I will inspect it.' },
-          { type: 'thinking', thinking: 'Need the file first.' },
-          { type: 'tool_call', id: 'tool-1', name: 'view', args: { path: 'src/index.ts' } },
-          { type: 'tool_result', id: 'tool-1', name: 'view', result: 'export const value = 1;' },
-        ],
-      },
+  it('hydrates MastraDBMessage entries without flattening content', () => {
+    const messages: MastraDBMessage[] = [
+      dbMessage('user-1', 'user', [{ type: 'text', text: 'Inspect this' }]),
+      dbMessage('assistant-1', 'assistant', [
+        { type: 'text', text: 'I will inspect it.' },
+        {
+          type: 'reasoning',
+          reasoning: 'Need the file first.',
+          details: [{ type: 'text', text: 'Need the file first.' }],
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'tool-1',
+            toolName: 'view',
+            args: { path: 'src/index.ts' },
+            result: 'export const value = 1;',
+          },
+        },
+      ]),
     ];
 
     const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages });
@@ -74,7 +86,7 @@ describe('transcript reducer message entries', () => {
       type: 'event',
       event: {
         type: 'message_update',
-        message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Streaming text' }] },
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Streaming text' }]),
       },
     });
 

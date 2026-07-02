@@ -32,6 +32,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
+import type { GoalConfig } from '../types';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -135,7 +136,7 @@ export interface SerializableStructuredOutput {
   /** JSON Schema representation of the output schema */
   schema?: JSONSchema7;
   /** Whether to use JSON prompt injection instead of native response format */
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
   /** Whether to use the parent agent's model for structuring */
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
@@ -269,6 +270,13 @@ export interface DurableAgenticWorkflowInput {
   modelSpanData?: unknown;
   /** Starting step index for continuation across iterations */
   stepIndex?: number;
+  /**
+   * JSON-safe snapshot of `requestContext.entries()` from the call site.
+   * Threaded through workflow input so durable steps (e.g. `is-task-complete`
+   * scorers) can pass it as `customContext`, matching the non-durable path.
+   * Only plain JSON-safe entries should appear here.
+   */
+  requestContextEntries?: Record<string, unknown>;
 }
 
 /**
@@ -377,6 +385,8 @@ export interface DurableAgenticExecutionOutput {
   processorRetryFeedback?: string;
   /** Whether background tasks are still running after this iteration */
   backgroundTaskPending?: boolean;
+  /** Whether a delegation hook called ctx.bail() during this iteration */
+  delegationBailed?: boolean;
 }
 
 /**
@@ -535,8 +545,16 @@ export interface RunRegistryEntry {
   cleanup?: () => void;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
-  /** Resolved input processors (non-serializable) */
+  /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Uncombined input processors for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest` in the
+   * `ProcessorRunner`; this field stores individual processors so the runner
+   * can invoke each processor's `processLLMRequest` method. When absent the
+   * durable `llm-execution` step falls back to `inputProcessors`.
+   */
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
   /** Resolved output processors (non-serializable) */
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Resolved error processors (non-serializable) */
@@ -603,6 +621,13 @@ export interface RunRegistryEntry {
    * Cross-process engines without this slot fall back to maxSteps only.
    */
   isTaskComplete?: AgentExecutionOptions['isTaskComplete'];
+  /**
+   * Agent-level goal configuration. Contains closures (judge resolver,
+   * tools resolver, scorer) that cannot survive the wire; the durable goal
+   * step reads this from the in-process registry. Cross-process engines
+   * without this slot simply skip goal evaluation.
+   */
+  goal?: GoalConfig;
   /**
    * Per-call global tool-approval policy. When `RequireToolApproval` is a
    * function it cannot be serialized into the workflow input, so the closure

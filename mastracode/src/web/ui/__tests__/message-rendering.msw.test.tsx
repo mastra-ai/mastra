@@ -1,4 +1,5 @@
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -13,6 +14,10 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 const PROJECT_PATH = '/tmp/mastracode-test';
+
+function dbMessage(id: string, role: MastraDBMessage['role'], parts: MastraMessagePart[]): MastraDBMessage {
+  return { id, role, createdAt: new Date(), content: { format: 2, parts } };
+}
 
 function seedProject() {
   const project: Project = {
@@ -74,7 +79,7 @@ function useAgentControllerHandlers({
   messages = [],
   events = [],
 }: {
-  messages?: AgentControllerMessage[];
+  messages?: MastraDBMessage[];
   events?: AgentControllerEvent[];
 } = {}) {
   server.use(
@@ -98,16 +103,20 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-1',
-          role: 'assistant',
-          content: [
-            { type: 'text', text: '**Hello** from hydrate' },
-            { type: 'thinking', thinking: 'checking files' },
-            { type: 'tool_call', id: 'tool-1', name: 'view', args: { path: 'README.md' } },
-            { type: 'tool_result', id: 'tool-1', name: 'view', result: 'readme contents' },
-          ],
-        },
+        dbMessage('assistant-1', 'assistant', [
+          { type: 'text', text: '**Hello** from hydrate' },
+          { type: 'reasoning', reasoning: 'checking files', details: [{ type: 'text', text: 'checking files' }] },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              args: { path: 'README.md' },
+              result: 'readme contents',
+            },
+          },
+        ]),
       ],
     });
 
@@ -127,7 +136,7 @@ describe('MastraCode message rendering', () => {
     seedProject();
     const stream = delayedSse({
       type: 'message_update',
-      message: { id: 'assistant-stream', role: 'assistant', content: [{ type: 'text', text: 'Streaming now' }] },
+      message: dbMessage('assistant-stream', 'assistant', [{ type: 'text', text: 'Streaming now' }]),
     });
     useAgentControllerHandlers();
     server.use(http.get(`${SESSION}/stream`, () => stream.response));
@@ -170,11 +179,7 @@ describe('MastraCode message rendering', () => {
     seedProject();
     useAgentControllerHandlers({
       messages: [
-        {
-          id: 'assistant-status',
-          role: 'assistant',
-          content: [{ type: 'om_thread_title_updated', text: 'Thread title updated: Better title' }],
-        },
+        dbMessage('assistant-status', 'assistant', [{ type: 'text', text: 'Thread title updated: Better title' }]),
       ],
     });
 
