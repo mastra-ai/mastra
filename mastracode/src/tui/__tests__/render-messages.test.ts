@@ -825,7 +825,8 @@ describe('renderExistingMessages subagents', () => {
       id: 'tool-legacy-1',
       name: 'view',
       args: { path: 'src/quiet-mode-e2e.ts', offset: 1, limit: 3 },
-      result: 'src/quiet-mode-e2e.ts:1-3\n     1→export const QUIET_MODE_LOADED_PREVIEW = "loaded quiet compact preview";',
+      result:
+        'src/quiet-mode-e2e.ts:1-3\n     1→export const QUIET_MODE_LOADED_PREVIEW = "loaded quiet compact preview";',
       isError: false,
     });
     const state = createState();
