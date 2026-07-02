@@ -148,9 +148,9 @@ export interface SerializableStructuredOutput {
  * step of a durable agentic loop. Mirrors `LoopOptions['modelSettings']` minus
  * `abortSignal` (non-serializable; handled separately via the run registry).
  *
- * `headers` is restricted to a plain record of strings so it survives JSON
- * round-trips across workers / persistence; provider extensions belong in
- * `providerOptions` on `SerializableDurableOptions`.
+ * `headers` are intentionally excluded — they are stored on the in-process
+ * `RunRegistryEntry` so they never reach durable storage. The durable
+ * `llm-execution` step merges them back from the registry at call time.
  */
 export interface SerializableModelSettings {
   maxOutputTokens?: number;
@@ -162,7 +162,6 @@ export interface SerializableModelSettings {
   stopSequences?: string[];
   seed?: number;
   maxRetries?: number;
-  headers?: Record<string, string>;
 }
 
 /**
@@ -175,7 +174,7 @@ export interface SerializableDurableOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */
   activeTools?: string[];
-  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed, headers). */
+  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed). Headers are excluded — see RunRegistryEntry. */
   modelSettings?: SerializableModelSettings;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
@@ -531,6 +530,8 @@ export interface RegistryModelListEntry {
   model: MastraLanguageModel;
   maxRetries: number;
   enabled: boolean;
+  /** Model-config-level headers (from `AgentModelManagerConfig.headers`). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -679,6 +680,18 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Call-time headers from `modelSettings.headers`. These are intentionally
+   * excluded from the serialized `workflowInput` so they never reach durable
+   * storage. The durable `llm-execution` step reads them from this in-process
+   * registry slot and passes them as `callTimeHeaders` to `mergeLlmCallHeaders`.
+   *
+   * Cross-process engines (e.g. Inngest after a worker restart) lose this
+   * slot; callers that need credentials on the LLM HTTP call should configure
+   * them on the model factory (e.g. `openai({ apiKey })`) or via environment
+   * variables.
+   */
+  callTimeHeaders?: Record<string, string>;
 }
 
 /**
