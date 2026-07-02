@@ -169,6 +169,11 @@ overrides:
   '@opentelemetry/sdk-node@<0.217.0': 0.217.0
   '@opentelemetry/exporter-prometheus@<0.217.0': 0.217.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
+  # uuid <11.1.1 and tar <7.5.16 are pinned by transitive parents on old
+  # majors (msal-node/google-gax/etc. declare uuid ^8-^10; the sqlite3
+  # install chain declares tar ^6). Both keep the APIs those parents use.
+  uuid@<11.1.1: 11.1.1
+  tar@<7.5.16: 7.5.16
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
