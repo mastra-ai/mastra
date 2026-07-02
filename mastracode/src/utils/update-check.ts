@@ -16,6 +16,10 @@ const NPM_REGISTRY_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
 /** Timeout for the npm registry fetch (ms). */
 const FETCH_TIMEOUT_MS = 5_000;
 
+// On Windows, package managers and vp are .cmd shims that execFile can only
+// launch through a shell (plain spawns of .cmd files fail with EINVAL).
+const USE_SHELL = process.platform === 'win32';
+
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
 function matchPM(str: string): PackageManager | null {
@@ -73,9 +77,14 @@ export async function detectPackageManager(): Promise<PackageManager> {
 
   // Tier 5: Check if the package is in pnpm's global store (non-blocking)
   const pnpmResult = await new Promise<boolean>(resolve => {
-    execFile('pnpm', ['list', '-g', '--depth=0', PACKAGE_NAME], { timeout: 3_000 }, (error, stdout) => {
-      resolve(!error && stdout.includes(PACKAGE_NAME));
-    });
+    execFile(
+      'pnpm',
+      ['list', '-g', '--depth=0', PACKAGE_NAME],
+      { timeout: 3_000, shell: USE_SHELL },
+      (error, stdout) => {
+        resolve(!error && stdout.includes(PACKAGE_NAME));
+      },
+    );
   });
   if (pnpmResult) return 'pnpm';
 
@@ -252,7 +261,7 @@ export function runUpdate(pm: PackageManager, targetVersion: string): Promise<Up
 
 function execUpdate(cmd: string, args: string[]): Promise<UpdateResult> {
   return new Promise(resolve => {
-    execFile(cmd, args, { timeout: 60_000 }, (error, _stdout, stderr) => {
+    execFile(cmd, args, { timeout: 60_000, shell: USE_SHELL }, (error, _stdout, stderr) => {
       const captured = (stderr ?? '').trim();
       if (error) {
         resolve({ ok: false, stderr: captured || error.message });
@@ -373,7 +382,7 @@ export function resolveUpdateOutcome(opts: {
 function getGlobalRoot(pm: PackageManager): Promise<string | null> {
   const args = pm === 'yarn' ? ['global', 'dir'] : ['root', '-g'];
   return new Promise(res => {
-    execFile(pm, args, { timeout: 10_000 }, (error, stdout) => {
+    execFile(pm, args, { timeout: 10_000, shell: USE_SHELL }, (error, stdout) => {
       const out = (stdout ?? '').trim().split('\n').pop()?.trim();
       if (error || !out) return res(null);
       res(pm === 'yarn' ? resolve(out, 'node_modules') : out);
@@ -416,7 +425,9 @@ function findInstallOwner(dir: string, version: string): InstallOwner | null {
       command: `vp install -g ${PACKAGE_NAME}@${version}`,
     };
   }
-  if (dir.startsWith('/opt/homebrew/Cellar/') || dir.startsWith('/usr/local/Cellar/')) {
+  // Homebrew keeps formulas under <prefix>/Cellar/ for any prefix (/opt/homebrew,
+  // /usr/local, linuxbrew, custom HOMEBREW_PREFIX), so match the path segment.
+  if (dir.split(sep).includes('Cellar')) {
     // Suggest-only: brew formulas lag npm, and `brew upgrade` can pull unrelated updates.
     return { name: 'Homebrew', command: `brew upgrade ${PACKAGE_NAME}` };
   }
@@ -430,6 +441,11 @@ function findInstallOwner(dir: string, version: string): InstallOwner | null {
  * is verified against the on-disk version.
  */
 export async function performUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateOutcome> {
+  // The registry-provided version reaches shell commands on Windows — accept only version tokens.
+  if (!/^[\w.+-]+$/.test(targetVersion)) {
+    return { status: 'failed', message: `Auto-update aborted: unexpected version "${targetVersion}".` };
+  }
+
   const install = locateOwnInstall();
 
   const owner = install ? findInstallOwner(install.dir, targetVersion) : null;

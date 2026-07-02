@@ -470,4 +470,23 @@ describe('performUpdate', () => {
     expect(outcome.message).toContain('brew upgrade mastracode');
     expect(execFileMock).not.toHaveBeenCalled();
   });
+
+  it('recognizes Homebrew under a non-default prefix (linuxbrew)', async () => {
+    mockInstalledAt('/home/linuxbrew/.linuxbrew/Cellar/mastracode/1.0.0/libexec/lib/node_modules/mastracode', '1.0.0');
+
+    const outcome = await performUpdate('npm', '2.0.0');
+
+    expect(outcome.status).toBe('unchanged');
+    expect(outcome.message).toContain('brew upgrade mastracode');
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed target version before running anything', async () => {
+    mockInstalledAt('/global/root/mastracode', '1.0.0');
+
+    const outcome = await performUpdate('npm', '2.0.0; rm -rf ~');
+
+    expect(outcome.status).toBe('failed');
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
 });
