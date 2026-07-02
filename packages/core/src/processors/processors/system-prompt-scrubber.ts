@@ -86,7 +86,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
     this.customPatterns = options.customPatterns || [];
     this.includeDetections = options.includeDetections || false;
     this.redactionMethod = options.redactionMethod || 'mask';
-    this.placeholderText = options.placeholderText || '[SYSTEM_PROMPT]';
+    this.placeholderText = options.placeholderText ?? '[SYSTEM_PROMPT]';
     this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
 

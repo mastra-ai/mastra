@@ -422,6 +422,15 @@ describe('SystemPromptScrubber', () => {
       expect(processor['placeholderText']).toBe('[CUSTOM_PLACEHOLDER]');
     });
 
+    it('should preserve empty placeholder text', async () => {
+      processor = new SystemPromptScrubber({
+        model: mockModel,
+        placeholderText: '',
+      });
+
+      expect(processor['placeholderText']).toBe('');
+    });
+
     it('should use custom instructions', async () => {
       const customInstructions = 'Custom detection instructions';
       processor = new SystemPromptScrubber({
