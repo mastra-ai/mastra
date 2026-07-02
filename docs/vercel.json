@@ -842,7 +842,7 @@
     },
     {
       "source": "/docs/community/contributing-templates",
-      "destination": "/templates",
+      "destination": "https://mastra.ai/templates",
       "permanent": true
     },
     {
