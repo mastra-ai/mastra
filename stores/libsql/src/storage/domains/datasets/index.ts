@@ -298,8 +298,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE ${whereSql}`,
         args: [id, ...params],
       });
-      if (result.rows?.[0]) return this.transformDatasetRow(result.rows[0]);
-      return null;
+      return result.rows?.[0] ? this.transformDatasetRow(result.rows[0]) : null;
     } catch (error) {
       throw new MastraError(
         {

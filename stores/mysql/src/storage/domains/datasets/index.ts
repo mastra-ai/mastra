@@ -349,8 +349,7 @@ export class DatasetsMySQL extends DatasetsStorage {
           projectId: filters?.projectId,
         },
       });
-      if (row) return this.mapDataset(row);
-      return null;
+      return row ? this.mapDataset(row) : null;
     } catch (error) {
       throw new MastraError(
         {

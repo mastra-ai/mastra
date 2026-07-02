@@ -307,8 +307,7 @@ export class DatasetsSpanner extends DatasetsStorage {
         json: true,
       });
       const row = (rows as Array<Record<string, any>>)[0];
-      if (row) return rowToDataset(row);
-      return null;
+      return row ? rowToDataset(row) : null;
     } catch (error) {
       throw new MastraError(
         {

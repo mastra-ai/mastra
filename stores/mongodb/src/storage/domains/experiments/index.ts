@@ -375,8 +375,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const query: Record<string, any> = { id };
       applyTenancyFilter(query, filters);
       const doc = await collection.findOne(query);
-      if (doc) return transformExperimentRow(doc as unknown as Record<string, unknown>);
-      return null;
+      if (!doc) return null;
+      return transformExperimentRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
       throw new MastraError(
         {
@@ -629,8 +629,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const query: Record<string, any> = { id };
       applyTenancyFilter(query, filters);
       const doc = await collection.findOne(query);
-      if (doc) return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
-      return null;
+      if (!doc) return null;
+      return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
       throw new MastraError(
         {

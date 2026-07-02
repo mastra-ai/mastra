@@ -863,13 +863,13 @@ export function createExperimentsTests({
           projectId: exp.projectId,
         });
 
-        // Wrong org — must not throw, must not delete
+        // Wrong org — must not throw and must not delete
         await experimentsStorage.deleteExperiment({
           id: exp.id,
           filters: { organizationId: 'org_b' },
         });
 
-        // Wrong project (right org) — must not throw, must not delete
+        // Wrong project (right org) — must not throw and must not delete
         await experimentsStorage.deleteExperiment({
           id: exp.id,
           filters: { organizationId: 'org_a', projectId: 'proj_b' },

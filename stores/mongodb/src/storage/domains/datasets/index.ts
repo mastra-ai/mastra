@@ -272,8 +272,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const query: Record<string, any> = { id };
       applyTenancyFilter(query, filters);
       const row = await collection.findOne(query);
-      if (row) return this.transformDatasetRow(row);
-      return null;
+      return row ? this.transformDatasetRow(row) : null;
     } catch (error) {
       throw new MastraError(
         {

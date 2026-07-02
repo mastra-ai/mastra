@@ -313,8 +313,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         json: true,
       });
       const row = (rows as Array<Record<string, any>>)[0];
-      if (row) return rowToExperiment(row);
-      return null;
+      return row ? rowToExperiment(row) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -638,8 +637,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         json: true,
       });
       const row = (rows as Array<Record<string, any>>)[0];
-      if (row) return rowToExperimentResult(row);
-      return null;
+      return row ? rowToExperimentResult(row) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -726,8 +724,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
       // Tenancy predicate folded directly into the DELETE DML. Silent no-op on
-      // mismatch — result rows carry the same organizationId/projectId as
-      // their parent experiment.
+      // mismatch.
       if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
         const conditions: string[] = [`${quoteIdent('experimentId', 'column name')} = @experimentId`];
         const params: Record<string, any> = { experimentId: args.experimentId };

@@ -20,8 +20,14 @@ remain indistinguishable so cross-tenant existence isn't leaked.
 The abstract storage contract (`DatasetsStorage.deleteDataset`,
 `ExperimentsStorage.deleteExperiment`, `ExperimentsStorage.deleteExperimentResults`)
 is unchanged — those still return `Promise<void>`, matching every other delete
-in the storage domain. The boolean signal is derived inside `DatasetsManager`
-via a pre-delete scoped `getDatasetById` probe.
+in the storage domain. Third-party adapter implementations do not need updating.
+The boolean signal is derived inside `DatasetsManager` via a pre-delete scoped
+`getDatasetById` probe. There is a tiny TOCTOU window between the probe and the
+delete on concurrent recreate, but it only affects debug log fidelity — not
+correctness or the no-existence-leak contract.
+
+No new named exports from `@mastra/core/storage`, so store adapters do not need
+a peer-floor bump.
 
 **Wire behavior change on `DELETE /datasets/:id`.**
 

@@ -377,10 +377,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE ${scoped.sql}`,
         args: scoped.args,
       });
-      if (result.rows?.[0]) {
-        return this.transformExperimentRow(result.rows[0] as Record<string, unknown>);
-      }
-      return null;
+      return result.rows?.[0] ? this.transformExperimentRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -653,10 +650,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${scoped.sql}`,
         args: scoped.args,
       });
-      if (result.rows?.[0]) {
-        return this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>);
-      }
-      return null;
+      return result.rows?.[0] ? this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -746,14 +740,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // When scoped, fold the tenancy predicate into the cascade DELETE via a
-      // subquery on the parent — the destructive statement is itself scoped,
-      // so a tenancy miss silently affects zero rows.
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
       const { conditions, params } = tenancyWhere(args.filters);
       if (conditions.length) {
-        const parentWhere = ['id = ?', ...conditions].join(' AND ');
         await this.#client.execute({
-          sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere})`,
+          sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')})`,
           args: [args.experimentId, ...params],
         });
         return;

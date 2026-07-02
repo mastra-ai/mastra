@@ -366,8 +366,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           projectId: args.filters?.projectId,
         },
       });
-      if (row) return this.mapExperiment(row);
-      return null;
+      return row ? this.mapExperiment(row) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -616,8 +615,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           projectId: args.filters?.projectId,
         },
       });
-      if (row) return this.mapExperimentResult(row);
-      return null;
+      return row ? this.mapExperimentResult(row) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -788,9 +786,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // When scoped, fold the tenancy predicate into the cascade DELETE via a
-      // subquery on the parent — the destructive statement is itself scoped,
-      // so a tenancy miss silently affects zero rows.
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
       if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
         const tenancyConditions: string[] = [];
         const tenancyParams: any[] = [];
@@ -803,7 +800,6 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           tenancyParams.push(args.filters.projectId);
         }
         const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
-
         await this.pool.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
           [args.experimentId, ...tenancyParams],
@@ -815,9 +811,6 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         [args.experimentId],
       );
     } catch (error) {
-      if (error instanceof MastraError) {
-        throw error;
-      }
       throw new MastraError(
         {
           id: 'MYSQL_DELETE_EXPERIMENT_RESULTS_FAILED',

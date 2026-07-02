@@ -438,8 +438,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
-      if (result) return this.transformExperimentRow(result);
-      return null;
+      return result ? this.transformExperimentRow(result) : null;
     } catch (error) {
       throw new MastraError(
         {
@@ -709,8 +708,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
-      if (result) return this.transformExperimentResultRow(result);
-      return null;
+      return result ? this.transformExperimentResultRow(result) : null;
     } catch (error) {
       throw new MastraError(
         {
