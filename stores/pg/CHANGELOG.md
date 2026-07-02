@@ -1,5 +1,33 @@
 # @mastra/pg
 
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Added storage retention support to PostgreSQL. When you set a `retention` config, `PostgresStore` can prune old rows from every growth-table domain it implements: `memory` (threads, messages, resources by `createdAtZ`), `observability` (spans by `startedAtZ`), `scores` (by `createdAtZ`), `workflows` (run snapshots by `updatedAtZ`), `backgroundTasks` (by `completedAtZ`, so in-flight tasks are never pruned), `experiments` (whole runs by `completedAtZ`, results cascade with their parent), `notifications` (by `createdAtZ`), and `schedules` fire history (by `actual_fire_at`). ([#18733](https://github.com/mastra-ai/mastra/pull/18733))
+
+  Deletes run in batches via `ctid` subqueries (bounded, resumable, and cancellable) so they stay safe on large tables. Anchor-column indexes are created lazily on the first `prune()` call — never at init — so deployments that don't configure retention pay no extra index overhead. `prune()` only deletes rows; PostgreSQL's autovacuum reclaims the dead tuples for reuse.
+
+  The v-next observability domain (day-partitioned signal event tables: `spans`, `metrics`, `logs`, `scores`, `feedback`) is also covered: `prune()` drops whole day partitions — TimescaleDB chunks via `drop_chunks()`, pg_partman children and native partitions via detach + drop — that are entirely older than the cutoff, so aging out event data is a metadata operation instead of a row-by-row delete.
+
+  ```typescript
+  const storage = new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+    retention: {
+      memory: { messages: { maxAge: '30d' } },
+      observability: { spans: { maxAge: '7d' } },
+    },
+  });
+
+  await storage.prune();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b)]:
+  - @mastra/core@1.49.0-alpha.3
+
 ## 1.14.3
 
 ### Patch Changes

@@ -25,13 +25,31 @@ import type {
   ListExperimentsOutput,
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { cutoffFor, runBatchedDelete } from '../../retention';
 import { tenancyWhere } from '../utils';
 
+const DEFAULT_PRUNE_BATCH_SIZE = 1000;
+
 export class ExperimentsLibSQL extends ExperimentsStorage {
+  /**
+   * An experiment is pruned as a whole unit: when `experiments.completedAt` is
+   * older than the policy, the run and all its `experiment_results` rows are
+   * deleted together (results cascade with their parent, matching
+   * `deleteExperiment`). Results are not an independent retention key. NULL
+   * `completedAt` (still running) is never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    experiments: { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
 
@@ -92,6 +110,67 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_EXPERIMENT_RESULTS });
     await this.#db.deleteData({ tableName: TABLE_EXPERIMENTS });
+  }
+
+  /**
+   * Prune whole experiments older than the `experiments` policy's `maxAge`.
+   *
+   * Each batch selects up to `batchSize` aged experiments and deletes their
+   * `experiment_results` rows and the experiment rows in one transaction —
+   * mirroring `deleteExperiment` — so hitting `maxBatches`/`maxRows` or the
+   * abort signal between batches never leaves a run hollow (parent kept,
+   * results gone). NULL `completedAt` (still running) is excluded by the
+   * `< cutoff` predicate. Bounds count whole experiments, not rows.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const policy = policies['experiments'];
+    if (!policy || options?.signal?.aborted) {
+      return policy
+        ? [
+            { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: 0, done: false },
+            { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
+          ]
+        : [];
+    }
+
+    // Lazily create the anchor index on first prune (best-effort) so only
+    // deployments that configure retention pay its write/disk overhead.
+    try {
+      await this.#db.ensureIndex({
+        indexName: `idx_retention_${TABLE_EXPERIMENTS}_completedAt`,
+        tableName: TABLE_EXPERIMENTS,
+        column: 'completedAt',
+      });
+    } catch (error) {
+      this.logger?.warn?.(`Failed to ensure retention index on ${TABLE_EXPERIMENTS}(completedAt):`, error);
+    }
+
+    const cutoff = cutoffFor(policy, 'timestamp');
+    const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
+
+    let childDeleted = 0;
+    const parent = await runBatchedDelete({
+      deleteBatch: async limit => {
+        const { parents, children } = await this.#db.pruneUnitsBatch({
+          parentTable: TABLE_EXPERIMENTS,
+          parentKey: 'id',
+          parentColumn: 'completedAt',
+          childTable: TABLE_EXPERIMENT_RESULTS,
+          childForeignKey: 'experimentId',
+          cutoff,
+          limit,
+        });
+        childDeleted += children;
+        return parents;
+      },
+      batchSize,
+      options,
+    });
+
+    return [
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: childDeleted, done: parent.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
+    ];
   }
 
   // Helper to transform row to Experiment

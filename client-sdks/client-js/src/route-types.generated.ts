@@ -15191,6 +15191,11 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
     spanId?: string | undefined;
     resourceId?: string | undefined;
     threadId?: string | undefined;
+    organizationId?: (string | null) | undefined;
+    projectId?: (string | null) | undefined;
+    batchId?: (string | null) | undefined;
+    datasetId?: (string | null) | undefined;
+    datasetItemId?: (string | null) | undefined;
     preprocessStepResult?:
       | {
           [key: string]: unknown;

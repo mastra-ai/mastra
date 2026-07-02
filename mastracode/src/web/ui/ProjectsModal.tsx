@@ -1,7 +1,10 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Folder, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { DirectoryBrowser } from './DirectoryPicker';
-import { CloseIcon, FolderIcon, GithubIcon, LogoMark, PlusIcon } from './icons';
 import type { Project } from './projects';
 import { addProject, loadProjects, removeProject } from './projects';
 
@@ -33,17 +36,18 @@ export function ProjectsModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Close on Escape (but if browsing to add, Escape backs out to the list first
-  // when there are existing projects).
+  // Escape backs out of the add view to the list first (when projects exist);
+  // the DS Dialog otherwise owns close-on-Escape for the list view.
   useEffect(() => {
+    if (!(adding && !empty)) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (adding && !empty) setAdding(false);
-      else onClose();
+      e.stopPropagation();
+      setAdding(false);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [adding, empty, onClose]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [adding, empty]);
 
   const handlePick = async (path: string, name: string) => {
     setBusy(true);
@@ -69,93 +73,86 @@ export function ProjectsModal({
   };
 
   return (
-    <div className="palette-overlay" onClick={onClose}>
-      <div
-        className="projects-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Projects"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="projects-head">
-          <div className="projects-head-title">
-            <LogoMark size={20} className="logo-mark" />
-            <span>{adding ? 'Open a project' : 'Projects'}</span>
-          </div>
-          <button className="settings-close" onClick={onClose} aria-label="Close">
-            <CloseIcon size={16} />
-          </button>
-        </div>
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent className="w-full max-w-lg" aria-label="Projects">
+        <DialogHeader className="px-5 pt-4 pb-2">
+          <DialogTitle>{adding ? 'Open a project' : 'Projects'}</DialogTitle>
+        </DialogHeader>
 
-        {adding ? (
-          <>
-            <p className="projects-sub">
-              Choose a folder on this machine. Its threads, memory, and workspace stay scoped to that directory — and
-              are shared with the terminal.
-            </p>
-            <DirectoryBrowser
-              onPick={(p, n) => void handlePick(p, n)}
-              onCancel={() => (empty ? onClose() : setAdding(false))}
-              busy={busy}
-              error={error}
-            />
-          </>
-        ) : (
-          <>
-            <div className="projects-list">
-              {projects.map(p => {
-                const active = p.id === activeProjectId;
-                const isGithub = p.source === 'github';
-                return (
-                  <button
-                    key={p.id}
-                    className={`project-card ${active ? 'active' : ''}`}
-                    onClick={() => {
-                      onSelectProject(p);
-                      onClose();
-                    }}
-                    title={isGithub ? 'GitHub repository' : p.path}
-                  >
-                    {isGithub ? (
-                      <GithubIcon size={18} className="project-card-icon" />
-                    ) : (
-                      <FolderIcon size={18} className="project-card-icon" />
-                    )}
-                    <span className="project-card-text">
-                      <span className="project-card-name" title={p.name}>
-                        {p.name}
-                      </span>
-                      {/* For GitHub projects `name` is the `owner/repo` identifier; keep it
-                          visible and show the tracked branch (when known) in the subtitle
-                          instead of a redundant "GitHub repo" label. */}
-                      <span className="project-card-path" title={isGithub ? p.name : p.path}>
-                        {isGithub ? (p.gitBranch ? `branch: ${p.gitBranch}` : 'GitHub repo') : p.path}
-                      </span>
-                    </span>
-                    <span className={`project-card-source ${isGithub ? 'github' : 'local'}`}>
-                      {isGithub ? 'GitHub' : 'Local'}
-                    </span>
-                    {active && <span className="project-card-badge">Active</span>}
-                    <span
-                      className="project-card-remove"
-                      onClick={e => handleRemove(e, p.id)}
-                      title="Remove project"
-                      aria-label={`Remove ${p.name}`}
+        <div className="flex flex-col gap-3 px-5 pb-5">
+          {adding ? (
+            <>
+              <Txt as="p" variant="ui-sm" className="text-icon3">
+                Choose a folder on this machine. Its threads, memory, and workspace stay scoped to that directory — and
+                are shared with the terminal.
+              </Txt>
+              <DirectoryBrowser
+                onPick={(p, n) => void handlePick(p, n)}
+                onCancel={() => (empty ? onClose() : setAdding(false))}
+                busy={busy}
+                error={error}
+              />
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1.5">
+                {projects.map(p => {
+                  const active = p.id === activeProjectId;
+                  return (
+                    <div
+                      key={p.id}
+                      className="group relative flex items-center gap-3 rounded-lg border border-border1 bg-surface-overlay-soft p-3 transition-colors hover:border-neutral5/50"
                     >
-                      <CloseIcon size={14} />
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-hidden"
+                        onClick={() => {
+                          onSelectProject(p);
+                          onClose();
+                        }}
+                        title={p.path}
+                      >
+                        <Folder size={18} className="shrink-0 text-accent1" />
+                        <span className="flex min-w-0 flex-col">
+                          <Txt as="span" variant="ui-md" className="truncate text-icon6">
+                            {p.name}
+                          </Txt>
+                          <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+                            {p.path}
+                          </Txt>
+                        </span>
+                      </button>
+                      {active && (
+                        <Txt
+                          as="span"
+                          variant="ui-xs"
+                          className="shrink-0 rounded-full bg-accent1/15 px-2 py-0.5 text-accent1"
+                        >
+                          Active
+                        </Txt>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0"
+                        onClick={e => handleRemove(e, p.id)}
+                        aria-label={`Remove ${p.name}`}
+                      >
+                        <X size={14} />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
 
-            <button className="projects-add-btn" onClick={() => setAdding(true)}>
-              <PlusIcon size={16} />
-              <span>Add a project</span>
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+              <Button variant="outline" size="sm" className="self-start" onClick={() => setAdding(true)}>
+                <Plus size={16} />
+                <span>Add a project</span>
+              </Button>
+            </>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -397,6 +397,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       if (args.filters?.projectId !== undefined) filter.projectId = args.filters.projectId;
       if (args.filters?.candidateKey !== undefined) filter.candidateKey = args.filters.candidateKey;
       if (args.filters?.candidateId !== undefined) filter.candidateId = args.filters.candidateId;
+      if (args.filters?.targetType !== undefined) filter.targetType = args.filters.targetType;
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // Match documents whose targetIds array contains any of the supplied IDs.
+        filter.targetIds = { $in: args.filters.targetIds };
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        const escapedName = args.filters.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        filter.name = { $regex: escapedName, $options: 'i' };
+      }
 
       const total = await collection.countDocuments(filter);
 

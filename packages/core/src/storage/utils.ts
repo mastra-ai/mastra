@@ -1,6 +1,7 @@
 import type { ScoreRowData } from '../evals/types';
 import { TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
 import type { TABLE_NAMES } from './constants';
+import type { Duration } from './retention';
 import type { StorageColumn } from './types';
 
 /**
@@ -28,6 +29,43 @@ export type StoreName =
   | 'TURBOPUFFER'
   | 'VECTORIZE'
   | (string & {});
+
+const DURATION_UNIT_MS: Record<string, number> = {
+  ms: 1,
+  s: 1000,
+  m: 60 * 1000,
+  h: 60 * 60 * 1000,
+  d: 24 * 60 * 60 * 1000,
+  w: 7 * 24 * 60 * 60 * 1000,
+};
+
+/**
+ * Parses a retention {@link Duration} into milliseconds.
+ *
+ * Accepts a raw number of milliseconds or a `<number><unit>` string where unit
+ * is one of `ms`, `s`, `m`, `h`, `d`, `w`.
+ *
+ * @throws Error if the input is not a valid duration.
+ */
+export function parseDuration(duration: Duration): number {
+  if (typeof duration === 'number') {
+    if (!Number.isFinite(duration) || duration < 0) {
+      throw new Error(`Invalid retention duration: ${duration}. Must be a non-negative finite number of milliseconds.`);
+    }
+    return duration;
+  }
+
+  const match = /^(\d+(?:\.\d+)?)(ms|s|m|h|d|w)$/.exec(duration);
+  if (!match) {
+    throw new Error(
+      `Invalid retention duration: "${duration}". Expected a number of milliseconds or a "<number><unit>" string (ms, s, m, h, d, w).`,
+    );
+  }
+
+  const value = Number(match[1]);
+  const unit = match[2]!;
+  return value * DURATION_UNIT_MS[unit]!;
+}
 
 export function safelyParseJSON(input: any): any {
   // If already an object (and not null), return as-is

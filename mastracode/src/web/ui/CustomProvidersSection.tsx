@@ -1,3 +1,8 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import type { CustomProviderInfo } from '../../shared/api/types';
@@ -6,7 +11,6 @@ import {
   useRemoveCustomProvider,
   useSaveCustomProvider,
 } from '../../shared/hooks/use-custom-providers';
-import { PlusIcon } from './icons';
 
 interface DraftState {
   /** id of the provider being edited, or '' for a brand-new one. */
@@ -84,102 +88,126 @@ export function CustomProvidersSection() {
   };
 
   return (
-    <div className="providers-pane">
-      <div className="cprov-head">
-        <p className="provider-caption">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <Txt as="p" variant="ui-sm" className="text-icon3">
           OpenAI-compatible endpoints. Mirrors the TUI <code>/custom-providers</code> command.
-        </p>
+        </Txt>
         {!draft && (
-          <button className="btn btn-sm" onClick={startAdd} disabled={busy}>
-            <PlusIcon size={13} /> Add provider
-          </button>
+          <Button size="sm" onClick={startAdd} disabled={busy}>
+            <Plus size={13} /> Add provider
+          </Button>
         )}
       </div>
 
-      {error && <div className="provider-error">{error}</div>}
+      {error && (
+        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+          {error}
+        </Txt>
+      )}
 
       {draft && (
-        <div className="cprov-form">
-          <label className="cprov-field">
-            <span>Name</span>
-            <input
-              className="provider-search-input"
+        <div className="flex flex-col gap-3 rounded-lg border border-border1 p-3">
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Name
+            </Txt>
+            <Input
+              size="sm"
               placeholder="e.g. my-llm"
               value={draft.name}
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               autoFocus
             />
           </label>
-          <label className="cprov-field">
-            <span>Base URL</span>
-            <input
-              className="provider-search-input"
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Base URL
+            </Txt>
+            <Input
+              size="sm"
               placeholder="https://api.example.com/v1"
               value={draft.url}
               onChange={e => setDraft({ ...draft, url: e.target.value })}
             />
           </label>
-          <label className="cprov-field">
-            <span>API key {draft.editingId ? '(leave blank to keep)' : '(optional)'}</span>
-            <input
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              API key {draft.editingId ? '(leave blank to keep)' : '(optional)'}
+            </Txt>
+            <Input
               type="password"
-              className="provider-key-input cprov-key"
+              size="sm"
               placeholder="Paste API key"
               value={draft.apiKey}
               onChange={e => setDraft({ ...draft, apiKey: e.target.value })}
             />
           </label>
-          <label className="cprov-field">
-            <span>Models (comma-separated)</span>
-            <input
-              className="provider-search-input"
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Models (comma-separated)
+            </Txt>
+            <Input
+              size="sm"
               placeholder="model-a, model-b"
               value={draft.models}
               onChange={e => setDraft({ ...draft, models: e.target.value })}
             />
           </label>
-          <div className="cprov-form-actions">
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void save()}>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
               {draft.editingId ? 'Save' : 'Add'}
-            </button>
-            <button className="btn btn-sm" disabled={busy} onClick={() => setDraft(null)}>
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => setDraft(null)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="provider-loading">Loading custom providers…</div>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Loading custom providers…
+        </Txt>
       ) : providers.length === 0 && !draft ? (
-        <div className="provider-empty">No custom providers yet. Add one above.</div>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          No custom providers yet. Add one above.
+        </Txt>
       ) : (
-        <div className="provider-list">
+        <ul role="list" className="flex flex-col divide-y divide-border1">
           {providers.map(p => (
-            <div key={p.id} className="provider-row cprov-row">
-              <div className="cprov-info">
-                <div className="cprov-title">
-                  <span className="provider-name">{p.name}</span>
-                  {p.hasApiKey && <span className="provider-pill stored">Key saved</span>}
+            <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <Txt as="span" variant="ui-md" className="truncate text-icon6">
+                    {p.name}
+                  </Txt>
+                  {p.hasApiKey && (
+                    <Badge size="sm" variant="success">
+                      Key saved
+                    </Badge>
+                  )}
                 </div>
-                <span className="cprov-url">{p.url}</span>
+                <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+                  {p.url}
+                </Txt>
                 {p.models.length > 0 && (
-                  <span className="cprov-models">
+                  <Txt as="span" variant="ui-xs" className="text-icon3">
                     {p.models.length} model{p.models.length === 1 ? '' : 's'}
-                  </span>
+                  </Txt>
                 )}
               </div>
-              <div className="provider-actions">
-                <button className="btn btn-sm" disabled={busy} onClick={() => startEdit(p)}>
+              <div className="flex items-center gap-2">
+                <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
                   Edit
-                </button>
-                <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => void remove(p.id)}>
+                </Button>
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
                   Remove
-                </button>
+                </Button>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

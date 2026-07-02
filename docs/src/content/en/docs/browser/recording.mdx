@@ -1,5 +1,5 @@
 ---
-title: "Browser recording (alpha)"
+title: "Browser recording (beta)"
 description: "Record browser sessions as Motion-JPEG AVI videos with optional agent captions."
 packages:
   - "@mastra/core"
@@ -7,13 +7,15 @@ packages:
   - "@mastra/stagehand"
 ---
 
-# Browser recording (alpha)
+# Browser recording (beta)
+
+**Added in:** `@mastra/core@1.43.0`
 
 Browser recording adds two opt-in tools that let an agent save a browser session as a Motion-JPEG AVI video. The agent can also add short captions while it works.
 
-:::caution
+:::experimental
 
-Browser recording is an alpha feature. The API and output format may change.
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -34,7 +36,7 @@ Pass `recording.outputDir` to `AgentBrowser` or `StagehandBrowser`. The browser 
 
 The following example enables recording for `AgentBrowser`:
 
-```typescript title="src/mastra/browsers.ts"
+```typescript title="src/mastra/browsers/agent-browser.ts"
 import { join } from 'node:path'
 import { AgentBrowser } from '@mastra/agent-browser'
 
@@ -48,7 +50,7 @@ export const browser = new AgentBrowser({
 
 The same option works with `StagehandBrowser`:
 
-```typescript title="src/mastra/browsers.ts"
+```typescript title="src/mastra/browsers/stagehand-browser.ts"
 import { join } from 'node:path'
 import { StagehandBrowser } from '@mastra/stagehand'
 
