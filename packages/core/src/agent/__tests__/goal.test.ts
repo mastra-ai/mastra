@@ -34,6 +34,29 @@ function singleStepModel(text = 'Working on it.') {
   });
 }
 
+function goalJudgeModel(decisions: Array<{ decision: 'done' | 'continue' | 'waiting'; reason: string }>) {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      const decision = decisions[Math.min(call, decisions.length - 1)];
+      call++;
+      const text = JSON.stringify(decision);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: `judge-${call}`, modelId: 'mock-judge-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: text },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+      };
+    },
+  });
+}
+
 function makeAgent(goal?: GoalConfig) {
   const agent = new Agent({
     id: 'goal-agent',
@@ -203,6 +226,72 @@ describe('in-loop goal scoring', () => {
 
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.status).toBe('done');
+    expect(record?.runsUsed).toBe(1);
+  });
+
+  it('direct agent goal loop completes with built-in scorer without manual continuation', async () => {
+    const agent = makeAgent({
+      judge: goalJudgeModel([
+        { decision: 'continue', reason: 'need one more pass' },
+        { decision: 'done', reason: 'goal satisfied' },
+      ]) as any,
+      maxRuns: 5,
+    });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+    expect(resultChunks.map(c => c.payload.status)).toEqual(['active', 'done']);
+    expect(resultChunks[resultChunks.length - 1].payload).toMatchObject({
+      objective: 'Reach the goal',
+      iteration: 2,
+      passed: true,
+      status: 'done',
+      maxRunsReached: false,
+    });
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.status).toBe('done');
+    expect(record?.runsUsed).toBe(2);
+  });
+
+  it('direct agent goal loop pauses actionably when built-in scorer returns waiting', async () => {
+    const agent = makeAgent({
+      judge: goalJudgeModel([{ decision: 'waiting', reason: 'waiting for your review' }]) as any,
+      maxRuns: 5,
+    });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    const resultChunks = goalChunks.filter(c => !c.payload.pending);
+    expect(resultChunks).toHaveLength(1);
+    expect(resultChunks[0].payload).toMatchObject({
+      objective: 'Reach the goal',
+      iteration: 1,
+      passed: false,
+      status: 'active',
+      waitingForUser: true,
+      reason: 'waiting for your review',
+    });
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.status).toBe('active');
     expect(record?.runsUsed).toBe(1);
   });
 
