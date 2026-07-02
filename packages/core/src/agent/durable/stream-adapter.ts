@@ -2,10 +2,12 @@ import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import type { OutputProcessorOrWorkflow } from '../../processors';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback, MastraOnStepFinishCallback } from '../../stream/types';
 import { MessageList } from '../message-list';
+import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
 import type {
   AgentStreamEvent,
@@ -69,6 +71,14 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    * callers leave this `false` so the stream stays open for a later resume.
    */
   closeOnSuspend?: boolean;
+  /**
+   * Structured output configuration with live schema. When provided,
+   * `MastraModelOutput` pipes LLM text through `createObjectStreamTransformer`
+   * to produce `object-result` chunks.
+   */
+  structuredOutput?: StructuredOutputOptions<OUTPUT>;
+  /** Output processors to run in MastraModelOutput's stream pipeline */
+  outputProcessors?: OutputProcessorOrWorkflow[];
 }
 
 /**
@@ -111,6 +121,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onIterationComplete,
     logger,
     closeOnSuspend = false,
+    structuredOutput,
+    outputProcessors,
   } = options;
 
   // Helper to log errors (uses logger if available, falls back to console)
@@ -168,8 +180,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Track error chunks for onError callback
           if ((chunk as any).type === 'error') {
             const errPayload = (chunk as any).payload;
-            lastErrorMessage =
-              errPayload?.error?.message || errPayload?.message || 'LLM execution error';
+            lastErrorMessage = errPayload?.error?.message || errPayload?.message || 'LLM execution error';
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
@@ -402,6 +413,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     options: {
       runId,
       onStepFinish: onStepFinish as MastraOnStepFinishCallback<OUTPUT> | undefined,
+      // For durable agents there is only one MastraModelOutput for the whole run.
+      // isLLMExecutionStep must be true so output processors run per-chunk
+      // (processOutputStream / processPart path) rather than the batch
+      // runOutputProcessors path which only fires at finish.  It also gates
+      // createObjectStreamTransformer for structured output.
+      // resolveFinalPromises forces text/finishReason promise resolution at
+      // step-finish despite isLLMExecutionStep being true — durable agents have
+      // no outer MastraModelOutput to resolve them.
+      structuredOutput: structuredOutput as any,
+      isLLMExecutionStep: true,
+      resolveFinalPromises: true,
+      outputProcessors,
     },
   });
 

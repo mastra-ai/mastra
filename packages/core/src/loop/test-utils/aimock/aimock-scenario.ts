@@ -83,6 +83,7 @@ export async function createSharedAgent(
     | 'errorProcessors'
     | 'defaultOptions'
     | 'pubsub'
+    | 'engine'
   > = {},
 ): Promise<{ agent: Agent; mastra: any }> {
   return buildScenarioAgent({ llm, ...opts });
@@ -369,7 +370,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(isTaskComplete ? { isTaskComplete } : {}),
     ...(structuredOutput ? { structuredOutput } : {}),
     ...(activeTools ? { activeTools } : {}),
-    ...(outputProcessors && !isDurable ? { outputProcessors } : {}),
+    ...(outputProcessors ? { outputProcessors } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     ...(prepareStep ? { prepareStep } : {}),
     ...(requestContext ? { requestContext } : {}),
@@ -409,6 +410,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   // Drain the stream so every loop turn (and every AIMock request) completes
   // before we hand back the captured journal.
   let chunks: ChunkType[] | undefined;
+  let suspendedDuringDrain = false;
   if (manualStreamConsumption) {
     // Skip consumption — test will manually drain the stream after publishing events.
   } else if (collectChunks) {
@@ -416,6 +418,12 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     try {
       for await (const chunk of fullStream as AsyncIterable<ChunkType>) {
         chunks.push(chunk);
+        // Durable streams stay open after suspension (no FINISH event fires).
+        // Break out so the harness returns and the test can call resume.
+        if (isDurable && (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval')) {
+          suspendedDuringDrain = true;
+          break;
+        }
       }
     } catch {
       // Stream may error (e.g. provider errors) — we still want the chunks collected so far
@@ -423,8 +431,12 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   } else if (isDurable) {
     // Durable: drain via fullStream iteration
     try {
-      for await (const _chunk of fullStream as AsyncIterable<ChunkType>) {
-        // drain
+      for await (const chunk of fullStream as AsyncIterable<ChunkType>) {
+        // Durable streams stay open after suspension — break so the harness returns.
+        if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+          suspendedDuringDrain = true;
+          break;
+        }
       }
     } catch {
       // Stream may error on provider failures — swallow so runLoopScenario still returns
@@ -433,8 +445,9 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     await output.consumeStream();
   }
 
-  // Clean up durable resources
-  if (isDurable && rawResult.cleanup) {
+  // Clean up durable resources — but NOT when the stream was suspended,
+  // because the test may still need to call resumeStream()/approveToolCall().
+  if (isDurable && rawResult.cleanup && !suspendedDuringDrain) {
     try {
       rawResult.cleanup();
     } catch {

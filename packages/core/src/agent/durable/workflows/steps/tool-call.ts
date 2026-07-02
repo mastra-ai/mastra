@@ -452,8 +452,17 @@ export function createDurableToolCallStep() {
         );
       }
 
-      // Check if resuming from approval
-      if (resumeData && typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData) {
+      // Check if resuming from approval — only when the tool actually requires
+      // approval.  Without the `requiresApproval` guard, generic resume data that
+      // happens to contain an `approved` field (e.g. from context.agent.suspend())
+      // would be misinterpreted as an approval response.
+      if (
+        requiresApproval &&
+        resumeData &&
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        'approved' in resumeData
+      ) {
         if (!(resumeData as { approved: boolean }).approved) {
           // Return the approval decision (not a `result` string) so it persists as
           // `state: 'output-denied'` with `approval`. The denial reason carries the
@@ -481,9 +490,15 @@ export function createDurableToolCallStep() {
           : undefined;
 
       // Check if resuming from in-execution suspension
-      // Pass resumeData through to the tool so it can continue from where it left off
+      // Pass resumeData through to the tool so it can continue from where it left off.
+      // For approval-gated tools, the approval check above already handled the
+      // `approved` field, so the tool executes fresh (not as a "from-suspension"
+      // resume).  For non-approval tools, ANY resume data is forwarded.
       const isResumingFromSuspension =
-        resumeData && typeof resumeData === 'object' && resumeData !== null && !('approved' in resumeData);
+        resumeData &&
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        (requiresApproval ? !('approved' in resumeData) : true);
 
       // 3. Check for background task execution
       const bgManager = registryEntry?.backgroundTaskManager;
@@ -529,6 +544,12 @@ export function createDurableToolCallStep() {
           : undefined;
       const toolTracingContext = stepSpan ? { currentSpan: stepSpan } : undefined;
 
+      // Track whether the tool's suspend callback was invoked so we can skip
+      // emitting a spurious tool-result after tool.execute() returns (the
+      // workflow engine's suspend() sets an internal flag but does not throw,
+      // so execution continues past the suspend call).
+      let wasSuspended = false;
+
       const toolOptions = {
         toolCallId,
         messages: [],
@@ -549,6 +570,7 @@ export function createDurableToolCallStep() {
 
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
+          wasSuspended = true;
           if (suspendOptions?.requireToolApproval) {
             // Tool is requesting approval during execution
             const approvalResumeSchema = JSON.stringify({
@@ -889,8 +911,13 @@ export function createDurableToolCallStep() {
           }
         }
 
-        // Emit tool-result chunk (non-fatal — result is returned regardless)
-        if (pubsub) {
+        // Emit tool-result chunk (non-fatal — result is returned regardless).
+        // Skip emission when the tool called suspend() — the workflow engine's
+        // suspend() sets a flag but does NOT throw, so execution continues past
+        // the suspend call and tool.execute() returns undefined. Emitting a
+        // tool-result with undefined would produce a spurious entry that
+        // confuses downstream consumers (e.g. MastraModelOutput.toolResults).
+        if (pubsub && !wasSuspended) {
           try {
             const resultChunk = await applyToolPayloadTransformToChunk(
               {
@@ -932,7 +959,7 @@ export function createDurableToolCallStep() {
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)
-        if (pubsub) {
+        if (pubsub && !wasSuspended) {
           try {
             const errorChunk = await applyToolPayloadTransformToChunk(
               {

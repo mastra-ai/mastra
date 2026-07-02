@@ -33,8 +33,7 @@ describeForAllEngines(
       expect(errorMessage).toContain('Rate limit exceeded');
     });
 
-    // Durable: error processors are not yet wired into the durable llm-execution retry loop (RC5)
-    it.skipIf(engine === 'durable')('onError and errorProcessors both fire for API errors', async () => {
+    it('onError and errorProcessors both fire for API errors', async () => {
       let onErrorFired = false;
       let errorProcessorFired = false;
 
@@ -69,8 +68,7 @@ describeForAllEngines(
       expect(onErrorFired).toBe(true);
     });
 
-    // Durable: output.text is not populated when stream is drained externally via fullStream
-    it.skipIf(engine === 'durable')('onError does not fire for tool execution errors (those are sent back to model)', async () => {
+    it('onError does not fire for tool execution errors (those are sent back to model)', async () => {
       let onErrorFired = false;
       const { createTool } = await import('../../../../tools');
 
