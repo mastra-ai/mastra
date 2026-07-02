@@ -236,6 +236,36 @@ describe('DurableAgent memory configuration', () => {
       expect(JSON.stringify(messages.messages[1]?.content)).toContain('assistant response');
       result.cleanup();
     });
+
+    it('should not persist messages when memory.options.readOnly is true', async () => {
+      const mockMemory = new MockMemory();
+      const baseAgent = new Agent({
+        id: 'readonly-persist-agent',
+        name: 'ReadOnly Persist Agent',
+        instructions: 'Test readOnly persistence',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('user input', {
+        memory: {
+          thread: 'thread-readonly',
+          resource: 'resource-readonly',
+          options: { readOnly: true },
+        },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const messages = await mockMemory.recall({
+        threadId: 'thread-readonly',
+        resourceId: 'resource-readonly',
+      });
+
+      expect(messages.messages).toHaveLength(0);
+      result.cleanup();
+    });
   });
 
   describe('memory.options configuration', () => {
