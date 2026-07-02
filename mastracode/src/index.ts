@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
-import { Agent } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type {
-  HeartbeatHandler,
+  IntervalHandler,
   AgentControllerConfig,
   AgentControllerEvent,
   AgentControllerMode,
@@ -13,6 +13,7 @@ import type {
   AgentControllerRequestContext,
   Session,
 } from '@mastra/core/agent-controller';
+import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
@@ -70,7 +71,9 @@ import {
   saveSettings,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import { PluginManager } from './plugins/manager.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
+import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -142,6 +145,20 @@ function applyEffectiveDefaultsToModes(
   });
 }
 
+function addPluginToolsToModeAllowlists(
+  modes: AgentControllerMode[],
+  pluginToolNames: string[],
+): AgentControllerMode[] {
+  if (pluginToolNames.length === 0) return modes;
+  return modes.map(mode => {
+    if (!mode.availableTools) return mode;
+    return {
+      ...mode,
+      availableTools: Array.from(new Set([...mode.availableTools, ...pluginToolNames])),
+    };
+  });
+}
+
 export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
@@ -175,8 +192,8 @@ export interface MastraCodeConfig {
   initialState?: Partial<MastraCodeState>;
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
-  /** Override heartbeat handlers. Default: gateway-sync */
-  heartbeatHandlers?: HeartbeatHandler[];
+  /** Override interval handlers. Default: gateway-sync */
+  intervalHandlers?: IntervalHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: AgentControllerConfig<MastraCodeState>['workspace'];
   /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
@@ -187,6 +204,10 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Disable plugin discovery/loading. Default: false */
+  disablePlugins?: boolean;
+  /** Override the plugin manager. Primarily useful for tests or embedding. */
+  pluginManager?: PluginManager;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
    * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
@@ -315,6 +336,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     routeThroughMastraGateway: false,
     settingsPath: config?.settingsPath,
   });
+  const amazonBedrockGateway = createAmazonBedrockGateway();
 
   // Project detection
   const project = detectProject(cwd);
@@ -452,6 +474,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ? undefined
     : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
 
+  const pluginManager = config?.disablePlugins
+    ? undefined
+    : (config?.pluginManager ?? new PluginManager({ projectRoot: project.rootPath, configDir, homeDir }));
+  const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
+  const pluginTools = pluginManager?.getPluginTools() ?? {};
+
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
@@ -516,12 +544,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       })
     : undefined;
-  const codeAgent: Agent = new Agent({
+  const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    // Workspace is wired per-request at the AgentController level (see
+    // `config.workspace` below), so opt out of the factory's default local
+    // workspace. An explicit `undefined` is required: the factory only builds a
+    // default when the `workspace` key is absent.
+    workspace: undefined,
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage),
+    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
     hooks: createToolHooks(hookManager),
     scorers: {
       outcome: {
@@ -620,7 +653,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
   ];
 
-  const defaultHeartbeatHandlers: HeartbeatHandler[] = [
+  const defaultIntervalHandlers: IntervalHandler[] = [
     {
       id: 'gateway-sync',
       intervalMs: 5 * 60 * 1000,
@@ -628,7 +661,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       handler: () => syncGateways(),
     },
   ];
-  const heartbeatHandlers = config?.heartbeatHandlers ?? defaultHeartbeatHandlers;
+  const intervalHandlers = config?.intervalHandlers ?? defaultIntervalHandlers;
 
   // Build lightweight provider access for resolving built-in packs at startup.
   // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
@@ -684,7 +717,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
-  const modes = applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
+  const modes = addPluginToolsToModeAllowlists(
+    applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    Object.keys(pluginTools),
+  );
   const defaultModeId =
     modes.find(mode => mode.metadata?.default === true)?.id ??
     modes.find(mode => mode.id === 'build')?.id ??
@@ -746,7 +782,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     stateSchema: typedStateSchema,
     agent: codeAgent,
     subagents: config?.subagents ?? [],
-    gateways: [mastraCodeGateway],
+    gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
@@ -755,6 +791,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       projectPath: project.rootPath,
       projectName: project.name,
       gitBranch: project.gitBranch,
+      pluginSkillPaths: loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.skillPaths ?? []) : [])),
+      pluginCommandPaths: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' ? (plugin.commandPaths ?? []) : [],
+      ),
+      pluginInstructions: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
+      ),
       yolo: true,
       ...globalInitialState,
       ...config?.initialState,
@@ -763,7 +806,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       configDir,
     },
     modes,
-    heartbeatHandlers,
+    intervalHandlers,
     modelUseCountProvider: () => loadSettings().modelUseCounts,
     modelUseCountTracker: modelId => {
       try {
@@ -802,6 +845,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     memory,
     mcpManager,
     hookManager,
+    pluginManager,
+    loadedPlugins,
+    pluginTools,
     signalsPubSub,
     authStorage,
     resolveModel,
@@ -959,3 +1005,34 @@ export async function mountAgentControllerOnMastra(
  * case: `bootLocalAgentController` (local) or {@link mountAgentControllerOnMastra} (server).
  */
 export const createMastraCode = bootLocalAgentController;
+
+/**
+ * Programmatic headless API. `runMC` runs an already-built controller/session
+ * (from {@link createMastraCode}) as an async-iterable run that also resolves to
+ * a typed result. Also available via the `mastracode/headless` subpath.
+ */
+export {
+  runMC,
+  runMCCli,
+  hasHeadlessFlag,
+  autoApprovePolicy,
+  denyPolicy,
+  permissionModeToPolicy,
+  formatHuman,
+  formatJsonl,
+  renderTextResult,
+  renderJsonResult,
+} from './headless/index.js';
+export type {
+  RunMCOptions,
+  RunMCResult,
+  RunMCStatus,
+  RunMCUsage,
+  RunMCToolCall,
+  RunMCToolResult,
+  RunMCError,
+  RunMCThreadOptions,
+  MCRun,
+  ResolutionPolicy,
+  PermissionMode,
+} from './headless/index.js';

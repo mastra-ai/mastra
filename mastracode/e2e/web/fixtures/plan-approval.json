@@ -13,8 +13,7 @@
             "id": "call_submit_plan",
             "name": "submit_plan",
             "arguments": {
-              "title": "Add a README",
-              "plan": "1. Create README.md\n2. Describe the project"
+              "path": ".mastracode/plans/add-readme.md"
             }
           }
         ]

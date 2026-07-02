@@ -2777,7 +2777,10 @@ describe('MCPServer - Tool Input Validation', () => {
 
     validationClient = new InternalMastraMCPClient({
       name: 'validation-test-client',
-      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`) },
+      // These tests assert the shape of the server's isError validation envelope
+      // (result.isError / result.content), so opt out of the default throw-on-error
+      // behavior and resolve with the raw result instead.
+      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`), onToolError: 'return' },
     });
 
     await validationClient.connect();

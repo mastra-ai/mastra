@@ -119,6 +119,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/structured-output',
           label: 'Structured Output',
         },
@@ -211,6 +219,14 @@ const sidebars = {
           type: 'doc',
           id: 'agents/signal-providers',
           label: 'Signal Providers',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/heartbeats',
+          label: 'Heartbeats',
           customProps: {
             tags: ['beta'],
           },
@@ -463,6 +479,9 @@ const sidebars = {
           type: 'doc',
           id: 'browser/recording',
           label: 'Recording',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',

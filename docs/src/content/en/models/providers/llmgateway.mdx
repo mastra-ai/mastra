@@ -94,6 +94,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 75
   },
   {
+    "model": "llmgateway/claude-fable-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
+  {
     "model": "llmgateway/claude-haiku-4-5",
     "imageInput": true,
     "audioInput": false,
@@ -116,6 +128,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 1,
     "outputCost": 5
+  },
+  {
+    "model": "llmgateway/claude-haiku-4-5-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 200000,
+    "maxOutput": 200000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "llmgateway/claude-opus-4-1-20250805",
@@ -210,6 +234,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 64000,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
+    "model": "llmgateway/claude-sonnet-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 1000000,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -478,18 +514,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.5
   },
   {
-    "model": "llmgateway/glm-4.5-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 98304,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "llmgateway/glm-4.5-x",
     "imageInput": false,
     "audioInput": false,
@@ -538,18 +562,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.9
   },
   {
-    "model": "llmgateway/glm-4.6v-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 16000,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "llmgateway/glm-4.6v-flashx",
     "imageInput": true,
     "audioInput": false,
@@ -584,18 +596,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.06,
     "outputCost": 0.4
-  },
-  {
-    "model": "llmgateway/glm-4.7-flash-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 200000,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "llmgateway/glm-4.7-flashx",
@@ -1098,8 +1098,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 2000000,
     "maxOutput": 30000,
-    "inputCost": 2,
-    "outputCost": 6
+    "inputCost": 1.25,
+    "outputCost": 2.5
   },
   {
     "model": "llmgateway/grok-4-20-reasoning",
@@ -1110,8 +1110,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 2000000,
     "maxOutput": 30000,
-    "inputCost": 2,
-    "outputCost": 6
+    "inputCost": 1.25,
+    "outputCost": 2.5
   },
   {
     "model": "llmgateway/grok-4-3",
@@ -1780,7 +1780,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": false,
-    "contextWindow": 262000,
+    "contextWindow": 262144,
     "maxOutput": 8192,
     "inputCost": 0.09,
     "outputCost": 0.58
@@ -1927,7 +1927,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 131072,
     "maxOutput": 32768,
     "inputCost": 0.15,
-    "outputCost": 1.5
+    "outputCost": 1.2
   },
   {
     "model": "llmgateway/qwen3-next-80b-a3b-thinking",

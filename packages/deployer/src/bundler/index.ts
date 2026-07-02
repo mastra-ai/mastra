@@ -7,14 +7,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
-import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import fsExtra, { copy, ensureDir, emptyDir } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
-import { getPackageRootPath } from '../build/package-info';
-import type { BundlerOptions } from '../build/types';
+import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
 import { isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
@@ -45,7 +44,7 @@ export abstract class Bundler extends MastraBundler {
 
   async writePackageJson(
     outputDirectory: string,
-    dependencies: Map<string, string>,
+    dependencies: Map<string, string | ExternalDependencyInfo>,
     resolutions?: Record<string, string>,
   ) {
     this.logger.debug("Writing project's package.json");
@@ -55,14 +54,15 @@ export abstract class Bundler extends MastraBundler {
 
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
+      const dependencyValue = typeof value === 'string' ? value : (value.packageSpec ?? value.version ?? 'latest');
       if (key.startsWith('@')) {
         // Handle scoped packages (e.g. @org/package)
         const pkgChunks = key.split('/');
-        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
+        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, dependencyValue);
       } else {
         // For non-scoped packages, take only the first part before any slash
         const pkgName = key.split('/')[0] || key;
-        dependenciesMap.set(pkgName, value);
+        dependenciesMap.set(pkgName, dependencyValue);
       }
     }
 
@@ -84,12 +84,6 @@ export abstract class Bundler extends MastraBundler {
         null,
         2,
       ),
-    );
-
-    // pnpm v11 requires build policy via pnpm-workspace.yaml in the output directory
-    await writeFile(
-      join(outputDirectory, 'pnpm-workspace.yaml'),
-      "packages:\n  - '.'\nallowBuilds:\n  bcrypt: true\n  esbuild: true\n  sharp: true\n  protobufjs: true\n  workerd: true\n  bufferutil: true\n  utf-8-validate: true\n",
     );
   }
 
@@ -359,52 +353,13 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
-    const dependenciesToInstall = new Map<string, string>();
+    const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
       if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 
-      let version = depInfo.version;
-      let actualPackageName: string | undefined;
-
-      // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
-      try {
-        // First try to resolve from the project root (provides correct context for monorepos)
-        let rootPath = await getPackageRootPath(dep, projectRoot);
-
-        // If not found in user's project, try resolving from deployer's location
-        // This handles packages like hono that are provided by @mastra/deployer
-        if (!rootPath) {
-          rootPath = await getPackageRootPath(dep, import.meta.dirname);
-        }
-
-        if (rootPath) {
-          const pkg = await readJSON(`${rootPath}/package.json`);
-          actualPackageName = pkg.name;
-          // Use pre-resolved version if available, otherwise use from package.json
-          if (!version) {
-            version = pkg.version;
-          }
-        }
-      } catch {
-        // Resolution failed, will use 'latest' for version
-      }
-
-      // Default to 'latest' if still no version
-      version = version || 'latest';
-
-      // Check if this is an npm alias (import name differs from actual package name)
-      // e.g., importing "ai-v5" which resolves to package "ai"
-      // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
-      // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
-      const isAlias = actualPackageName && dep !== actualPackageName;
-
-      if (isAlias) {
-        dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
-      } else {
-        dependenciesToInstall.set(dep, version);
-      }
+      dependenciesToInstall.set(dep, depInfo);
     }
 
     try {

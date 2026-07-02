@@ -68,7 +68,7 @@ export class MongoDBStore extends MastraCompositeStore {
   stores: StorageDomains;
 
   constructor(config: MongoDBConfig) {
-    super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit });
+    super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit, retention: config.retention });
 
     this.#connector = resolveMongoDBConfig(config);
 

@@ -1,4 +1,5 @@
 import { MastraBase } from '../../../base';
+import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '../../retention';
 
 /**
  * A single task in an agent's structured task list.
@@ -65,11 +66,25 @@ export interface GoalObjectiveRecord {
  * lane.
  */
 export abstract class ThreadStateStorage extends MastraBase {
+  /**
+   * Declares which of this domain's tables are eligible for age-based retention.
+   * Adapters that support retention override this; the default is empty.
+   */
+  static readonly retentionTables: RetentionTablesDescriptor = {};
+
   constructor() {
     super({
       component: 'STORAGE',
       name: 'THREAD_STATE',
     });
+  }
+
+  /**
+   * Delete rows older than each policy's `maxAge`, batched, bounded, and
+   * cancellable. Default implementation is a no-op (retention not supported).
+   */
+  async prune(_policies: Record<string, TableRetentionPolicy>, _options?: PruneOptions): Promise<PruneResult[]> {
+    return [];
   }
 
   /**

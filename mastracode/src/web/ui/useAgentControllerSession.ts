@@ -2,7 +2,6 @@ import { MastraClient } from '@mastra/client-js';
 import type {
   AgentControllerAvailableModel,
   AgentControllerModeInfo,
-  AgentControllerThreadInfo,
   AgentControllerSessionSettings,
   PlanResume,
   PermissionRules,
@@ -13,13 +12,25 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { initialTranscript, transcriptReducer } from './transcript';
 import type { TranscriptState } from './transcript';
+import {
+  useAgentControllerModelsQuery,
+  useAgentControllerPermissionsQuery,
+  useAgentControllerSettingsQuery,
+  useAgentControllerThreadsQuery,
+  useCloneAgentControllerThreadMutation,
+  useCreateAgentControllerThreadMutation,
+  useDeleteAgentControllerThreadMutation,
+  useRenameAgentControllerThreadMutation,
+  useSetAgentControllerStateMutation,
+  useSetPermissionForCategoryMutation,
+  useSwitchAgentControllerModeMutation,
+  useSwitchAgentControllerModelMutation,
+} from './useAgentControllerQueries';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 
-/** How many recent threads to load for the sidebar (it shows the newest few). */
-const THREAD_PAGE_SIZE = 20;
-
-type Session = ReturnType<ReturnType<MastraClient['getAgentController']>['session']>;
+type Controller = ReturnType<MastraClient['getAgentController']>;
+type Session = ReturnType<Controller['session']>;
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -48,7 +59,7 @@ export interface AgentControllerSessionApi {
   status: ConnectionStatus;
   modes: AgentControllerModeInfo[];
   models: AgentControllerAvailableModel[];
-  threads: AgentControllerThreadInfo[];
+  threads: Awaited<ReturnType<Session['listThreads']>>;
   send: (text: string) => Promise<void>;
   steer: (text: string) => Promise<void>;
   abort: () => Promise<void>;
@@ -76,6 +87,8 @@ export interface AgentControllerSessionApi {
   setPermissionForTool: (toolName: string, policy: PermissionPolicy) => Promise<void>;
   /** Current agent behavior settings (yolo, thinking, notifications, smart editing). */
   settings: AgentControllerSessionSettings | null;
+  permissions: PermissionRules | null;
+  pendingPermissionCategory: ToolCategory | null;
   /** Re-fetch behavior settings from the server (after a setState write). */
   refreshSettings: () => Promise<void>;
   /** Merge key-value pairs into the server-side session state. */
@@ -99,46 +112,44 @@ export function useAgentControllerSession({
   const [transcript, dispatch] = useReducer(transcriptReducer, initialTranscript);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
   const [modes, setModes] = useState<AgentControllerModeInfo[]>([]);
-  const [threads, setThreads] = useState<AgentControllerThreadInfo[]>([]);
+  const [controller, setController] = useState<Controller | null>(null);
+  const [querySession, setQuerySession] = useState<Session | null>(null);
 
   const sessionRef = useRef<Session | null>(null);
-  const agentControllerRef = useRef<ReturnType<MastraClient['getAgentController']> | null>(null);
-  const [models, setModels] = useState<AgentControllerAvailableModel[]>([]);
-  const [settings, setSettings] = useState<AgentControllerSessionSettings | null>(null);
+
+  const queryScope = { agentControllerId, resourceId };
+  const modelsQuery = useAgentControllerModelsQuery(controller, enabled, { agentControllerId });
+  const settingsQuery = useAgentControllerSettingsQuery(querySession, enabled, queryScope);
+  const permissionsQuery = useAgentControllerPermissionsQuery(querySession, enabled, queryScope);
+  const threadsQuery = useAgentControllerThreadsQuery(querySession, projectPath, enabled, queryScope);
+  const setStateMutation = useSetAgentControllerStateMutation(querySession, queryScope);
+  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(querySession, queryScope);
+  const createThreadMutation = useCreateAgentControllerThreadMutation(querySession, projectPath, queryScope);
+  const deleteThreadMutation = useDeleteAgentControllerThreadMutation(querySession, projectPath, queryScope);
+  const renameThreadMutation = useRenameAgentControllerThreadMutation(querySession, projectPath, queryScope);
+  const cloneThreadMutation = useCloneAgentControllerThreadMutation(querySession, projectPath, queryScope);
+  const switchModeMutation = useSwitchAgentControllerModeMutation(querySession, queryScope);
+  const switchModelMutation = useSwitchAgentControllerModelMutation(querySession, queryScope);
+  const models = modelsQuery.data ?? [];
+  const settings = settingsQuery.data ?? null;
+  const permissions = permissionsQuery.data ?? null;
+  const pendingPermissionCategory = setPermissionForCategoryMutation.variables?.category ?? null;
+  const threads = threadsQuery.data ?? [];
 
   const refreshSettings = useCallback(async () => {
-    try {
-      const state = await sessionRef.current?.state();
-      if (state?.settings) setSettings(state.settings);
-    } catch {
-      /* non-fatal */
-    }
-  }, []);
+    await settingsQuery.refetch();
+  }, [settingsQuery]);
 
   const refreshThreads = useCallback(async () => {
-    const session = sessionRef.current;
-    if (!session) return;
-    try {
-      // The sidebar only shows the most recent threads — fetch a small page
-      // instead of the resource's entire (potentially huge) thread history.
-      // Scope to the active project path so worktrees sharing a resourceId
-      // don't bleed each other's threads into the list.
-      setThreads(
-        await session.listThreads({
-          limit: THREAD_PAGE_SIZE,
-          tags: projectPath ? { projectPath } : undefined,
-        }),
-      );
-    } catch {
-      /* non-fatal */
-    }
-  }, [projectPath]);
+    await threadsQuery.refetch();
+  }, [threadsQuery]);
 
   useEffect(() => {
     if (!enabled) {
       // No active project — stay dormant, don't create a session or thread.
       setStatus('connecting');
-      setThreads([]);
+      setController(null);
+      setQuerySession(null);
       dispatch({ type: 'reset' });
       return;
     }
@@ -224,7 +235,8 @@ export function useAgentControllerSession({
       const controller = client.getAgentController(agentControllerId);
       const session = controller.session(resourceId);
       sessionRef.current = session;
-      agentControllerRef.current = controller;
+      setController(controller);
+      setQuerySession(session);
 
       try {
         const [created, agentControllerModes] = await Promise.all([
@@ -236,22 +248,7 @@ export function useAgentControllerSession({
         if (disposed) return;
         setModes(agentControllerModes);
 
-        // Load available models for the settings picker (non-fatal if it fails).
-        // The catalog can be huge (thousands of entries), so keep only models
-        // that have an API key configured — the ones the user can actually use.
-        controller
-          .listModels()
-          .then(list => {
-            if (disposed) return;
-            // Only offer models with an API key configured. If none are set up,
-            // leave the list empty (the picker hides) rather than dumping the
-            // entire catalog into a select.
-            setModels(list.filter(m => m.hasApiKey));
-          })
-          .catch(() => {});
-
         const state = await session.state();
-        if (state.settings) setSettings(state.settings);
         // Resuming a thread that already has history: load and render it so the
         // view isn't empty until new events arrive. Falls back to a clean reset.
         const threadId = created.threadId ?? state.threadId;
@@ -279,7 +276,6 @@ export function useAgentControllerSession({
         }
 
         await subscribe(session, false);
-        if (!disposed) void refreshThreads();
       } catch {
         if (!disposed) setStatus('error');
       }
@@ -291,7 +287,7 @@ export function useAgentControllerSession({
       unsubscribe?.();
       sessionRef.current = null;
     };
-  }, [agentControllerId, resourceId, baseUrl, refreshThreads, enabled]);
+  }, [agentControllerId, resourceId, baseUrl, projectPath, enabled]);
 
   const send = useCallback(async (text: string) => {
     const session = sessionRef.current;
@@ -324,13 +320,19 @@ export function useAgentControllerSession({
     [],
   );
 
-  const switchMode = useCallback(async (modeId: string) => {
-    await sessionRef.current?.switchMode(modeId);
-  }, []);
+  const switchMode = useCallback(
+    async (modeId: string) => {
+      await switchModeMutation.mutateAsync(modeId);
+    },
+    [switchModeMutation],
+  );
 
-  const switchModel = useCallback(async (modelId: string) => {
-    await sessionRef.current?.switchModel(modelId);
-  }, []);
+  const switchModel = useCallback(
+    async (modelId: string) => {
+      await switchModelMutation.mutateAsync(modelId);
+    },
+    [switchModelMutation],
+  );
 
   const switchThread = useCallback(async (threadId: string) => {
     const session = sessionRef.current;
@@ -364,40 +366,32 @@ export function useAgentControllerSession({
 
   const createThread = useCallback(
     async (title?: string) => {
-      const session = sessionRef.current;
-      if (!session) return;
-      const thread = await session.createThread(title);
+      const thread = await createThreadMutation.mutateAsync(title);
       dispatch({ type: 'reset', threadId: thread.id });
-      void refreshThreads();
     },
-    [refreshThreads],
+    [createThreadMutation],
   );
 
   const deleteThread = useCallback(
     async (threadId: string) => {
-      await sessionRef.current?.deleteThread(threadId);
-      void refreshThreads();
+      await deleteThreadMutation.mutateAsync(threadId);
     },
-    [refreshThreads],
+    [deleteThreadMutation],
   );
 
   const renameThread = useCallback(
     async (threadId: string, title: string) => {
-      await sessionRef.current?.renameThread(threadId, title);
-      void refreshThreads();
+      await renameThreadMutation.mutateAsync({ threadId, title });
     },
-    [refreshThreads],
+    [renameThreadMutation],
   );
 
   const cloneThread = useCallback(
     async (sourceThreadId?: string) => {
-      const session = sessionRef.current;
-      if (!session) return;
-      const thread = await session.cloneThread(sourceThreadId ? { sourceThreadId } : undefined);
+      const thread = await cloneThreadMutation.mutateAsync(sourceThreadId ? { sourceThreadId } : undefined);
       dispatch({ type: 'reset', threadId: thread.id });
-      void refreshThreads();
     },
-    [refreshThreads],
+    [cloneThreadMutation],
   );
 
   const setGoal = useCallback(async (objective: string) => {
@@ -424,17 +418,23 @@ export function useAgentControllerSession({
     return (await sessionRef.current?.getPermissions()) ?? { categories: {}, tools: {} };
   }, []);
 
-  const setPermissionForCategory = useCallback(async (category: ToolCategory, policy: PermissionPolicy) => {
-    await sessionRef.current?.setPermissionForCategory(category, policy);
-  }, []);
+  const setPermissionForCategory = useCallback(
+    async (category: ToolCategory, policy: PermissionPolicy) => {
+      await setPermissionForCategoryMutation.mutateAsync({ category, policy });
+    },
+    [setPermissionForCategoryMutation],
+  );
 
   const setPermissionForTool = useCallback(async (toolName: string, policy: PermissionPolicy) => {
     await sessionRef.current?.setPermissionForTool(toolName, policy);
   }, []);
 
-  const setState = useCallback(async (updates: Record<string, unknown>) => {
-    await sessionRef.current?.setState(updates);
-  }, []);
+  const setState = useCallback(
+    async (updates: Record<string, unknown>) => {
+      await setStateMutation.mutateAsync(updates);
+    },
+    [setStateMutation],
+  );
 
   return {
     transcript,
@@ -464,6 +464,8 @@ export function useAgentControllerSession({
     setPermissionForCategory,
     setPermissionForTool,
     settings,
+    permissions,
+    pendingPermissionCategory,
     refreshSettings,
     setState,
     pushNotice,

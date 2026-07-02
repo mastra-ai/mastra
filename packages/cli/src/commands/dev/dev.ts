@@ -4,7 +4,13 @@ import { join, resolve } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
-import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
+import {
+  getServerOptions,
+  normalizeStudioBase,
+  prepareFsAgentsEntry,
+  writeFsAgentsEntry,
+  mirrorFsAgentWorkspaces,
+} from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 import pc from 'picocolors';
@@ -437,13 +443,20 @@ export async function dev({
   await acquireDevLock(dotMastraPath);
 
   const fileService = new FileService();
-  const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+  const userEntryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
   const bundler = new DevBundler(env);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
-  // Use the bundler's getAllToolPaths method to prepare tools paths
-  const discoveredTools = bundler.getAllToolPaths(mastraDir, tools ?? []);
+  // Discover fs-routed agents under agents/* and, if any exist, wrap the entry so
+  // they are registered onto the user's mastra instance. Falls back to the user
+  // entry unchanged when there are none.
+  const fsAgents = await prepareFsAgentsEntry(mastraDir, userEntryFile, dotMastraPath);
+  const entryFile = fsAgents.entryFile;
+
+  // Use the bundler's getAllToolPaths method to prepare tools paths, plus any
+  // tools defined under agents/*/tools for fs-routed agents.
+  const discoveredTools = bundler.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 
   const loadedEnv = await bundler.loadEnvVars();
 
@@ -469,7 +482,7 @@ export async function dev({
     }
   }
 
-  const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
+  const serverOptions = await getServerOptions(userEntryFile, join(dotMastraPath, 'output'));
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');
@@ -522,6 +535,18 @@ export async function dev({
   };
 
   await bundler.prepare(dotMastraPath);
+
+  // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
+  // empties the output directory so the wrapper is not wiped before the watcher
+  // reads it. No-op when there are no fs-routed agents.
+  await writeFsAgentsEntry(fsAgents);
+
+  // Mirror authored `agents/<name>/workspace/**` seeds into the bundled output
+  // directory, where the generated entry resolves each agent's default
+  // workspace at runtime. Runs after `prepare()` so it is not wiped.
+  if (fsAgents.agentCount > 0) {
+    await mirrorFsAgentWorkspaces(mastraDir, join(dotMastraPath, 'output'));
+  }
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 

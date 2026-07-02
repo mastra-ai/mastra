@@ -66,6 +66,7 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('user_interrupt').catch(() => {});
       state.session.abort();
     } else {
       const current = state.editor.getText();
@@ -214,6 +215,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   if (!activeGoalJudge) return false;
 
   state.userInitiatedAbort = true;
+  state.hookManager?.runInterrupt('goal_judge_interrupt').catch(() => {});
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
   // Esc during an in-loop goal evaluation pauses the goal so it does not
@@ -358,6 +360,10 @@ export function setupAutocomplete(state: TUIState): void {
       name: 'yolo',
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
+    {
+      name: 'voice',
+      description: 'Manage push-to-talk voice input (engine, provider, model)',
+    },
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
@@ -365,6 +371,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'plugins', description: 'Manage Mastra Code plugins' },
     { name: 'observability', description: 'Configure cloud observability' },
     {
       name: 'github',
@@ -439,10 +446,11 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    const configDir = (state.session.state.get() as { configDir?: string } | undefined)?.configDir;
+    const sessionState = state.session.state.get() as { configDir?: string; pluginCommandPaths?: string[] } | undefined;
+    const configDir = sessionState?.configDir;
     // Load from all sources (global and local)
     const globalCommands = await loadCustomCommands(undefined, configDir);
-    const localCommands = await loadCustomCommands(process.cwd(), configDir);
+    const localCommands = await loadCustomCommands(process.cwd(), configDir, sessionState?.pluginCommandPaths ?? []);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();
@@ -519,13 +527,21 @@ export function setupKeyHandlers(
     }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      return;
     }
-    state.activeInlinePlanApproval = undefined;
-    state.activeInlineQuestion = undefined;
-    state.pendingInlineQuestions.length = 0;
-    state.pendingAskUserComponents?.clear();
-    state.userInitiatedAbort = true;
-    state.session.abort();
+
+    if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('process_sigint').catch(() => {});
+      state.session.abort();
+    }
   };
   process.on('SIGINT', sigintHandler);
 

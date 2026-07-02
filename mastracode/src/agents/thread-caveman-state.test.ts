@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { restoreOMThreadStateForCurrentThread } from './thread-caveman-state.js';
+import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './thread-caveman-state.js';
 
 function createSession({
   currentThreadId = 'thread-1',
@@ -17,6 +17,7 @@ function createSession({
   const setState = vi.fn(async (nextState: Record<string, unknown>) => {
     Object.assign(state, nextState);
   });
+  let eventHandler: ((event: any) => void) | undefined;
   const session = {
     state: {
       get: vi.fn(() => state),
@@ -30,6 +31,13 @@ function createSession({
       }),
       setSetting: vi.fn(async () => {}),
     },
+    subscribe: vi.fn((handler: (event: any) => void) => {
+      eventHandler = handler;
+      return () => {
+        eventHandler = undefined;
+      };
+    }),
+    emit: (event: any) => eventHandler?.(event),
     switchCurrentThread: (threadId: string | undefined) => {
       activeThreadId = threadId;
     },
@@ -129,5 +137,51 @@ describe('restoreOMThreadStateForCurrentThread', () => {
 
     expect(session.state.set).not.toHaveBeenCalled();
     expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'observeAttachments', value: false });
+  });
+
+  it('mirrors persisted sandboxAllowedPaths metadata into controller state', async () => {
+    const session = createSession({
+      metadata: { sandboxAllowedPaths: ['/outside/project'] },
+      state: { sandboxAllowedPaths: [] },
+    });
+
+    await restoreOMThreadStateForCurrentThread(session as never);
+
+    expect(session.state.set).toHaveBeenCalledWith({ sandboxAllowedPaths: ['/outside/project'] });
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('clears sandboxAllowedPaths when the current thread has no sandbox metadata', async () => {
+    const session = createSession({ metadata: {}, state: { sandboxAllowedPaths: ['/outside/project'] } });
+
+    await restoreOMThreadStateForCurrentThread(session as never);
+
+    expect(session.state.set).toHaveBeenCalledWith({ sandboxAllowedPaths: [] });
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not update sandboxAllowedPaths when missing metadata already matches the cleared state', async () => {
+    const session = createSession({ metadata: {}, state: { sandboxAllowedPaths: [] } });
+
+    await restoreOMThreadStateForCurrentThread(session as never);
+
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('persists sandboxAllowedPaths state changes back to the current thread', async () => {
+    const session = createSession({ metadata: {}, state: { sandboxAllowedPaths: ['/outside/project'] } });
+    attachOMThreadStatePersistence(session as never);
+
+    session.emit({
+      type: 'state_changed',
+      state: { sandboxAllowedPaths: ['/outside/project'] },
+      changedKeys: ['sandboxAllowedPaths'],
+    });
+
+    expect(session.thread.setSetting).toHaveBeenCalledWith({
+      key: 'sandboxAllowedPaths',
+      value: ['/outside/project'],
+    });
   });
 });

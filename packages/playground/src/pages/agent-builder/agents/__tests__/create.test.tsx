@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -27,18 +28,9 @@ vi.mock('@/domains/agent-builder/components/agent-starter/agent-builder-starter'
   AgentBuilderStarter: () => <div data-testid="agent-builder-starter" />,
 }));
 
-vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    Button: ({ children, onClick, tooltip, ...rest }: any) => (
-      <button onClick={onClick} aria-label={tooltip} {...rest}>
-        {children}
-      </button>
-    ),
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
+vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
 
 vi.mock('react-router', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -115,9 +107,11 @@ const renderCreate = () => {
   const result = render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <AgentBuilderCreate />
-        </MemoryRouter>
+        <TooltipProvider>
+          <MemoryRouter>
+            <AgentBuilderCreate />
+          </MemoryRouter>
+        </TooltipProvider>
       </QueryClientProvider>
     </MastraReactProvider>,
   );

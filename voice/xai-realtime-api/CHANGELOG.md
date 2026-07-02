@@ -1,5 +1,39 @@
 # @mastra/voice-xai-realtime
 
+## 0.2.3-alpha.1
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3-alpha.0
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2
+
+## 0.2.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb)]:
+  - @mastra/schema-compat@1.3.2-alpha.1
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2-alpha.0
+
 ## 0.2.1
 
 ### Patch Changes

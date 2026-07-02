@@ -1,7 +1,10 @@
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Folder } from 'lucide-react';
 import { useState } from 'react';
 
 import { useDirectoryListing } from '../../shared/hooks/use-fs';
-import { ArrowDownIcon, FolderIcon } from './icons';
 
 /**
  * Server-driven directory browser. The browser can't read absolute filesystem
@@ -32,7 +35,7 @@ function basename(path: string): string {
 /** Split an absolute path into clickable breadcrumb segments. */
 function crumbs(path: string): { label: string; path: string }[] {
   const parts = path.split('/').filter(Boolean);
-  const out: { label: string; path: string }[] = [{ label: '/', path: '/' }];
+  const out: { label: string; path: string }[] = [{ label: 'root', path: '/' }];
   let acc = '';
   for (const part of parts) {
     acc += `/${part}`;
@@ -40,6 +43,9 @@ function crumbs(path: string): { label: string; path: string }[] {
   }
   return out;
 }
+
+const ENTRY_CLASS =
+  'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-icon5 transition-colors hover:bg-surface4 focus-visible:outline-hidden focus-visible:bg-surface4 disabled:opacity-50';
 
 export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickError = null }: DirectoryBrowserProps) {
   // `undefined` lists the server root; explicit paths drill into subfolders.
@@ -54,75 +60,80 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
   const browse = (next?: string) => setPath(next);
 
   return (
-    <div className="dirbrowser">
+    <div className="flex flex-col gap-3">
       {listing && (
-        <nav className="dirbrowser-crumbs" aria-label="Path">
-          {crumbs(listing.path).map((c, i, arr) => (
-            <span key={c.path} className="dirbrowser-crumb-wrap">
-              <button
-                type="button"
-                className="dirbrowser-crumb"
-                disabled={i === arr.length - 1}
-                onClick={() => void browse(c.path)}
-                title={c.path}
+        <Breadcrumb label="Path">
+          {crumbs(listing.path).map((c, i, arr) => {
+            const isCurrent = i === arr.length - 1;
+            return (
+              <Crumb
+                as={isCurrent ? 'span' : 'button'}
+                isCurrent={isCurrent}
+                {...(isCurrent
+                  ? { title: c.path }
+                  : { type: 'button', title: c.path, onClick: () => void browse(c.path) })}
+                key={c.path}
               >
                 {c.label}
-              </button>
-              {i < arr.length - 1 && <span className="dirbrowser-crumb-sep">/</span>}
-            </span>
-          ))}
-        </nav>
+              </Crumb>
+            );
+          })}
+        </Breadcrumb>
       )}
 
-      <div className="dirbrowser-list">
-        {loading && <div className="dirbrowser-msg">Loading…</div>}
-        {error && <div className="dirbrowser-msg dirbrowser-err">{error}</div>}
+      <div className="flex max-h-72 min-h-40 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border1 bg-surface-overlay-soft p-1.5">
+        {loading && (
+          <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-icon3">
+            Loading…
+          </Txt>
+        )}
+        {error && (
+          <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-notice-destructive-fg">
+            {error}
+          </Txt>
+        )}
         {!loading && !error && listing && (
           <>
-            {listing.parent && (
-              <button
-                type="button"
-                className="dirbrowser-entry dirbrowser-up"
-                onClick={() => void browse(listing.parent!)}
-              >
-                <ArrowDownIcon size={14} className="dirbrowser-up-icon" />
-                <span>Up a level</span>
-              </button>
+            {listing.entries.length === 0 && (
+              <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-icon3">
+                No subfolders here
+              </Txt>
             )}
-            {listing.entries.length === 0 && <div className="dirbrowser-msg">No subfolders here</div>}
             {listing.entries.map(entry => (
               <button
                 key={entry.path}
                 type="button"
-                className="dirbrowser-entry"
-                onDoubleClick={() => onPick(entry.path, basename(entry.path))}
+                className={ENTRY_CLASS}
                 onClick={() => void browse(entry.path)}
-                title={`Open ${entry.name} (double-click to use)`}
+                title={`Open ${entry.name}`}
               >
-                <FolderIcon size={15} className="dirbrowser-folder" />
-                <span className="dirbrowser-name">{entry.name}</span>
+                <Folder size={15} className="text-accent1" />
+                <span className="truncate">{entry.name}</span>
               </button>
             ))}
           </>
         )}
       </div>
 
-      {pickError && <div className="dirbrowser-msg dirbrowser-err">{pickError}</div>}
+      {pickError && (
+        <Txt as="div" variant="ui-sm" className="text-notice-destructive-fg">
+          {pickError}
+        </Txt>
+      )}
 
-      <div className="dirbrowser-actions">
-        <span className="dirbrowser-hint">Double-click a folder to use it, or pick the one you're in.</span>
-        <div className="dirbrowser-buttons">
-          <button type="button" className="btn btn-sm" onClick={onCancel} disabled={busy}>
+      <div className="flex items-center justify-end gap-3">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm btn-primary"
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             disabled={!listing || busy}
             onClick={() => listing && onPick(listing.path, basename(listing.path))}
           >
             {busy ? 'Adding…' : 'Use this folder'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -357,7 +357,9 @@ export async function emitChunkEvent<OUTPUT = undefined>(
 }
 
 /**
- * Helper to emit a step start event to pubsub
+ * Helper to emit a step start event to pubsub.
+ * The `data` payload must include `type: 'step-start'` so the stream-adapter
+ * consumer recognises it as a `ChunkType` and enqueues it onto the client stream.
  */
 export async function emitStepStartEvent(
   pubsub: PubSub,
@@ -367,7 +369,7 @@ export async function emitStepStartEvent(
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
-    data,
+    data: { type: 'step-start', ...data },
   });
 }
 

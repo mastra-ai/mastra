@@ -7,6 +7,7 @@ import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
@@ -16,7 +17,7 @@ import { AGENT_STREAM_TOPIC } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
-import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
+import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
 import type {
   AgentFinishEventData,
   AgentStepFinishEventData,
@@ -740,18 +741,27 @@ export class DurableAgent<
           scheduleAutoCleanup();
         }
       },
-      onIterationComplete: options?.onIterationComplete
-        ? async data => {
-            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
-          }
-        : undefined,
+      // onIterationComplete is NOT forwarded here — the dowhile predicate
+      // now calls it in-process from globalRunRegistry and honors its return
+      // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
+      // still fires for external observability subscribers.
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
     const workflowExecution = ready
-      .then(() => this.executeWorkflow(runId, workflowInput))
+      .then(async () => {
+        // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+        // Only the initial stream() path emits 'start'; resume() does not.
+        await emitChunkEvent(this.pubsub, runId, {
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: workflowInput.agentId, messageId },
+        });
+        return this.executeWorkflow(runId, workflowInput);
+      })
       .catch(error => {
         void this.emitError(runId, error);
       });
@@ -1157,18 +1167,27 @@ export class DurableAgent<
           scheduleAutoCleanup();
         }
       },
-      onIterationComplete: options?.onIterationComplete
-        ? async data => {
-            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
-          }
-        : undefined,
+      // onIterationComplete is NOT forwarded here — the dowhile predicate
+      // now calls it in-process from globalRunRegistry and honors its return
+      // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
+      // still fires for external observability subscribers.
       closeOnSuspend: true,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
     const workflowExecution = ready
-      .then(() => this.executeWorkflow(runId, workflowInput))
+      .then(async () => {
+        // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+        // Only the initial generate()/stream() path emits 'start'; resume() does not.
+        await emitChunkEvent(this.pubsub, runId, {
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: workflowInput.agentId, messageId },
+        });
+        return this.executeWorkflow(runId, workflowInput);
+      })
       .catch(error => {
         void this.emitError(runId, error);
       });
