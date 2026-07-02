@@ -1195,6 +1195,77 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const isContinued = toolCalls.length > 0 && finishReason !== 'stop';
             const hasToolCalls = toolCalls.length > 0;
 
+            // 13.5. Run processOutputStep for output processors (runs AFTER LLM response, BEFORE tool execution)
+            // Mirrors the regular agent's llm-execution-step.ts processOutputStep call
+            if (registryEntry?.outputProcessors && registryEntry.outputProcessors.length > 0) {
+              const outputStepRunner = new ProcessorRunner({
+                inputProcessors: [],
+                outputProcessors: registryEntry.outputProcessors,
+                logger: logger as any,
+                agentName: typedInput.agentName ?? typedInput.agentId,
+                processorStates: registryEntry?.processorStates,
+              });
+
+              const toolCallInfos = toolCalls.map(tc => ({
+                toolName: tc.toolName,
+                toolCallId: tc.toolCallId,
+                args: tc.args,
+              }));
+
+              const outputStepWriter = pubsub
+                ? {
+                    custom: async (data: { type: string }) => {
+                      await emitChunkEvent(pubsub, runId, data as any);
+                    },
+                  }
+                : undefined;
+
+              try {
+                await outputStepRunner.runProcessOutputStep({
+                  steps: (inputData as any).accumulatedSteps ?? [],
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  stepNumber: (inputData as any).accumulatedSteps?.length ?? 0,
+                  finishReason,
+                  providerMetadata: responseMetadata,
+                  toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
+                  text: textDeltas.join(''),
+                  usage,
+                  requestContext,
+                  writer: outputStepWriter,
+                });
+              } catch (error) {
+                if (error instanceof TripWire) {
+                  // Emit tripwire chunk and return bail response
+                  if (pubsub) {
+                    await emitChunkEvent(pubsub, runId, {
+                      type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
+                      payload: {
+                        reason: error.message,
+                        processorId: error.processorId,
+                        metadata: error.options?.metadata,
+                      },
+                    });
+                  }
+                  return {
+                    messageListState: messageList.serialize(),
+                    text: '',
+                    toolCalls: [],
+                    stepResult: {
+                      reason: 'tripwire' as any,
+                      warnings: [],
+                      isContinued: false,
+                    },
+                    metadata: { modelId: currentModel.modelId },
+                    state: typedInput.state,
+                  };
+                }
+                throw error;
+              }
+            }
+
             // 14. Export spans if there are tool calls (so tools can be children of model_step)
             // Don't end the spans yet - they will be ended after tool execution
             const stepSpanData = hasToolCalls ? modelSpanTracker?.exportCurrentStep() : undefined;

@@ -199,8 +199,9 @@ async function buildScenarioAgent({
       ...(goal ? { goal } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
       ...(defaultOptions ? { defaultOptions } : {}),
-      // For durable engine, inputProcessors must be on the agent constructor
+      // For durable engine, processors must be on the agent constructor
       ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
+      ...(engine === 'durable' && outputProcessors ? { outputProcessors } : {}),
     });
   }
 
