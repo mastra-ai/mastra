@@ -2341,9 +2341,9 @@ importers:
       fastest-levenshtein:
         specifier: ^1.0.16
         version: 1.0.16
-      partial-json:
-        specifier: ^0.1.7
-        version: 0.1.7
+      jsonriver:
+        specifier: ^1.1.1
+        version: 1.1.1
       posthog-node:
         specifier: ^5.37.0
         version: 5.37.0(rxjs@7.8.2)
@@ -23966,6 +23966,9 @@ packages:
     resolution: {integrity: sha512-wy8OTjwsJwQRnQJkKnMJJ9vcytRdBPAgIF/Hy6+s1dAj42BHMKiyL8JzEieIl3JY7idt8eyHwBWTO8mh/+mtwA==}
     hasBin: true
 
+  jsonriver@1.1.1:
+    resolution: {integrity: sha512-w/y/ZvC0YlJxRjySXt6hEji3RltOLAbSiDe3jlWekbIT7qLIOJF+tGNscwTWJZhoNQzi1dItJVMM2jEPZbHSEQ==}
+
   jsonschema@1.2.7:
     resolution: {integrity: sha512-3dFMg9hmI9LdHag/BRIhMefCfbq1hicvYMy8YhZQorAdzOzWz7NjniSpn39yjpzUAMIWtGyyZuH2KNBloH7ZLw==}
 
@@ -25812,9 +25815,6 @@ packages:
   parseurl@1.3.3:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
-
-  partial-json@0.1.7:
-    resolution: {integrity: sha512-Njv/59hHaokb/hRUjce3Hdv12wd60MtM9Z5Olmn+nehe0QDAsRtRbJPvJ0Z91TusF0SuZRIvnM+S4l6EIP8leA==}
 
   pascal-case@3.1.2:
     resolution: {integrity: sha512-uWlGT3YSnK9x3BQJaOdcZwrnV6hPpd8jFH1/ucpiLRPh/2zCVJKS19E4GvYHvaCcACn3foXZ0cLB9Wrx1KGe5g==}
@@ -47229,6 +47229,8 @@ snapshots:
 
   jsonrepair@3.15.0: {}
 
+  jsonriver@1.1.1: {}
+
   jsonschema@1.2.7: {}
 
   jsonwebtoken@9.0.3:
@@ -49739,8 +49741,6 @@ snapshots:
       entities: 8.0.0
 
   parseurl@1.3.3: {}
-
-  partial-json@0.1.7: {}
 
   pascal-case@3.1.2:
     dependencies:

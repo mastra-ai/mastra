@@ -34,6 +34,7 @@ vi.mock('../handlers/index.js', () => ({
   handleToolInputDelta: vi.fn(),
   handleToolInputEnd: vi.fn(),
   handleToolEnd: vi.fn(),
+  clearToolInputParsers: vi.fn(),
 }));
 
 vi.mock('../state.js', () => ({

@@ -1,8 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { handleToolInputDelta, handleToolInputStart, handleToolUpdate } from '../tool.js';
+import { clearToolInputParsers, handleToolInputDelta, handleToolInputStart, handleToolUpdate } from '../tool.js';
 
-function createContext(bufferText: string | undefined) {
+async function flushParser(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function createContext(bufferText: string | undefined, toolName = 'view') {
   const updateArgs = vi.fn();
   const refresh = vi.fn();
   const requestRender = vi.fn();
@@ -11,7 +17,7 @@ function createContext(bufferText: string | undefined) {
   const toolInputBuffers = new Map<string, { text: string; toolName: string }>();
 
   if (bufferText !== undefined) {
-    toolInputBuffers.set('call-1', { text: bufferText, toolName: 'view' });
+    toolInputBuffers.set('call-1', { text: bufferText, toolName });
   }
 
   const session = { displayState: { get: () => ({ toolInputBuffers }) } };
@@ -28,26 +34,51 @@ function createContext(bufferText: string | undefined) {
     },
   } as any;
 
-  return { ctx, updateArgs, refresh, requestRender };
+  return { ctx, toolInputBuffers, updateArgs, refresh, requestRender };
 }
 
 describe('tool event handlers', () => {
-  it('parses buffered partial tool args into the pending tool component', () => {
-    const { ctx, updateArgs, refresh, requestRender } = createContext('{"path":"src/index.ts","query":"create');
+  afterEach(() => {
+    clearToolInputParsers();
+  });
 
-    handleToolInputDelta(ctx, 'call-1', 'ignored-delta');
+  it('feeds streamed delta fragments into the pending tool component incrementally', async () => {
+    const { ctx, updateArgs, refresh, requestRender } = createContext('');
+
+    handleToolInputDelta(ctx, 'call-1', '{"path":"src/index.ts","query":"create');
+    await flushParser();
 
     expect(updateArgs).toHaveBeenCalledWith({ path: 'src/index.ts', query: 'create' }, false);
     expect(refresh).toHaveBeenCalledOnce();
     expect(requestRender).toHaveBeenCalledOnce();
+
+    handleToolInputDelta(ctx, 'call-1', ' parser"}');
+    await flushParser();
+
+    expect(updateArgs).toHaveBeenLastCalledWith({ path: 'src/index.ts', query: 'create parser' }, false);
+    expect(requestRender).toHaveBeenCalledTimes(2);
   });
 
-  it('uses the canonical display-state buffer instead of the latest delta fragment', () => {
-    const { ctx, updateArgs } = createContext('{"path":"src/index.ts"}');
+  it('does not reparse the canonical display-state buffer on every delta', async () => {
+    const { ctx, updateArgs } = createContext('{"path":"canonical.ts"}');
 
-    handleToolInputDelta(ctx, 'call-1', '{"path":"wrong.ts"}');
+    handleToolInputDelta(ctx, 'call-1', '{"path":"delta.ts"}');
+    await flushParser();
 
-    expect(updateArgs).toHaveBeenCalledWith({ path: 'src/index.ts' }, false);
+    expect(updateArgs).toHaveBeenCalledWith({ path: 'delta.ts' }, false);
+    expect(updateArgs).not.toHaveBeenCalledWith({ path: 'canonical.ts' }, false);
+  });
+
+  it('streams partial ask_user args into the inline question component', async () => {
+    const { ctx, requestRender } = createContext('', 'ask_user');
+    const updateAskArgs = vi.fn();
+    ctx.state.pendingAskUserComponents.set('call-1', { updateArgs: updateAskArgs });
+
+    handleToolInputDelta(ctx, 'call-1', '{"question":"Pick a color","options":[{"label":"Red"');
+    await flushParser();
+
+    expect(updateAskArgs).toHaveBeenCalledWith({ question: 'Pick a color', options: [{ label: 'Red' }] });
+    expect(requestRender).toHaveBeenCalledOnce();
   });
 
   it('ignores deltas for calls without a display-state buffer', () => {
@@ -63,6 +94,7 @@ describe('tool event handlers', () => {
     const component = { updateResult: vi.fn() };
     const requestRender = vi.fn();
     const invalidate = vi.fn();
+    const toolInputBuffers = new Map([['call-1', { text: '', toolName: 'mastra_expert' }]]);
     const ctx = {
       addChildBeforeFollowUps: vi.fn(child => ctx.state.chatContainer.children.push(child)),
       state: {
@@ -76,11 +108,7 @@ describe('tool event handlers', () => {
         seenToolCallIds: new Set(),
         session: {
           displayState: {
-            get: () => ({
-              toolInputBuffers: new Map([
-                ['call-1', { text: '{"question":"Answer from Alexandria"}', toolName: 'mastra_expert' }],
-              ]),
-            }),
+            get: () => ({ toolInputBuffers }),
           },
         },
         chatContainer: { children: [], invalidate },
@@ -89,7 +117,6 @@ describe('tool event handlers', () => {
     } as any;
 
     handleToolInputStart(ctx, 'call-1', 'mastra_expert');
-    handleToolInputDelta(ctx, 'call-1', 'ignored-delta');
     handleToolUpdate(ctx, 'call-1', {
       event: 'tool_start',
       toolName: 'search_content',

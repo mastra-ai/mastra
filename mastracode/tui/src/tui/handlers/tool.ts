@@ -9,7 +9,7 @@
 import { getToolCategory, TOOL_CATEGORIES } from '@mastra/code-sdk/permissions';
 import type { TaskItemInput } from '@mastra/core/signals';
 import { safeStringify } from '@mastra/core/utils';
-import { parse as parsePartialJson } from 'partial-json';
+import { parse as parseJsonRiver } from 'jsonriver';
 
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -48,6 +48,85 @@ function reconcileToolBoundaries(ctx: EventHandlerContext): void {
 }
 
 const pluginSubagentToolCallIds = new Set<string>();
+
+type JsonObject = Record<string, unknown>;
+
+class AsyncStringQueue implements AsyncIterable<string> {
+  #chunks: string[] = [];
+  #waiting: ((result: IteratorResult<string>) => void) | undefined;
+  #closed = false;
+
+  push(chunk: string): void {
+    if (this.#closed) return;
+    const waiting = this.#waiting;
+    if (waiting) {
+      this.#waiting = undefined;
+      waiting({ value: chunk, done: false });
+      return;
+    }
+    this.#chunks.push(chunk);
+  }
+
+  close(): void {
+    this.#closed = true;
+    const waiting = this.#waiting;
+    if (waiting) {
+      this.#waiting = undefined;
+      waiting({ value: undefined, done: true });
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<string> {
+    return {
+      next: () => {
+        const chunk = this.#chunks.shift();
+        if (chunk !== undefined) return Promise.resolve({ value: chunk, done: false });
+        if (this.#closed) return Promise.resolve({ value: undefined, done: true });
+        return new Promise(resolve => {
+          this.#waiting = resolve;
+        });
+      },
+    };
+  }
+}
+
+interface ToolInputParserState {
+  queue: AsyncStringQueue;
+  iterator: AsyncIterableIterator<unknown>;
+  latestArgs?: JsonObject;
+  closed: boolean;
+}
+
+const toolInputParsers = new Map<string, ToolInputParserState>();
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function createToolInputParser(toolCallId: string): ToolInputParserState {
+  const queue = new AsyncStringQueue();
+  const state: ToolInputParserState = {
+    queue,
+    iterator: parseJsonRiver(queue) as AsyncIterableIterator<unknown>,
+    closed: false,
+  };
+  toolInputParsers.set(toolCallId, state);
+  return state;
+}
+
+function closeToolInputParser(toolCallId: string): void {
+  const parser = toolInputParsers.get(toolCallId);
+  if (!parser) return;
+  parser.closed = true;
+  parser.queue.close();
+  toolInputParsers.delete(toolCallId);
+}
+
+export function clearToolInputParsers(): void {
+  for (const toolCallId of toolInputParsers.keys()) {
+    closeToolInputParser(toolCallId);
+  }
+}
 
 type SubagentProgressEvent =
   | { event: 'text'; text: string }
@@ -403,6 +482,9 @@ export function handleShellOutput(
  */
 export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: string, toolName: string): void {
   const { state } = ctx;
+  closeToolInputParser(toolCallId);
+  const parser = createToolInputParser(toolCallId);
+  void processToolInputParser(ctx, toolCallId, parser);
 
   // Mark as seen so handleMessageUpdate doesn't create a duplicate component
   if (!state.seenToolCallIds.has(toolCallId)) {
@@ -484,92 +566,114 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
 }
 
 /**
- * Handle an incremental delta of tool call input arguments.
- * Buffers the partial JSON text and attempts to parse it, updating the component's args.
+ * Apply the latest progressive JSON object from the stateful tool-input parser.
  */
-export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
+function applyParsedToolArgs(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  toolName: string,
+  partialArgs: JsonObject,
+): void {
   const { state } = ctx;
-  const ds = state.session.displayState.get();
-  const buffer = ds.toolInputBuffers.get(toolCallId);
-  if (buffer === undefined) return;
 
-  const updatedText = buffer.text;
+  const component = state.pendingTools.get(toolCallId);
+  if (component) {
+    component.updateArgs(partialArgs, false);
+    reconcileToolBoundaries(ctx);
+    component.refresh?.();
+  }
 
+  if (toolName === 'ask_user') {
+    const askComponent = state.pendingAskUserComponents.get(toolCallId);
+    if (askComponent) {
+      try {
+        askComponent.updateArgs(partialArgs);
+      } catch {
+        // Don't crash on malformed partial args
+      }
+    }
+  }
+
+  if (toolName === 'submit_plan') {
+    const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
+    if (planComponent) {
+      planComponent.updateArgs(partialArgs);
+    }
+  }
+
+  if (toolName === 'task_write' && state.taskProgress) {
+    const tasks = (partialArgs as { tasks?: TaskItemInput[] }).tasks;
+    if (tasks && tasks.length > 0) {
+      const existing = state.taskProgress.getTasks();
+      const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
+      if (allExistingDone) {
+        // Old list is done — start fresh, stream new items immediately
+        state.taskProgress.updateTasks(tasks);
+      } else if (tasks.length > 1) {
+        // Merge only completed items (exclude the last still-streaming one)
+        const merged = [...existing];
+        for (const task of tasks.slice(0, -1)) {
+          if (!task.content) continue;
+          const idx = task.id
+            ? merged.findIndex(t => t.id === task.id)
+            : merged.findIndex(t => !t.id && t.content === task.content);
+          if (idx >= 0) {
+            merged[idx] = task;
+          } else {
+            merged.push(task);
+          }
+        }
+        state.taskProgress.updateTasks(merged);
+      }
+    }
+  }
+
+  state.ui.requestRender();
+}
+
+async function processToolInputParser(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  parser: ToolInputParserState,
+): Promise<void> {
   try {
-    const partialArgs = parsePartialJson(updatedText);
-    if (partialArgs && typeof partialArgs === 'object') {
-      // Update inline tool component if it exists
-      const component = state.pendingTools.get(toolCallId);
-      if (component) {
-        component.updateArgs(partialArgs, false);
-        reconcileToolBoundaries(ctx);
-        component.refresh?.();
-      }
+    while (!parser.closed) {
+      const next = await parser.iterator.next();
+      if (next.done) return;
+      if (!isJsonObject(next.value)) continue;
 
-      // For ask_user, stream partial args into the question component
-      if (buffer.toolName === 'ask_user') {
-        const askComponent = state.pendingAskUserComponents.get(toolCallId);
-        if (askComponent) {
-          try {
-            askComponent.updateArgs(partialArgs);
-          } catch {
-            // Don't crash on malformed partial args
-          }
-        }
-      }
-
-      // For submit_plan, stream the path arg into the inline purple plan box.
-      if (buffer.toolName === 'submit_plan') {
-        const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
-        if (planComponent) {
-          planComponent.updateArgs(partialArgs);
-        }
-      }
-
-      // For task_write, stream partial tasks into the pinned TaskProgressComponent.
-      // The last array item is actively being written so its content is unstable.
-      // If all existing pinned items are already completed, the list is stable and
-      // we can stream in new items immediately (including the last one).
-      // Otherwise, exclude the last item to avoid jumpy partial-content matches.
-      if (buffer.toolName === 'task_write' && state.taskProgress) {
-        const tasks = (partialArgs as { tasks?: TaskItemInput[] }).tasks;
-        if (tasks && tasks.length > 0) {
-          const existing = state.taskProgress.getTasks();
-          const allExistingDone = existing.length === 0 || existing.every(t => t.status === 'completed');
-          if (allExistingDone) {
-            // Old list is done — start fresh, stream new items immediately
-            state.taskProgress.updateTasks(tasks);
-          } else if (tasks.length > 1) {
-            // Merge only completed items (exclude the last still-streaming one)
-            const merged = [...existing];
-            for (const task of tasks.slice(0, -1)) {
-              if (!task.content) continue;
-              const idx = task.id
-                ? merged.findIndex(t => t.id === task.id)
-                : merged.findIndex(t => !t.id && t.content === task.content);
-              if (idx >= 0) {
-                merged[idx] = task;
-              } else {
-                merged.push(task);
-              }
-            }
-            state.taskProgress.updateTasks(merged);
-          }
-        }
-      }
-
-      state.ui.requestRender();
+      parser.latestArgs = next.value;
+      const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
+      if (!buffer || parser.closed) return;
+      applyParsedToolArgs(ctx, toolCallId, buffer.toolName, next.value);
     }
   } catch {
-    // Malformed or incomplete JSON — partial-json throws MalformedJSON for invalid input
+    closeToolInputParser(toolCallId);
   }
+}
+
+/**
+ * Handle an incremental delta of tool call input arguments.
+ * Feeds only the incoming JSON fragment to the stateful parser.
+ */
+export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, argsTextDelta: string): void {
+  const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
+  if (buffer === undefined) return;
+
+  let parser = toolInputParsers.get(toolCallId);
+  if (!parser) {
+    parser = createToolInputParser(toolCallId);
+    void processToolInputParser(ctx, toolCallId, parser);
+  }
+
+  parser.queue.push(argsTextDelta);
 }
 
 /**
  * Clean up the input buffer when tool input streaming ends.
  */
-export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: string): void {
-  // Buffer cleanup handled by AgentController display state
+export function handleToolInputEnd(_ctx: EventHandlerContext, toolCallId: string): void {
+  closeToolInputParser(toolCallId);
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {

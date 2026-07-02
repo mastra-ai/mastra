@@ -31,4 +31,5 @@ export {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolEnd,
+  clearToolInputParsers,
 } from './tool.js';

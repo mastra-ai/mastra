@@ -40,6 +40,7 @@ import {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolEnd,
+  clearToolInputParsers,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
@@ -63,6 +64,7 @@ export async function dispatchEvent(
 ): Promise<void> {
   switch (event.type) {
     case 'agent_start':
+      clearToolInputParsers();
       // Reset tokens/sec at the start of a new turn (not at the end) so the
       // last turn's reading stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
