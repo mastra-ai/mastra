@@ -1,0 +1,19 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start a slow run for lifecycle hook e2e.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 2
+      },
+      "response": {
+        "content": "Lifecycle hook slow response that should be interrupted before completing the full response. This fixture keeps streaming for long enough that Ctrl+C reliably aborts the active run before it finishes. Additional lifecycle text keeps the stream open while hooks record AgentStart, Interrupt, and AgentEnd events."
+      }
+    }
+  ]
+}
