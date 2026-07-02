@@ -412,6 +412,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           ...workspaceRef.config,
         });
         this.logger?.debug(`[ensureStoredWorkspace] Persisted inline workspace '${workspaceId}' to DB`);
+      } else if (workspaceRef.type === 'provider') {
+        // Provider-based workspaces are resolved at hydration time via the editor's
+        // workspace provider registry. The provider ref is stored directly in the
+        // agent snapshot — no separate workspace record needed.
       }
     } catch (error) {
       // Don't fail agent creation if workspace persistence fails
@@ -1739,6 +1743,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       // duplicate workspace instances on repeated calls.
       const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
       return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+    }
+
+    if (workspaceRef.type === 'provider') {
+      return workspaceNs.resolveWorkspaceProvider(workspaceRef.provider, workspaceRef.config);
     }
 
     return undefined;

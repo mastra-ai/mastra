@@ -2150,11 +2150,13 @@ export interface StorageBlobEntry {
 
 /**
  * Workspace reference configuration stored in agent snapshots.
- * Can reference a stored workspace by ID or provide inline workspace config.
+ * Can reference a stored workspace by ID, provide inline workspace config,
+ * or name a registered workspace provider to build the entire workspace.
  */
 export type StorageWorkspaceRef =
   | { type: 'id'; workspaceId: string }
-  | { type: 'inline'; config: StorageWorkspaceSnapshotType };
+  | { type: 'inline'; config: StorageWorkspaceSnapshotType }
+  | { type: 'provider'; provider: string; config: Record<string, unknown> };
 
 // ============================================
 // Workflow Storage Types
