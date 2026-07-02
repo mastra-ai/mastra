@@ -1,11 +1,11 @@
 services:
   mongodb-storage:
-    image: mongo:8.0
+    image: mongo:8.3.4
     container_name: 'mongodb-storage-test-db'
     ports:
       - '27017:27017'
-    tmpfs:
-      - /data/db
+    volumes:
+      - mongodbdata:/data/db
     healthcheck:
       test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
       interval: 2s
@@ -26,4 +26,5 @@ services:
       timeout: 2s
       retries: 15
       start_period: 3s
-
+volumes:
+  mongodbdata:
