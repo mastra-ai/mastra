@@ -43,6 +43,7 @@ const respondSettings = (settings: ReturnType<typeof buildBuilderSettings>) => {
 };
 
 afterEach(() => {
+  delete window.MASTRA_DESKTOP_ENDPOINT;
   cleanup();
 });
 
@@ -91,6 +92,68 @@ describe('useAgentBuilderAllowedModels', () => {
       expect(result.current.models).toEqual([
         { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
         { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o-mini' },
+      ]);
+    });
+  });
+
+  describe('when Mastra Studio Desktop has a reachable Ollama runtime', () => {
+    it('adds the local Ollama provider alongside Ollama Cloud', async () => {
+      const probeRequests: unknown[] = [];
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+      server.use(
+        http.get(MODELS_URL, () =>
+          HttpResponse.json(
+            availableModelsResponse([
+              {
+                id: 'ollama-cloud',
+                name: 'Ollama Cloud',
+                envVar: 'OLLAMA_API_KEY',
+                connected: true,
+                models: ['gpt-oss:120b'],
+              },
+            ]),
+          ),
+        ),
+        http.get('*/__desktop/state', () =>
+          HttpResponse.json({
+            runtime: { state: 'running', url: 'http://127.0.0.1:4112' },
+            settings: {
+              environmentVariables: {},
+              modelApiKey: 'ollama',
+              modelId: 'llama3.2',
+              modelUrl: 'http://localhost:11434/v1',
+            },
+          }),
+        ),
+        http.post('*/__desktop/probe-models', async ({ request }) => {
+          probeRequests.push(await request.json());
+          return HttpResponse.json({
+            ok: true,
+            modelUrl: 'http://localhost:11434/v1',
+            models: ['llama3.2', 'qwen2.5'],
+          });
+        }),
+      );
+
+      const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper() });
+
+      await waitFor(() => expect(result.current.providers.find(provider => provider.id === 'ollama')).toBeDefined());
+      expect(result.current.providers).toEqual([
+        expect.objectContaining({ id: 'ollama', name: 'Ollama Local', models: ['llama3.2', 'qwen2.5'] }),
+        expect.objectContaining({ id: 'ollama-cloud', name: 'Ollama Cloud', models: ['gpt-oss:120b'] }),
+      ]);
+      expect(result.current.models).toEqual([
+        { provider: 'ollama', providerName: 'Ollama Local', model: 'llama3.2' },
+        { provider: 'ollama', providerName: 'Ollama Local', model: 'qwen2.5' },
+        { provider: 'ollama-cloud', providerName: 'Ollama Cloud', model: 'gpt-oss:120b' },
+      ]);
+      expect(probeRequests).toEqual([
+        {
+          apiKey: 'ollama',
+          modelUrl: 'http://localhost:11434/v1',
+          providerId: 'ollama',
+          providerName: 'Ollama Local',
+        },
       ]);
     });
   });

@@ -1,11 +1,7 @@
 import { Agent } from '@mastra/core/agent';
+import { getDesktopModelConfig } from '../local-model-gateway';
 
-const localModelApiKeyPlaceholder = 'not-needed';
-
-function getDesktopModelApiKey() {
-  const configuredApiKey = process.env.MASTRA_DESKTOP_MODEL_API_KEY?.trim();
-  return configuredApiKey && configuredApiKey.length > 0 ? configuredApiKey : localModelApiKeyPlaceholder;
-}
+const desktopModel = getDesktopModelConfig();
 
 export const desktopAssistant = new Agent({
   id: 'desktop-assistant',
@@ -17,10 +13,10 @@ Help the user test their local model connection, explain how to add tools, and k
 If the model appears to be running through LM Studio, mention that tool support depends on the loaded model.
   `.trim(),
   model: {
-    providerId: 'lmstudio',
-    modelId: process.env.MASTRA_DESKTOP_MODEL_ID || 'lmstudio/openai/gpt-oss-20b',
-    url: process.env.MASTRA_DESKTOP_MODEL_URL || 'http://localhost:1234/v1',
-    apiKey: getDesktopModelApiKey(),
+    providerId: desktopModel.providerId,
+    modelId: desktopModel.modelId,
+    url: desktopModel.url,
+    apiKey: desktopModel.apiKey,
   },
   editor: {
     instructions: true,

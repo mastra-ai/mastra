@@ -4,6 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { useAllModels } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
+import {
+  buildDesktopLocalProvider,
+  desktopEndpoint,
+  desktopProbeProviderIdForModelUrl,
+  desktopProviderNameForModelUrl,
+  desktopRequest,
+} from '@/lib/desktop-runtime';
+import type { DesktopRuntimeState, ProbeModelsResult } from '@/lib/desktop-runtime';
 
 /**
  * Single source of truth for "what providers/models is the agent builder
@@ -24,6 +32,7 @@ export const useAgentBuilderAllowedModels = ({
   enabled = true,
 }: { enabled?: boolean } = {}): AgentBuilderAllowedModels => {
   const client = useMastraClient();
+  const endpoint = desktopEndpoint();
 
   const { data, isLoading } = useQuery({
     queryKey: ['builder-available-models'],
@@ -31,8 +40,55 @@ export const useAgentBuilderAllowedModels = ({
     enabled,
   });
 
-  const providers = useMemo<Provider[]>(() => (data?.providers as Provider[]) ?? [], [data]);
+  const { data: desktopState, isLoading: isDesktopStateLoading } = useQuery({
+    enabled: enabled && Boolean(endpoint),
+    queryFn: () => {
+      if (!endpoint) throw new Error('Desktop endpoint is not configured.');
+      return desktopRequest<DesktopRuntimeState>(endpoint, '/state');
+    },
+    queryKey: ['desktop-runtime-state', endpoint],
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  const modelUrl = desktopState?.settings.modelUrl;
+  const modelApiKey = desktopState?.settings.modelApiKey;
+  const probeProviderId = modelUrl ? desktopProbeProviderIdForModelUrl(modelUrl) : undefined;
+  const probeProviderName = modelUrl ? desktopProviderNameForModelUrl(modelUrl) : undefined;
+
+  const { data: desktopProbe, isFetching: isDesktopProbeFetching } = useQuery({
+    enabled: enabled && Boolean(endpoint && modelUrl?.trim()),
+    queryFn: () => {
+      if (!endpoint || !modelUrl) throw new Error('Desktop model endpoint is not configured.');
+      return desktopRequest<ProbeModelsResult>(endpoint, '/probe-models', {
+        body: JSON.stringify({
+          apiKey: modelApiKey,
+          modelUrl,
+          providerId: probeProviderId,
+          providerName: probeProviderName,
+        }),
+        method: 'POST',
+      });
+    },
+    queryKey: ['desktop-runtime-models', endpoint, probeProviderId, modelUrl, modelApiKey],
+    retry: false,
+    staleTime: 30_000,
+  });
+
+  const providers = useMemo<Provider[]>(() => {
+    const serverProviders = (data?.providers as Provider[]) ?? [];
+    const desktopProvider = buildDesktopLocalProvider({ probe: desktopProbe, state: desktopState });
+
+    if (!desktopProvider) return serverProviders.filter(provider => !provider.id.startsWith('desktop-local/'));
+
+    return [
+      desktopProvider,
+      ...serverProviders.filter(
+        provider => provider.id !== desktopProvider.id && !provider.id.startsWith('desktop-local/'),
+      ),
+    ];
+  }, [data, desktopProbe, desktopState]);
   const models = useAllModels(providers);
 
-  return { providers, models, isLoading };
+  return { providers, models, isLoading: isLoading || isDesktopStateLoading || isDesktopProbeFetching };
 };

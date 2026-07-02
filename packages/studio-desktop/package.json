@@ -27,6 +27,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.39",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.25",
     "@internal/lint": "workspace:*",
     "@internal/playground": "workspace:*",

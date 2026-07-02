@@ -10,41 +10,19 @@ import { useEnvironmentVariablesEditor } from '@mastra/playground-ui/hooks/use-e
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { desktopEndpoint, desktopLocalProviderIdForModelUrl, desktopRequest } from '@/lib/desktop-runtime';
+import type {
+  DesktopRuntimeSettings,
+  DesktopRuntimeState,
+  ProbeModelsResult,
+  UpdateSettingsResult,
+} from '@/lib/desktop-runtime';
 
-type RuntimeState = 'idle' | 'starting' | 'running' | 'stopped' | 'error';
 type LocalModelProviderId = 'lmstudio' | 'ollama' | 'custom';
 
 interface EnvironmentVariableRow {
   key: string;
   value: string;
-}
-
-interface DesktopRuntimeSettings {
-  modelUrl: string;
-  modelId: string;
-  modelApiKey: string;
-  environmentVariables: Record<string, string>;
-}
-
-export interface DesktopRuntimeState {
-  runtime: {
-    state: RuntimeState;
-    url?: string;
-    error?: string;
-  };
-  settings: DesktopRuntimeSettings;
-}
-
-interface ProbeModelsResult {
-  ok: boolean;
-  modelUrl: string;
-  models: string[];
-  error?: string;
-}
-
-interface UpdateSettingsResult {
-  settings: DesktopRuntimeSettings;
-  state: DesktopRuntimeState;
 }
 
 const LOCAL_MODEL_PRESETS = {
@@ -72,44 +50,19 @@ const LOCAL_MODEL_PRESETS = {
     modelApiKey: 'not-needed',
     guidance: 'Use any local OpenAI-compatible server that exposes /v1/models.',
   },
-} as const;
+} as const satisfies Record<
+  LocalModelProviderId,
+  { id: LocalModelProviderId; name: string; modelUrl: string; modelId: string; modelApiKey: string; guidance: string }
+>;
 
 const ENVIRONMENT_VARIABLE_PRESETS = [
   { key: 'OPENAI_API_KEY', label: 'OpenAI key' },
   { key: 'LM_API_TOKEN', label: 'LM Studio token' },
 ] as const;
 
-function desktopEndpoint() {
-  const endpoint = window.MASTRA_DESKTOP_ENDPOINT?.trim();
-  return endpoint ? endpoint.replace(/\/$/, '') : undefined;
-}
-
-function desktopUrl(endpoint: string, path: string) {
-  return `${endpoint}${path}`;
-}
-
-async function desktopRequest<TResponse>(endpoint: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await fetch(desktopUrl(endpoint, path), {
-    ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json' } : init?.headers,
-  });
-
-  const body = (await response.json()) as unknown;
-  if (!response.ok) {
-    const error =
-      typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string'
-        ? body.error
-        : `Desktop request failed with ${response.status}`;
-    throw new Error(error);
-  }
-  return body as TResponse;
-}
-
 function providerForModelUrl(modelUrl: string): LocalModelProviderId {
-  const normalized = modelUrl.replace(/\/$/, '');
-  if (normalized === LOCAL_MODEL_PRESETS.ollama.modelUrl) return 'ollama';
-  if (normalized === LOCAL_MODEL_PRESETS.lmstudio.modelUrl) return 'lmstudio';
-  return 'custom';
+  const providerId = desktopLocalProviderIdForModelUrl(modelUrl);
+  return providerId === 'local' ? 'custom' : providerId;
 }
 
 function rowsFromEnvironmentVariables(envVars: Record<string, string>): EnvironmentVariableRow[] {
