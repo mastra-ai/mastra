@@ -70,7 +70,12 @@ function createMockModel() {
           stream: new ReadableStream({
             start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId: 'mock-hitl', timestamp: new Date() });
+              controller.enqueue({
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-hitl',
+                timestamp: new Date(),
+              });
               controller.enqueue({
                 type: 'tool-call',
                 toolCallId: 'call-1',
@@ -233,7 +238,9 @@ async function main() {
     if (!ok) allPass = false;
     console.log(`${ok ? '✅ PASS' : '❌ FAIL'}  ${name}`);
   }
-  console.log(`\n${allPass ? '✅ All checks passed — approvals round-trip on recall.' : '❌ Some checks failed (the historical bug, or a regression).'}`);
+  console.log(
+    `\n${allPass ? '✅ All checks passed — approvals round-trip on recall.' : '❌ Some checks failed (the historical bug, or a regression).'}`,
+  );
 
   process.exit(allPass ? 0 : 1);
 }
