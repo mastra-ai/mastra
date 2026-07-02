@@ -19,5 +19,7 @@ export function useDirectoryListing(path: string | undefined) {
       const qs = path ? `?path=${encodeURIComponent(path)}` : '';
       return client.get<DirectoryListing>(`/api/web/fs/list${qs}`);
     },
+    placeholderData: previous => previous,
+    staleTime: 60_000,
   });
 }

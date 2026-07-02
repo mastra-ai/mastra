@@ -11,7 +11,6 @@ import { useActiveProject } from './useActiveProject';
 import { useAgentControllerSession } from './useAgentControllerSession';
 import { useDensityPreference } from './useDensityPreference';
 import { useGlobalShortcuts } from './useGlobalShortcuts';
-import { useProjectModalAutoOpen } from './useProjectModalAutoOpen';
 import { useProjectSessionSync } from './useProjectSessionSync';
 import { useTranscriptScroll } from './useTranscriptScroll';
 
@@ -69,7 +68,6 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
 
-  useProjectModalAutoOpen(projects.length, setProjectsOpen);
   useGlobalShortcuts({
     busy,
     projectsOpen,

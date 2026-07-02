@@ -2,9 +2,9 @@ import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Txt } from '@
 import { Folder, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { DirectoryBrowser } from './DirectoryPicker';
+import { ProjectDirectoryPicker } from './ProjectDirectoryPicker';
 import type { Project } from './projects';
-import { addProject, loadProjects, removeProject } from './projects';
+import { removeProject } from './projects';
 
 interface ProjectsModalProps {
   projects: Project[];
@@ -31,8 +31,6 @@ export function ProjectsModal({
 }: ProjectsModalProps) {
   const empty = projects.length === 0;
   const [adding, setAdding] = useState(empty);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Escape backs out of the add view to the list first (when projects exist);
   // the DS Dialog otherwise owns close-on-Escape for the list view.
@@ -46,23 +44,6 @@ export function ProjectsModal({
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [adding, empty]);
-
-  const handlePick = async (path: string, name: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      // addProject resolves the server-side (TUI-matching) resourceId, then
-      // persists to localStorage. Reload so we don't double-append.
-      const project = await addProject(name || path, path);
-      onProjectsChange(loadProjects());
-      onSelectProject(project);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleRemove = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -79,18 +60,12 @@ export function ProjectsModal({
 
         <div className="flex flex-col gap-3 px-5 pb-5">
           {adding ? (
-            <>
-              <Txt as="p" variant="ui-sm" className="text-icon3">
-                Choose a folder on this machine. Its threads, memory, and workspace stay scoped to that directory — and
-                are shared with the terminal.
-              </Txt>
-              <DirectoryBrowser
-                onPick={(p, n) => void handlePick(p, n)}
-                onCancel={() => (empty ? onClose() : setAdding(false))}
-                busy={busy}
-                error={error}
-              />
-            </>
+            <ProjectDirectoryPicker
+              onSelectProject={onSelectProject}
+              onProjectsChange={onProjectsChange}
+              onClose={onClose}
+              onCancel={() => (empty ? onClose() : setAdding(false))}
+            />
           ) : (
             <>
               <div className="flex flex-col gap-1.5">

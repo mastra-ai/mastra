@@ -8,6 +8,7 @@ import { CommandPalette } from './CommandPalette';
 import type { SlashCommand } from './commands';
 import { GoalPanel, StatusLine, Transcript } from './components';
 import { Composer } from './Composer';
+import { ProjectDirectoryPicker } from './ProjectDirectoryPicker';
 import type { Project } from './projects';
 import { ProjectsModal } from './ProjectsModal';
 import { SettingsPanel } from './SettingsPanel';
@@ -100,16 +101,18 @@ export function AppLayout({
   onComposerCommandApplied,
   runPaletteCommand,
 }: AppLayoutProps) {
+  const openProjectManagement = () => {
+    closeSidebar();
+    if (activeProject) setProjectsOpen(true);
+  };
+
   return (
     <div className="relative z-1 flex h-screen">
       <Sidebar
         open={sidebarOpen}
         projects={projects}
         activeProjectId={activeProjectId}
-        onManageProjects={() => {
-          setProjectsOpen(true);
-          closeSidebar();
-        }}
+        onManageProjects={openProjectManagement}
         onOpenSettings={() => {
           setSettingsOpen(true);
           closeSidebar();
@@ -155,18 +158,11 @@ export function AppLayout({
         </header>
 
         {!activeProject ? (
-          <div className="m-auto flex max-w-md flex-col items-center gap-3 px-6 text-center">
-            <Txt as="h2" variant="header-md" className="text-icon6">
-              Welcome to MastraCode
-            </Txt>
-            <Txt as="p" variant="ui-md" className="max-w-sm text-icon3">
-              Open a project folder to start a coding session. Each project keeps its own threads, memory, and workspace
-              — shared with the terminal.
-            </Txt>
-            <Button variant="primary" className="mt-2" onClick={() => setProjectsOpen(true)}>
-              Open a project
-            </Button>
-          </div>
+          <ProjectDirectoryPicker
+            onSelectProject={project => selectProject(project)}
+            onProjectsChange={setProjects}
+            variant="page"
+          />
         ) : (
           <>
             {transcript.goal && (
