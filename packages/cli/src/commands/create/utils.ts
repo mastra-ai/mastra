@@ -15,6 +15,21 @@ import { getPackageManager, isGitInitialized } from '../utils.js';
 
 const exec = util.promisify(child_process.exec);
 
+const defaultGitignoreEntries = [
+  'output.txt',
+  'node_modules',
+  'dist',
+  '.mastra',
+  '.env.development',
+  '.env',
+  '*.db',
+  '*.db-*',
+  '.netlify',
+  '.vercel',
+  '*.duckdb',
+  '*.duckdb.wal',
+];
+
 const execWithTimeout = async (command: string, timeoutMs?: number) => {
   try {
     const promise = exec(command, { killSignal: 'SIGTERM' });
@@ -127,6 +142,34 @@ Learn more in the [Mastra platform documentation](https://mastra.ai/docs/mastra-
 
   await fs.writeFile(readmePath, content);
 };
+
+async function writeTsConfigFile(): Promise<void> {
+  await fs.writeFile(
+    'tsconfig.json',
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'ES2022',
+          moduleResolution: 'bundler',
+          esModuleInterop: true,
+          forceConsistentCasingInFileNames: true,
+          strict: true,
+          skipLibCheck: true,
+          noEmit: true,
+          outDir: 'dist',
+        },
+        include: ['src/**/*'],
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+async function writeGitignoreFile(): Promise<void> {
+  await fs.writeFile('.gitignore', `${defaultGitignoreEntries.join('\n')}\n`);
+}
 
 async function installMastraDependencies(
   pm: PackageManager,
@@ -297,22 +340,7 @@ onlyBuiltDependencies:
     try {
       await exec(`${pm} ${installCommand} zod@^4`);
       await exec(`${pm} ${installCommand} -D typescript @types/node`);
-      await exec(`echo '{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "dist"
-  },
-  "include": [
-    "src/**/*"
-  ]
-}' > tsconfig.json`);
+      await writeTsConfigFile();
     } catch (error) {
       throw new Error(
         `Failed to install basic dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -349,18 +377,7 @@ onlyBuiltDependencies:
 
     s.start('Adding .gitignore');
     try {
-      await exec(`echo output.txt >> .gitignore`);
-      await exec(`echo node_modules >> .gitignore`);
-      await exec(`echo dist >> .gitignore`);
-      await exec(`echo .mastra >> .gitignore`);
-      await exec(`echo .env.development >> .gitignore`);
-      await exec(`echo .env >> .gitignore`);
-      await exec(`echo *.db >> .gitignore`);
-      await exec(`echo *.db-* >> .gitignore`);
-      await exec(`echo .netlify >> .gitignore`);
-      await exec(`echo .vercel >> .gitignore`);
-      await exec(`echo *.duckdb >> .gitignore`);
-      await exec(`echo *.duckdb.wal >> .gitignore`);
+      await writeGitignoreFile();
     } catch (error) {
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

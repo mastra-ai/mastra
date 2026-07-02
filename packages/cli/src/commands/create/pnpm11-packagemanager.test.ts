@@ -207,4 +207,59 @@ describe('pnpm v11 packageManager normalization', () => {
     const written = JSON.parse(packageJsonWrite![1]);
     expect(written.packageManager).toBeUndefined();
   });
+
+  it('should write generated config files without shell echo commands', async () => {
+    mocks.readFileContent = JSON.stringify({
+      name: 'test-project',
+      scripts: {},
+    });
+
+    const { createMastraProject } = await import('./utils');
+
+    await createMastraProject({
+      projectName: 'test-generated-files-project',
+      needsInteractive: false,
+    });
+
+    expect(mocks.mockExec).not.toHaveBeenCalledWith(expect.stringContaining('echo '));
+
+    const writeFileCalls = mocks.mockWriteFile.mock.calls;
+    const tsconfigWrite = writeFileCalls.find((call: any[]) => call[0] === 'tsconfig.json');
+    const gitignoreWrite = writeFileCalls.find((call: any[]) => call[0] === '.gitignore');
+
+    expect(tsconfigWrite).toBeDefined();
+    expect(JSON.parse(tsconfigWrite![1])).toEqual({
+      compilerOptions: {
+        target: 'ES2022',
+        module: 'ES2022',
+        moduleResolution: 'bundler',
+        esModuleInterop: true,
+        forceConsistentCasingInFileNames: true,
+        strict: true,
+        skipLibCheck: true,
+        noEmit: true,
+        outDir: 'dist',
+      },
+      include: ['src/**/*'],
+    });
+
+    expect(gitignoreWrite).toBeDefined();
+    expect(gitignoreWrite![1]).toBe(
+      [
+        'output.txt',
+        'node_modules',
+        'dist',
+        '.mastra',
+        '.env.development',
+        '.env',
+        '*.db',
+        '*.db-*',
+        '.netlify',
+        '.vercel',
+        '*.duckdb',
+        '*.duckdb.wal',
+        '',
+      ].join('\n'),
+    );
+  });
 });
