@@ -6,7 +6,12 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { entitiesResponse, topicsResponse } from '../../services/__tests__/fixtures/entity-learning';
+import type { EntityLearningTopicsResponse } from '../../services';
+import {
+  behaviorTopicsResponse,
+  entitiesResponse,
+  topicsResponse,
+} from '../../services/__tests__/fixtures/entity-learning';
 import type { SelectedEntity } from '../../types';
 import { SignalsOverviewPage } from '../signals-overview-page';
 
@@ -29,6 +34,44 @@ vi.mock('react-resizable-panels', () => ({
   Separator: () => null,
   usePanelRef: () => ({ current: null }),
 }));
+
+/**
+ * Mirrors the real API: each signal resolves to its own latest run, and a
+ * runId pinned to another signal's run matches no topics.
+ */
+function useTopicsBySignalHandlers() {
+  const latestBySignal: Record<string, EntityLearningTopicsResponse> = {
+    sentiment: topicsResponse,
+    behavior: behaviorTopicsResponse,
+  };
+
+  server.use(
+    http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+    http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+      const url = new URL(request.url);
+      const signalName = url.searchParams.get('signalName') ?? '';
+      const latest = latestBySignal[signalName];
+      const runId = url.searchParams.get('runId');
+
+      if (!latest || (runId && runId !== latest.run.runId)) {
+        const empty: EntityLearningTopicsResponse = {
+          run: {
+            runId: runId ?? 'none',
+            signalName,
+            topicCount: 0,
+            sourceItemCount: 0,
+            groupedItemCount: 0,
+            outlierItemCount: 0,
+          },
+          topics: [],
+        };
+        return HttpResponse.json(empty);
+      }
+
+      return HttpResponse.json(latest);
+    }),
+  );
+}
 
 function renderOverview(
   selectedEntity: SelectedEntity | null,
@@ -105,11 +148,8 @@ describe('SignalsOverviewPage', () => {
   });
 
   describe('when an entity is selected', () => {
-    it('renders a section per available signal with clusters from /topics', async () => {
-      server.use(
-        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
-        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
-      );
+    it('renders a section per available signal with that signal own latest-run clusters', async () => {
+      useTopicsBySignalHandlers();
 
       renderOverview({ entityType: 'agent', entityId: 'entity_support' });
 
@@ -117,16 +157,16 @@ describe('SignalsOverviewPage', () => {
       expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
       expect(screen.getByRole('heading', { name: 'Behavior' })).not.toBeNull();
 
-      // Clusters (topics) are rendered as cards.
+      // Each section shows its own signal's clusters. `behavior`'s latest run
+      // ('31') differs from the entity-wide latestRunId ('32', a `sentiment`
+      // run), so pinning that run id would render the behavior section empty.
       expect(await screen.findAllByRole('heading', { name: 'Frustrated escalations' })).not.toHaveLength(0);
       expect(screen.getAllByRole('heading', { name: 'Satisfied resolutions' }).length).toBeGreaterThan(0);
+      expect(await screen.findAllByRole('heading', { name: 'Repeated retries' })).not.toHaveLength(0);
     });
 
     it('calls onSignalSelect with the signal name and topic id when a cluster card is clicked', async () => {
-      server.use(
-        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
-        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
-      );
+      useTopicsBySignalHandlers();
 
       const onSignalSelect = vi.fn();
       renderOverview({ entityType: 'agent', entityId: 'entity_support' }, onSignalSelect);
@@ -138,10 +178,7 @@ describe('SignalsOverviewPage', () => {
     });
 
     it('calls onSignalSelect with only the signal name when See details is clicked', async () => {
-      server.use(
-        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
-        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
-      );
+      useTopicsBySignalHandlers();
 
       const onSignalSelect = vi.fn();
       renderOverview({ entityType: 'agent', entityId: 'entity_support' }, onSignalSelect);
