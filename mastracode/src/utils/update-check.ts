@@ -234,25 +234,16 @@ export function parseChangelog(markdown: string, version: string): string | null
   return entries.map(e => `  • ${e}`).join('\n');
 }
 
-/** Result of attempting an auto-update. */
+/** Result of attempting an auto-update: exit status plus captured stderr. */
 export interface UpdateResult {
-  /** true when the package manager exited with code 0. */
   ok: boolean;
-  /**
-   * Captured stderr from the package manager (and, for spawn failures such as
-   * the binary being missing, the underlying error message). Undefined when
-   * there was nothing to report.
-   */
   stderr?: string;
 }
 
 /**
  * Run the appropriate global install command to update mastracode.
- *
- * Note: exit code 0 only means the package manager was happy — it does NOT
- * prove the running binary was updated (e.g. when mastracode is managed by a
- * different tool and npm installs into a location that isn't on the PATH).
- * Callers should confirm the result with {@link getOwnInstalledVersion}.
+ * Exit code 0 does not prove the running binary changed (the install may land
+ * in a location the PATH shim doesn't use) — verify with {@link locateOwnInstall}.
  */
 export function runUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateResult> {
   const args = buildInstallArgs(pm, targetVersion);
@@ -285,12 +276,8 @@ function buildInstallArgs(pm: PackageManager, version: string): string[] {
 /** Max stderr lines to surface when an update fails. */
 const MAX_UPDATE_ERROR_LINES = 5;
 
-/**
- * Pick the last few meaningful (non-empty) lines of a package manager's stderr
- * so the user sees the real cause of a failed update instead of nothing.
- * Returns null when there is nothing useful to show.
- */
-export function formatUpdaterError(stderr: string | undefined): string | null {
+/** Last few non-empty stderr lines, or null when there is nothing to show. */
+function formatUpdaterError(stderr: string | undefined): string | null {
   if (!stderr) return null;
   const lines = stderr
     .split('\n')
@@ -301,15 +288,9 @@ export function formatUpdaterError(stderr: string | undefined): string | null {
 }
 
 /**
- * Locate the mastracode package that the *running* binary belongs to and read
- * its version straight from disk (no cache), so a post-update check reflects
- * what is actually installed. Walks up from the real path of
- * `process.argv[1]` until it finds a `package.json` whose `name` is
- * `"mastracode"`.
- *
- * Returns null when it can't be determined — e.g. when running from source, or
- * the package directory can't be located. Callers should treat null as
- * "unknown", not as a failure.
+ * Find the installed mastracode package the running binary belongs to (walking
+ * up from `process.argv[1]`) and read its version fresh from disk. Returns
+ * null when it can't be determined, e.g. when running from source.
  */
 export function locateOwnInstall(): { dir: string; version: string | null } | null {
   const entry = process.argv[1];
@@ -322,7 +303,6 @@ export function locateOwnInstall(): { dir: string; version: string | null } | nu
     return null;
   }
 
-  // Walk up toward the filesystem root looking for the package's own manifest.
   let previous = '';
   while (dir && dir !== previous) {
     try {
@@ -334,7 +314,7 @@ export function locateOwnInstall(): { dir: string; version: string | null } | nu
         return { dir, version: typeof pkg.version === 'string' ? pkg.version : null };
       }
     } catch {
-      // No readable/parseable package.json here — keep walking up.
+      // Not a readable manifest — keep walking up.
     }
     previous = dir;
     dir = dirname(dir);
@@ -343,59 +323,38 @@ export function locateOwnInstall(): { dir: string; version: string | null } | nu
   return null;
 }
 
-/**
- * Version reported by the mastracode installation that the running binary
- * belongs to, read fresh from disk. Returns null when it can't be determined.
- * See {@link locateOwnInstall}.
- */
-export function getOwnInstalledVersion(): string | null {
-  return locateOwnInstall()?.version ?? null;
-}
-
-/** Outcome of an auto-update, once the on-disk result has been verified. */
 export type UpdateOutcome =
   | { status: 'updated'; message: string }
   | { status: 'unchanged'; message: string }
   | { status: 'failed'; message: string };
 
 /**
- * Decide what to tell the user after {@link runUpdate}, given the version the
- * running binary now reports on disk. Pure — all IO is done by the caller.
- *
- * - `failed`:    the package manager errored; the message surfaces its output
- *                plus a manual command to run.
- * - `unchanged`: the package manager exited 0, but the running binary is still
- *                on the old version — it is managed by another tool and the
- *                update landed in a copy that isn't on the PATH. The message is
- *                honest instead of a false "Updated".
- * - `updated`:   confirmed applied, or indeterminable (installed version is
- *                null); the caller should restart.
+ * Decide what to tell the user after {@link runUpdate}: `updated` when the
+ * on-disk version matches the target (or can't be determined), `unchanged`
+ * when the package manager succeeded but the running install didn't change,
+ * `failed` on error (with the package manager's stderr).
  */
 export function resolveUpdateOutcome(opts: {
   pm: PackageManager;
   targetVersion: string;
   result: UpdateResult;
-  installedVersion: string | null;
-  installedPackageDir?: string | null;
+  install: { dir: string; version: string | null } | null;
 }): UpdateOutcome {
-  const { pm, targetVersion, result, installedVersion, installedPackageDir } = opts;
+  const { pm, targetVersion, result, install } = opts;
+  const cmd = getInstallCommand(pm, targetVersion);
 
   if (!result.ok) {
-    const cmd = getInstallCommand(pm, targetVersion);
-    let message = `Auto-update failed. Run \`${cmd}\` manually.`;
     const details = formatUpdaterError(result.stderr);
+    let message = `Auto-update failed. Run \`${cmd}\` manually.`;
     if (details) message += `\n\n${details}`;
     return { status: 'failed', message };
   }
 
-  if (installedVersion !== null && installedVersion !== targetVersion) {
-    const cmd = getInstallCommand(pm, targetVersion);
-    const location = installedPackageDir ? ` (at ${installedPackageDir})` : '';
+  if (install?.version != null && install.version !== targetVersion) {
     const message =
-      `The package manager reported success, but the Mastra Code you are running${location} is still ` +
-      `v${installedVersion}. Your installation appears to be managed by another tool — update it with the tool you ` +
-      `installed Mastra Code with (e.g. the command that put it on your PATH). If you use a standard package manager, ` +
-      `try \`${cmd}\`.`;
+      `The update installed, but the Mastra Code you are running (at ${install.dir}) is still ` +
+      `v${install.version} — it looks like it is managed by another tool. Update it with that tool, ` +
+      `or try \`${cmd}\`.`;
     return { status: 'unchanged', message };
   }
 

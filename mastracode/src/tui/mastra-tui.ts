@@ -1601,14 +1601,11 @@ export class MastraTUI {
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
       const result = await runUpdate(pm, latestVersion);
-      // Exit code 0 doesn't prove the running binary was updated — verify on disk.
-      const install = locateOwnInstall();
       const outcome = resolveUpdateOutcome({
         pm,
         targetVersion: latestVersion,
         result,
-        installedVersion: install?.version ?? null,
-        installedPackageDir: install?.dir ?? null,
+        install: locateOwnInstall(),
       });
       if (outcome.status === 'updated') {
         showInfo(this.state, outcome.message);

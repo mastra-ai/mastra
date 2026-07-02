@@ -9,15 +9,7 @@ const { execFileMock, readFileSyncMock, realpathSyncMock } = vi.hoisted(() => ({
 vi.mock('node:child_process', () => ({ execFile: execFileMock }));
 vi.mock('node:fs', () => ({ readFileSync: readFileSyncMock, realpathSync: realpathSyncMock }));
 
-import {
-  fetchChangelog,
-  formatUpdaterError,
-  getOwnInstalledVersion,
-  locateOwnInstall,
-  parseChangelog,
-  resolveUpdateOutcome,
-  runUpdate,
-} from '../update-check.js';
+import { fetchChangelog, locateOwnInstall, parseChangelog, resolveUpdateOutcome, runUpdate } from '../update-check.js';
 
 describe('parseChangelog', () => {
   const SAMPLE_CHANGELOG = [
@@ -194,23 +186,7 @@ describe('runUpdate', () => {
   });
 });
 
-describe('formatUpdaterError', () => {
-  it('returns null for undefined or blank stderr', () => {
-    expect(formatUpdaterError(undefined)).toBeNull();
-    expect(formatUpdaterError('   \n \n  ')).toBeNull();
-  });
-
-  it('returns the last non-empty lines, capped at five', () => {
-    const stderr = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n');
-    expect(formatUpdaterError(stderr)).toBe(['line 6', 'line 7', 'line 8', 'line 9', 'line 10'].join('\n'));
-  });
-
-  it('drops blank lines between content', () => {
-    expect(formatUpdaterError('first\n\n\nsecond')).toBe('first\nsecond');
-  });
-});
-
-describe('locateOwnInstall / getOwnInstalledVersion', () => {
+describe('locateOwnInstall', () => {
   const originalArgv1 = process.argv[1];
 
   beforeEach(() => {
@@ -230,7 +206,6 @@ describe('locateOwnInstall / getOwnInstalledVersion', () => {
     });
 
     expect(locateOwnInstall()).toEqual({ dir: '/opt/tool/mastracode', version: '9.9.9' });
-    expect(getOwnInstalledVersion()).toBe('9.9.9');
   });
 
   it('skips unrelated package.json files while walking up', () => {
@@ -242,7 +217,7 @@ describe('locateOwnInstall / getOwnInstalledVersion', () => {
       throw new Error('ENOENT');
     });
 
-    expect(getOwnInstalledVersion()).toBe('2.0.0');
+    expect(locateOwnInstall()).toEqual({ dir: '/a/b', version: '2.0.0' });
   });
 
   it('returns null when no mastracode manifest is found (e.g. running from source)', () => {
@@ -253,7 +228,6 @@ describe('locateOwnInstall / getOwnInstalledVersion', () => {
     });
 
     expect(locateOwnInstall()).toBeNull();
-    expect(getOwnInstalledVersion()).toBeNull();
   });
 
   it('returns null when the binary path cannot be resolved', () => {
@@ -262,7 +236,7 @@ describe('locateOwnInstall / getOwnInstalledVersion', () => {
       throw new Error('ENOENT');
     });
 
-    expect(getOwnInstalledVersion()).toBeNull();
+    expect(locateOwnInstall()).toBeNull();
   });
 
   it('returns a null version when the manifest has no version field', () => {
@@ -274,26 +248,34 @@ describe('locateOwnInstall / getOwnInstalledVersion', () => {
     });
 
     expect(locateOwnInstall()).toEqual({ dir: '/pkg', version: null });
-    expect(getOwnInstalledVersion()).toBeNull();
   });
 });
 
 describe('resolveUpdateOutcome', () => {
   const base = { pm: 'npm' as const, targetVersion: '2.0.0' };
+  const oldInstall = { dir: '/opt/vite-plus/mastracode', version: '1.0.0' };
 
   it('reports failure with the manual command and formatted stderr', () => {
     const outcome = resolveUpdateOutcome({
       ...base,
       result: { ok: false, stderr: 'npm ERR! code EACCES\nnpm ERR! permission denied' },
-      installedVersion: '1.0.0',
+      install: oldInstall,
     });
     expect(outcome.status).toBe('failed');
     expect(outcome.message).toContain('npm install -g mastracode@2.0.0');
     expect(outcome.message).toContain('npm ERR! permission denied');
   });
 
+  it('caps surfaced stderr at the last five non-empty lines', () => {
+    const stderr = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n\n');
+    const outcome = resolveUpdateOutcome({ ...base, result: { ok: false, stderr }, install: oldInstall });
+    expect(outcome.message).toContain('line 10');
+    expect(outcome.message).toContain('line 6');
+    expect(outcome.message).not.toContain('line 5');
+  });
+
   it('reports failure without a details block when there is no stderr', () => {
-    const outcome = resolveUpdateOutcome({ ...base, result: { ok: false }, installedVersion: '1.0.0' });
+    const outcome = resolveUpdateOutcome({ ...base, result: { ok: false }, install: oldInstall });
     expect(outcome).toEqual({
       status: 'failed',
       message: 'Auto-update failed. Run `npm install -g mastracode@2.0.0` manually.',
@@ -304,34 +286,24 @@ describe('resolveUpdateOutcome', () => {
     const outcome = resolveUpdateOutcome({
       ...base,
       result: { ok: true },
-      installedVersion: '2.0.0',
-      installedPackageDir: '/usr/local/lib/node_modules/mastracode',
+      install: { dir: '/usr/local/lib/node_modules/mastracode', version: '2.0.0' },
     });
     expect(outcome).toEqual({ status: 'updated', message: 'Updated to v2.0.0. Please restart Mastra Code.' });
   });
 
-  it('reports success when the installed version is indeterminable (null)', () => {
-    const outcome = resolveUpdateOutcome({ ...base, result: { ok: true }, installedVersion: null });
-    expect(outcome.status).toBe('updated');
+  it('reports success when the install is indeterminable', () => {
+    expect(resolveUpdateOutcome({ ...base, result: { ok: true }, install: null }).status).toBe('updated');
+    expect(
+      resolveUpdateOutcome({ ...base, result: { ok: true }, install: { dir: '/pkg', version: null } }).status,
+    ).toBe('updated');
   });
 
-  it('reports an honest unchanged message (with location) when exit 0 but the binary is still old', () => {
-    const outcome = resolveUpdateOutcome({
-      ...base,
-      result: { ok: true },
-      installedVersion: '1.0.0',
-      installedPackageDir: '/opt/vite-plus/mastracode',
-    });
+  it('reports an honest unchanged message when exit 0 but the binary is still old', () => {
+    const outcome = resolveUpdateOutcome({ ...base, result: { ok: true }, install: oldInstall });
     expect(outcome.status).toBe('unchanged');
     expect(outcome.message).toContain('still v1.0.0');
     expect(outcome.message).toContain('/opt/vite-plus/mastracode');
     expect(outcome.message).not.toContain('Updated to v');
     expect(outcome.message).toContain('npm install -g mastracode@2.0.0');
-  });
-
-  it('omits the location when the package directory is unknown', () => {
-    const outcome = resolveUpdateOutcome({ ...base, result: { ok: true }, installedVersion: '1.0.0' });
-    expect(outcome.status).toBe('unchanged');
-    expect(outcome.message).not.toContain(' (at ');
   });
 });

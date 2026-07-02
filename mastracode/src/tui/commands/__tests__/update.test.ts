@@ -181,7 +181,7 @@ describe('handleUpdateCommand', () => {
     await command;
 
     expect(resolveUpdateOutcomeMock).toHaveBeenCalledWith(
-      expect.objectContaining({ installedVersion: '0.1.0', installedPackageDir: '/opt/vite-plus/mastracode' }),
+      expect.objectContaining({ install: { dir: '/opt/vite-plus/mastracode', version: '0.1.0' } }),
     );
     expect(ctx.showError).toHaveBeenCalledWith(
       'The package manager reported success, but the Mastra Code you are running is still v0.1.0.',
