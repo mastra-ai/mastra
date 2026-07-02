@@ -44,6 +44,8 @@ catalog:
   tsx: ^4.22.4
 
 patchedDependencies:
+  '@ai-sdk/provider-utils@2.2.8': patches/@ai-sdk__provider-utils@2.2.8.patch
+  '@ai-sdk/provider-utils@3.0.25': patches/@ai-sdk__provider-utils@3.0.25.patch
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 

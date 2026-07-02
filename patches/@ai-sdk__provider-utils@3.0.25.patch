@@ -1,0 +1,166 @@
+diff --git a/dist/index.js b/dist/index.js
+index f6fa5a295309e45bfa9d0114976751706c6613bf..99fbf9666d5f7db38613130683582e2b05344c1a 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1077,12 +1077,59 @@ async function resolve(value) {
+ 
+ // src/response-handler.ts
+ var import_provider12 = require("@ai-sdk/provider");
++
++// PATCHED (mastra): GHSA-866g-f22w-33x8 — cap buffered response-body reads to
++// prevent unbounded memory consumption from a malicious/compromised endpoint.
++// No upstream patch exists for this version line.
++var MASTRA_MAX_RESPONSE_BODY_BYTES = (() => {
++  try {
++    const raw = typeof process !== "undefined" && process.env ? process.env.AI_SDK_MAX_RESPONSE_BODY_BYTES : void 0;
++    const parsed = raw == null ? NaN : Number(raw);
++    return Number.isFinite(parsed) && parsed > 0 ? parsed : 100 * 1024 * 1024;
++  } catch {
++    return 100 * 1024 * 1024;
++  }
++})();
++async function mastraReadResponseBodyWithLimit(response) {
++  const limit = MASTRA_MAX_RESPONSE_BODY_BYTES;
++  const rawContentLength = response.headers && typeof response.headers.get === "function" ? response.headers.get("content-length") : null;
++  const contentLength = rawContentLength == null ? NaN : Number(rawContentLength);
++  if (Number.isFinite(contentLength) && contentLength > limit) {
++    throw new Error(`Response body of ${contentLength} bytes exceeds the ${limit} byte limit (set AI_SDK_MAX_RESPONSE_BODY_BYTES to raise it)`);
++  }
++  if (!response.body || typeof response.body.getReader !== "function") {
++    return response.text();
++  }
++  const reader = response.body.getReader();
++  const chunks = [];
++  let total = 0;
++  for (;;) {
++    const { done, value } = await reader.read();
++    if (done) break;
++    total += value.byteLength;
++    if (total > limit) {
++      try {
++        reader.cancel();
++      } catch {}
++      throw new Error(`Response body exceeds the ${limit} byte limit (set AI_SDK_MAX_RESPONSE_BODY_BYTES to raise it)`);
++    }
++    chunks.push(value);
++  }
++  const merged = new Uint8Array(total);
++  let offset = 0;
++  for (const chunk of chunks) {
++    merged.set(chunk, offset);
++    offset += chunk.byteLength;
++  }
++  return new TextDecoder().decode(merged);
++}
++
+ var createJsonErrorResponseHandler = ({
+   errorSchema,
+   errorToMessage,
+   isRetryable
+ }) => async ({ response, url, requestBodyValues }) => {
+-  const responseBody = await response.text();
++  const responseBody = await mastraReadResponseBodyWithLimit(response);
+   const responseHeaders = extractResponseHeaders(response);
+   if (responseBody.trim() === "") {
+     return {
+@@ -1172,7 +1219,7 @@ var createJsonStreamResponseHandler = (chunkSchema) => async ({ response }) => {
+   };
+ };
+ var createJsonResponseHandler = (responseSchema) => async ({ response, url, requestBodyValues }) => {
+-  const responseBody = await response.text();
++  const responseBody = await mastraReadResponseBodyWithLimit(response);
+   const parsedResult = await safeParseJSON({
+     text: responseBody,
+     schema: responseSchema
+@@ -1227,7 +1274,7 @@ var createBinaryResponseHandler = () => async ({ response, url, requestBodyValue
+ };
+ var createStatusCodeErrorResponseHandler = () => async ({ response, url, requestBodyValues }) => {
+   const responseHeaders = extractResponseHeaders(response);
+-  const responseBody = await response.text();
++  const responseBody = await mastraReadResponseBodyWithLimit(response);
+   return {
+     responseHeaders,
+     value: new import_provider12.APICallError({
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 6f3887f5cc4b62a386978f7504b8083a7f56b82f..c1316c013ae127ccc45c733f3aa1ecb8e31e9442 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -985,12 +985,59 @@ async function resolve(value) {
+ 
+ // src/response-handler.ts
+ import { APICallError as APICallError4, EmptyResponseBodyError } from "@ai-sdk/provider";
++
++// PATCHED (mastra): GHSA-866g-f22w-33x8 — cap buffered response-body reads to
++// prevent unbounded memory consumption from a malicious/compromised endpoint.
++// No upstream patch exists for this version line.
++var MASTRA_MAX_RESPONSE_BODY_BYTES = (() => {
++  try {
++    const raw = typeof process !== "undefined" && process.env ? process.env.AI_SDK_MAX_RESPONSE_BODY_BYTES : void 0;
++    const parsed = raw == null ? NaN : Number(raw);
++    return Number.isFinite(parsed) && parsed > 0 ? parsed : 100 * 1024 * 1024;
++  } catch {
++    return 100 * 1024 * 1024;
++  }
++})();
++async function mastraReadResponseBodyWithLimit(response) {
++  const limit = MASTRA_MAX_RESPONSE_BODY_BYTES;
++  const rawContentLength = response.headers && typeof response.headers.get === "function" ? response.headers.get("content-length") : null;
++  const contentLength = rawContentLength == null ? NaN : Number(rawContentLength);
++  if (Number.isFinite(contentLength) && contentLength > limit) {
++    throw new Error(`Response body of ${contentLength} bytes exceeds the ${limit} byte limit (set AI_SDK_MAX_RESPONSE_BODY_BYTES to raise it)`);
++  }
++  if (!response.body || typeof response.body.getReader !== "function") {
++    return response.text();
++  }
++  const reader = response.body.getReader();
++  const chunks = [];
++  let total = 0;
++  for (;;) {
++    const { done, value } = await reader.read();
++    if (done) break;
++    total += value.byteLength;
++    if (total > limit) {
++      try {
++        reader.cancel();
++      } catch {}
++      throw new Error(`Response body exceeds the ${limit} byte limit (set AI_SDK_MAX_RESPONSE_BODY_BYTES to raise it)`);
++    }
++    chunks.push(value);
++  }
++  const merged = new Uint8Array(total);
++  let offset = 0;
++  for (const chunk of chunks) {
++    merged.set(chunk, offset);
++    offset += chunk.byteLength;
++  }
++  return new TextDecoder().decode(merged);
++}
++
+ var createJsonErrorResponseHandler = ({
+   errorSchema,
+   errorToMessage,
+   isRetryable
+ }) => async ({ response, url, requestBodyValues }) => {
+-  const responseBody = await response.text();
++  const responseBody = await mastraReadResponseBodyWithLimit(response);
+   const responseHeaders = extractResponseHeaders(response);
+   if (responseBody.trim() === "") {
+     return {
+@@ -1080,7 +1127,7 @@ var createJsonStreamResponseHandler = (chunkSchema) => async ({ response }) => {
+   };
+ };
+ var createJsonResponseHandler = (responseSchema) => async ({ response, url, requestBodyValues }) => {
+-  const responseBody = await response.text();
++  const responseBody = await mastraReadResponseBodyWithLimit(response);
+   const parsedResult = await safeParseJSON({
+     text: responseBody,
+     schema: responseSchema
+@@ -1135,7 +1182,7 @@ var createBinaryResponseHandler = () => async ({ response, url, requestBodyValue
+ };
+ var createStatusCodeErrorResponseHandler = () => async ({ response, url, requestBodyValues }) => {
+   const responseHeaders = extractResponseHeaders(response);
+-  const responseBody = await response.text();
++  const responseBody = await mastraReadResponseBodyWithLimit(response);
+   return {
+     responseHeaders,
+     value: new APICallError4({
