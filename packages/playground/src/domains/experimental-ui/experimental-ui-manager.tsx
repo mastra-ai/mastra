@@ -1,4 +1,6 @@
-import { Popover, PopoverTrigger, PopoverContent, RadioGroup, RadioGroupItem, Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { FlaskConicalIcon } from 'lucide-react';
 import { useMaybeExperimentalUI } from './experimental-ui-context';
 

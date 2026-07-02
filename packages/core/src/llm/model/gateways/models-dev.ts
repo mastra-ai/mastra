@@ -15,7 +15,7 @@ import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
-import type { AttachmentCapabilities, GatewayLanguageModel, ProviderConfig } from './base.js';
+import type { AttachmentCapabilities, GatewayLanguageModel, ProviderConfig, TemperatureCapabilities } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevModelInfo {
@@ -24,6 +24,7 @@ interface ModelsDevModelInfo {
   status?: string;
   modalities?: { input?: string[]; output?: string[] };
   attachment?: boolean;
+  temperature?: boolean;
   [key: string]: unknown;
 }
 
@@ -110,6 +111,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
   private providerConfigs: Record<string, ProviderConfig> = {};
   private attachmentCapabilities: AttachmentCapabilities = {};
+  private temperatureCapabilities: TemperatureCapabilities = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -123,6 +125,10 @@ export class ModelsDevGateway extends MastraModelGateway {
     }
 
     const data = (await response.json()) as ModelsDevResponse;
+
+    // Reset capability maps so removed providers/models are not retained across syncs
+    this.attachmentCapabilities = {};
+    this.temperatureCapabilities = {};
 
     const providerConfigs: Record<string, ProviderConfig> = {};
 
@@ -158,6 +164,12 @@ export class ModelsDevGateway extends MastraModelGateway {
         // Collect model IDs that support attachments
         const attachmentModels = activeModels
           .filter(([, modelInfo]) => modelInfo?.attachment === true)
+          .map(([modelId]) => modelId)
+          .sort();
+
+        // Collect model IDs that support temperature sampling
+        const temperatureModels = activeModels
+          .filter(([, modelInfo]) => modelInfo?.temperature === true)
           .map(([modelId]) => modelId)
           .sort();
 
@@ -203,6 +215,9 @@ export class ModelsDevGateway extends MastraModelGateway {
         if (attachmentModels.length > 0) {
           this.attachmentCapabilities[normalizedId] = attachmentModels;
         }
+        if (temperatureModels.length > 0) {
+          this.temperatureCapabilities[normalizedId] = temperatureModels;
+        }
       }
     }
 
@@ -218,6 +233,10 @@ export class ModelsDevGateway extends MastraModelGateway {
    */
   getAttachmentCapabilities(): AttachmentCapabilities {
     return this.attachmentCapabilities;
+  }
+
+  getTemperatureCapabilities(): TemperatureCapabilities {
+    return this.temperatureCapabilities;
   }
 
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {

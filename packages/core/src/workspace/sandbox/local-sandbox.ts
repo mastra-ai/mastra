@@ -35,8 +35,18 @@ import type { SandboxInfo } from './types';
 // Mount Path Validation
 // =============================================================================
 
-/** Directory for mount marker files used to detect config changes across restarts. */
-export const MARKER_DIR = path.join(os.tmpdir(), '.mastra-mounts');
+/**
+ * Directory for mount marker files used to detect config changes across restarts.
+ *
+ * Resolved lazily so `os.tmpdir()` is never invoked at module-load time. The
+ * Agent/evals runtime (which transitively imports this module) is bundled into
+ * the Studio client, where `node:os` is shimmed to an empty object and
+ * `os.tmpdir` is `undefined`. Evaluating it at import time crashes Studio boot.
+ * See https://github.com/mastra-ai/mastra/issues/18519.
+ */
+export function getMarkerDir(): string {
+  return path.join(os.tmpdir(), '.mastra-mounts');
+}
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
 const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
@@ -530,7 +540,7 @@ export class LocalSandbox extends MastraSandbox {
 
     // Clean up marker file
     const filename = this.mounts.markerFilename(hostPath);
-    const markerPath = path.join(MARKER_DIR, filename);
+    const markerPath = path.join(getMarkerDir(), filename);
     try {
       await fs.unlink(markerPath);
     } catch {
@@ -563,10 +573,10 @@ export class LocalSandbox extends MastraSandbox {
 
     const filename = this.mounts.markerFilename(hostPath);
     const markerContent = `${hostPath}|${entry.configHash}`;
-    const markerFilePath = path.join(MARKER_DIR, filename);
+    const markerFilePath = path.join(getMarkerDir(), filename);
 
     try {
-      await fs.mkdir(MARKER_DIR, { recursive: true });
+      await fs.mkdir(getMarkerDir(), { recursive: true });
       await fs.writeFile(markerFilePath, markerContent, 'utf-8');
     } catch {
       this.logger.debug('Could not write marker file', { markerFilePath });
@@ -611,7 +621,7 @@ export class LocalSandbox extends MastraSandbox {
    */
   private async hasMarkerFile(hostPath: string): Promise<boolean> {
     const filename = this.mounts.markerFilename(hostPath);
-    const markerPath = path.join(MARKER_DIR, filename);
+    const markerPath = path.join(getMarkerDir(), filename);
     try {
       await fs.access(markerPath);
       return true;
@@ -630,7 +640,7 @@ export class LocalSandbox extends MastraSandbox {
     newConfig: FilesystemMountConfig,
   ): Promise<'matching' | 'mismatched' | 'foreign'> {
     const filename = this.mounts.markerFilename(hostPath);
-    const markerPath = path.join(MARKER_DIR, filename);
+    const markerPath = path.join(getMarkerDir(), filename);
 
     try {
       const content = await fs.readFile(markerPath, 'utf-8');

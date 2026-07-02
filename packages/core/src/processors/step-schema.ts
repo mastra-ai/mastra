@@ -164,6 +164,8 @@ export type ProcessorOutputStepPhaseType = {
   messageList: MessageList;
   stepNumber: number;
   finishReason?: string;
+  /** Provider-specific metadata for the step (e.g. Bedrock guardrail trace). */
+  providerMetadata?: Record<string, unknown>;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
   usage?: Record<string, unknown>;
@@ -205,6 +207,8 @@ export type ProcessorStepOutputType = {
   state?: Record<string, unknown>;
   result?: SerializableOutputResult;
   finishReason?: string;
+  /** Provider-specific metadata for the step (e.g. Bedrock guardrail trace). */
+  providerMetadata?: Record<string, unknown>;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
   usage?: Record<string, unknown>;
@@ -618,6 +622,10 @@ export const ProcessorOutputStepPhaseSchema = z.object({
   messageList: messageListSchema,
   stepNumber: z.number().describe('The current step number (0-indexed)'),
   finishReason: z.string().optional().describe('The finish reason from the LLM (stop, tool-use, length, etc.)'),
+  providerMetadata: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('Provider-specific metadata for the step (e.g. Bedrock guardrail trace under bedrock.trace.guardrail)'),
   toolCalls: z.array(toolCallSchema).optional().describe('Tool calls made in this step (if any)'),
   text: z.string().optional().describe('Generated text from this step'),
   usage: z

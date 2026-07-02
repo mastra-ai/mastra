@@ -177,14 +177,13 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Dynamically import OM schema to avoid breaking older @mastra/core versions
-    let omSchema: Record<string, any> | undefined;
-    try {
-      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
-      omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
-    } catch {
-      // OM not available in this version of core
-    }
+    // Reuse the module-level `_omTableSchema` set via the top-of-file
+    // `createRequire` shim. `await import('@mastra/core/storage')` here used
+    // to deadlock `mastra build` output: bundlers rewrite the dynamic import
+    // to point at the entry chunk that statically depends on this file, so
+    // the cycle never resolves when storage initializes during module
+    // evaluation (#18298).
+    const omSchema = _omTableSchema?.[OM_TABLE];
 
     if (omSchema) {
       await this.#db.createTable({
@@ -2529,6 +2528,8 @@ export class MemoryPG extends MemoryStorage {
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
         threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
       };
 
       // Append chunk to existing array using JSONB concatenation

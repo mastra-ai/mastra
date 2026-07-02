@@ -392,7 +392,7 @@ export async function runOm14745RotationScenario(opts: {
 
   if (!status.shouldBuffer) {
     throw new Error(
-      `OM 14745 harness requires shouldBuffer=true (pending=${status.pendingTokens}, threshold=${status.threshold}, shouldObserve=${status.shouldObserve})`,
+      `OM 14745 controller requires shouldBuffer=true (pending=${status.pendingTokens}, threshold=${status.threshold}, shouldObserve=${status.shouldObserve})`,
     );
   }
 
@@ -420,7 +420,7 @@ export async function runOm14745RotationScenario(opts: {
   });
 
   if (!bufResult.buffered) {
-    throw new Error('OM 14745 harness: expected om.buffer() to run (buffered=false)');
+    throw new Error('OM 14745 controller: expected om.buffer() to run (buffered=false)');
   }
 
   messageList.updateToolInvocation({

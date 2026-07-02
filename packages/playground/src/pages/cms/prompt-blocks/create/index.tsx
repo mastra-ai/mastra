@@ -1,4 +1,4 @@
-import { MainContentLayout } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { PromptBlockCreateContent } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
 

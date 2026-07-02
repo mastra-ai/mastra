@@ -46,6 +46,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
@@ -53,6 +54,14 @@ export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
 } from './processors/observational-memory/model-by-input-tokens';
+export {
+  Extractor,
+  type ExtractorConfig,
+  type ExtractorOnExtractedContext,
+  type ExtractorRuntimeContext,
+  type ExtractorSource,
+} from './processors/observational-memory';
+export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -204,6 +213,12 @@ function normalizeObservationalMemoryConfig(
   return config as NormalizedObservationalMemoryConfig;
 }
 
+function hasWorkingMemoryExtractor(
+  extractors: NonNullable<NonNullable<ObservationalMemoryConfig['observation']>['extract']> | undefined,
+): boolean {
+  return !!extractors?.some(extractor => extractor.slug === 'working-memory');
+}
+
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
 
@@ -251,6 +266,40 @@ export class Memory extends MastraMemory {
     } else {
       void this._omEngine?.then(engine => engine?.__registerMastra(mastra));
     }
+  }
+
+  public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
+    return this.applyManagedWorkingMemoryDefaults(super.getMergedThreadConfig(config));
+  }
+
+  private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
+    const omConfig = normalizeObservationalMemoryConfig(
+      config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
+    );
+    if (!omConfig?.observation?.manageWorkingMemory || !config.workingMemory?.enabled) {
+      return config;
+    }
+
+    const currentWorkingMemory = config.workingMemory;
+    const workingMemory = {
+      ...currentWorkingMemory,
+      agentManaged: currentWorkingMemory.agentManaged ?? false,
+      useStateSignals: currentWorkingMemory.useStateSignals ?? true,
+    };
+    const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
+    const extract = observation.extract ?? [];
+
+    return {
+      ...config,
+      workingMemory,
+      observationalMemory: {
+        ...omConfig,
+        observation: {
+          ...observation,
+          extract: hasWorkingMemoryExtractor(extract) ? extract : [...extract, new WorkingMemoryExtractor()],
+        },
+      },
+    } as MemoryConfigInternal;
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
@@ -956,16 +1005,37 @@ ${workingMemory}`;
     const chunks: string[] = [];
     let currentChunk = '';
 
-    // Split text into words to avoid breaking words
+    // Split text into words to avoid breaking words where possible.
     const words = text.split(/\s+/);
 
     for (const word of words) {
+      // A single word can be longer than the chunk budget (e.g. a base64 data URI,
+      // a minified JS/JSON blob, a long URL, or spaceless CJK text where the entire
+      // message is one "word"). The whitespace split can't break these, so hard-split
+      // the oversized word by character count to guarantee every chunk stays under the
+      // embedder's token limit instead of emitting one oversized chunk it would reject.
+      if (word.length > charSize) {
+        // Flush whatever we've accumulated so far before the oversized word.
+        if (currentChunk) {
+          chunks.push(currentChunk);
+          currentChunk = '';
+        }
+        for (let i = 0; i < word.length; i += charSize) {
+          chunks.push(word.slice(i, i + charSize));
+        }
+        continue;
+      }
+
       // Add space before word unless it's the first word in the chunk
       const wordWithSpace = currentChunk ? ' ' + word : word;
 
       // If adding this word would exceed the chunk size, start a new chunk
       if (currentChunk.length + wordWithSpace.length > charSize) {
-        chunks.push(currentChunk);
+        // Guard against pushing an empty leading chunk: if the very first word
+        // already filled/exceeded the budget, currentChunk is still '' here.
+        if (currentChunk) {
+          chunks.push(currentChunk);
+        }
         currentChunk = word;
       } else {
         currentChunk += wordWithSpace;
@@ -1398,8 +1468,10 @@ ${workingMemory}`;
       return null;
     }
 
-    // In readOnly mode, provide context without tool instructions
-    if (config?.readOnly) {
+    const workingMemoryConfig = config.workingMemory;
+
+    // In readOnly or non-agent-managed mode, provide context without tool instructions.
+    if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
       return this.getReadOnlyWorkingMemoryInstruction({
         template: workingMemoryTemplate,
         data: workingMemoryData,
@@ -1630,6 +1702,7 @@ ${workingMemory}`;
 
     return new OMClass({
       storage: memoryStore,
+      memory: this,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       activateAfterIdle: omConfig.activateAfterIdle,
@@ -1653,6 +1726,7 @@ ${workingMemory}`;
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
+            extract: omConfig.observation.extract,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1664,6 +1738,7 @@ ${workingMemory}`;
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
             instruction: omConfig.reflection.instruction,
+            extract: omConfig.reflection.extract,
           }
         : undefined,
     });
@@ -2118,7 +2193,9 @@ Notes:
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
-    if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
+    const workingMemoryConfig = mergedConfig.workingMemory;
+
+    if (workingMemoryConfig?.enabled && workingMemoryConfig.agentManaged !== false && !mergedConfig.readOnly) {
       const { name, tool } = createWorkingMemoryTool(mergedConfig, {
         vNext: this.isVNextWorkingMemoryConfig(mergedConfig),
       });

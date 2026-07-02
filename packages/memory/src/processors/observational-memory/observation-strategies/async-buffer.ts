@@ -1,7 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { setThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
+import {
+  applyExtractorHooks,
+  buildThreadMetadataFromExtractedValues,
+  getPriorExtractedValues,
+} from '../extracted-values';
 import { createBufferingEndMarker, createBufferingFailedMarker, createThreadUpdateMarker } from '../markers';
 import { getBufferedChunks, combineObservationsForBuffering } from '../message-utils';
 
@@ -14,6 +19,7 @@ import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from '.
 export class AsyncBufferObservationStrategy extends ObservationStrategy {
   private readonly startedAt: string;
   private readonly cycleId: string;
+  private priorExtractedValues?: Record<string, unknown>;
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
     super(deps, opts);
@@ -48,11 +54,36 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
   }
 
   async observe(existingObservations: string, messages: MastraDBMessage[]) {
-    return this.deps.observer.call(existingObservations, messages, undefined, {
+    const thread = await this.storage.getThreadById({ threadId: this.opts.threadId });
+    const omMeta = thread ? getThreadOMMetadata(thread.metadata) : undefined;
+    this.priorExtractedValues = getPriorExtractedValues(omMeta, this.observationConfig.extractors);
+
+    const result = await this.deps.observer.call(existingObservations, messages, undefined, {
       skipContinuationHints: true,
       requestContext: this.opts.requestContext,
       observabilityContext: this.opts.observabilityContext,
+      priorExtractedValues: this.priorExtractedValues,
+      resourceId: this.opts.resourceId,
+      mainAgent: this.opts.agent,
     });
+    const hookedValues = await applyExtractorHooks({
+      source: 'observer',
+      extractors: result.extractors ?? this.observationConfig.extractors,
+      values: result.extractedValues,
+      failures: result.extractionFailures,
+      previousValues: this.priorExtractedValues,
+      threadId: this.opts.threadId,
+      resourceId: this.opts.resourceId,
+      mainAgent: this.opts.agent,
+      memory: this.deps.memory,
+      sendSignal: this.opts.sendSignal,
+      requestContext: this.opts.requestContext,
+    });
+    return {
+      ...result,
+      extractedValues: hookedValues.values,
+      extractionFailures: hookedValues.failures,
+    };
   }
 
   async process(output: ObserverOutput, _existingObservations: string): Promise<ProcessedObservation> {
@@ -94,6 +125,9 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
+      extractedValues: output.extractedValues,
+      extractionFailures: output.extractionFailures,
+      extractors: output.extractors,
     };
   }
 
@@ -114,28 +148,43 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         suggestedContinuation: processed.suggestedContinuation,
         currentTask: processed.currentTask,
         threadTitle: processed.threadTitle,
+        extractedValues: processed.extractedValues,
+        extractionFailures: processed.extractionFailures,
       },
       lastBufferedAtTime: processed.lastObservedAt,
     });
 
     await this.indexObservationGroups(processed.observations, threadId, resourceId, processed.lastObservedAt);
 
-    // Update thread title immediately — don't wait for activation.
+    // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
     const newTitle = processed.threadTitle?.trim();
-    if (newTitle && newTitle.length >= 3) {
+    const hasValidThreadTitle = !!newTitle && newTitle.length >= 3;
+    if (hasValidThreadTitle || processed.extractedValues) {
       const thread = await this.storage.getThreadById({ threadId });
       if (thread) {
         const oldTitle = thread.title?.trim();
-        if (newTitle !== oldTitle) {
-          const newMetadata = setThreadOMMetadata(thread.metadata, {
-            threadTitle: processed.threadTitle,
-          });
-          await this.storage.updateThread({
-            id: threadId,
-            title: newTitle,
-            metadata: newMetadata,
-          });
+        const shouldUpdateThreadTitle = hasValidThreadTitle && newTitle !== oldTitle;
+        const previousOmMetadata = getThreadOMMetadata(thread.metadata);
+        const metadataUpdate = buildThreadMetadataFromExtractedValues(
+          processed.extractors ?? this.observationConfig.extractors,
+          processed.extractedValues,
+        );
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          ...(hasValidThreadTitle || metadataUpdate.threadTitle
+            ? { threadTitle: metadataUpdate.threadTitle ?? processed.threadTitle }
+            : {}),
+          extracted: {
+            ...(previousOmMetadata?.extracted ?? {}),
+            ...(metadataUpdate.extracted ?? {}),
+          },
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: shouldUpdateThreadTitle ? newTitle : (thread.title ?? ''),
+          metadata: newMetadata,
+        });
 
+        if (shouldUpdateThreadTitle) {
           const marker = createThreadUpdateMarker({
             cycleId: this.cycleId,
             threadId,
@@ -167,6 +216,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       recordId: record.id,
       threadId,
       observations: processed.observations,
+      extractedValues: processed.extractedValues,
+      extractionFailures: processed.extractionFailures,
     });
     if (this.opts.writer) {
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.

@@ -1,4 +1,4 @@
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 

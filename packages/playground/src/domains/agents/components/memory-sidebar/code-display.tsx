@@ -1,4 +1,4 @@
-import { ScrollArea } from '@mastra/playground-ui';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 
 interface CodeDisplayProps {
   content: string;

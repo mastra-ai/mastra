@@ -79,6 +79,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   #subscriptions: Map<string, Subscription> = new Map();
   #cbIds: WeakMap<EventCallback, string> = new WeakMap();
   #pendingPublishes: Set<Promise<unknown>> = new Set();
+  // `localOnly` publishes bypass Redis entirely so values carrying live
+  // methods (e.g. `MastraModelOutput` returned from an evented agent run via
+  // `workflows-finish`) survive intact. Mirrors the same contract honored by
+  // `UnixSocketPubSub` so consumers like `Mastra.__registerInternalWorkflow`
+  // get consistent semantics across transports.
+  #localCallbacks: Map<string, Set<EventCallback>> = new Map();
   #closed = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
@@ -124,8 +130,28 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return `${this.#keyPrefix}:${topic}`;
   }
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
     if (this.#closed) throw new Error('RedisStreamsPubSub: cannot publish on closed client');
+
+    // `localOnly` events stay entirely within the publishing process. They are
+    // never serialized through Redis, so live values on the payload (e.g.
+    // `MastraModelOutput` returned via `workflows-finish` for an evented
+    // agent run) keep their prototype and methods intact.
+    if (options?.localOnly) {
+      const localEvent: Event = {
+        ...event,
+        id: randomUUID(),
+        createdAt: new Date(),
+        deliveryAttempt: event.deliveryAttempt ?? 1,
+      };
+      this.#deliverLocal(topic, localEvent);
+      return;
+    }
+
     await this.#ensureWriterConnected();
 
     const id = randomUUID();
@@ -162,6 +188,15 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     if (this.#closed) throw new Error('RedisStreamsPubSub: cannot subscribe on closed client');
     const key = this.#subKey(topic, cb);
     if (this.#subscriptions.has(key)) return; // idempotent: same (topic, cb) already subscribed
+
+    // Register for `localOnly` delivery before wiring up the Redis reader so a
+    // racing publisher in the same process never misses this subscriber.
+    let localBucket = this.#localCallbacks.get(topic);
+    if (!localBucket) {
+      localBucket = new Set();
+      this.#localCallbacks.set(topic, localBucket);
+    }
+    localBucket.add(cb);
 
     await this.#ensureWriterConnected();
 
@@ -252,6 +287,12 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    const localBucket = this.#localCallbacks.get(topic);
+    if (localBucket) {
+      localBucket.delete(cb);
+      if (localBucket.size === 0) this.#localCallbacks.delete(topic);
+    }
+
     const key = this.#subKey(topic, cb);
     const sub = this.#subscriptions.get(key);
     if (!sub) return;
@@ -430,6 +471,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // unsubscribe's key lookup works.
     const subs = [...this.#subscriptions.values()];
     await Promise.all(subs.map(sub => this.unsubscribe(sub.topic, sub.cb)));
+    this.#localCallbacks.clear();
 
     if (this.#writeClient.isOpen) {
       try {
@@ -587,6 +629,42 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     } catch {
       // Caller threw synchronously — treat as nack.
       await nack();
+    }
+  }
+
+  #deliverLocal(topic: string, event: Event): void {
+    const callbacks = this.#localCallbacks.get(topic);
+    if (!callbacks || callbacks.size === 0) return;
+    for (const cb of callbacks) {
+      this.#invokeLocalCallback(topic, event, cb);
+    }
+  }
+
+  #invokeLocalCallback(topic: string, event: Event, cb: EventCallback): void {
+    // `localOnly` deliveries don't have an external broker to redeliver from,
+    // so ack/nack are no-ops here. The caller still gets a real Event object
+    // and can branch on `deliveryAttempt` if it cares.
+    const ack = async () => {};
+    const nack = async () => {};
+    try {
+      const result: unknown = (cb as (event: Event, ack: () => Promise<void>, nack: () => Promise<void>) => unknown)(
+        event,
+        ack,
+        nack,
+      );
+      if (result && typeof (result as { then?: unknown; catch?: unknown }).catch === 'function') {
+        (result as Promise<unknown>).catch(err => {
+          this.#logger?.debug?.('redis-streams: local subscriber rejected', {
+            topic,
+            err: err instanceof Error ? err.message : err,
+          });
+        });
+      }
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: local subscriber threw', {
+        topic,
+        err: err instanceof Error ? err.message : err,
+      });
     }
   }
 }

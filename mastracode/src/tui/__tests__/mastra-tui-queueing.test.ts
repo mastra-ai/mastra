@@ -36,10 +36,10 @@ const EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS = {
 
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   // Mirror production wiring: state.session is the same object as
-  // harness.session. Tests pass per-session behavior under `session`
+  // controller.session. Tests pass per-session behavior under `session`
   // (run-control, thread lifecycle, stream); only host-level behavior goes on
-  // `harness`. We link them here so a single `session` override drives both.
-  const { session: sessionOverride, harness: harnessOverride, ...rest } = overrides as any;
+  // `controller`. We link them here so a single `session` override drives both.
+  const { session: sessionOverride, controller: agentControllerOverride, ...rest } = overrides as any;
   const session = {
     followUps: { count: vi.fn(() => 0) },
     getCurrentRunId: vi.fn(() => null),
@@ -53,7 +53,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
   };
   return {
     session,
-    harness: { session, ...(harnessOverride ?? {}) },
+    controller: { session, ...(agentControllerOverride ?? {}) },
     goalManager: { stopActiveTimer: vi.fn() },
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
@@ -103,6 +103,8 @@ function createQueueContext(state: TUIState, overrides: Partial<EventHandlerCont
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
     renderClearedTasksInline: vi.fn(),
+    renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
     ...overrides,
   };
@@ -132,7 +134,7 @@ describe('MastraTUI queueing', () => {
     mocks.showError.mockReset();
   });
 
-  it('sends editor submissions as signals instead of resolving input while the harness is running', async () => {
+  it('sends editor submissions as signals instead of resolving input while the controller is running', async () => {
     const editor = {
       onSubmit: undefined as ((text: string) => void) | undefined,
       addToHistory: vi.fn(),
@@ -175,7 +177,7 @@ describe('MastraTUI queueing', () => {
     expect(resolution).toEqual({ resolved: false, value: undefined });
   });
 
-  it('runs slash commands immediately instead of queuing while the harness is running', async () => {
+  it('runs slash commands immediately instead of queuing while the controller is running', async () => {
     const editor = {
       onSubmit: undefined as ((text: string) => void) | undefined,
       addToHistory: vi.fn(),
@@ -844,7 +846,7 @@ describe('MastraTUI queueing', () => {
     expect(mocks.showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
   });
 
-  it('waits for harness-level follow-ups to finish before draining the local queue', () => {
+  it('waits for controller-level follow-ups to finish before draining the local queue', () => {
     const state = createQueueState({
       session: { followUps: { count: vi.fn(() => 1) } } as any,
       pendingQueuedActions: ['message'],

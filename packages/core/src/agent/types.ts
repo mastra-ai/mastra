@@ -30,6 +30,7 @@ import type {
 } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
+import type { ReasoningLevel } from '../loop/types';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -49,6 +50,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
+import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
@@ -70,6 +72,7 @@ export type {
   UIMessageWithMetadata,
   MessageList,
 } from './message-list/index';
+export type { ReasoningLevel } from '../loop/types';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type {
   NotificationDeliveryPolicyConfig,
@@ -193,7 +196,8 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'wake'; runId: string; output: MastraModelOutput<OUTPUT> }
   | { action: 'deliver'; runId: string }
   | { action: 'persist' }
-  | { action: 'discard' };
+  | { action: 'discard' }
+  | { action: 'blocked'; reason: 'thread-blocked'; runId: string };
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -201,7 +205,7 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
    * Resolves once the runtime has decided what to do with the signal
-   * (`wake`/`deliver`/`persist`/`discard`). This settles at decision-time — it
+   * (`wake`/`deliver`/`persist`/`discard`/`blocked`). This settles at decision-time — it
    * never waits for a woken run to finish or for a `persist` write to land.
    *
    * Rejects only when the signal cannot be routed/started at all — for example
@@ -212,9 +216,10 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
    * `wake` means this process ran the agent and `output` is its
    * `MastraModelOutput`. A signal queued onto an existing run, or one whose
    * cross-process wake race was lost (and forwarded to the winning run),
-   * resolves to `deliver`. `runId` is present on `wake`/`deliver` only; for
-   * `persist`/`discard`, correlate via {@link signal}'s `id`. To await a
-   * `persist` write, use {@link persisted}.
+   * resolves to `deliver`. `blocked` means the signal targeted a suspended
+   * thread that cannot accept a new idle wake. `runId` is present on
+   * `wake`/`deliver`/`blocked` only; for `persist`/`discard`, correlate via
+   * {@link signal}'s `id`. To await a `persist` write, use {@link persisted}.
    */
   accepted: Promise<SendAgentSignalAccepted<OUTPUT>>;
   signal: CreatedAgentSignal;
@@ -241,6 +246,27 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
  * @experimental Agent message APIs are experimental and may change in a future release.
  */
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
+/**
+ * @experimental Agent stream resume APIs are experimental and may change in a future release.
+ */
+export type SendAgentStreamResumeOptions<OUTPUT = unknown> = {
+  threadId: string;
+  resourceId: string;
+  runId: string;
+  toolCallId?: string;
+  resumeData: unknown;
+  streamOptions?: AgentExecutionOptions<OUTPUT>;
+};
+
+/**
+ * @experimental Agent stream resume APIs are experimental and may change in a future release.
+ */
+export interface SendAgentStreamResumeResult {
+  accepted: true;
+  runId: string;
+  toolCallId?: string;
+}
 
 /**
  * @experimental Agent state signal APIs are experimental and may change in a future release.
@@ -350,9 +376,12 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   useAgent?: boolean;
 
   /**
-   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   * Whether to use prompt injection instead of native response format to coerce the LLM to respond with JSON text.
+   * true and 'system' inject JSON instructions into the leading system message.
+   * 'inline' appends JSON instructions to the latest user message.
+   * false or omitted uses the provider's native response format.
    */
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
 
   /**
    * Optional logger instance for structured logging
@@ -395,7 +424,18 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'> & {
+  /**
+   * Reasoning effort level for the model. Controls how much reasoning
+   * the model performs before generating a response.
+   *
+   * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
+   * When used with older model providers (V2/V3), this option is a no-op.
+   *
+   * @default undefined (provider default behavior)
+   */
+  reasoning?: ReasoningLevel;
+};
 
 export type ModelWithRetries = {
   id?: string;
@@ -452,6 +492,11 @@ export interface GoalConfig {
    * own judging). When omitted, the default judge is text-only.
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
+   * Max steps the judge agent may take per evaluation (its internal agentic-loop
+   * budget). When omitted the judge uses the model loop's default (5).
+   */
+  maxSteps?: number;
   /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.
@@ -648,6 +693,45 @@ interface AgentConfigBase<
    * Memory module used for storing and retrieving stateful context.
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
+  /**
+   * Skills that guide agent behavior — reusable instructions the model loads on demand.
+   *
+   * Accepts an array of path strings (pointing to SKILL.md directories on disk) and/or
+   * inline skills created with `createSkill()`. Can also be a dynamic function that
+   * resolves skills per request.
+   *
+   * Skills work without a Workspace. When both `skills` and `workspace.skills` are
+   * configured, they are merged (agent-level skills win on name conflicts).
+   *
+   * @example Path-based skills
+   * ```typescript
+   * skills: ['./skills/review', './skills/testing']
+   * ```
+   *
+   * @example Inline skills
+   * ```typescript
+   * import { createSkill } from '@mastra/core/skills';
+   *
+   * skills: [
+   *   createSkill({
+   *     name: 'code-review',
+   *     description: 'Use when reviewing code.',
+   *     instructions: 'When reviewing code...',
+   *   }),
+   * ]
+   * ```
+   *
+   * @example Dynamic skills
+   * ```typescript
+   * skills: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   return tier === 'premium'
+   *     ? ['./skills/basic', './skills/premium']
+   *     : ['./skills/basic'];
+   * }
+   * ```
+   */
+  skills?: AgentSkillsInput;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'

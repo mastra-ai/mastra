@@ -5,6 +5,7 @@ Review the full branch diff, not just the most recent commit. If there is alread
 Read the entire diff carefully. Do not skim. Re-read any tricky sections until you understand why they changed. When something looks subtle, risky, or surprising, read the surrounding code too and make sure the change really makes sense in context.
 
 As you review, actively look for problems and missing work:
+
 - bugs or logic mistakes
 - missing edge cases
 - unnecessary complexity
@@ -20,6 +21,7 @@ As you review, actively look for problems and missing work:
 Be skeptical. Do not rubber-stamp your own work just because you wrote it.
 
 Make notes as you go, then produce a concise review with these sections:
+
 - Must fix
 - Risks / questions
 - Suggested improvements

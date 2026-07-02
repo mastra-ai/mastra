@@ -1,3 +1,16 @@
 {
-  "attachment": ["meta-llama/llama-4-scout-17b-16e-instruct"]
+  "attachment": ["meta-llama/llama-4-scout-17b-16e-instruct"],
+  "temperature": [
+    "groq/compound",
+    "groq/compound-mini",
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-safeguard-20b",
+    "qwen/qwen3-32b",
+    "whisper-large-v3",
+    "whisper-large-v3-turbo"
+  ]
 }

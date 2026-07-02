@@ -12,10 +12,10 @@
     "typecheck": "pnpm build:linked-workspace-deps && tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.0",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.25",
     "@mastra/core": "latest",
     "@mastra/deployer-vercel": "latest",
+    "@mastra/memory": "latest",
     "hono": "^4.12.8",
     "zod": "^4.4.3",
     "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5"
@@ -29,6 +29,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "1.45.0",
+      "@mastra/memory": "1.21.1",
       "@mastra/deployer-vercel": "link:../../deployers/vercel",
       "mastra": "link:../../packages/cli"
     }

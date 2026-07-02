@@ -83,24 +83,24 @@ export class MemoryStorageMongoDB extends MemoryStorage {
    */
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
-      // Threads collection indexes
+      // Threads: point lookups (id) + resource-scoped listing sorted by createdAt or updatedAt.
+      // A single descending compound serves both ASC and DESC sorts, and its resourceId prefix
+      // covers resourceId-only filters. Unfiltered (no resourceId) listing is a rare admin path
+      // left to an in-memory sort rather than carrying standalone single-field sort indexes.
       { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1 } },
-      { collection: TABLE_THREADS, keys: { createdAt: -1 } },
-      { collection: TABLE_THREADS, keys: { updatedAt: -1 } },
-      // Messages collection indexes
+      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1 } },
+      // Messages: point lookups (id) + per-thread retrieval (listMessages) and per-resource
+      // retrieval (listMessagesByResourceId), both sorted by createdAt. The compound prefixes
+      // cover thread_id-only and resourceId-only filters.
       { collection: TABLE_MESSAGES, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_MESSAGES, keys: { thread_id: 1 } },
-      { collection: TABLE_MESSAGES, keys: { resourceId: 1 } },
-      { collection: TABLE_MESSAGES, keys: { createdAt: -1 } },
       { collection: TABLE_MESSAGES, keys: { thread_id: 1, createdAt: 1 } },
-      // Resources collection indexes
+      { collection: TABLE_MESSAGES, keys: { resourceId: 1, createdAt: 1 } },
+      // Resources: only ever fetched by id.
       { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
-      { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
-      // Observational Memory collection indexes
+      // Observational Memory: point lookups (id) + latest-generation-per-lookupKey. The compound
+      // prefix covers lookupKey-only filters.
       { collection: OM_TABLE, keys: { id: 1 }, options: { unique: true } },
-      { collection: OM_TABLE, keys: { lookupKey: 1 } },
       { collection: OM_TABLE, keys: { lookupKey: 1, generationCount: -1 } },
     ];
   }
@@ -118,8 +118,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         const collection = await this.getCollection(indexDef.collection);
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
-        // Log but continue - indexes are performance optimizations
-        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+        // Fail loud: a silently missing index degrades query performance at scale.
+        // Users who manage their own indexes can set skipDefaultIndexes.
+        throw new MastraError(
+          {
+            id: createStorageErrorId('MONGODB', 'CREATE_DEFAULT_INDEXES', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`,
+            details: { collection: indexDef.collection },
+          },
+          error,
+        );
       }
     }
   }
@@ -144,14 +154,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    const threadsCollection = await this.getCollection(TABLE_THREADS);
-    const messagesCollection = await this.getCollection(TABLE_MESSAGES);
-    const resourcesCollection = await this.getCollection(TABLE_RESOURCES);
+    const [threadsCollection, messagesCollection, resourcesCollection, omCollection] = await Promise.all([
+      this.getCollection(TABLE_THREADS),
+      this.getCollection(TABLE_MESSAGES),
+      this.getCollection(TABLE_RESOURCES),
+      this.getCollection(OM_TABLE),
+    ]);
 
     await Promise.all([
       threadsCollection.deleteMany({}),
       messagesCollection.deleteMany({}),
       resourcesCollection.deleteMany({}),
+      omCollection.deleteMany({}),
     ]);
   }
 
@@ -651,11 +665,20 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       });
 
-      // Execute message inserts and thread update in parallel
-      await Promise.all([
-        collection.bulkWrite(messagesToInsert),
-        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
-      ]);
+      // Collect every distinct thread touched by this batch (mirrors pg behaviour)
+      const allThreadIds = new Set(messages.map(m => m.threadId!));
+      const now = new Date();
+
+      // Write messages and refresh each touched thread's updatedAt atomically when
+      // supported. Operations are sequential because a transaction session is not
+      // concurrency-safe; on a standalone server this degrades to the same sequential
+      // best-effort behavior.
+      await this.#connector.withTransaction(async session => {
+        await collection.bulkWrite(messagesToInsert, { session });
+        for (const tid of allThreadIds) {
+          await threadsCollection.updateOne({ id: tid }, { $set: { updatedAt: now } }, { session });
+        }
+      });
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };
@@ -808,10 +831,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       await collection.updateOne(
         { id: resource.id },
         {
-          $set: {
-            ...resource,
-            metadata: JSON.stringify(resource.metadata),
-          },
+          $set: { ...resource },
         },
         { upsert: true },
       );
@@ -869,7 +889,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       if (metadata) {
-        updateDoc.metadata = JSON.stringify(updatedResource.metadata);
+        updateDoc.metadata = updatedResource.metadata;
       }
 
       await collection.updateOne({ id: resourceId }, { $set: updateDoc });
@@ -1117,10 +1137,17 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      // First, delete all messages associated with the thread
+      // Best-effort cascade, deliberately NOT wrapped in a transaction: a thread
+      // can accumulate an unbounded number of messages, and a transactional
+      // deleteMany is capped by transactionLifetimeLimitSeconds (60s default) and
+      // must hold every delete in cache until commit — so a large thread would
+      // abort and become permanently undeletable. A plain deleteMany commits
+      // incrementally and always completes. Messages are removed before the thread
+      // so the thread row is the linearization point: a crash mid-drain leaves the
+      // thread re-deletable (deleteMany is idempotent), with only orphaned messages
+      // keyed by a thread_id nothing queries as transient, sweepable residue.
       const collectionMessages = await this.getCollection(TABLE_MESSAGES);
       await collectionMessages.deleteMany({ thread_id: threadId });
-      // Then delete the thread itself
       const collectionThreads = await this.getCollection(TABLE_THREADS);
       await collectionThreads.deleteOne({ id: threadId });
     } catch (error) {
@@ -1956,6 +1983,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
         threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
       };
 
       // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically

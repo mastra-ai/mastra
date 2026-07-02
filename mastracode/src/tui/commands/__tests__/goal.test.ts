@@ -75,6 +75,11 @@ vi.mock('@mastra/core/agent', () => ({
 }));
 
 vi.mock('@mastra/core/processors', () => ({
+  isBadRequestError: (error: unknown) =>
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {},
   ProviderHistoryCompat: class {},
   StreamErrorRetryProcessor: class {},
@@ -132,7 +137,7 @@ vi.mock('../../prompt-api-key.js', () => ({
   promptForApiKeyIfNeeded: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { createMockState } from '../../__tests__/harness-mock.js';
+import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager.js';
 import { createGoalReminderMessage, handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
 
@@ -463,7 +468,7 @@ describe('handleGoalCommand', () => {
     const showInfo = vi.fn();
     const ctx = {
       state: createMockState({
-        harness: { listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]) },
+        controller: { listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]) },
         extra: { goalManager, ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() } },
       }),
       authStorage: {},
@@ -499,7 +504,7 @@ describe('handleGoalCommand', () => {
     const showInfo = vi.fn();
     const ctx = {
       state: createMockState({
-        harness: { listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]) },
+        controller: { listAvailableModels: vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]) },
         extra: { goalManager, ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() } },
       }),
       authStorage: {},
@@ -631,7 +636,7 @@ describe('handleGoalCommand', () => {
     const state = createMockState({
       threadId: 'thread-1',
       session: { model: { get: vi.fn(() => '__GATEWAY_OPENAI_MODEL__') }, sendSignal },
-      harness: { listAvailableModels: vi.fn().mockResolvedValue([{ id: '__GATEWAY_OPENAI_MODEL__' }]) },
+      controller: { listAvailableModels: vi.fn().mockResolvedValue([{ id: '__GATEWAY_OPENAI_MODEL__' }]) },
       extra: { goalManager, planStartedGoalId: 'plan-goal-xyz' },
     }) as any;
     const showInfo = vi.fn();
