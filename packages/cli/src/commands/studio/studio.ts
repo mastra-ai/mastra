@@ -68,7 +68,7 @@ export async function studio(
       process.exit(1);
     }
 
-    const port = options.port || 3000;
+    const port = options.port ?? 3000;
 
     // Start the server using the installed serve binary
     // Start the server using node
@@ -111,7 +111,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
     .replaceAll('%%MASTRA_SERVER_HOST%%', options.serverHost || 'localhost')
-    .replaceAll('%%MASTRA_SERVER_PORT%%', String(options.serverPort || 4111))
+    .replaceAll('%%MASTRA_SERVER_PORT%%', String(options.serverPort ?? 4111))
     .replaceAll('%%MASTRA_SERVER_PROTOCOL%%', options.serverProtocol || 'http')
     .replaceAll('%%MASTRA_API_PREFIX%%', options.serverApiPrefix || '/api')
     .replaceAll('%%MASTRA_EXPERIMENTAL_FEATURES%%', experimentalFeatures)
