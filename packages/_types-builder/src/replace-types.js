@@ -132,56 +132,6 @@ async function resolveRelativeDeclaration(moduleSpecifier, fromFile) {
   return null;
 }
 
-/**
- * Remove nominal brands (`#private;`, `private`/`protected` members) from all
- * class declarations in a copied `.d.ts` file.
- *
- * Bundled declaration files are *copies*: multiple packages ship their own
- * duplicate of the same class. Nominal members make those otherwise identical
- * copies mutually unassignable (e.g. `'#private' is missing in type ...`),
- * breaking users who pass instances across package boundaries (see #18682).
- * A nominal brand asserts "same declaration = same type", which is false by
- * construction in a duplicated declaration file, so we strip the brands.
- * Members are dropped entirely (not made public) so copies stay structurally
- * compatible regardless of visibility differences.
- */
-export function stripNominalBrands(sourceFile) {
-  const classNodes = [
-    ...sourceFile.getDescendantsOfKind(SyntaxKind.ClassDeclaration),
-    ...sourceFile.getDescendantsOfKind(SyntaxKind.ClassExpression),
-  ];
-
-  for (const classNode of classNodes) {
-    for (const member of [...classNode.getMembers()]) {
-      // Keep constructors: visibility on a constructor affects `new` calls,
-      // not instance-type assignability.
-      if (member.getKind() === SyntaxKind.Constructor) {
-        continue;
-      }
-
-      const name = typeof member.getName === 'function' ? member.getName() : undefined;
-      if (name && name.startsWith('#')) {
-        member.remove();
-        continue;
-      }
-
-      if (
-        typeof member.hasModifier === 'function' &&
-        (member.hasModifier(SyntaxKind.PrivateKeyword) || member.hasModifier(SyntaxKind.ProtectedKeyword))
-      ) {
-        member.remove();
-      }
-    }
-  }
-}
-
-async function stripNominalBrandsFromFile(file) {
-  const Program = new Project();
-  const sourceFile = Program.addSourceFileAtPath(file);
-  stripNominalBrands(sourceFile);
-  await sourceFile.save();
-}
-
 async function copyDeclarationGraph(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, visited) {
   const normalizedSourceFilePath = resolve(sourceFilePath);
   if (visited.has(normalizedSourceFilePath)) {
@@ -194,7 +144,6 @@ async function copyDeclarationGraph(sourceFilePath, sourceRootDir, destRootDir, 
   await mkdir(dirname(destFilePath), { recursive: true });
   await copyFile(sourceFilePath, destFilePath);
 
-  await stripNominalBrandsFromFile(destFilePath);
   await replaceBundledReferences(destFilePath, rootDir, bundledPackages, visited, sourceFilePath);
 
   const Program = new Project();
