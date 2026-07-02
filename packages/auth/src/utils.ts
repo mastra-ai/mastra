@@ -2,13 +2,14 @@ import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
 
 export type JwtPayload = jwt.JwtPayload;
+export type DecodedJwt = jwt.Jwt;
 
 export async function decodeToken(accessToken: string) {
   const decoded = jwt.decode(accessToken, { complete: true });
   return decoded;
 }
 
-export function getTokenIssuer(decoded: jwt.JwtPayload | null) {
+export function getTokenIssuer(decoded: DecodedJwt | null) {
   if (!decoded) throw new Error('Invalid token');
   if (!decoded.payload || typeof decoded.payload !== 'object') throw new Error('Invalid token payload');
   if (!decoded.payload.iss) throw new Error('Invalid token header');
