@@ -1,5 +1,13 @@
 # @mastra/deployer-cloud
 
+## 1.49.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`d4c0641`](https://github.com/mastra-ai/mastra/commit/d4c06417e07513daad6ea9d22ef689ff5df73d83), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`5b1dcc5`](https://github.com/mastra-ai/mastra/commit/5b1dcc5899f672c6db141c85a8f59a4a11973034), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`484d401`](https://github.com/mastra-ai/mastra/commit/484d40138383cb9eb629a02722e559c9b8157ee9), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`e8eee50`](https://github.com/mastra-ai/mastra/commit/e8eee5087937c9db1a57167119813861328e22ce), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b)]:
+  - @mastra/core@1.49.0-alpha.3
+  - @mastra/deployer@1.49.0-alpha.3
+
 ## 1.49.0-alpha.2
 
 ### Patch Changes

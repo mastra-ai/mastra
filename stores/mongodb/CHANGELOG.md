@@ -1,5 +1,32 @@
 # @mastra/mongodb
 
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- Added storage retention support to MongoDB. When you set a `retention` config, `MongoDBStore` can prune old documents from every growth domain it implements: `memory` (threads, messages, resources by `createdAt`), `observability` (spans by `startedAt`), `scores` (by `createdAt`), `workflows` (run snapshots by `updatedAt`), `backgroundTasks` (by `completedAt`, so in-flight tasks are never pruned), `experiments` (whole runs by `completedAt`, results cascade with their parent — transactional on replica sets), `notifications` (by `createdAt`), and `schedules` fire history (by `actual_fire_at`). ([#18798](https://github.com/mastra-ai/mastra/pull/18798))
+
+  Deletes run in batches via bounded `find(_id)` + `deleteMany` pairs (bounded, resumable, and cancellable) so they stay safe on large collections. Anchor-field indexes are created lazily on the first `prune()` call — never at init — so deployments that don't configure retention pay no extra index overhead. `prune()` only deletes documents; WiredTiger reuses the freed space for subsequent writes.
+
+  ```typescript
+  const storage = new MongoDBStore({
+    id: 'mastra-storage',
+    uri: process.env.MONGODB_URI,
+    dbName: 'mastra',
+    retention: {
+      memory: { messages: { maxAge: '30d' } },
+      observability: { spans: { maxAge: '7d' } },
+    },
+  });
+
+  await storage.prune();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b)]:
+  - @mastra/core@1.49.0-alpha.3
+
 ## 1.11.1
 
 ### Patch Changes
