@@ -132,7 +132,7 @@ overrides:
   body-parser@<=2.2.1: 2.2.2
   inngest: ^4.2.2
   fast-xml-parser@<5.5.7: ^5.7.1
-  langsmith@<0.5.19: ^0.5.19
+  langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
   serialize-javascript@<7.0.5: ^7.0.5
@@ -140,7 +140,8 @@ overrides:
   # are within the parents' declared ranges).
   simple-git@<3.36.0: 3.36.0
   axios@>=1.0.0 <1.16.0: 1.16.0
-  protobufjs@>=7.0.0 <7.5.8: 7.5.8
+  protobufjs@>=7.0.0 <7.6.3: 7.6.3
+  protobufjs@>=8.0.0 <8.6.0: 8.6.0
   minimatch@>=5.0.0 <5.1.8: 5.1.8
   minimatch@>=9.0.0 <9.0.7: 9.0.7
   ws@>=8.0.0 <8.21.0: 8.21.0
@@ -156,8 +157,17 @@ overrides:
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4
   svgo@>=3.0.0 <3.3.3: 3.3.3
+  # undici 5.x has no patched release (fixes land in 6.23+); the only 5.x
+  # consumer is @connectrpc/connect-node@1.7.0 (via @cursor/sdk), which is
+  # compatible with the undici 6 Client/Pool APIs.
+  undici@<6.0.0: 6.27.0
   undici@>=6.0.0 <6.27.0: 6.27.0
   undici@>=7.0.0 <7.28.0: 7.28.0
+  multer@<2.2.0: 2.2.0
+  '@hey-api/openapi-ts@<0.97.3': 0.97.3
+  '@opentelemetry/core@>=2.0.0 <2.8.0': 2.8.0
+  '@opentelemetry/sdk-node@<0.217.0': 0.217.0
+  '@opentelemetry/exporter-prometheus@<0.217.0': 0.217.0
   uuid@>=13.0.0 <13.0.1: 13.0.1
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
