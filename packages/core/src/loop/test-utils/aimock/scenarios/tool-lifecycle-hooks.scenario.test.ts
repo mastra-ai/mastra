@@ -116,5 +116,5 @@ describeForAllEngines(
       expect(text).toContain('finished');
     });
   },
-  { skip: ['durable'] },
 );
+
