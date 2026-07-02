@@ -18,8 +18,8 @@ import type { RunScopeContext } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
-import { normalizeModelOutput } from './normalize-model-output';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
+import { normalizeModelOutput } from './normalize-model-output';
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
