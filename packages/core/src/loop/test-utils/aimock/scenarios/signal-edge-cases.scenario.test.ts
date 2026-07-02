@@ -310,5 +310,9 @@ describeForAllEngines(
       await expect(result3.accepted).resolves.toMatchObject({ action: 'persist' });
     });
   },
+  // Durable: sendMessage-wake tests hang because DurableAgent.stream()
+  // doesn't complete through the AgentThreadStreamRuntime subscribe path.
+  // The state-only tests (sendStateSignal, unsubscribe) pass on durable.
+  // Signal drain within a run works — this is a separate integration gap.
   { skip: ['durable'] },
 );

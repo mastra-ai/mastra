@@ -1,3 +1,5 @@
+import { Dialog, DialogContent, DialogHeader, DialogTitle, Kbd, Txt } from '@mastra/playground-ui';
+
 interface ShortcutsOverlayProps {
   onClose: () => void;
 }
@@ -19,33 +21,26 @@ const SHORTCUTS: Shortcut[] = [
 /** A help overlay listing the keyboard shortcuts, triggered by '?'. */
 export function ShortcutsOverlay({ onClose }: ShortcutsOverlayProps) {
   return (
-    <div className="palette-overlay" onClick={onClose}>
-      <div
-        className="settings-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Keyboard shortcuts"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="settings-head">
-          <h2 className="settings-title">Keyboard shortcuts</h2>
-          <button className="settings-close" onClick={onClose} aria-label="Close shortcuts">
-            ×
-          </button>
-        </div>
-        <ul className="shortcuts-list">
+    <Dialog open onOpenChange={open => !open && onClose()}>
+      <DialogContent className="w-full max-w-md" aria-label="Keyboard shortcuts">
+        <DialogHeader className="px-5 pt-4 pb-2">
+          <DialogTitle>Keyboard shortcuts</DialogTitle>
+        </DialogHeader>
+        <ul className="flex flex-col gap-1 px-5 pb-5">
           {SHORTCUTS.map(s => (
-            <li key={s.description} className="shortcuts-row">
-              <span className="shortcuts-desc">{s.description}</span>
-              <span className="shortcuts-keys">
+            <li key={s.description} className="flex items-center justify-between gap-4 py-1.5">
+              <Txt as="span" variant="ui-sm" className="text-icon5">
+                {s.description}
+              </Txt>
+              <span className="flex shrink-0 items-center gap-1">
                 {s.keys.map(k => (
-                  <kbd key={k}>{k}</kbd>
+                  <Kbd key={k}>{k}</Kbd>
                 ))}
               </span>
             </li>
           ))}
         </ul>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

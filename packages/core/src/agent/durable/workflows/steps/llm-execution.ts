@@ -330,6 +330,33 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               structuredOutput = merged.structuredOutput;
             }
 
+            // ── Signal echo & pre-run drain ───────────────────────────────
+            // Mirror the non-durable llm-execution-step:
+            //  1. Echo initialSignalEchoes (signals that were part of the input
+            //     messages, e.g. from persisted memory) so the client sees them.
+            //  2. Pre-run signals: if this is the first model request of the run
+            //     (stepIndex === 0), drain signals that were queued before the
+            //     run made its first request. These must be added to messageList
+            //     BEFORE inputMessages is materialized so the model sees them.
+            if (pubsub) {
+              const initialSignalEchoes = registryEntry?.initialSignalEchoes?.splice(0) ?? [];
+              for (const initialSignal of initialSignalEchoes) {
+                await emitChunkEvent(pubsub, runId, initialSignal.toDataPart() as any);
+              }
+
+              const isFirstModelRequest = stepIndex === 0;
+              if (isFirstModelRequest && registryEntry?.drainPendingSignals) {
+                const preRunSignals = registryEntry.drainPendingSignals('pre-run');
+                if (preRunSignals.length > 0) {
+                  currentMessageId = mastra?.generateId?.() ?? crypto.randomUUID();
+                }
+                for (const preRunSignal of preRunSignals) {
+                  const signalForTranscript = messageList.addSignal(preRunSignal);
+                  await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
+                }
+              }
+            }
+
             // `downloadRetries` / `downloadConcurrency` are internal-only on the
             // non-durable path today (not exposed through AgentExecutionOptions),
             // so durable also relies on the MessageList defaults here. If those
@@ -633,7 +660,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     threadId: typedInput.state?.threadId,
                     resourceId: typedInput.state?.resourceId,
                   }),
-                  callTimeHeaders: currentModelSettings.headers as Record<string, string> | undefined,
+                  modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
+                  callTimeHeaders:
+                    registryEntry?.callTimeHeaders || currentModelSettings.headers
+                      ? {
+                          ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
+                          ...(currentModelSettings.headers as Record<string, string> | undefined),
+                        }
+                      : undefined,
                 }),
                 modelSettings: {
                   ...currentModelSettings,

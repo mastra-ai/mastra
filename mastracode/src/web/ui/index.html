@@ -5,16 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MastraCode — Web</title>
     <script>
-      // Apply the persisted/system theme before paint to avoid a flash.
+      // Apply the persisted/system theme class before paint to avoid a flash.
+      // Mirrors @mastra/playground-ui's ThemeProvider, which keys off the
+      // `.dark`/`.light` class on <html> and stores the raw theme string
+      // ('dark' | 'light' | 'system') under `mastracode.theme`.
       (function () {
         try {
-          var t = localStorage.getItem('mastracode.theme');
-          if (t !== 'dark' && t !== 'light') {
-            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          var stored = localStorage.getItem('mastracode.theme');
+          var resolved;
+          if (stored === 'dark' || stored === 'light') {
+            resolved = stored;
+          } else if (stored === 'system') {
+            resolved =
+              window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          } else {
+            // No stored preference: match ThemeProvider's defaultTheme="dark".
+            resolved = 'dark';
           }
-          document.documentElement.setAttribute('data-theme', t);
+          document.documentElement.classList.add(resolved);
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'dark');
+          document.documentElement.classList.add('dark');
         }
       })();
     </script>
