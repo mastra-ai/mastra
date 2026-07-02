@@ -110,21 +110,25 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(stripAnsi(output)).toContain('│ const value =');
   });
 
-  it('shows a rolling tail for large quiet write previews', () => {
-    const hugeContent = `START_SHOULD_NOT_RENDER${'a'.repeat(2_500)}END_SHOULD_RENDER`;
+  it('shows the latest complete lines for large quiet write previews', () => {
+    const hugeContent = Array.from(
+      { length: 120 },
+      (_, index) => `const row${index} = { id: ${index}, label: 'WRITE_STREAM_${String(index).padStart(5, '0')}' };`,
+    ).join('\n');
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: 'src/large.ts', content: hugeContent },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
-    const output = stripAnsi(component.render(120).join('\n'));
-    expect(output).toContain('write');
-    expect(output).toContain('src/large.ts');
-    expect(output).toContain('…');
-    expect(output).toContain('END_SHOULD_RENDER');
-    expect(output).not.toContain('START_SHOULD_NOT_RENDER');
+    const output = component.render(120).join('\n');
+    const visible = stripAnsi(output);
+    expect(output).toContain('\u001b[');
+    expect(visible).toContain('write');
+    expect(visible).toContain('src/large.ts');
+    expect(visible).toContain('WRITE_STREAM_00119');
+    expect(visible).not.toContain('WRITE_STREAM_00000');
   });
 
   it('shows exactly the immediate dirname and filename once continuation paths are available', () => {
