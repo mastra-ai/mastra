@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { ArrowUpRight, CircleSlashIcon, InboxIcon, MousePointerClickIcon } from 'lucide-react';
 import { Badge } from '../../../ds/components/Badge';
 import { Button } from '../../../ds/components/Button';
@@ -21,6 +22,7 @@ export function SignalClusterCard({ topic, onSelect }: SignalClusterCardProps) {
   const coveragePct = Math.round(topic.coverage * 100);
   const itemLabel = topic.itemCount === 1 ? 'item' : 'items';
   const clusterColor = stringToColor(topic.name);
+  const clusterStyle = { '--cluster-color': clusterColor } as CSSProperties;
 
   return (
     <article
@@ -34,7 +36,7 @@ export function SignalClusterCard({ topic, onSelect }: SignalClusterCardProps) {
         }
       }}
       className="group cursor-pointer rounded-2xl border border-border1/70 bg-surface2 p-5 shadow-sm transition-colors hover:border-[var(--cluster-color)] focus-visible:border-[var(--cluster-color)] focus-visible:outline-none"
-      style={{ ['--cluster-color' as string]: clusterColor }}
+      style={clusterStyle}
     >
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex min-w-0 items-start gap-2">

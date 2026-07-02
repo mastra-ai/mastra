@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import type {
   EntityLearningPointsParams,
   EntityLearningTopicExamplesParams,
@@ -14,9 +14,8 @@ export function useEntities() {
 
   return useQuery({
     queryKey: [KEY, 'entities'],
-    queryFn: () => service!.getEntities(),
+    queryFn: isConfigured && service ? () => service.getEntities() : skipToken,
     select: data => data.entities,
-    enabled: isConfigured && Boolean(service),
     retry: false,
   });
 }
@@ -27,9 +26,8 @@ export function useEntityRuns(entityId: string | undefined, signalName: string |
 
   return useQuery({
     queryKey: [KEY, 'runs', entityId, signalName],
-    queryFn: () => service!.getEntityRuns(entityId!, signalName!),
+    queryFn: service && entityId && signalName ? () => service.getEntityRuns(entityId, signalName) : skipToken,
     select: data => data.runs,
-    enabled: Boolean(service && entityId && signalName),
     retry: false,
   });
 }
@@ -40,9 +38,9 @@ export function useEntityRun(entityId: string | undefined, runId: string | undef
 
   return useQuery({
     queryKey: [KEY, 'run', entityId, runId, signalName],
-    queryFn: () => service!.getEntityRun(entityId!, runId!, signalName!),
+    queryFn:
+      service && entityId && runId && signalName ? () => service.getEntityRun(entityId, runId, signalName) : skipToken,
     select: data => data.run,
-    enabled: Boolean(service && entityId && runId && signalName),
     retry: false,
   });
 }
@@ -53,9 +51,9 @@ export function useEntityLearning(entityId: string | undefined, signalName: stri
 
   return useQuery({
     queryKey: [KEY, 'learning', entityId, signalName, runId ?? null],
-    queryFn: () => service!.getEntityLearning(entityId!, signalName!, runId),
+    queryFn:
+      service && entityId && signalName ? () => service.getEntityLearning(entityId, signalName, runId) : skipToken,
     select: data => data.learning,
-    enabled: Boolean(service && entityId && signalName),
     retry: false,
   });
 }
@@ -70,8 +68,10 @@ export function useEntityTopics(
 
   return useQuery({
     queryKey: [KEY, 'topics', entityId, signalName, runId],
-    queryFn: () => service!.getEntityTopics(entityId!, signalName!, runId!),
-    enabled: Boolean(service && entityId && signalName && runId),
+    queryFn:
+      service && entityId && signalName && runId
+        ? () => service.getEntityTopics(entityId, signalName, runId)
+        : skipToken,
     retry: false,
   });
 }
@@ -87,9 +87,11 @@ export function useEntityTopic(
 
   return useQuery({
     queryKey: [KEY, 'topic', entityId, topicId, signalName, runId],
-    queryFn: () => service!.getEntityTopic(entityId!, topicId!, signalName!, runId!),
+    queryFn:
+      service && entityId && topicId && signalName && runId
+        ? () => service.getEntityTopic(entityId, topicId, signalName, runId)
+        : skipToken,
     select: data => data.topic,
-    enabled: Boolean(service && entityId && topicId && signalName && runId),
     retry: false,
   });
 }
@@ -104,8 +106,10 @@ export function useEntityTopicExamples(
 
   return useQuery({
     queryKey: [KEY, 'topic-examples', entityId, topicId, params?.signalName, params?.runId, params?.limit ?? null],
-    queryFn: () => service!.getEntityTopicExamples(entityId!, topicId!, params!),
-    enabled: Boolean(service && entityId && topicId && params?.signalName && params?.runId),
+    queryFn:
+      service && entityId && topicId && params?.signalName && params?.runId
+        ? () => service.getEntityTopicExamples(entityId, topicId, params)
+        : skipToken,
     retry: false,
   });
 }
@@ -124,8 +128,10 @@ export function useEntityPoints(entityId: string | undefined, params: EntityLear
       params?.includeOutliers ?? null,
       params?.limit ?? null,
     ],
-    queryFn: () => service!.getEntityPoints(entityId!, params!),
-    enabled: Boolean(service && entityId && params?.signalName && params?.runId),
+    queryFn:
+      service && entityId && params?.signalName && params?.runId
+        ? () => service.getEntityPoints(entityId, params)
+        : skipToken,
     retry: false,
   });
 }
@@ -140,8 +146,10 @@ export function useEntityOutliers(
 
   return useQuery({
     queryKey: [KEY, 'outliers', entityId, signalName, runId],
-    queryFn: () => service!.getEntityOutliers(entityId!, signalName!, runId!),
-    enabled: Boolean(service && entityId && signalName && runId),
+    queryFn:
+      service && entityId && signalName && runId
+        ? () => service.getEntityOutliers(entityId, signalName, runId)
+        : skipToken,
     retry: false,
   });
 }
@@ -155,8 +163,10 @@ export function useEntityOutlierExamples(
 
   return useQuery({
     queryKey: [KEY, 'outlier-examples', entityId, params?.signalName, params?.runId, params?.limit ?? null],
-    queryFn: () => service!.getEntityOutlierExamples(entityId!, params!),
-    enabled: Boolean(service && entityId && params?.signalName && params?.runId),
+    queryFn:
+      service && entityId && params?.signalName && params?.runId
+        ? () => service.getEntityOutlierExamples(entityId, params)
+        : skipToken,
     retry: false,
   });
 }
