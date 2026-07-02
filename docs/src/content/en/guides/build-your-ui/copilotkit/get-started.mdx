@@ -317,7 +317,7 @@ Inside `StepsFeedback`, let the user toggle steps and then call `respond({ accep
 | `agents` | `AgentsConfig` | Provide pre-constructed AG-UI agents instead of using the ones on the Mastra instance. |
 | `tracingOptions` | `MastraTracingOptions` | Mastra tracing options forwarded to each agent run. |
 
-By default the endpoint exposes every agent registered on the Mastra instance, and the frontend chooses one with the `agent` prop.
+By default the endpoint exposes every agent registered on the Mastra instance, and the frontend chooses one with the `agent` prop. Any other CopilotKit runtime option (for example `mcpApps`, see [Open-ended generative UI](/guides/build-your-ui/copilotkit/generative-ui#open-ended)) is forwarded to the underlying runtime.
 
 ## Deployment
 

@@ -91,15 +91,50 @@ See CopilotKit's [generative UI guides](https://docs.copilotkit.ai/) for the cur
 
 Instead of a fixed component per tool, you register a catalog of typed building blocks and the agent assembles them into a UI tree per request. CopilotKit calls this **A2UI** (Agent-to-UI), available in a fixed-schema and a dynamic variant. It suits the long tail of secondary interactions where breadth matters more than pixel-perfection.
 
-A2UI works with Mastra through `@ag-ui/mastra`. You define the catalog (the primitives and their schemas) and the renderers (how each primitive displays), and the agent emits the composition. See CopilotKit's [A2UI documentation](https://docs.copilotkit.ai/a2a/generative-ui/a2ui).
+The path of least resistance is to pass your catalog to the `<CopilotKit>` provider. That single prop enables A2UI rendering and injects the A2UI tool into your agent, so no backend change is needed:
+
+```tsx title="app/page.tsx"
+import { CopilotKit } from '@copilotkit/react-core/v2'
+import { myCatalog } from './a2ui-catalog'
+
+export default function Page() {
+  return (
+    <CopilotKit
+      runtimeUrl="http://localhost:4111/copilotkit"
+      agent="weatherAgent"
+      a2ui={{ catalog: myCatalog }}
+    >
+      {/* your app */}
+    </CopilotKit>
+  )
+}
+```
+
+The catalog defines the primitives (their schemas) and the renderers (how each primitive displays). In the fixed-schema variant the components are pre-authored and the agent's tool only supplies data; the dynamic variant lets the agent compose the tree more freely. See CopilotKit's [A2UI documentation](https://docs.copilotkit.ai/a2a/generative-ui/a2ui).
 
 ## Open-ended
 
-At the far end of the spectrum, the agent owns the entire surface: the UI is generated or provided elsewhere and sandboxed in your app. CopilotKit supports this through **MCP Apps**, where an MCP server ships UI that renders inside your application. This tier trades determinism for novelty and is the most experimental point on the spectrum. See CopilotKit's [MCP Apps documentation](https://docs.copilotkit.ai/).
+At the far end of the spectrum, the agent owns the entire surface: the UI is invented elsewhere and sandboxed in your app. CopilotKit supports this through **MCP Apps**, where an MCP server ships UI that renders inside your application. This tier trades determinism for novelty and is the most experimental point on the spectrum.
 
-## Related: app control
+The path of least resistance keeps the frontend untouched: your existing `<CopilotKit>` provider is enough. On the backend, point `registerCopilotKit()` at one or more MCP servers with the `mcpApps` option (it is forwarded to the CopilotKit runtime):
 
-Two adjacent capabilities are not part of the generative UI spectrum (they control your app rather than render agent output), but they pair naturally with it. Both are covered in [Get started](/guides/build-your-ui/copilotkit/get-started#app-control-and-interactivity):
+```typescript title="src/mastra/index.ts"
+registerCopilotKit({
+  path: '/copilotkit',
+  resourceId: 'weatherAgent',
+  mcpApps: {
+    servers: [
+      { type: 'http', url: 'http://localhost:3108/mcp', serverId: 'my-server' },
+    ],
+  },
+})
+```
 
-- **Frontend tools**: let the agent act on your application (`useFrontendTool`).
-- **Human-in-the-loop**: pause a run and wait for user approval or edits (`useHumanInTheLoop`).
+When the agent calls an MCP App tool, CopilotKit fetches and renders that tool's UI in the chat with no additional frontend code. See CopilotKit's [MCP Apps documentation](https://docs.copilotkit.ai/agno/generative-ui/mcp-apps).
+
+## Related: app control and interactivity
+
+Some capabilities sit next to the spectrum rather than on it: they control your app or gate a run instead of rendering agent output. Both are covered in [Get started](/guides/build-your-ui/copilotkit/get-started#app-control-and-interactivity):
+
+- **Frontend tools** (`useFrontendTool`): let the agent act on your application. This is part of CopilotKit's separate [App Control](https://docs.copilotkit.ai/) concept, alongside shared state and agent context.
+- **Human-in-the-loop** (`useHumanInTheLoop`): pause a run and wait for user approval or edits.
