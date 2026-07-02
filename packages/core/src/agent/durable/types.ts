@@ -703,6 +703,23 @@ export interface RunRegistryEntry {
    */
   workflowExecution?: Promise<unknown>;
   /**
+   * Tripwire data from `processInput` (initial input processing). When an
+   * input processor calls `abort()` during `runInputProcessors` in
+   * `preparation.ts`, the TripWire is caught and stored here instead of
+   * swallowed. The first durable `llm-execution` step checks this slot and
+   * immediately emits a `tripwire` chunk + bail response, preventing the
+   * model from ever being called.
+   *
+   * Non-serializable (contains metadata of unknown shape); populated during
+   * `prepareForDurableExecution`.
+   */
+  tripwire?: {
+    reason: string;
+    retry?: boolean;
+    metadata?: unknown;
+    processorId?: string;
+  };
+  /**
    * Call-time headers from `modelSettings.headers`. These are intentionally
    * excluded from the serialized `workflowInput` so they never reach durable
    * storage. The durable `llm-execution` step reads them from this in-process

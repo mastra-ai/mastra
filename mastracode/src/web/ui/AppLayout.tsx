@@ -1,6 +1,9 @@
 import type { PlanResume } from '@mastra/client-js';
-import { Button, Notice, Spinner, Txt } from '@mastra/playground-ui';
-import type { Theme } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown, Menu } from 'lucide-react';
 import type { RefObject } from 'react';
 

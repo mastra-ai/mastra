@@ -498,6 +498,19 @@ export function createDurableToolCallStep() {
         delete (cleanedArgs as any)._background;
       }
 
+      // Fire onInputAvailable lifecycle hook before execution (matches non-durable path).
+      if (tool && 'onInputAvailable' in tool && typeof (tool as any).onInputAvailable === 'function') {
+        try {
+          await (tool as any).onInputAvailable({
+            toolCallId,
+            input: cleanedArgs,
+            messages: messageList ? messageList.get.input.aiV5.model() : [],
+          });
+        } catch (hookError) {
+          logger?.error?.('Error calling onInputAvailable', hookError);
+        }
+      }
+
       // Execute the tool
       if (!tool.execute) {
         return {
@@ -855,6 +868,19 @@ export function createDurableToolCallStep() {
 
       try {
         const result = await tool.execute(cleanedArgs, toolOptions);
+
+        // Fire onOutput lifecycle hook after successful execution (matches non-durable path).
+        if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
+          try {
+            await (tool as any).onOutput({
+              toolCallId,
+              toolName,
+              output: result,
+            });
+          } catch (hookError) {
+            logger?.error?.('Error calling onOutput', hookError);
+          }
+        }
 
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {

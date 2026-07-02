@@ -1,5 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
-import { useTheme } from '@mastra/playground-ui';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useCallback, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';

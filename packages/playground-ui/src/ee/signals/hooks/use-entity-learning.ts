@@ -58,20 +58,18 @@ export function useEntityLearning(entityId: string | undefined, signalName: stri
   });
 }
 
-/** GET /entity-learning/entities/:entityId/topics?signalName=&runId= — the clusters. */
-export function useEntityTopics(
-  entityId: string | undefined,
-  signalName: string | undefined,
-  runId: string | undefined,
-) {
+/**
+ * GET /entity-learning/entities/:entityId/topics?signalName=&runId? — the clusters.
+ * Omit `runId` to let the API resolve the latest run for that signal — an
+ * entity-level `latestRunId` belongs to a single signal and must not be
+ * reused across signals.
+ */
+export function useEntityTopics(entityId: string | undefined, signalName: string | undefined, runId?: string) {
   const { service } = useEntityLearningConfig();
 
   return useQuery({
-    queryKey: [KEY, 'topics', entityId, signalName, runId],
-    queryFn:
-      service && entityId && signalName && runId
-        ? () => service.getEntityTopics(entityId, signalName, runId)
-        : skipToken,
+    queryKey: [KEY, 'topics', entityId, signalName, runId ?? 'latest'],
+    queryFn: service && entityId && signalName ? () => service.getEntityTopics(entityId, signalName, runId) : skipToken,
     retry: false,
   });
 }

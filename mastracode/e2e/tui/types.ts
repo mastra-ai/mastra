@@ -73,6 +73,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'lifecycle-hooks-configured'
+  | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
@@ -198,7 +199,7 @@ export type McE2eScenario = {
   description: string;
   testName: string;
   skipReason?: string;
-  projectFixture?: 'long-branch';
+  projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;

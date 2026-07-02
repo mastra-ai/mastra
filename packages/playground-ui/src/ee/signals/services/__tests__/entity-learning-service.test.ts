@@ -151,6 +151,21 @@ describe('createEntityLearningService', () => {
       expect(capturedUrl?.searchParams.get('runId')).toBe('32');
     });
 
+    it('omits runId from /topics when not provided so the API resolves the latest run per signal', async () => {
+      let capturedUrl: URL | undefined;
+      server.use(
+        http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+          capturedUrl = new URL(request.url);
+          return HttpResponse.json(topicsResponse);
+        }),
+      );
+
+      await service.getEntityTopics('entity_support', 'sentiment');
+
+      expect(capturedUrl?.searchParams.get('signalName')).toBe('sentiment');
+      expect(capturedUrl?.searchParams.has('runId')).toBe(false);
+    });
+
     it('fetches a single topic by id', async () => {
       let capturedUrl: URL | undefined;
       server.use(
