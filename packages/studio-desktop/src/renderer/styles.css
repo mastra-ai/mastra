@@ -79,12 +79,15 @@ input {
 
 .tab,
 .icon-button,
-.studio-source-row,
-.manual-server-row button,
-.source-header button,
-.provider-tabs button,
-.setup-actions button,
-.model-list button {
+  .studio-source-row,
+  .manual-server-row button,
+  .source-header button,
+  .provider-tabs button,
+  .setup-actions button,
+  .model-list button,
+  .env-preset-row button,
+  .runtime-env-editor button,
+  .runtime-env-editor input {
   -webkit-app-region: no-drag;
 }
 
@@ -388,7 +391,8 @@ input {
   white-space: nowrap;
 }
 
-.local-model-setup {
+.local-model-setup,
+.runtime-env-setup {
   display: grid;
   gap: 14px;
   padding: 18px 0;
@@ -441,10 +445,19 @@ input {
 
 .provider-tabs,
 .setup-actions,
-.model-list {
+.model-list,
+.env-preset-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.runtime-env-editor {
+  min-width: 0;
+}
+
+.runtime-env-editor [class*='grid'] {
+  min-width: 0;
 }
 
 .setup-guidance,

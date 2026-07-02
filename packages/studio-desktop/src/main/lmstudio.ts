@@ -8,23 +8,30 @@ interface OpenAIModelList {
 
 export async function probeLmStudioModels(
   modelUrl = DEFAULT_MODEL_URL,
+  apiKey?: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ProbeModelsResult> {
-  return probeOpenAICompatibleModels(modelUrl, 'LM Studio', fetchImpl);
+  return probeOpenAICompatibleModels(modelUrl, 'LM Studio', apiKey, fetchImpl);
 }
 
 export async function probeOpenAICompatibleModels(
   modelUrl = DEFAULT_MODEL_URL,
   providerName = 'OpenAI-compatible server',
+  apiKey?: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ProbeModelsResult> {
   const targetUrl = modelUrl.trim() || DEFAULT_MODEL_URL;
   const label = providerName.trim() || 'OpenAI-compatible server';
+  const token = apiKey?.trim();
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (token && token !== 'not-needed' && token !== 'ollama') {
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   try {
     const response = await fetchImpl(toModelsEndpoint(targetUrl), {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers,
     });
 
     if (!response.ok) {

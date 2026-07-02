@@ -36,7 +36,7 @@ describe('ManagedMastraRuntime', () => {
     });
   });
 
-  it('starts the built runtime with desktop model and storage env vars', async () => {
+  it('starts the built runtime with desktop model, storage, and user env vars', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-desktop-runtime-'));
     const outputDir = join(dir, 'output');
     await mkdir(outputDir);
@@ -52,7 +52,19 @@ describe('ManagedMastraRuntime', () => {
       nodePath: '/node',
     });
 
-    await expect(runtime.start(DEFAULT_SETTINGS, 4112)).resolves.toMatchObject({
+    await expect(
+      runtime.start(
+        {
+          ...DEFAULT_SETTINGS,
+          environmentVariables: {
+            HOST: '0.0.0.0',
+            OPENAI_API_KEY: 'sk-local',
+            PORT: '9999',
+          },
+        },
+        4112,
+      ),
+    ).resolves.toMatchObject({
       state: 'running',
       pid: 1234,
       port: 4112,
@@ -67,6 +79,7 @@ describe('ManagedMastraRuntime', () => {
         env: expect.objectContaining({
           ELECTRON_RUN_AS_NODE: '1',
           HOST: '127.0.0.1',
+          OPENAI_API_KEY: 'sk-local',
           PORT: '4112',
           MASTRA_TELEMETRY_DISABLED: 'true',
           MASTRA_DESKTOP_MODEL_ID: DEFAULT_SETTINGS.modelId,

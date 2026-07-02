@@ -18,10 +18,19 @@ describe('desktop settings', () => {
         modelUrl: '',
         modelId: '  local/model  ',
         modelApiKey: '',
+        environmentVariables: {
+          ' invalid key ': 'ignored',
+          LM_API_TOKEN: 'lm-secret',
+          OPENAI_API_KEY: 123,
+        },
       }),
     ).toEqual({
       ...DEFAULT_SETTINGS,
       modelId: 'local/model',
+      environmentVariables: {
+        LM_API_TOKEN: 'lm-secret',
+        OPENAI_API_KEY: '123',
+      },
     });
   });
 
@@ -36,14 +45,26 @@ describe('desktop settings', () => {
       modelUrl: 'http://localhost:1234/v1',
       modelId: 'lmstudio/test',
       modelApiKey: 'not-needed',
+      environmentVariables: {
+        OPENAI_API_KEY: 'sk-local',
+      },
     });
 
-    await updateSettings(path, { serverMode: 'managed', modelId: 'lmstudio/next' });
+    await updateSettings(path, {
+      serverMode: 'managed',
+      modelId: 'lmstudio/next',
+      environmentVariables: {
+        LM_API_TOKEN: 'lm-local',
+      },
+    });
 
     await expect(readSettings(path)).resolves.toMatchObject({
       serverMode: 'managed',
       externalServerUrl: 'http://127.0.0.1:4111',
       modelId: 'lmstudio/next',
+      environmentVariables: {
+        LM_API_TOKEN: 'lm-local',
+      },
     });
     await expect(readFile(path, 'utf8')).resolves.toContain('\n');
   });

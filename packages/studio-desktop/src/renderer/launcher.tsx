@@ -1,17 +1,22 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { EnvironmentVariablesEditor } from '@mastra/playground-ui/components/EnvironmentVariablesEditor';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Section } from '@mastra/playground-ui/components/Section';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { useEnvironmentVariablesEditor } from '@mastra/playground-ui/hooks/use-environment-variables-editor';
 
+import { ENVIRONMENT_VARIABLE_PRESETS } from '../shared/environment-variables';
+import type { EnvironmentVariableRow } from '../shared/environment-variables';
 import { LOCAL_MODEL_PRESETS } from '../shared/model-presets';
 import type { LocalModelProviderId } from '../shared/model-presets';
 import { getOfflineReadiness } from '../shared/offline-readiness';
 import type { DesktopState, DesktopTab, PlatformProject, ProbeModelsResult } from '../shared/types';
 
 export interface LauncherActions {
+  onAddEnvironmentPreset: (key: string) => void;
   onApplyLocalModel: () => void;
   onLocalModelApiKeyChange: (value: string) => void;
   onLocalModelIdChange: (value: string) => void;
@@ -28,7 +33,9 @@ export interface LauncherActions {
   onPlatformRefresh: () => void;
   onProbeLocalModels: () => void;
   onReloadActiveTab: () => void;
+  onRuntimeEnvironmentRowsChange: (rows: EnvironmentVariableRow[]) => void;
   onSavePlatformBase: () => void;
+  onSaveRuntimeEnvironment: (rows: readonly EnvironmentVariableRow[]) => void;
   onSelectLocalModel: (modelId: string) => void;
   onSetLocalProvider: (providerId: LocalModelProviderId) => void;
 }
@@ -37,6 +44,7 @@ export interface LauncherProps {
   activeTab: DesktopTab | undefined;
   busyAction: string | undefined;
   current: DesktopState;
+  environmentRows: EnvironmentVariableRow[];
   isLocalModelApplied: boolean;
   lastError: string | undefined;
   localModelApiKey: string;
@@ -46,6 +54,7 @@ export interface LauncherProps {
   localProviderId: LocalModelProviderId;
   manualServerUrl: string;
   platformBaseUrl: string;
+  runtimeEnvironmentDirty: boolean;
   actions: LauncherActions;
 }
 
@@ -268,6 +277,72 @@ function LocalModelSetup({
   );
 }
 
+function RuntimeEnvironmentSetup({
+  actions,
+  busyAction,
+  current,
+  environmentRows,
+  runtimeEnvironmentDirty,
+}: Pick<
+  LauncherProps,
+  'actions' | 'busyAction' | 'current' | 'environmentRows' | 'runtimeEnvironmentDirty'
+>) {
+  const editor = useEnvironmentVariablesEditor({
+    rows: environmentRows,
+    onRowsChange: actions.onRuntimeEnvironmentRowsChange,
+  });
+  const savedVariableCount = Object.keys(current.settings.environmentVariables).length;
+
+  return (
+    <section className="runtime-env-setup" aria-label="Runtime environment">
+      <header className="inline-section-header">
+        <h3>Runtime environment</h3>
+        <StatusBadge variant={runtimeEnvironmentDirty ? 'warning' : 'neutral'} size="sm">
+          {runtimeEnvironmentDirty ? 'Unsaved' : `${savedVariableCount} saved`}
+        </StatusBadge>
+      </header>
+
+      <p className="setup-guidance">
+        Add provider keys for the bundled runtime. LM Studio tokens are created in LM Studio and pasted here when
+        authentication is enabled.
+      </p>
+
+      <ButtonsGroup className="env-preset-row" spacing="default" aria-label="Environment variable presets">
+        {ENVIRONMENT_VARIABLE_PRESETS.map(preset => (
+          <Button
+            key={preset.key}
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={() => actions.onAddEnvironmentPreset(preset.key)}
+          >
+            {preset.label}
+          </Button>
+        ))}
+      </ButtonsGroup>
+
+      <EnvironmentVariablesEditor
+        editor={editor}
+        className="runtime-env-editor"
+        addLabel="Add variable"
+        keyPlaceholder="OPENAI_API_KEY"
+        valuePlaceholder="Value"
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            variant="default"
+            disabled={!runtimeEnvironmentDirty || editor.hasDuplicateKeys}
+            onClick={() => actions.onSaveRuntimeEnvironment(editor.rows)}
+          >
+            {busyAction === 'save-runtime-env' ? 'Saving...' : 'Save & restart'}
+          </Button>
+        }
+      />
+    </section>
+  );
+}
+
 function LocalStudioSection(props: LauncherProps) {
   const { actions, busyAction, current, manualServerUrl } = props;
 
@@ -288,6 +363,8 @@ function LocalStudioSection(props: LauncherProps) {
         />
 
         <LocalModelSetup {...props} />
+
+        <RuntimeEnvironmentSetup {...props} />
 
         <SourceRow
           title="Localhost :4111"

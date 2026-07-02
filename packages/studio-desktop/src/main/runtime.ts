@@ -67,6 +67,7 @@ export class ManagedMastraRuntime {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        ...settings.environmentVariables,
         ELECTRON_RUN_AS_NODE: '1',
         NODE_ENV: 'production',
         HOST: LOCALHOST,

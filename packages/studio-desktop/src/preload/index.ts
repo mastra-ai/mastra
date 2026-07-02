@@ -26,10 +26,10 @@ const api: MastraDesktopApi = {
   startPlatformLogin: () => ipcRenderer.invoke('desktop:start-platform-login') as Promise<DesktopState>,
   logoutPlatform: () => ipcRenderer.invoke('desktop:logout-platform') as Promise<DesktopState>,
   refreshPlatform: () => ipcRenderer.invoke('desktop:refresh-platform') as Promise<DesktopState>,
-  probeLmStudioModels: (modelUrl?: string) =>
-    ipcRenderer.invoke('desktop:probe-lmstudio-models', modelUrl) as Promise<ProbeModelsResult>,
-  probeOpenAICompatibleModels: (modelUrl?: string, providerName?: string) =>
-    ipcRenderer.invoke('desktop:probe-openai-compatible-models', modelUrl, providerName) as Promise<ProbeModelsResult>,
+  probeLmStudioModels: (modelUrl?: string, apiKey?: string) =>
+    ipcRenderer.invoke('desktop:probe-lmstudio-models', modelUrl, apiKey) as Promise<ProbeModelsResult>,
+  probeOpenAICompatibleModels: (modelUrl?: string, providerName?: string, apiKey?: string) =>
+    ipcRenderer.invoke('desktop:probe-openai-compatible-models', modelUrl, providerName, apiKey) as Promise<ProbeModelsResult>,
   restartRuntime: () => ipcRenderer.invoke('desktop:restart-runtime') as Promise<DesktopState>,
   getLogs: () => ipcRenderer.invoke('desktop:get-logs') as Promise<string[]>,
   openStudioExternal: () => ipcRenderer.invoke('desktop:open-studio-external') as Promise<void>,

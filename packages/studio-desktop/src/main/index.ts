@@ -721,7 +721,7 @@ async function showMessage(options: Electron.MessageBoxOptions) {
 }
 
 async function checkLmStudioServer() {
-  const result = await probeLmStudioModels(currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl);
+  const result = await probeLmStudioModels(currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl, currentSettings.modelApiKey);
   if (!result.ok) {
     logs.add(`LM Studio probe failed: ${result.error ?? 'unknown error'}`);
     emitState();
@@ -750,7 +750,11 @@ async function checkLmStudioServer() {
 }
 
 async function checkCurrentModelServer() {
-  const result = await probeOpenAICompatibleModels(currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl);
+  const result = await probeOpenAICompatibleModels(
+    currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl,
+    undefined,
+    currentSettings.modelApiKey,
+  );
   if (!result.ok) {
     logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
     emitState();
@@ -781,7 +785,7 @@ async function checkCurrentModelServer() {
 }
 
 async function applyLmStudioPreset() {
-  const result = await probeLmStudioModels(LM_STUDIO_PRESET.modelUrl);
+  const result = await probeLmStudioModels(LM_STUDIO_PRESET.modelUrl, LM_STUDIO_PRESET.modelApiKey);
   const modelId = selectLmStudioModelId(result);
   currentSettings = await writeSettings(settingsPath, buildLmStudioPresetSettings(currentSettings, modelId));
   await restartManagedRuntime();
@@ -801,7 +805,7 @@ async function applyLmStudioPreset() {
 }
 
 async function applyOllamaPreset() {
-  const result = await probeOpenAICompatibleModels(OLLAMA_PRESET.modelUrl, OLLAMA_PRESET.name);
+  const result = await probeOpenAICompatibleModels(OLLAMA_PRESET.modelUrl, OLLAMA_PRESET.name, OLLAMA_PRESET.modelApiKey);
   const modelId = selectDetectedModelId(result, OLLAMA_PRESET.modelId);
   currentSettings = await writeSettings(
     settingsPath,
@@ -1024,8 +1028,8 @@ function installIpc() {
   ipcMain.handle('desktop:logout-platform', () => logoutPlatform());
   ipcMain.handle('desktop:refresh-platform', () => refreshPlatform());
 
-  ipcMain.handle('desktop:probe-lmstudio-models', async (_event, modelUrl?: string) => {
-    const result = await probeLmStudioModels(modelUrl ?? currentSettings.modelUrl);
+  ipcMain.handle('desktop:probe-lmstudio-models', async (_event, modelUrl?: string, apiKey?: string) => {
+    const result = await probeLmStudioModels(modelUrl ?? currentSettings.modelUrl, apiKey ?? currentSettings.modelApiKey);
     if (!result.ok) {
       logs.add(`LM Studio probe failed: ${result.error ?? 'unknown error'}`);
     }
@@ -1033,8 +1037,8 @@ function installIpc() {
     return result;
   });
 
-  ipcMain.handle('desktop:probe-openai-compatible-models', async (_event, modelUrl?: string, providerName?: string) => {
-    const result = await probeOpenAICompatibleModels(modelUrl ?? currentSettings.modelUrl, providerName);
+  ipcMain.handle('desktop:probe-openai-compatible-models', async (_event, modelUrl?: string, providerName?: string, apiKey?: string) => {
+    const result = await probeOpenAICompatibleModels(modelUrl ?? currentSettings.modelUrl, providerName, apiKey ?? currentSettings.modelApiKey);
     if (!result.ok) {
       logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
     }

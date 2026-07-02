@@ -4,7 +4,7 @@ export type DesktopTabStatus = 'ready' | 'loading' | 'error';
 export type PlatformStatus = 'signed-out' | 'signing-in' | 'loading' | 'ready' | 'error';
 
 export interface DesktopSettings {
-  version: 2;
+  version: 3;
   serverMode: ServerMode;
   externalServerUrl?: string;
   devServerUrl: string;
@@ -13,6 +13,7 @@ export interface DesktopSettings {
   modelUrl: string;
   modelId: string;
   modelApiKey: string;
+  environmentVariables: Record<string, string>;
 }
 
 export interface RuntimeStatus {
@@ -119,8 +120,8 @@ export interface MastraDesktopApi {
   startPlatformLogin: () => Promise<DesktopState>;
   logoutPlatform: () => Promise<DesktopState>;
   refreshPlatform: () => Promise<DesktopState>;
-  probeLmStudioModels: (modelUrl?: string) => Promise<ProbeModelsResult>;
-  probeOpenAICompatibleModels: (modelUrl?: string, providerName?: string) => Promise<ProbeModelsResult>;
+  probeLmStudioModels: (modelUrl?: string, apiKey?: string) => Promise<ProbeModelsResult>;
+  probeOpenAICompatibleModels: (modelUrl?: string, providerName?: string, apiKey?: string) => Promise<ProbeModelsResult>;
   restartRuntime: () => Promise<DesktopState>;
   getLogs: () => Promise<string[]>;
   openStudioExternal: () => Promise<void>;

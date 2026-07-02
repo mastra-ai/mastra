@@ -40,6 +40,14 @@ Use **Model > Use LM Studio Preset** to switch the managed runtime to LM Studio 
 
 If LM Studio isn't running, start the LM Studio local server and run the check again. The desktop app doesn't start or manage LM Studio in this version.
 
+## Runtime environment
+
+Use **Runtime environment** in the new tab picker to add provider keys for the bundled runtime. The editor supports manual variables, `.env` file import, and presets for `OPENAI_API_KEY` and `LM_API_TOKEN`.
+
+Save changes to restart the managed runtime with the updated variables. User-defined variables are passed to the bundled runtime process, but desktop-owned variables such as `HOST`, `PORT`, storage paths, and model settings stay controlled by the app.
+
+LM Studio doesn't require an API token by default. If you enable LM Studio authentication, create the API token in LM Studio, then paste it into the desktop app as `LM_API_TOKEN` or as the local model API key. The desktop app doesn't create LM Studio API tokens because LM Studio exposes token creation through its local app UI, not through the OpenAI-compatible models endpoint.
+
 ## Data and runtime
 
 In managed mode, the app starts a bundled Mastra runtime bound to `127.0.0.1`. It stores settings and local Editor files in the app data directory for the current operating system.

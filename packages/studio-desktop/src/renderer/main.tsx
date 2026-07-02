@@ -4,6 +4,11 @@ import './styles.css';
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { createRoot } from 'react-dom/client';
 
+import {
+  collectEnvironmentVariables,
+  rowsFromEnvironmentVariables,
+} from '../shared/environment-variables';
+import type { EnvironmentVariableRow } from '../shared/environment-variables';
 import { LOCAL_MODEL_PRESETS } from '../shared/model-presets';
 import type { LocalModelProviderId } from '../shared/model-presets';
 import type { DesktopState, DesktopTab, MastraDesktopApi, ProbeModelsResult } from '../shared/types';
@@ -42,6 +47,8 @@ let localModelId = '';
 let localModelApiKey = '';
 let localModelFieldsDirty = false;
 let localModelProbe: ProbeModelsResult | undefined;
+let environmentRows: EnvironmentVariableRow[] = [{ key: '', value: '' }];
+let runtimeEnvironmentDirty = false;
 let busyAction: string | undefined;
 let lastError: string | undefined;
 
@@ -71,6 +78,11 @@ function syncLocalModelFields(current: DesktopState, force = false) {
   localModelId = current.settings.modelId;
   localModelApiKey = current.settings.modelApiKey;
   localProviderId = providerForModelUrl(current.settings.modelUrl);
+}
+
+function syncRuntimeEnvironmentFields(current: DesktopState, force = false) {
+  if (!force && runtimeEnvironmentDirty) return;
+  environmentRows = rowsFromEnvironmentVariables(current.settings.environmentVariables);
 }
 
 function setLocalProvider(providerId: LocalModelProviderId) {
@@ -170,6 +182,19 @@ function launcherActions(): LauncherActions {
         return api.restartRuntime();
       });
     },
+    onAddEnvironmentPreset: key => {
+      const hasKey = environmentRows.some(row => row.key.trim() === key);
+      if (!hasKey) {
+        environmentRows = [...environmentRows.filter(row => row.key.trim() || row.value), { key, value: '' }];
+      }
+      runtimeEnvironmentDirty = true;
+      render();
+    },
+    onRuntimeEnvironmentRowsChange: rows => {
+      environmentRows = rows.map(row => ({ key: row.key, value: row.value }));
+      runtimeEnvironmentDirty = true;
+      render();
+    },
     onLocalModelApiKeyChange: value => {
       localModelApiKey = value;
       localModelFieldsDirty = true;
@@ -224,7 +249,7 @@ function launcherActions(): LauncherActions {
     onProbeLocalModels: () => {
       void runAction('probe-local-models', async () => {
         const provider = selectedLocalProvider();
-        localModelProbe = await api.probeOpenAICompatibleModels(localModelUrl, provider.name);
+        localModelProbe = await api.probeOpenAICompatibleModels(localModelUrl, provider.name, localModelApiKey);
         if (localModelProbe.ok && localModelProbe.models[0]) {
           localModelId = localModelProbe.models[0];
           localModelFieldsDirty = true;
@@ -240,6 +265,14 @@ function launcherActions(): LauncherActions {
       void runAction('save-platform-base', () =>
         api.updateSettings({ platformBaseUrl: platformBaseUrl.trim() || state?.settings.platformBaseUrl }).then(result => result.state),
       );
+    },
+    onSaveRuntimeEnvironment: rows => {
+      void runAction('save-runtime-env', async () => {
+        const environmentVariables = collectEnvironmentVariables(rows);
+        await api.updateSettings({ environmentVariables });
+        runtimeEnvironmentDirty = false;
+        return api.restartRuntime();
+      });
     },
     onSelectLocalModel: modelId => {
       localModelId = modelId;
@@ -270,6 +303,7 @@ function renderLauncher() {
       activeTab={active}
       busyAction={busyAction}
       current={current}
+      environmentRows={environmentRows}
       isLocalModelApplied={currentModelMatchesSettings(current)}
       lastError={lastError}
       localModelApiKey={localModelApiKey}
@@ -279,6 +313,7 @@ function renderLauncher() {
       localProviderId={localProviderId}
       manualServerUrl={manualServerUrl}
       platformBaseUrl={platformBaseUrl}
+      runtimeEnvironmentDirty={runtimeEnvironmentDirty}
     />,
   );
 }
@@ -314,11 +349,13 @@ void api.getState().then(initialState => {
   manualServerUrl = initialState.settings.devServerUrl;
   platformBaseUrl = initialState.settings.platformBaseUrl;
   syncLocalModelFields(initialState, true);
+  syncRuntimeEnvironmentFields(initialState, true);
   render();
 });
 
 api.onStateChanged(nextState => {
   state = nextState;
   syncLocalModelFields(nextState);
+  syncRuntimeEnvironmentFields(nextState);
   render();
 });

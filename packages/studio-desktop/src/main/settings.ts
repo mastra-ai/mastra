@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { normalizeEnvironmentVariables } from '../shared/environment-variables';
 import type { DesktopSettings } from '../shared/types';
 import { DEFAULT_SETTINGS } from './defaults';
 import { normalizeServerUrl } from './url';
@@ -29,7 +30,7 @@ export function normalizeSettings(value: unknown): DesktopSettings {
   const source = typeof value === 'object' && value !== null ? (value as Partial<DesktopSettings>) : {};
   const externalServerUrl = cleanOptionalUrl(source.externalServerUrl);
   return {
-    version: 2,
+    version: 3,
     serverMode: source.serverMode === 'external' ? 'external' : 'managed',
     externalServerUrl,
     devServerUrl: cleanUrl(source.devServerUrl ?? externalServerUrl, DEFAULT_SETTINGS.devServerUrl),
@@ -38,6 +39,7 @@ export function normalizeSettings(value: unknown): DesktopSettings {
     modelUrl: cleanUrl(source.modelUrl, DEFAULT_SETTINGS.modelUrl),
     modelId: cleanRequired(source.modelId, DEFAULT_SETTINGS.modelId),
     modelApiKey: cleanRequired(source.modelApiKey, DEFAULT_SETTINGS.modelApiKey),
+    environmentVariables: normalizeEnvironmentVariables(source.environmentVariables),
   };
 }
 

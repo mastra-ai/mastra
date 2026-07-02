@@ -45,6 +45,34 @@ describe('probeOpenAICompatibleModels', () => {
       });
       expect(requests).toEqual(['/v1/models']);
     });
+
+    it('sends an Authorization header when a real API key is configured', async () => {
+      const authorizationHeaders: Array<string | undefined> = [];
+      const modelUrl = await withModelServer((req, res) => {
+        authorizationHeaders.push(req.headers.authorization);
+        json(res, 200, { data: [{ id: 'loaded-model' }] });
+      });
+
+      await expect(probeOpenAICompatibleModels(modelUrl, 'Local server', 'secret-token')).resolves.toMatchObject({
+        ok: true,
+        models: ['loaded-model'],
+      });
+      expect(authorizationHeaders).toEqual(['Bearer secret-token']);
+    });
+
+    it('does not send an Authorization header for placeholder API key values', async () => {
+      const authorizationHeaders: Array<string | undefined> = [];
+      const modelUrl = await withModelServer((req, res) => {
+        authorizationHeaders.push(req.headers.authorization);
+        json(res, 200, { data: [{ id: 'loaded-model' }] });
+      });
+
+      await expect(probeLmStudioModels(modelUrl, 'not-needed')).resolves.toMatchObject({
+        ok: true,
+        models: ['loaded-model'],
+      });
+      expect(authorizationHeaders).toEqual([undefined]);
+    });
   });
 
   describe('when the model server returns a failing HTTP status', () => {
