@@ -656,7 +656,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             registryEntry.memory &&
             durableState?.threadId &&
             durableState?.resourceId &&
-            !durableState.observationalMemory
+            !durableState.observationalMemory &&
+            // Honor readOnly like the non-durable Agent#executeOnFinish, which gates the
+            // whole persistence block on !readOnlyMemory. The durable path flushes directly
+            // and bypasses the MessageHistory processor that would otherwise enforce this.
+            !durableState.memoryConfig?.readOnly
           ) {
             try {
               const memoryMessageList = new MessageList();
