@@ -92,6 +92,7 @@ type StreamChunk =
   | StreamDataChunk<'data-system-reminder'>
   | StreamDataChunk<'data-om-activation'>
   | StreamDataChunk<'data-om-thread-update'>
+  | StreamDataChunk<'data-mastracode-tool-progress'>
   | StreamDataChunk<'data-sandbox-stdout'>
   | StreamDataChunk<'data-sandbox-stderr'>;
 

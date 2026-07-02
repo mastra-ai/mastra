@@ -10,15 +10,15 @@
  * {@link MCRun} is async-iterable over controller events and also resolves to a
  * final result via `result`.
  */
-import type { AgentControllerEvent, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart, Session } from '@mastra/core/agent-controller';
 
 import { autoApprovePolicy } from './policy.js';
 import type { MCRun, ResolutionPolicy, RunMCOptions, RunMCResult, RunMCStatus } from './types.js';
 
-function extractAssistantText(message: AgentControllerMessage): string {
-  return message.content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-    .map(c => c.text)
+function extractAssistantText(message: MastraDBMessage): string {
+  return message.content.parts
+    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
+    .map(p => p.text)
     .join('');
 }
 
