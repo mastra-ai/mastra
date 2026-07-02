@@ -18,7 +18,14 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentInstructions, AgentMethodType, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
+import type {
+  AgentInstructions,
+  AgentMethodType,
+  AgentModelManagerConfig,
+  GoalConfig,
+  ToolsetsInput,
+  ToolsInput,
+} from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
@@ -98,6 +105,8 @@ interface DurablePreparationAgent {
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
+  __getGoalConfig(): GoalConfig | undefined;
+  __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
 }
 
 /**
@@ -317,11 +326,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Resolve input processors now that the memory context is in place.
   const processorStates = new Map<string, ProcessorState>();
   let inputProcessors: InputProcessorOrWorkflow[] = [];
+  let llmRequestInputProcessors: InputProcessorOrWorkflow[] = [];
   let outputProcessors: OutputProcessorOrWorkflow[] = [];
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
 
   try {
     inputProcessors = await typedAgent.listInputProcessors(requestContext);
+    // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
+    // processors are skipped by ProcessorRunner.runProcessLLMRequest.
+    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
     outputProcessors = await typedAgent.listOutputProcessors(requestContext);
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
@@ -582,6 +595,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     workspace,
     requestContext,
     inputProcessors,
+    llmRequestInputProcessors,
     outputProcessors,
     errorProcessors,
     processorStates,
@@ -603,6 +617,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // real (toolName, args) on each call. The boolean shadow on the
     // serialized workflow input is the cross-process fallback.
     requireToolApproval: execOptions?.requireToolApproval,
+    // Agent-level goal config (judge resolver, tools resolver, scorer).
+    // Non-serializable — cross-process engines skip goal evaluation.
+    goal: agent.__getGoalConfig(),
     cleanup: () => {},
   };
 

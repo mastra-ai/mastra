@@ -1078,6 +1078,10 @@ export interface BufferedObservationChunk {
   currentTask?: string;
   /** Optional thread title from observer output */
   threadTitle?: string;
+  /** Values extracted during this buffered observation cycle. */
+  extractedValues?: Record<string, unknown>;
+  /** Extractor failures from this buffered observation cycle. */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -1102,6 +1106,10 @@ export interface BufferedObservationChunkInput {
   currentTask?: string;
   /** Optional thread title from observer output */
   threadTitle?: string;
+  /** Values extracted during this buffered observation cycle. */
+  extractedValues?: Record<string, unknown>;
+  /** Extractor failures from this buffered observation cycle. */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**

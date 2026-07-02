@@ -65,6 +65,7 @@ import { AgentController } from '@mastra/core/agent-controller'
 import { LibSQLStore } from '@mastra/libsql'
 
 const agent = new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'Help the user plan and complete tasks.',
   model: '__GATEWAY_OPENAI_MODEL__',
