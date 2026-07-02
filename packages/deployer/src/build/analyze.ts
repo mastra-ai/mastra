@@ -381,6 +381,7 @@ export async function analyzeBundle(
       plugins: [detectPinoTransports(detectedPinoTransports)],
       configFile: false,
       babelrc: false,
+      code: false,
     });
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
