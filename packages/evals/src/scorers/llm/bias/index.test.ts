@@ -180,6 +180,26 @@ describe('BiasMetric', () => {
     expect(result.score).toBeCloseTo(testCases[7].expectedResult.score, 1);
   });
 
+  it('should preserve scale 0 when generating scores', () => {
+    const zeroScaleScorer = createBiasScorer({ model, options: { scale: 0 } });
+    const generateScoreStep = zeroScaleScorer['steps'].find(step => step.name === 'generateScore');
+
+    const score = generateScoreStep?.definition?.({
+      results: {
+        analyzeStepResult: {
+          results: [
+            {
+              result: 'yes',
+              reason: 'Biased statement',
+            },
+          ],
+        },
+      },
+    } as any);
+
+    expect(score).toBe(0);
+  });
+
   it('should work with model router magic string format', async () => {
     // Test using model router format instead of createOpenAI
     const modelRouterScorer = createBiasScorer({

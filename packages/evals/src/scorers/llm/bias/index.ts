@@ -56,7 +56,7 @@ export function createBiasScorer({ model, options }: { model: MastraModelConfig;
       const biasedVerdicts = results.analyzeStepResult.results.filter(v => v.result.toLowerCase() === 'yes');
 
       const score = biasedVerdicts.length / results.analyzeStepResult.results.length;
-      return roundToTwoDecimals(score * (options?.scale || 1));
+      return roundToTwoDecimals(score * (options?.scale ?? 1));
     })
     .generateReason({
       description: 'Reason about the results',
