@@ -1,14 +1,22 @@
+import { Badge, Button, Input, Txt } from '@mastra/playground-ui';
+import { Check, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ProviderInfo } from '../../shared/api/types';
 import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../../shared/hooks/use-providers';
-import { CheckIcon, SearchIcon } from './icons';
 
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   oauth: 'Signed in',
   stored: 'Key saved',
   env: 'From env',
   none: 'Not set',
+};
+
+const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'default'> = {
+  oauth: 'success',
+  stored: 'success',
+  env: 'info',
+  none: 'default',
 };
 
 /**
@@ -83,18 +91,22 @@ export function ProvidersSection() {
   const renderRow = (p: ProviderInfo) => {
     const isEditing = editing === p.provider;
     return (
-      <div key={p.provider} className="provider-row">
-        <div className="provider-info">
-          {p.source !== 'none' && <CheckIcon size={13} className={`provider-tick ${p.source}`} />}
-          <span className="provider-name">{p.provider}</span>
-          <span className={`provider-pill ${p.source}`}>{SOURCE_LABEL[p.source]}</span>
+      <li key={p.provider} role="listitem" className="flex items-center justify-between gap-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {p.source !== 'none' && <Check size={13} className="text-accent1 shrink-0" />}
+          <Txt as="span" variant="ui-md" className="truncate text-icon6">
+            {p.provider}
+          </Txt>
+          <Badge size="sm" variant={SOURCE_VARIANT[p.source]}>
+            {SOURCE_LABEL[p.source]}
+          </Badge>
         </div>
         {isEditing ? (
-          <div className="provider-edit">
-            <input
+          <div className="flex items-center gap-2">
+            <Input
               ref={keyInputRef}
               type="password"
-              className="provider-key-input"
+              size="sm"
               placeholder="Paste API key"
               value={keyDraft}
               onChange={e => setKeyDraft(e.target.value)}
@@ -106,15 +118,16 @@ export function ProvidersSection() {
                 }
               }}
             />
-            <button
-              className="btn btn-primary btn-sm"
+            <Button
+              variant="primary"
+              size="sm"
               disabled={busy || !keyDraft.trim()}
               onClick={() => void saveKey(p.provider, p.envVar)}
             >
               Save
-            </button>
-            <button
-              className="btn btn-sm"
+            </Button>
+            <Button
+              size="sm"
               disabled={busy}
               onClick={() => {
                 setEditing(null);
@@ -122,12 +135,12 @@ export function ProvidersSection() {
               }}
             >
               Cancel
-            </button>
+            </Button>
           </div>
         ) : (
-          <div className="provider-actions">
-            <button
-              className="btn btn-sm"
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
               disabled={busy}
               onClick={() => {
                 setEditing(p.provider);
@@ -135,15 +148,15 @@ export function ProvidersSection() {
               }}
             >
               {p.source === 'stored' ? 'Update' : 'Add key'}
-            </button>
+            </Button>
             {p.source === 'stored' && (
-              <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => void removeKey(p.provider)}>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => void removeKey(p.provider)}>
                 Remove
-              </button>
+              </Button>
             )}
           </div>
         )}
-      </div>
+      </li>
     );
   };
 
@@ -151,41 +164,47 @@ export function ProvidersSection() {
   const list = searching ? results : configured;
 
   return (
-    <div className="providers-pane">
-      <div className="provider-search">
-        <SearchIcon size={14} className="provider-search-icon" />
-        <input
+    <div className="flex flex-col gap-3">
+      <div className="relative">
+        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-icon3" />
+        <Input
           type="text"
-          className="provider-search-input"
           placeholder="Search providers to add a key…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           aria-label="Search providers"
+          className="pl-8"
         />
       </div>
 
-      {error && <div className="provider-error">{error}</div>}
+      {error && (
+        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+          {error}
+        </Txt>
+      )}
 
       {loading ? (
-        <div className="provider-loading">Loading providers…</div>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Loading providers…
+        </Txt>
       ) : (
         <>
           {!searching && (
-            <p className="provider-caption">
+            <Txt as="p" variant="ui-sm" className="text-icon3">
               {configured.length > 0
                 ? `${configured.length} configured. Search above to add more.`
                 : 'No providers configured yet. Search above to add a key.'}
-            </p>
+            </Txt>
           )}
-          <div className="provider-list">
-            {list.length === 0 ? (
-              <div className="provider-empty">
-                {searching ? `No providers match “${search.trim()}”.` : 'No providers configured.'}
-              </div>
-            ) : (
-              list.map(renderRow)
-            )}
-          </div>
+          {list.length === 0 ? (
+            <Txt as="p" variant="ui-sm" className="text-icon3">
+              {searching ? `No providers match “${search.trim()}”.` : 'No providers configured.'}
+            </Txt>
+          ) : (
+            <ul role="list" className="flex flex-col divide-y divide-border1">
+              {list.map(renderRow)}
+            </ul>
+          )}
         </>
       )}
     </div>

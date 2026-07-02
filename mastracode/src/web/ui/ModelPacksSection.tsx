@@ -1,4 +1,6 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
+import { Badge, Button, Input, Txt } from '@mastra/playground-ui';
+import { Check, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -7,7 +9,6 @@ import {
   useRemoveModelPack,
   useSaveModelPack,
 } from '../../shared/hooks/use-model-packs';
-import { CheckIcon, PlusIcon } from './icons';
 
 interface DraftPack {
   name: string;
@@ -17,6 +18,13 @@ interface DraftPack {
 }
 
 const EMPTY_DRAFT: DraftPack = { name: '', build: '', plan: '', fast: '' };
+
+// Native <select> kept here (styled with DS tokens) rather than the DS
+// Select: the draft form has three model pickers and the native control keeps
+// the markup/keyboard model simple. The DS Select is a portalled popup with no
+// UX gain for this dense form.
+const SELECT_CLASS =
+  'h-form-default w-full rounded-full border border-border1 bg-surface-overlay-soft px-3 text-ui-md text-neutral6 outline-hidden focus-visible:border-neutral5/50';
 
 /**
  * Model packs. Mirrors the TUI's `/models-pack` command: a pack assigns a model
@@ -86,7 +94,7 @@ export function ModelPacksSection({
   const modelOptions = models.map(m => m.id);
 
   const modelSelect = (value: string, onChange: (v: string) => void) => (
-    <select className="pack-select" value={value} onChange={e => onChange(e.target.value)}>
+    <select className={SELECT_CLASS} value={value} onChange={e => onChange(e.target.value)}>
       <option value="">Select model…</option>
       {value && !modelOptions.includes(value) && <option value={value}>{value}</option>}
       {modelOptions.map(id => (
@@ -98,90 +106,116 @@ export function ModelPacksSection({
   );
 
   return (
-    <div className="providers-pane">
-      <div className="cprov-head">
-        <p className="provider-caption">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <Txt as="p" variant="ui-sm" className="text-icon3">
           A pack sets a model for each mode (build / plan / fast). Mirrors the TUI <code>/models-pack</code> command.
-        </p>
+        </Txt>
         {!draft && (
-          <button className="btn btn-sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
-            <PlusIcon size={13} /> New pack
-          </button>
+          <Button size="sm" onClick={() => setDraft({ ...EMPTY_DRAFT })} disabled={busy}>
+            <Plus size={13} /> New pack
+          </Button>
         )}
       </div>
 
-      {!resourceId && <div className="provider-caption">Open a project to activate a pack on its session.</div>}
-      {error && <div className="provider-error">{error}</div>}
+      {!resourceId && (
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Open a project to activate a pack on its session.
+        </Txt>
+      )}
+      {error && (
+        <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
+          {error}
+        </Txt>
+      )}
 
       {draft && (
-        <div className="cprov-form">
-          <label className="cprov-field">
-            <span>Name</span>
-            <input
-              className="provider-search-input"
+        <div className="flex flex-col gap-3 rounded-lg border border-border1 p-3">
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Name
+            </Txt>
+            <Input
+              size="sm"
               placeholder="e.g. my-pack"
               value={draft.name}
               onChange={e => setDraft({ ...draft, name: e.target.value })}
               autoFocus
             />
           </label>
-          <label className="cprov-field">
-            <span>Build model</span>
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Build model
+            </Txt>
             {modelSelect(draft.build, v => setDraft({ ...draft, build: v }))}
           </label>
-          <label className="cprov-field">
-            <span>Plan model</span>
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Plan model
+            </Txt>
             {modelSelect(draft.plan, v => setDraft({ ...draft, plan: v }))}
           </label>
-          <label className="cprov-field">
-            <span>Fast model</span>
+          <label className="flex flex-col gap-1">
+            <Txt as="span" variant="ui-sm" className="text-icon5">
+              Fast model
+            </Txt>
             {modelSelect(draft.fast, v => setDraft({ ...draft, fast: v }))}
           </label>
-          <div className="cprov-form-actions">
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void saveDraft()}>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" size="sm" disabled={busy} onClick={() => void saveDraft()}>
               Add
-            </button>
-            <button className="btn btn-sm" disabled={busy} onClick={() => setDraft(null)}>
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => setDraft(null)}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <div className="provider-loading">Loading model packs…</div>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Loading model packs…
+        </Txt>
       ) : packs.length === 0 && !draft ? (
-        <div className="provider-empty">No model packs available. Configure provider keys or add a custom pack.</div>
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          No model packs available. Configure provider keys or add a custom pack.
+        </Txt>
       ) : (
-        <div className="provider-list">
+        <ul role="list" className="flex flex-col divide-y divide-border1">
           {packs.map(p => (
-            <div key={p.id} className={`provider-row pack-row ${p.active ? 'active' : ''}`}>
-              <div className="cprov-info">
-                <div className="cprov-title">
-                  {p.active && <CheckIcon size={13} className="provider-tick stored" />}
-                  <span className="provider-name">{p.name}</span>
-                  {p.custom && <span className="provider-pill none">Custom</span>}
-                  {p.active && <span className="provider-pill stored">Active</span>}
+            <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  {p.active && <Check size={13} className="text-accent1 shrink-0" />}
+                  <Txt as="span" variant="ui-md" className="truncate text-icon6">
+                    {p.name}
+                  </Txt>
+                  {p.custom && <Badge size="sm">Custom</Badge>}
+                  {p.active && (
+                    <Badge size="sm" variant="success">
+                      Active
+                    </Badge>
+                  )}
                 </div>
-                <span className="pack-models">
+                <Txt as="span" variant="ui-xs" className="text-icon3">
                   build: {p.models.build || '—'} · plan: {p.models.plan || '—'} · fast: {p.models.fast || '—'}
-                </span>
+                </Txt>
               </div>
-              <div className="provider-actions">
+              <div className="flex items-center gap-2">
                 {!p.active && (
-                  <button className="btn btn-sm" disabled={busy || !resourceId} onClick={() => void activate(p.id)}>
+                  <Button size="sm" disabled={busy || !resourceId} onClick={() => void activate(p.id)}>
                     Activate
-                  </button>
+                  </Button>
                 )}
                 {p.custom && (
-                  <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => void remove(p.id)}>
+                  <Button variant="outline" size="sm" disabled={busy} onClick={() => void remove(p.id)}>
                     Remove
-                  </button>
+                  </Button>
                 )}
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
