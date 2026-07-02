@@ -124,8 +124,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'build-your-ui/copilotkit/bots',
-              label: 'Bots & channels',
+              id: 'build-your-ui/copilotkit/channels',
+              label: 'Channels',
             },
           ],
         },

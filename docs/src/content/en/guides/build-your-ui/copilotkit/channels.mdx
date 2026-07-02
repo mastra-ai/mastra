@@ -1,15 +1,15 @@
 ---
-title: "CopilotKit Bots and Channels | Frameworks"
+title: "CopilotKit Channels | Frameworks"
 description: "Deploy the same Mastra agent to Slack, Discord, Telegram, and other messaging channels"
 ---
 
-# Bots and channels
+# Channels
 
 The same Mastra agent that powers your in-app copilot can also run as a bot in messaging platforms. CopilotKit's bot layer connects your agent to Slack, Discord, Telegram, WhatsApp, and Microsoft Teams, with threads, tool calls, and human-in-the-loop approvals handled in the channel.
 
 :::info
 
-The full setup lives in the [CopilotKit bot documentation](https://docs.showcase.copilotkit.ai/slack). This page shows how it fits together with a Mastra agent.
+The full setup lives in the [CopilotKit bot documentation](https://docs.copilotkit.ai/slack). This page shows how it fits together with a Mastra agent.
 
 :::
 
@@ -45,7 +45,7 @@ Rich messages are written as JSX and rendered to each platform's native message 
 
 ## Slack
 
-The [Slack quickstart](https://docs.showcase.copilotkit.ai/slack) takes you from zero to a bot you can `@`-mention in a channel, then adds an interactive button card. Slack runs over Socket Mode, which opens an outbound WebSocket to Slack, so no public URL or tunnel is required during development.
+The [Slack quickstart](https://docs.copilotkit.ai/slack) takes you from zero to a bot you can `@`-mention in a channel, then adds an interactive button card. Slack runs over Socket Mode, which opens an outbound WebSocket to Slack, so no public URL or tunnel is required during development.
 
 Install the packages:
 
@@ -60,4 +60,4 @@ Set the Slack credentials in your environment:
 
 ## Other platforms
 
-The bot adapters share one `@copilotkit/bot` API and differ only in what each platform natively supports. For Discord, Telegram, WhatsApp, and Microsoft Teams, set the relevant platform credentials and add the matching adapter to the `adapters` array. See the [CopilotKit bot documentation](https://docs.showcase.copilotkit.ai/slack) for platform-specific setup.
+The bot adapters share one `@copilotkit/bot` API and differ only in what each platform natively supports. For Discord, Telegram, WhatsApp, and Microsoft Teams, set the relevant platform credentials and add the matching adapter to the `adapters` array. See the [CopilotKit bot documentation](https://docs.copilotkit.ai/slack) for platform-specific setup.
