@@ -8,12 +8,14 @@ import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
-import type { ListDatasetItemsOutput } from '../../storage/types';
+import type { DatasetItem, ListDatasetItemsOutput } from '../../storage/types';
 import { Dataset } from '../dataset';
 import { SchemaValidationError, SchemaUpdateValidationError } from '../validation/errors';
 
-// Dataset.listItems returns a union for backwards compat, but the runtime
-// always returns the paginated shape. Narrow it in tests.
+// Dataset.listItems returns a union: bare `DatasetItem[]` when only `version`
+// is passed, else the paginated `{ items, pagination }` shape. Narrow to the
+// paginated branch in tests that pass `search`/`page`/`perPage` (with or
+// without `version`).
 const paginated = <T>(r: T | ListDatasetItemsOutput): ListDatasetItemsOutput => r as ListDatasetItemsOutput;
 
 const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<any, any, any, any> => ({
@@ -206,12 +208,12 @@ describe('Dataset', () => {
     expect(result.pagination).toBeDefined();
   });
 
-  // 15. listItems — with version returns paginated shape
-  it('listItems with version returns { items, pagination } at that version', async () => {
+  // 15. listItems — version-only returns bare DatasetItem[] snapshot
+  it('listItems with only version returns a bare DatasetItem[] snapshot', async () => {
     const item = await ds.addItem({ input: { a: 1 } });
-    const result = paginated(await ds.listItems({ version: item.datasetVersion }));
-    expect(result.items.length).toBeGreaterThanOrEqual(1);
-    expect(result.pagination).toBeDefined();
+    const result = await ds.listItems({ version: item.datasetVersion });
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as DatasetItem[]).length).toBeGreaterThanOrEqual(1);
   });
 
   // 15a. listItems — version + search

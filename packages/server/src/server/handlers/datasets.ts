@@ -325,13 +325,18 @@ export const LIST_ITEMS_ROUTE = createRoute({
     try {
       const { page, perPage, version, search } = params;
       const ds = await mastra.datasets.get({ id: datasetId });
-      const { items, pagination } = await ds.listItems({
+      const result = await ds.listItems({
         page: page ?? 0,
         perPage: perPage ?? 10,
         version,
         search,
       });
-      return { items, pagination };
+      // Handler always passes `page` and `perPage`, so `listItems` always
+      // returns the paginated shape; the guard is defensive.
+      if (Array.isArray(result)) {
+        return { items: result, pagination: { total: result.length, page: 0, perPage: result.length, hasMore: false } };
+      }
+      return { items: result.items, pagination: result.pagination };
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });

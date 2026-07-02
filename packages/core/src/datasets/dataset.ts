@@ -182,18 +182,37 @@ export class Dataset {
    * List items in the dataset, optionally at a specific version, with
    * optional substring search and pagination.
    *
-   * Always returns the paginated `{ items, pagination }` shape. Prior to
-   * MASTRA-4433, passing `version` returned a bare `DatasetItem[]` via
-   * `store.getItemsByVersion`; that branch is gone so `search` and
-   * pagination can reach the storage layer alongside `version`.
+   * Return shape depends on the arguments:
+   *
+   * - When `version` is the only argument provided (no `search`, `page`, or
+   *   `perPage`), returns a bare `DatasetItem[]` snapshot of every item at
+   *   that version. This shape is retained for callers that predate
+   *   server-side pagination on the versioned path; new code should pass
+   *   `page` / `perPage` (or `search`) to opt into the paginated shape.
+   * - In all other cases (no arguments, or `search` / `page` / `perPage`
+   *   provided with or without `version`), returns the paginated
+   *   `{ items, pagination }` shape.
+   *
+   * @deprecated The `DatasetItem[]` branch of the return type is retained
+   * for backwards compatibility with the `version`-only call form; pass
+   * `page` / `perPage` (or `search`) to always receive the paginated
+   * `{ items, pagination }` shape.
    */
   async listItems(args?: {
     version?: number;
     page?: number;
     perPage?: number;
     search?: string;
-  }): Promise<ListDatasetItemsOutput> {
+  }): Promise<DatasetItem[] | ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
+
+    const onlyVersion =
+      args?.version !== undefined && args.search === undefined && args.page === undefined && args.perPage === undefined;
+
+    if (onlyVersion) {
+      return store.getItemsByVersion({ datasetId: this.id, version: args.version! });
+    }
+
     return store.listItems({
       datasetId: this.id,
       ...(args?.version !== undefined ? { version: args.version } : {}),
