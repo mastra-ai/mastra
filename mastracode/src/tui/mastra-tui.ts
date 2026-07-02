@@ -4,6 +4,7 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
@@ -761,6 +762,7 @@ export class MastraTUI {
       this.clearStatusTimingTicker();
       this.startCaffeinate();
       this.lastStreamError = null;
+      this.beginLifecycleRun();
     }
 
     if (event.type === 'error' && 'error' in event && !event.retryable) {
@@ -773,6 +775,7 @@ export class MastraTUI {
     }
 
     try {
+      this.fireLifecycleHooksForEvent(event);
       await dispatchEvent(event, this.getEventContext(), this.state);
       this.captureAgentControllerAnalytics(event);
 
@@ -789,6 +792,7 @@ export class MastraTUI {
       if (event.type === 'agent_end') {
         const stopReason = event.reason === 'aborted' ? 'aborted' : event.reason === 'error' ? 'error' : 'complete';
         this.startIdleStatusTimingTicker();
+        await this.runAgentEndHook(event.reason ?? 'complete');
         await this.runStopHook(stopReason);
 
         if (event.reason === 'error' && this.lastStreamError) {
@@ -799,6 +803,7 @@ export class MastraTUI {
     } finally {
       if (event.type === 'agent_end') {
         this.stopCaffeinate();
+        this.endLifecycleRun();
       }
     }
   }
@@ -985,6 +990,58 @@ export class MastraTUI {
     for (const warning of warnings) {
       showInfo(this.state, `[${event}] ${warning}`);
     }
+  }
+
+  private beginLifecycleRun(): void {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return;
+    const runId = randomUUID();
+    hookMgr.setRunId(runId);
+    hookMgr.runAgentStart().catch(() => {});
+  }
+
+  private fireLifecycleHooksForEvent(event: AgentControllerEvent): void {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return;
+    switch (event.type) {
+      case 'tool_approval_required':
+        hookMgr.runPermissionRequest('tool_approval', event.toolCallId, event.toolName, event.args).catch(() => {});
+        break;
+      case 'tool_suspended': {
+        const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+        if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+          hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
+        } else if (event.toolName === 'submit_plan') {
+          hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
+        }
+        break;
+      }
+      case 'subagent_start':
+        hookMgr
+          .runSubagentStart(event.toolCallId, event.agentType, event.task, event.modelId, event.forked)
+          .catch(() => {});
+        break;
+      case 'subagent_end':
+        hookMgr
+          .runSubagentEnd(event.toolCallId, event.agentType, event.result, event.isError, event.durationMs)
+          .catch(() => {});
+        break;
+    }
+  }
+
+  private async runAgentEndHook(reason: 'complete' | 'aborted' | 'error' | 'suspended'): Promise<void> {
+    const hookMgr = this.state.hookManager;
+    if (!hookMgr) return;
+    try {
+      const result = await hookMgr.runAgentEnd(reason);
+      this.showHookWarnings('AgentEnd', result.warnings);
+    } catch (error) {
+      showError(this.state, `AgentEnd hook failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  private endLifecycleRun(): void {
+    const hookMgr = this.state.hookManager;
+    hookMgr?.clearRunId();
   }
 
   private async runStopHook(stopReason: 'complete' | 'aborted' | 'error'): Promise<void> {
