@@ -145,33 +145,35 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
       return part || null;
     }
 
-    // Combine multiple text chunks into a single text part
-    const textChunks = state.batch.filter((part: ChunkType) => part.type === 'text-delta') as ChunkType[];
-
-    if (textChunks.length > 0) {
-      // Combine all text deltas
-      const combinedText = textChunks.map(part => (part.type === 'text-delta' ? part.payload.text : '')).join('');
-
-      // Create a new combined text part, preserving id and runId from the first chunk
-      const firstChunk = textChunks[0] as ChunkType & { type: 'text-delta' };
-      const combinedChunk: ChunkType = {
-        type: 'text-delta',
-        payload: { text: combinedText, id: firstChunk.payload.id },
-        runId: firstChunk.runId,
-        from: ChunkFrom.AGENT,
-      };
-
-      // Clear the batch completely - non-text chunks should be handled by the main logic
-      // when they arrive, not accumulated here
-      state.batch = [];
-
-      return combinedChunk;
-    } else {
-      // If no text chunks, return the first non-text part
-      const part = state.batch[0];
+    const firstPart = state.batch[0];
+    if (firstPart?.type !== 'text-delta') {
       state.batch = state.batch.slice(1);
-      return part || null;
+      return firstPart;
     }
+
+    const textChunks: Extract<ChunkType, { type: 'text-delta' }>[] = [];
+    for (const part of state.batch) {
+      if (part.type !== 'text-delta') {
+        break;
+      }
+      textChunks.push(part);
+    }
+
+    const combinedText = textChunks.map(part => part.payload.text).join('');
+    const firstChunk = textChunks[0];
+    if (!firstChunk) {
+      return null;
+    }
+
+    const combinedChunk: ChunkType = {
+      type: 'text-delta',
+      payload: { text: combinedText, id: firstChunk.payload.id },
+      runId: firstChunk.runId,
+      from: ChunkFrom.AGENT,
+    };
+
+    state.batch = state.batch.slice(textChunks.length);
+    return combinedChunk;
   }
 
   /**

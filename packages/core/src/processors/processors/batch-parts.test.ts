@@ -268,6 +268,65 @@ describe('BatchPartsProcessor', () => {
       expect(result).toBeNull();
     });
 
+    it('preserves non-text parts when flushing mixed batches with emitOnNonText false', async () => {
+      processor = new BatchPartsProcessor({ batchSize: 10, emitOnNonText: false });
+
+      const textChunk1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'text-1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const objectChunk: ChunkType = { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT };
+      const textChunk2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world', id: 'text-1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      await processor.processOutputStream({
+        part: textChunk1,
+        streamParts: [textChunk1],
+        state,
+        abort: () => {
+          throw new Error('abort');
+        },
+      });
+      await processor.processOutputStream({
+        part: objectChunk,
+        streamParts: [textChunk1, objectChunk],
+        state,
+        abort: () => {
+          throw new Error('abort');
+        },
+      });
+      await processor.processOutputStream({
+        part: textChunk2,
+        streamParts: [textChunk1, objectChunk, textChunk2],
+        state,
+        abort: () => {
+          throw new Error('abort');
+        },
+      });
+
+      expect(processor.flush(state)).toEqual({
+        type: 'text-delta',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello', id: 'text-1' },
+      });
+      expect(processor.flush(state)).toEqual(objectChunk);
+      expect(processor.flush(state)).toEqual({
+        type: 'text-delta',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: ' world', id: 'text-1' },
+      });
+      expect(processor.flush(state)).toBeNull();
+    });
+
     it('should handle mixed text and non-text chunks correctly', async () => {
       processor = new BatchPartsProcessor({ batchSize: 3 });
 
