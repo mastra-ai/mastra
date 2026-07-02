@@ -1,5 +1,11 @@
 # @mastra/mongodb
 
+## 1.12.0-alpha.3
+
+### Patch Changes
+
+- Raise `@mastra/core` peer floor to `>=1.49.0-0` on all storage adapters so the tenancy-related named exports the adapters now consume are guaranteed to exist at install time. ([#18861](https://github.com/mastra-ai/mastra/pull/18861))
+
 ## 1.12.0-alpha.2
 
 ### Patch Changes
