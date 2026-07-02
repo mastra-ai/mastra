@@ -131,7 +131,10 @@ interface SignalSectionProps {
 }
 
 export function SignalSection({ entity, catalog, signalName, onSeeDetails, onSelectCluster }: SignalSectionProps) {
-  const { data, isLoading, isError } = useEntityTopics(entity.entityId, signalName, entity.latestRunId);
+  // No runId: the API resolves the latest run per signal. `entity.latestRunId`
+  // is entity-wide and belongs to a single signal, so reusing it here would
+  // return empty topics for every other signal.
+  const { data, isLoading, isError } = useEntityTopics(entity.entityId, signalName);
   const topics = data?.topics ?? [];
 
   return (
