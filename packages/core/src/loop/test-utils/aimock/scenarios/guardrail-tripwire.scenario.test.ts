@@ -86,5 +86,5 @@ describeForAllEngines(
       expect(await output.finishReason).not.toBe('tripwire');
     });
   },
-  { skip: ['durable'] },
 );
+
