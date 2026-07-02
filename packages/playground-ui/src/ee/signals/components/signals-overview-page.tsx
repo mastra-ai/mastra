@@ -1,5 +1,5 @@
-import type { CSSProperties } from 'react';
 import { ArrowUpRight, CircleSlashIcon, InboxIcon, MousePointerClickIcon } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { Badge } from '../../../ds/components/Badge';
 import { Button } from '../../../ds/components/Button';
 import { EmptyState } from '../../../ds/components/EmptyState';
