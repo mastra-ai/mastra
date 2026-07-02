@@ -38,7 +38,3 @@ await store.experiments.deleteExperiment({
   filters: { organizationId, projectId },
 });
 ```
-
-Related: [MASTRA-4445](https://linear.app/kepler-crm/issue/MASTRA-4445)
-</content>
-</invoke>

@@ -205,6 +205,21 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.clearTable({ tableName: TABLE_DATASETS });
   }
 
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const [rows] = await this.database.run({
+        sql: `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
+              WHERE TABLE_SCHEMA = "" AND TABLE_NAME IN (@a, @b)`,
+        params: { a: TABLE_EXPERIMENTS, b: TABLE_EXPERIMENT_RESULTS },
+        json: true,
+      });
+      const row = rows?.[0] as { c?: number | string } | undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
+  }
+
   // ==========================================================================
   // Dataset CRUD
   // ==========================================================================
@@ -367,6 +382,14 @@ export class DatasetsSpanner extends DatasetsStorage {
       }
       const scopedWhere = [`${quoteIdent('id', 'column name')} = @id`, ...tenancyConditions].join(' AND ');
 
+      // Probe for experiment tables outside the transaction. Once any statement
+      // fails inside a Spanner read-write transaction, the transaction is left
+      // in a state where subsequent statements can't be trusted to run (the
+      // batch-DML contract halts on the first error, and a client-side try/catch
+      // around a DML doesn't put the tx back into a usable shape). Checking
+      // existence up front avoids running detach DMLs against missing tables.
+      const experimentTablesExist = await this.experimentTablesExist();
+
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
@@ -380,8 +403,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               return;
             }
 
-            // Best-effort detach of experiments; tables may not exist standalone.
-            try {
+            if (experimentTablesExist) {
               await tx.runUpdate({
                 sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
                       WHERE ${quoteIdent('experimentId', 'column name')} IN (
@@ -396,8 +418,6 @@ export class DatasetsSpanner extends DatasetsStorage {
                       WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
                 params: { id: args.id },
               });
-            } catch {
-              // Experiments tables absent — nothing to detach.
             }
 
             for (const table of [TABLE_DATASET_VERSIONS, TABLE_DATASET_ITEMS]) {

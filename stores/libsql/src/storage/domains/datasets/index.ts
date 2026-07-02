@@ -135,6 +135,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#db.deleteData({ tableName: TABLE_DATASETS });
   }
 
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)`,
+        args: [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+      });
+      const row = result.rows?.[0] as { c?: number | string } | undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
+  }
+
   // --- Row transformers ---
 
   private transformDatasetRow(row: Record<string, any>): DatasetRecord {
@@ -408,33 +421,27 @@ export class DatasetsLibSQL extends DatasetsStorage {
       if (!exists.rows?.[0]) return;
 
       // Detach experiments (SET NULL) + delete their results for FK safety.
-      // Each wrapped separately — experiment tables may not exist.
-      try {
-        await this.#client.execute({
+      // Probe sqlite_master rather than swallowing "no such table" errors.
+      const experimentTablesExist = await this.experimentTablesExist();
+
+      // Dataset cascade — atomic batch, parent DELETE scoped by tenancy. When
+      // experiment tables exist, fold the detach DMLs into the same batch so the
+      // whole cascade is one atomic transaction.
+      const statements: { sql: string; args: any[] }[] = [];
+      if (experimentTablesExist) {
+        statements.push({
           sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
           args: [id],
         });
-      } catch {
-        // experiment_results table may not exist
-      }
-      try {
-        await this.#client.execute({
+        statements.push({
           sql: `UPDATE ${TABLE_EXPERIMENTS} SET datasetId = NULL, datasetVersion = NULL WHERE datasetId = ?`,
           args: [id],
         });
-      } catch {
-        // experiments table may not exist
       }
-
-      // Dataset cascade — atomic batch, parent DELETE scoped by tenancy
-      await this.#client.batch(
-        [
-          { sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] },
-        ],
-        'write',
-      );
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] });
+      await this.#client.batch(statements, 'write');
     } catch (error) {
       throw new MastraError(
         {

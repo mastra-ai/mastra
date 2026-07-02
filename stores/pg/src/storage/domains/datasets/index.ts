@@ -474,22 +474,24 @@ export class DatasetsPG extends DatasetsStorage {
         ]);
         if (!locked) return;
 
-        // Detach experiments — try/catch because experiment tables may not exist yet
-        try {
+        // Detach experiments only if their tables exist. We probe with
+        // to_regclass instead of try/catch inside the transaction, because a
+        // failed DML in Postgres puts the connection into an aborted state
+        // (SQLSTATE 25P02), which would cause every subsequent DELETE below
+        // to fail and roll back the whole transaction.
+        const experimentTablesExist = await t.oneOrNone<{ exists: boolean }>(
+          `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
+          [experimentResultsTable, experimentsTable],
+        );
+        if (experimentTablesExist?.exists) {
           await t.none(
             `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
             [id],
           );
-        } catch {
-          /* table may not exist */
-        }
-        try {
           await t.none(
             `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
             [id],
           );
-        } catch {
-          /* table may not exist */
         }
 
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);

@@ -190,6 +190,20 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)}`);
   }
 
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const [rows] = await this.pool.execute<any[]>(
+        `SELECT COUNT(*) AS c FROM information_schema.tables
+         WHERE table_schema = DATABASE() AND table_name IN (?, ?)`,
+        [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+      );
+      const row = Array.isArray(rows) ? (rows[0] as { c?: number | string } | undefined) : undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
+  }
+
   // --- Row transformers ---
 
   private mapDataset(row: Record<string, any>): DatasetRecord {
@@ -431,6 +445,12 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
     const scopedWhere = ['id = ?', ...filterCols].join(' AND ');
 
+    // Probe for experiment tables via information_schema outside the transaction
+    // rather than running DMLs and swallowing "table missing" errors. Even though
+    // ER_NO_SUCH_TABLE (1146) does not abort an InnoDB transaction, resolving
+    // existence up front keeps the transaction focused on real writes.
+    const experimentTablesExist = await this.experimentTablesExist();
+
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -444,21 +464,15 @@ export class DatasetsMySQL extends DatasetsStorage {
         return;
       }
 
-      try {
+      if (experimentTablesExist) {
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
           [id],
         );
-      } catch {
-        // experiment_results table may not exist
-      }
-      try {
         await connection.execute(
           `UPDATE ${formatTableName(TABLE_EXPERIMENTS)} SET ${quoteIdentifier('datasetId', 'column name')} = NULL, ${quoteIdentifier('datasetVersion', 'column name')} = NULL WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
           [id],
         );
-      } catch {
-        // experiments table may not exist
       }
 
       await connection.execute(
