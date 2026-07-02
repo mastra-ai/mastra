@@ -58,12 +58,15 @@ describe('DirectoryBrowser', () => {
       await user.click(await screen.findByText('alpha'));
 
       expect(await screen.findByText('src')).toBeInTheDocument();
-      expect(screen.getByText('Up a level')).toBeInTheDocument();
+
+      // go back up via the breadcrumb, not an "Up a level" entry
+      await user.click(screen.getByRole('button', { name: 'projects' }));
+      expect(await screen.findByText('beta')).toBeInTheDocument();
     });
   });
 
   describe('when a folder is double-clicked', () => {
-    it('picks that folder', async () => {
+    it('does not pick the folder', async () => {
       server.use(
         http.get(FS_URL, ({ request }) => HttpResponse.json(listingFor(new URL(request.url).searchParams.get('path')))),
       );
@@ -73,7 +76,7 @@ describe('DirectoryBrowser', () => {
 
       fireEvent.doubleClick(await screen.findByText('alpha'));
 
-      expect(onPick).toHaveBeenCalledWith('/projects/alpha', 'alpha');
+      expect(onPick).not.toHaveBeenCalled();
     });
   });
 

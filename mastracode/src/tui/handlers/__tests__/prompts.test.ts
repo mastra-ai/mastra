@@ -6,7 +6,7 @@ import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from 
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
-import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
+import { handleAskQuestion, handlePlanApproval, handleSandboxAccessRequest } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
 
 const tmpProjects: string[] = [];
@@ -67,6 +67,23 @@ function createCtx() {
 
   return { ctx, state, answerQuestion };
 }
+
+describe('handleSandboxAccessRequest', () => {
+  it('includes the requested path and reason in PermissionResult tool_input', async () => {
+    const { ctx, state } = createCtx();
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    (state as any).hookManager = { runPermissionResult };
+
+    const promise = handleSandboxAccessRequest(ctx, 'sandbox-1', '/tmp/project', 'Read workspace files');
+    state.activeInlineQuestion!.handleInput('\r');
+    await promise;
+
+    expect(runPermissionResult).toHaveBeenCalledWith('sandbox_access', 'sandbox-1', 'request_access', 'approved', {
+      path: '/tmp/project',
+      reason: 'Read workspace files',
+    });
+  });
+});
 
 describe('handleAskQuestion goal mode', () => {
   it('shows ask_user prompts to the user instead of answering with the goal judge', async () => {
@@ -238,6 +255,8 @@ describe('handlePlanApproval regular approval', () => {
   it('approves the plan without sending a handoff signal', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx, sendSignal } = createPlanApprovalCtx(projectPath);
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    state.hookManager = { runPermissionResult };
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
 
@@ -254,6 +273,9 @@ describe('handlePlanApproval regular approval', () => {
       },
     });
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
+    expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
+      path: PLAN_PATH,
+    });
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     expect(sendSignal).not.toHaveBeenCalled();

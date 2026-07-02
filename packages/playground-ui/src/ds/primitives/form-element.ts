@@ -5,7 +5,7 @@ export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:curs
 // (theme-aware neutral5 — light on dark surfaces, dark on light) that clears WCAG
 // 1.4.11 non-text contrast (3:1) on any surface, where the border1→border2 shift
 // alone (white/7%→11%) does not. `focus-visible` for the bare control,
-// `focus-within` for wrapper variants (InputGroup, Searchbar) whose focus lives on
+// `focus-within` for wrapper variants (InputGroup) whose focus lives on
 // a nested input.
 export const inputFocusBorderVisible = 'focus-visible:border-neutral5/50';
 export const inputFocusBorderWithin = 'focus-within:border-neutral5/50';

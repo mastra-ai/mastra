@@ -471,6 +471,9 @@ export async function createHonoServer(
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
       const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
+      const organizationId = process.env.MASTRA_ORGANIZATION_ID || '';
+      const platformProjectId = process.env.MASTRA_PLATFORM_PROJECT_ID || '';
+      const platformObservabilityEndpoint = process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -503,6 +506,9 @@ export async function createHonoServer(
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
         signalsUI: `'${signalsUI}'`,
+        organizationId: `'${escapeForHtml(organizationId)}'`,
+        platformProjectId: `'${escapeForHtml(platformProjectId)}'`,
+        platformObservabilityEndpoint: `'${escapeForHtml(platformObservabilityEndpoint)}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 

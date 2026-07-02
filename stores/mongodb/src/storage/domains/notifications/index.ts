@@ -9,12 +9,17 @@ import type {
   NotificationRecord,
   NotificationSignalAttributes,
   NotificationStatus,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   UpdateNotificationInput,
 } from '@mastra/core/storage';
 import type { Collection, Filter, UpdateFilter } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
@@ -136,6 +141,11 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
   static readonly MANAGED_COLLECTIONS = [TABLE_NOTIFICATIONS] as const;
 
+  /** Anchor is the notification's creation time, stored as a BSON date. */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    notifications: { table: TABLE_NOTIFICATIONS, column: 'createdAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -147,6 +157,16 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
   private async getCollection(): Promise<Collection<Record<string, any>>> {
     return this.#connector.getCollection(TABLE_NOTIFICATIONS);
+  }
+
+  /** Delete notifications older than the policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: NotificationsMongoDB.retentionTables,
+      order: ['notifications'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'notifications', targets, options, logger: this.logger });
   }
 
   async init(): Promise<void> {

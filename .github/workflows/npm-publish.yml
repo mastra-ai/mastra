@@ -490,6 +490,18 @@ jobs:
         if: steps.check-snapshot-pre-json.outputs.files_exists == 'true'
         run: pnpm changeset-cli pre exit
 
+      - name: Add snapshot-only package bumps
+        run: |
+          cat > .changeset/snapshot-forced-packages.md <<'EOF'
+          ---
+          '@mastra/observability': patch
+          '@mastra/auth-studio': patch
+          '@mastra/core': patch
+          ---
+
+          Include observability, auth studio, and core in snapshot publishes.
+          EOF
+
       - name: Run Changeset Version Snapshot
         run: pnpm changeset-cli version --snapshot ${{ env.FINAL_TAG }}
         env:

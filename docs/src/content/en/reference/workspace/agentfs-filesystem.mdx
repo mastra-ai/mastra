@@ -37,6 +37,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'file-agent',
   name: 'file-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
