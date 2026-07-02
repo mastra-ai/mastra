@@ -561,7 +561,6 @@ body::before {
   color: #953800;
 }
 
-
 /* Compact density: tighten the conversation rhythm and chrome. */
 [data-density='compact'] .transcript {
   gap: 10px;
@@ -573,7 +572,6 @@ body::before {
 [data-density='compact'] .composer {
   padding: 8px 18px;
 }
-
 
 /* ── Toasts ────────────────────────────────────────────────────────────── */
 
@@ -649,4 +647,3 @@ body::before {
 .transcript::-webkit-scrollbar-thumb:hover {
   background: var(--fg-muted);
 }
-
