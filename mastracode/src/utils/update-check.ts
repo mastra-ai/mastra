@@ -399,55 +399,54 @@ async function isOwnInstallManagedBy(pm: PackageManager, install: { dir: string 
   }
 }
 
-/** A tool (other than a package manager) known to own installs, recognized by install path. */
+/** A tool other than a package manager that owns the running install, matched by path. */
 interface InstallOwner {
   name: string;
-  /** Command to run to update through the tool; omitted when we only suggest it to the user. */
-  update?: (version: string) => [cmd: string, args: string[]];
-  /** The manual update command shown to the user. */
-  command: (version: string) => string;
+  /** Command to run to delegate the update; omitted when we only suggest `command` to the user. */
+  exec?: { cmd: string; args: string[] };
+  /** Manual update command shown to the user. */
+  command: string;
 }
 
-function findInstallOwner(dir: string): InstallOwner | null {
+function findInstallOwner(dir: string, version: string): InstallOwner | null {
   if (dir.startsWith(join(homedir(), '.vite-plus') + sep)) {
     return {
       name: 'vite-plus',
-      update: version => ['vp', ['install', '-g', `${PACKAGE_NAME}@${version}`]],
-      command: version => `vp install -g ${PACKAGE_NAME}@${version}`,
+      exec: { cmd: 'vp', args: ['install', '-g', `${PACKAGE_NAME}@${version}`] },
+      command: `vp install -g ${PACKAGE_NAME}@${version}`,
     };
   }
   if (dir.startsWith('/opt/homebrew/Cellar/') || dir.startsWith('/usr/local/Cellar/')) {
-    // Not run automatically: brew formulas lag npm, and `brew upgrade` may pull unrelated updates.
-    return { name: 'Homebrew', command: () => `brew upgrade ${PACKAGE_NAME}` };
+    // Suggest-only: brew formulas lag npm, and `brew upgrade` can pull unrelated updates.
+    return { name: 'Homebrew', command: `brew upgrade ${PACKAGE_NAME}` };
   }
   return null;
 }
 
 /**
  * Update mastracode and verify the result: delegates to the tool that owns the
- * running install when it's one we recognize, skips the install when it isn't
- * managed by `pm`, otherwise runs the package manager — and in every executed
- * case checks the on-disk version actually changed.
+ * running install when we recognize it, skips the install when it isn't
+ * managed by `pm`, otherwise runs the package manager. Every executed update
+ * is verified against the on-disk version.
  */
 export async function performUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateOutcome> {
   const install = locateOwnInstall();
 
-  const owner = install ? findInstallOwner(install.dir) : null;
+  const owner = install ? findInstallOwner(install.dir, targetVersion) : null;
   if (owner) {
-    if (!owner.update) {
+    if (!owner.exec) {
       const message =
         `Your Mastra Code install (at ${install!.dir}) is managed by ${owner.name}. ` +
-        `Update it with \`${owner.command(targetVersion)}\`.`;
+        `Update it with \`${owner.command}\`.`;
       return { status: 'unchanged', message };
     }
-    const [cmd, args] = owner.update(targetVersion);
-    const result = await execUpdate(cmd, args);
+    const result = await execUpdate(owner.exec.cmd, owner.exec.args);
     return resolveUpdateOutcome({
       pm,
       targetVersion,
       result,
       install: locateOwnInstall(),
-      manualCommand: owner.command(targetVersion),
+      manualCommand: owner.command,
     });
   }
 

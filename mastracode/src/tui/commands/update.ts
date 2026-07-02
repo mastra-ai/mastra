@@ -76,8 +76,7 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
     ctx.showInfo(`Updating to v${latestVersion}…`);
     const outcome = await performUpdate(pm, latestVersion);
     if (outcome.status === 'updated') {
-      // Print after the TUI is torn down — a message rendered in the TUI is
-      // lost in the exit race and the user never sees the confirmation.
+      // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
       ctx.stop();
       console.info(outcome.message);
       process.exit(0);
