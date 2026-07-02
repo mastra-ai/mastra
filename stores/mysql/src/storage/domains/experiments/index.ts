@@ -444,8 +444,21 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op on mismatch or missing row. Never throws so we don't
+      // leak experiment existence across tenants via error timing/text. The cascade DELETE
+      // below is already experimentId-scoped, so gating at the parent is sufficient.
+      const existing = await this.operations.load<{ id: string }>({
+        tableName: TABLE_EXPERIMENTS,
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
+      });
+      if (!existing) return;
+
       const connection = await this.pool.getConnection();
       try {
         await connection.beginTransaction();
@@ -742,8 +755,21 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op if the parent experiment does not match the
+      // caller's scope. Prevents wiping another tenant's results via a leaked id.
+      if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
+        const parent = await this.operations.load<{ id: string }>({
+          tableName: TABLE_EXPERIMENTS,
+          keys: {
+            id: args.experimentId,
+            organizationId: args.filters?.organizationId,
+            projectId: args.filters?.projectId,
+          },
+        });
+        if (!parent) return;
+      }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
         [args.experimentId],

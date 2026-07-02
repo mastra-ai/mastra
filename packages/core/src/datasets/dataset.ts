@@ -484,10 +484,16 @@ export class Dataset {
 
   /**
    * Delete an experiment (run) by ID.
+   *
+   * The ownership check above already refuses cross-tenant / cross-dataset
+   * requests, but we still forward `this.#scope` to storage so the delete
+   * is defense-in-depth: a leaked handle or race that skipped the assertion
+   * still cannot delete another tenant's experiment (storage silently no-ops
+   * on tenancy mismatch).
    */
   async deleteExperiment(args: { experimentId: string }) {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
-    return experimentsStore.deleteExperiment({ id: args.experimentId });
+    return experimentsStore.deleteExperiment({ id: args.experimentId, filters: this.#scope });
   }
 }

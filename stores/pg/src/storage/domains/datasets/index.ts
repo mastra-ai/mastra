@@ -41,34 +41,11 @@ import type {
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
-}
-
-/**
- * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
- * Uses double-quoted PG identifiers and continues numbering from `startIndex`.
- * Returns empty arrays and unchanged `nextIndex` when no filters apply.
- */
-function tenancyWhere(
-  filters: DatasetTenancyFilters | undefined,
-  startIndex: number,
-): { conditions: string[]; params: any[]; nextIndex: number } {
-  const conditions: string[] = [];
-  const params: any[] = [];
-  let idx = startIndex;
-  if (filters?.organizationId !== undefined) {
-    conditions.push(`"organizationId" = $${idx++}`);
-    params.push(filters.organizationId);
-  }
-  if (filters?.projectId !== undefined) {
-    conditions.push(`"projectId" = $${idx++}`);
-    params.push(filters.projectId);
-  }
-  return { conditions, params, nextIndex: idx };
 }
 
 export class DatasetsPG extends DatasetsStorage {

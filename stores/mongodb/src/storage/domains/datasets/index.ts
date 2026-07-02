@@ -35,21 +35,12 @@ import type {
   DatasetTenancyFilters,
 } from '@mastra/core/storage';
 
-/**
- * Merge tenancy read-scope conditions into a MongoDB filter document. Fields
- * with `undefined` filter values are omitted (no predicate). Defined values
- * become equality matches — matches the pattern already used by listDatasets.
- */
-function applyTenancyFilter(filter: Record<string, any>, filters: DatasetTenancyFilters | undefined): void {
-  if (!filters) return;
-  if (filters.organizationId !== undefined) filter.organizationId = filters.organizationId;
-  if (filters.projectId !== undefined) filter.projectId = filters.projectId;
-}
 import type { Collection } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+import { applyTenancyFilter } from '../utils';
 
 const MANAGED_COLLECTIONS = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
 

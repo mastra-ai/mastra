@@ -119,3 +119,39 @@ export function transformFromSqlRow<T>({
 
   return result as T;
 }
+
+/**
+ * Tenancy scope shape shared by domains that carry `organizationId` / `projectId`
+ * columns (datasets, experiments, etc.). Structurally compatible with
+ * `DatasetTenancyFilters` and `ExperimentTenancyFilters` in `@mastra/core/storage`.
+ */
+export type TenancyScope = {
+  organizationId?: string;
+  projectId?: string;
+};
+
+/**
+ * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
+ * Uses double-quoted PG identifiers and continues numbering from `startIndex`.
+ * Returns empty arrays and unchanged `nextIndex` when no filters apply.
+ *
+ * Shared across domains (datasets, experiments, ...) so tenancy predicates stay
+ * consistent and cross-tenant reads/deletes do not leak.
+ */
+export function tenancyWhere(
+  filters: TenancyScope | undefined,
+  startIndex: number,
+): { conditions: string[]; params: any[]; nextIndex: number } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let idx = startIndex;
+  if (filters?.organizationId !== undefined) {
+    conditions.push(`"organizationId" = $${idx++}`);
+    params.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push(`"projectId" = $${idx++}`);
+    params.push(filters.projectId);
+  }
+  return { conditions, params, nextIndex: idx };
+}

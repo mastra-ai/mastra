@@ -38,27 +38,10 @@ import type {
   DatasetTenancyFilters,
 } from '@mastra/core/storage';
 
-/**
- * Build additional `AND col = ?` conditions for a tenancy read-scope filter.
- * Returned in the shape expected by the existing SQL builders in this file.
- * When `filters` is undefined or empty, returns empty arrays (no scoping).
- */
-function tenancyWhere(filters?: DatasetTenancyFilters): { conditions: string[]; params: InValue[] } {
-  const conditions: string[] = [];
-  const params: InValue[] = [];
-  if (filters?.organizationId !== undefined) {
-    conditions.push('organizationId = ?');
-    params.push(filters.organizationId);
-  }
-  if (filters?.projectId !== undefined) {
-    conditions.push('projectId = ?');
-    params.push(filters.projectId);
-  }
-  return { conditions, params };
-}
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {

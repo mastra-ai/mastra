@@ -41,7 +41,14 @@ export abstract class ExperimentsStorage extends StorageDomain {
    */
   abstract getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null>;
   abstract listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput>;
-  abstract deleteExperiment(args: { id: string }): Promise<void>;
+  /**
+   * Delete an experiment (and any of its results). When `filters` is provided,
+   * the delete is a silent no-op if the experiment does not match the tenancy
+   * filters — never throws on mismatch, to avoid leaking existence across
+   * tenants via error timing/text. Mirrors the datasets delete contract
+   * (MASTRA-4438).
+   */
+  abstract deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void>;
 
   // Results (per-item)
   abstract addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult>;
@@ -57,7 +64,13 @@ export abstract class ExperimentsStorage extends StorageDomain {
     filters?: ExperimentTenancyFilters;
   }): Promise<ExperimentResult | null>;
   abstract listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput>;
-  abstract deleteExperimentResults(args: { experimentId: string }): Promise<void>;
+  /**
+   * Delete all results for an experiment. When `filters` is provided, the
+   * delete is scoped to results whose parent experiment matches the tenancy
+   * filters — silent no-op on mismatch. Never throws, to avoid leaking
+   * cross-tenant existence via error timing/text.
+   */
+  abstract deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void>;
 
   // Aggregation
   abstract getReviewSummary(): Promise<ExperimentReviewCounts[]>;

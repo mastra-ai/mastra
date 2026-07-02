@@ -408,8 +408,14 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op on mismatch or missing experiment. Never throws
+      // so we don't leak cross-tenant existence via error timing/text. The cascade
+      // DELETE below is experimentId-scoped, so gating at the parent is sufficient.
+      const gate = await this.getExperimentById({ id: args.id, filters: args.filters });
+      if (!gate) return;
+
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
@@ -693,8 +699,14 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op if the parent experiment does not match the
+      // caller's scope. Prevents wiping another tenant's results via a leaked id.
+      if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
+        const parent = await this.getExperimentById({ id: args.experimentId, filters: args.filters });
+        if (!parent) return;
+      }
       await this.db.runDml({
         sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
               WHERE ${quoteIdent('experimentId', 'column name')} = @experimentId`,

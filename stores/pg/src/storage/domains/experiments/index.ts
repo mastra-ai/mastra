@@ -29,31 +29,7 @@ import type {
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
-
-/**
- * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
- * Uses double-quoted PG identifiers and continues numbering from `startIndex`.
- * Returns empty arrays and unchanged `nextIndex` when no filters apply.
- * Mirrors the datasets domain helper (MASTRA-4438).
- */
-function tenancyWhere(
-  filters: ExperimentTenancyFilters | undefined,
-  startIndex: number,
-): { conditions: string[]; params: any[]; nextIndex: number } {
-  const conditions: string[] = [];
-  const params: any[] = [];
-  let idx = startIndex;
-  if (filters?.organizationId !== undefined) {
-    conditions.push(`"organizationId" = $${idx++}`);
-    params.push(filters.organizationId);
-  }
-  if (filters?.projectId !== undefined) {
-    conditions.push(`"projectId" = $${idx++}`);
-    params.push(filters.projectId);
-  }
-  return { conditions, params, nextIndex: idx };
-}
+import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 export class ExperimentsPG extends ExperimentsStorage {
   #db: PgDB;
@@ -460,13 +436,20 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment({ id }: { id: string }): Promise<void> {
+  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
       const resultsTable = getTableName({
         indexName: TABLE_EXPERIMENT_RESULTS,
         schemaName: getSchemaName(this.#schema),
       });
       const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+
+      // Tenancy gate: silent no-op on mismatch (does not throw). The cascade DELETE
+      // below is already experimentId-scoped by FK, so gating at the parent is sufficient.
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const existsSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')}`;
+      const existing = await this.#db.client.oneOrNone(existsSql, [id, ...params]);
+      if (!existing) return;
 
       // Delete results first (FK semantics)
       await this.#db.client.none(`DELETE FROM ${resultsTable} WHERE "experimentId" = $1`, [id]);
@@ -707,9 +690,26 @@ export class ExperimentsPG extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults({ experimentId }: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults({
+    experimentId,
+    filters,
+  }: {
+    experimentId: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<void> {
     try {
       const tableName = getTableName({ indexName: TABLE_EXPERIMENT_RESULTS, schemaName: getSchemaName(this.#schema) });
+      const experimentsTable = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
+
+      // Tenancy gate: silent no-op if the parent experiment does not match the
+      // caller's scope. Prevents wiping another tenant's results via a leaked id.
+      if (filters?.organizationId !== undefined || filters?.projectId !== undefined) {
+        const { conditions, params } = tenancyWhere(filters, 2);
+        const existsSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')}`;
+        const parent = await this.#db.client.oneOrNone(existsSql, [experimentId, ...params]);
+        if (!parent) return;
+      }
+
       await this.#db.client.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);
     } catch (error) {
       throw new MastraError(

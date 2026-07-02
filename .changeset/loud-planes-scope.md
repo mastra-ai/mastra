@@ -7,9 +7,15 @@
 '@mastra/pg': patch
 ---
 
-Tenancy-scope `getExperimentById` and `getExperimentResultById`.
+Tenancy-scope experiments `getById` and `delete*` on `ExperimentsStorage`.
 
-`ExperimentsStorage.getExperimentById` and `ExperimentsStorage.getExperimentResultById` used to look up an experiment (or experiment result) by its primary key alone, so any caller who knew the id could read it regardless of tenant. Both getters now accept an optional `filters: { organizationId?, projectId? }` argument that is enforced in the SQL/collection predicate on every adapter (inmemory, libsql, pg, mysql, mongodb, spanner). On tenancy mismatch the storage layer returns `null` — matching how a missing id already behaves, so existence does not leak through error timing or messages.
+`ExperimentsStorage.getExperimentById`, `getExperimentResultById`, `deleteExperiment`, and `deleteExperimentResults` used to key on the primary id alone, so any caller who knew the id could read or delete the row regardless of tenant. All four now accept an optional `filters: { organizationId?, projectId? }` argument that is enforced on every adapter (inmemory, libsql, pg, mysql, mongodb, spanner):
+
+- On tenancy mismatch, `get*` returns `null` at the storage layer.
+- On tenancy mismatch, `delete*` is a silent no-op.
+- The `deleteExperiment` cascade to results and the `deleteExperimentResults` bulk delete are gated on the parent experiment matching the caller's scope, so a leaked id cannot wipe another tenant's rows.
+
+Both behaviors match how a missing id already responds, so existence does not leak through error timing or messages.
 
 `Dataset.getExperiment` and the shared experiment-ownership gate on `Dataset` now forward the dataset's tenancy scope to storage, so experiment reads and downstream mutations (list results, update result, delete experiment) reached through a dataset handle are automatically scoped to the owning tenant.
 
