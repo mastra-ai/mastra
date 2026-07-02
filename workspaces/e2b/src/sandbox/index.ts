@@ -24,7 +24,7 @@ import type {
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
-import type { TemplateBuilder, TemplateClass } from 'e2b';
+import type { SandboxNetworkOpts, TemplateBuilder, TemplateClass } from 'e2b';
 import { createDefaultMountableTemplate } from '../utils/template';
 import type { TemplateSpec } from '../utils/template';
 import { mountS3, mountGCS, mountAzure, LOG_PREFIX } from './mounts';
@@ -83,6 +83,8 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
   env?: Record<string, string>;
   /** Custom metadata */
   metadata?: Record<string, unknown>;
+  /** Network configuration to use when creating the E2B sandbox */
+  network?: SandboxNetworkOpts;
 
   /** Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var. */
   domain?: string;
@@ -163,6 +165,7 @@ export class E2BSandbox extends MastraSandbox {
   private readonly templateSpec?: TemplateSpec;
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
+  private readonly network?: SandboxNetworkOpts;
   private readonly connectionOpts: Record<string, string>;
   private readonly _instructionsOverride?: InstructionsOption;
 
@@ -184,6 +187,7 @@ export class E2BSandbox extends MastraSandbox {
     this.templateSpec = options.template;
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
+    this.network = options.network;
     this.connectionOpts = {
       ...(options.domain && { domain: options.domain }),
       ...(options.apiUrl && { apiUrl: options.apiUrl }),
@@ -285,6 +289,7 @@ export class E2BSandbox extends MastraSandbox {
           ...this.metadata,
           'mastra-sandbox-id': this.id,
         },
+        ...(this.network && { network: this.network }),
         timeoutMs: this.timeout,
       });
     } catch (createError) {
@@ -303,6 +308,7 @@ export class E2BSandbox extends MastraSandbox {
             ...this.metadata,
             'mastra-sandbox-id': this.id,
           },
+          ...(this.network && { network: this.network }),
           timeoutMs: this.timeout,
         });
       } else {
