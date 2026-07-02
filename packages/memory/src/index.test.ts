@@ -54,6 +54,110 @@ describe('Memory', () => {
     });
   });
 
+  describe('listTools', () => {
+    it('omits working memory tools when agentManaged is false', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, agentManaged: false } },
+      });
+
+      expect(memory.listTools()).not.toHaveProperty('updateWorkingMemory');
+    });
+
+    it('includes working memory tools by default when working memory is enabled', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true } },
+      });
+
+      expect(memory.listTools()).toHaveProperty('updateWorkingMemory');
+    });
+
+    it('uses manageWorkingMemory to add the working memory extractor and disable agent-managed tools by default', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+
+      const config = memory.getMergedThreadConfig() as MemoryConfig & {
+        workingMemory: MemoryConfig['workingMemory'] & { agentManaged?: boolean; useStateSignals?: boolean };
+      };
+      const omConfig = config.observationalMemory as Extract<MemoryConfig['observationalMemory'], object> & {
+        observation?: { extract?: Array<{ slug: string }> };
+      };
+      expect(config.workingMemory.agentManaged).toBe(false);
+      expect(config.workingMemory.useStateSignals).toBe(true);
+      expect(memory.listTools()).not.toHaveProperty('updateWorkingMemory');
+      expect(omConfig.observation?.extract?.some(extractor => extractor.slug === 'working-memory')).toBe(true);
+    });
+
+    it('keeps explicit useStateSignals false when manageWorkingMemory supplies defaults', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, useStateSignals: false },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+
+      const config = memory.getMergedThreadConfig();
+
+      expect(config.workingMemory?.useStateSignals).toBe(false);
+    });
+
+    it('keeps agent-managed tools when agentManaged explicitly overrides manageWorkingMemory defaults', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, agentManaged: true, useStateSignals: false },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+
+      expect(memory.listTools()).toHaveProperty('updateWorkingMemory');
+    });
+  });
+
+  describe('getSystemMessage', () => {
+    it('renders working memory as context-only when agentManaged is false', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, agentManaged: false } },
+      });
+      const threadId = 'agent-managed-false-thread';
+      const resourceId = 'agent-managed-false-resource';
+      await memory.createThread({ threadId, resourceId });
+      await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: '# User\n- Location: Sooke' });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
+
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('Location: Sooke');
+      expect(systemMessage).not.toContain('calling the updateWorkingMemory tool');
+    });
+
+    it('renders update instructions when agentManaged explicitly overrides manageWorkingMemory defaults', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, agentManaged: true, useStateSignals: false },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+      const threadId = 'agent-managed-true-thread';
+      const resourceId = 'agent-managed-true-resource';
+      await memory.createThread({ threadId, resourceId });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
+
+      expect(systemMessage).toContain('calling the updateWorkingMemory tool');
+      expect(systemMessage).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+    });
+  });
+
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
 

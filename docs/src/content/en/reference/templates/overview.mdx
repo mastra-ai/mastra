@@ -146,6 +146,7 @@ We recommend using OpenAI, Anthropic, or Google model providers for templates. C
 import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
+  id: 'example-agent',
   name: 'example-agent',
   model: '__GATEWAY_OPENAI_MODEL__', // or other provider strings
   instructions: 'Your agent instructions here',

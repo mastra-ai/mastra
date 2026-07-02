@@ -24,6 +24,7 @@ import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAITransport, ProviderOptions, ResponsesWebSocketOptions } from './provider-options.js';
 import type { ModelRouterModelId } from './provider-registry.js';
+import { modelSupportsTemperature } from './provider-registry.js';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
 
 export { defaultGateways, gateways } from './gateways/defaults.js';
@@ -355,6 +356,15 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     this.setStreamTransportHandle({ resolvedTransport, transport, responsesWebSocket });
   }
 
+  private stripUnsupportedSamplingParams(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+    const supports = modelSupportsTemperature(this.config.routerId);
+    if (supports !== false) return options;
+
+    const { temperature, topP, topK, ...rest } = options;
+    if (temperature === undefined && topP === undefined && topK === undefined) return options;
+    return rest;
+  }
+
   async doGenerate(options: LanguageModelV2CallOptions): Promise<StreamResult> {
     const resolved = this.#manager.resolveModelId(this.config.routerId);
     let auth: GatewayAuthResult;
@@ -377,6 +387,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
+    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+
     const model = await this.resolveLanguageModel({
       apiKey: auth.apiKey ?? '',
       auth,
@@ -387,16 +399,14 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     // Handle V2, V3, and V4 models
     if (isLanguageModelV4(model)) {
       const aiSDKV7Model = new AISDKV7LanguageModel(model);
-      // Cast V4 stream result to V2 format - the stream contents are compatible at runtime
-      return aiSDKV7Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+      return aiSDKV7Model.doGenerate(sanitizedOptions as any) as unknown as Promise<StreamResult>;
     }
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
-      // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      return aiSDKV6Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+      return aiSDKV6Model.doGenerate(sanitizedOptions as any) as unknown as Promise<StreamResult>;
     }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
-    return aiSDKV5Model.doGenerate(options);
+    return aiSDKV5Model.doGenerate(sanitizedOptions);
   }
 
   async doStream(options: LanguageModelV2CallOptions): Promise<StreamResult> {
@@ -422,8 +432,10 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
+    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+
     const { transport, websocket } = getOpenAITransport(
-      options.providerOptions as ProviderOptions | undefined,
+      sanitizedOptions.providerOptions as ProviderOptions | undefined,
       resolved.providerId,
     );
     const requestedTransport: OpenAITransport = transport === 'auto' ? 'websocket' : transport;
@@ -448,19 +460,19 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     if (isLanguageModelV4(model)) {
       const aiSDKV7Model = new AISDKV7LanguageModel(model);
       // Cast V4 stream result to V2 format - the stream contents are compatible at runtime
-      const streamResult = (await aiSDKV7Model.doStream(options as any)) as unknown as StreamResult;
+      const streamResult = (await aiSDKV7Model.doStream(sanitizedOptions as any)) as unknown as StreamResult;
       attachModelStreamTransport(streamResult, streamTransport);
       return streamResult;
     }
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
       // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      const streamResult = (await aiSDKV6Model.doStream(options as any)) as unknown as StreamResult;
+      const streamResult = (await aiSDKV6Model.doStream(sanitizedOptions as any)) as unknown as StreamResult;
       attachModelStreamTransport(streamResult, streamTransport);
       return streamResult;
     }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
-    const streamResult = await aiSDKV5Model.doStream(options);
+    const streamResult = await aiSDKV5Model.doStream(sanitizedOptions);
     attachModelStreamTransport(streamResult, streamTransport);
     return streamResult;
   }

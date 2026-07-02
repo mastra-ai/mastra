@@ -129,6 +129,7 @@ import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -859,6 +860,28 @@ export class Agent<
    */
   __getGoalConfig(): GoalConfig | undefined {
     return this.#goal;
+  }
+
+  /**
+   * Returns a closure that drains pending signals for a given run from the
+   * shared `AgentThreadStreamRuntime`. Used by `prepareForDurableExecution` to
+   * store the drain function on the in-process `RunRegistryEntry`.
+   * @internal
+   */
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
+    const pubsub = this.getPubSub();
+    return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /**
+   * Returns the uncombined input processors suitable for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest`; this
+   * method returns them individually so the `ProcessorRunner` can invoke
+   * each processor's `processLLMRequest` method.
+   * @internal — used by `DurableAgent` preparation to populate the registry.
+   */
+  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext);
   }
 
   /**
@@ -3068,8 +3091,10 @@ export class Agent<
     this.#mastra = mastra;
 
     // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish.
+    // the background — we don't await to keep this hot path sync-ish. Release
+    // its global scorer hook synchronously so it can't outlive the instance.
     if (this.#ephemeralMastra) {
+      this.#ephemeralMastra.__unregisterHooks();
       void this.#ephemeralMastra.stopWorkers().catch(() => {});
       this.#ephemeralMastra = undefined;
     }
@@ -4279,6 +4304,7 @@ export class Agent<
     toolsets,
     requestContext,
     mastraProxy,
+    outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     ...rest
@@ -4289,6 +4315,7 @@ export class Agent<
     toolsets: ToolsetsInput;
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
@@ -4320,6 +4347,7 @@ export class Agent<
             requestContext,
             ...observabilityContext,
             model: await this.getModel({ requestContext }),
+            outputWriter,
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
             backgroundConfig: (toolObj as any).background,
@@ -4489,9 +4517,14 @@ export class Agent<
 
         const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
           ? undefined
-          : (output: SubAgentToolOutput) => ({
+          : (output: SubAgentToolOutput | string) => ({
               type: 'text' as const,
-              value: output.text,
+              // When a sub-agent invocation is dispatched as a background task, the agentic loop
+              // hands `toModelOutput` the placeholder string from tool-call-step.ts ("Background
+              // task started...") instead of the agentOutputSchema object. Reading `output.text`
+              // off that string is undefined, which serializes to a tool message with null content
+              // that providers (e.g. Anthropic) reject with a 500. Use the string as-is in that case.
+              value: typeof output === 'string' ? output : (output.text ?? ''),
             });
 
         const toolObj = createTool({
@@ -4835,7 +4868,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -4854,7 +4890,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -4970,6 +5009,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
@@ -4991,6 +5034,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
@@ -5653,6 +5700,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     requestContext?: RequestContext;
+    outputWriter?: OutputWriter;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
@@ -5686,6 +5734,7 @@ export class Agent<
       resourceId: resourceIdFromContext || options.resourceId || optionMemory?.resource || mergedMemory?.resource,
       runId: mergedOptions.runId,
       requestContext,
+      outputWriter: mergedOptions.outputWriter,
       memoryConfig: options.memoryConfig ?? mergedMemory?.options,
       autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
       // Use the deep-merged delegation so default callbacks (e.g. messageFilter)
@@ -5771,6 +5820,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       toolsets: toolsets!,
+      outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
     });

@@ -2061,6 +2061,9 @@ export class MemoryMySQL extends MemoryStorage {
           createdAt: new Date(),
           suggestedContinuation: input.chunk.suggestedContinuation,
           currentTask: input.chunk.currentTask,
+          threadTitle: input.chunk.threadTitle,
+          extractedValues: input.chunk.extractedValues,
+          extractionFailures: input.chunk.extractionFailures,
         };
 
         const newChunks = [...existingChunks, newChunk];

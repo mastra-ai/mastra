@@ -86,6 +86,31 @@ describe('ToolCard dispatch', () => {
     expect(document.querySelector('[data-om-badge="cycle-1"]')).toBeTruthy();
   });
 
+  it('uses streaming OM output data for completed observation markers even when metadata has stale start data', () => {
+    renderToolCard(
+      baseProps({
+        toolName: 'mastra-memory-om-observation',
+        input: { cycleId: 'cycle-stream', _state: 'loading', operationType: 'observation' },
+        output: {
+          status: 'complete',
+          omData: {
+            cycleId: 'cycle-stream',
+            _state: 'complete',
+            operationType: 'observation',
+            extractedValues: { workingMemory: { name: 'Tyler' } },
+          },
+        },
+        metadata: {
+          mode: 'stream',
+          omData: { cycleId: 'cycle-stream', _state: 'loading', operationType: 'observation' },
+        },
+      }),
+    );
+
+    expect(screen.getByRole('button', { name: /observed/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /extractions \(1\)/i })).toBeTruthy();
+  });
+
   it('routes agent-* tools to the agent badge wrapper', () => {
     renderToolCard(
       baseProps({

@@ -920,6 +920,8 @@ export class InMemoryMemory extends MemoryStorage {
       suggestedContinuation: chunk.suggestedContinuation,
       currentTask: chunk.currentTask,
       threadTitle: chunk.threadTitle,
+      extractedValues: chunk.extractedValues,
+      extractionFailures: chunk.extractionFailures,
     };
 
     // Add chunk to the array

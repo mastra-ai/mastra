@@ -23,6 +23,7 @@ import { UserMessageComponent } from '../components/user-message.js';
 import { addChildBeforeMessageOrFollowUps } from '../render-messages.js';
 import { getMarkdownTheme } from '../theme.js';
 
+import { createStaticSubagentComponent } from './tool.js';
 import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
@@ -479,6 +480,17 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: AgentCont
 
       if (!state.seenToolCallIds.has(content.id)) {
         state.seenToolCallIds.add(content.id);
+
+        const preContent = getContentBeforeToolCall(message, content.id, state.seenToolCallIds);
+        state.streamingComponent.updateContent({
+          ...message,
+          content: preContent,
+        });
+
+        if (createStaticSubagentComponent(ctx, content.id, content.name, content.args)) {
+          createdStreamingComponent = true;
+          continue;
+        }
 
         const component = new ToolExecutionComponentEnhanced(
           content.name,

@@ -1,3 +1,23 @@
 {
-  "attachment": ["moonshotai/Kimi-K2.5"]
+  "attachment": ["moonshotai/Kimi-K2.5"],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "OpenPipe/Qwen3-14B-Instruct",
+    "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen/Qwen3-235B-A22B-Thinking-2507",
+    "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "deepseek-ai/DeepSeek-V3.1",
+    "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
+    "meta-llama/Llama-3.3-70B-Instruct",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "microsoft/Phi-4-mini-instruct",
+    "moonshotai/Kimi-K2.5",
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "zai-org/GLM-5-FP8",
+    "zai-org/GLM-5.1"
+  ]
 }

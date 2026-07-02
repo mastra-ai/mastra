@@ -56,6 +56,36 @@ describe('tryGenerateWithJsonFallback', () => {
     expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe(true);
   });
 
+  it('preserves explicit inline jsonPromptInjection on the retry', async () => {
+    const generate = vi
+      .fn()
+      .mockResolvedValueOnce({ object: undefined })
+      .mockResolvedValueOnce({ object: { decision: 'done' } });
+
+    const options = {
+      structuredOutput: { schema: z.object({ decision: z.string() }), jsonPromptInjection: 'inline' },
+    } as any;
+
+    await tryGenerateWithJsonFallback(makeAgent(generate), 'prompt', options);
+
+    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('preserves explicit system jsonPromptInjection on the retry', async () => {
+    const generate = vi
+      .fn()
+      .mockResolvedValueOnce({ object: undefined })
+      .mockResolvedValueOnce({ object: { decision: 'done' } });
+
+    const options = {
+      structuredOutput: { schema: z.object({ decision: z.string() }), jsonPromptInjection: 'system' },
+    } as any;
+
+    await tryGenerateWithJsonFallback(makeAgent(generate), 'prompt', options);
+
+    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('system');
+  });
+
   it('preserves the rest of the options on the retry', async () => {
     const generate = vi
       .fn()

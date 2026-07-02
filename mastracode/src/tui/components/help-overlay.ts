@@ -50,6 +50,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
     { key: '/api-keys', description: 'Manage provider API keys' },
+    { key: '/plugins', description: 'Manage Mastra Code plugins' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },

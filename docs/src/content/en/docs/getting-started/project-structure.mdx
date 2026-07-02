@@ -7,13 +7,13 @@ description: Guide on organizing folders and files in Mastra, including best pra
 
 Your new Mastra project, created with the `create mastra` command, comes with a predefined set of files and folders to help you get started.
 
-Mastra is a framework, but it's **unopinionated** about how you organize or colocate your files. The CLI provides a sensible default structure that works well for most projects, but you're free to adapt it to your workflow or team conventions. You could even build your entire project in a single file if you wanted! Whatever structure you choose, keep it consistent to ensure your code stays maintainable and straightforward to navigate.
+Mastra is a framework, but it's mostly **unopinionated** about how you organize or colocate your files. The CLI provides a sensible default structure that works well for most projects, but you're free to adapt it to your workflow or team conventions. You could even build your entire project in a single file if you wanted! Whatever structure you choose, keep it consistent to ensure your code stays maintainable and straightforward to navigate.
 
 ## Default project structure
 
 A project created with the `create mastra` command looks like this:
 
-```
+```bash
 src/
 ├── mastra/
 │   ├── agents/
@@ -30,13 +30,11 @@ src/
 └── tsconfig.json
 ```
 
-:::tip
 Use the predefined files as templates. Duplicate and adapt them to quickly create your own agents, tools, workflows, etc.
-:::
 
 ### Folders
 
-Folders organize your agent's resources, like agents, tools, and workflows.
+Mastra recommends organizing your code into the following folders:
 
 | Folder | Description |
 | - | - |
@@ -44,9 +42,13 @@ Folders organize your agent's resources, like agents, tools, and workflows.
 | `src/mastra/agents` | Define and configure your agents - their behavior, goals, and tools. |
 | `src/mastra/workflows` | Define multi-step workflows that orchestrate agents and tools together. |
 | `src/mastra/tools` | Create reusable tools that your agents can call |
-| `src/mastra/mcp` | (Optional) Implement custom MCP servers to share your tools with external agents |
-| `src/mastra/scorers` | (Optional) Define scorers for evaluating agent performance over time |
-| `src/mastra/public` | (Optional) Contents are copied into the `.build/output` directory during the build process, making them available for serving at runtime |
+| `src/mastra/mcp` | Implement custom MCP servers to share your tools with external agents |
+| `src/mastra/scorers` | Define scorers for evaluating agent performance over time |
+
+There are two special folder conventions in Mastra:
+
+- `src/mastra/agents/<name>`: You can define an agent by file convention instead of constructing it in code. Learn more in the [file-based agents](/docs/agents/file-based-agents) guide.
+- `src/mastra/public`: Contents are copied into the `.build/output` directory during the build process, making them available for serving at runtime.
 
 ### Top-level files
 

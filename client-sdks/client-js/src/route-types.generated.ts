@@ -135,7 +135,7 @@ export type GetAgents_Response = {
           [key: string]: any;
         }
       | undefined;
-    source?: ('code' | 'stored') | undefined;
+    source?: ('code' | 'stored' | 'fs') | undefined;
     status?: ('draft' | 'published' | 'archived') | undefined;
     activeVersionId?: string | undefined;
     hasDraft?: boolean | undefined;
@@ -343,7 +343,7 @@ export type GetAgentsAgentId_Response = {
         [key: string]: any;
       }
     | undefined;
-  source?: ('code' | 'stored') | undefined;
+  source?: ('code' | 'stored' | 'fs') | undefined;
   status?: ('draft' | 'published' | 'archived') | undefined;
   activeVersionId?: string | undefined;
   hasDraft?: boolean | undefined;
@@ -11701,6 +11701,32 @@ export type GetMemoryObservationalMemory_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
@@ -11729,6 +11755,32 @@ export type GetMemoryObservationalMemory_Response = {
         threadId: string | null;
         activeObservations: string;
         bufferedObservations?: string | undefined;
+        bufferedObservationChunks?:
+          | {
+              id?: string | undefined;
+              cycleId: string;
+              observations: string;
+              tokenCount: number;
+              messageIds?: string[] | undefined;
+              messageTokens: number;
+              lastObservedAt?: Date | undefined;
+              createdAt?: Date | undefined;
+              suggestedContinuation?: string | undefined;
+              currentTask?: string | undefined;
+              threadTitle?: string | undefined;
+              extractedValues?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+              extractionFailures?:
+                | {
+                    slug: string;
+                    error: string;
+                  }[]
+                | undefined;
+            }[]
+          | undefined;
         bufferedReflection?: string | undefined;
         originType: 'initial' | 'observation' | 'reflection';
         generationCount: number;
@@ -11788,6 +11840,32 @@ export type PostMemoryObservationalMemoryBufferStatus_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
@@ -12938,7 +13016,7 @@ export type GetScoresScorers_Response = {
     agentNames: string[];
     workflowIds: string[];
     isRegistered: boolean;
-    source: 'code' | 'stored';
+    source: 'code' | 'stored' | 'fs';
   };
 };
 
@@ -12980,7 +13058,7 @@ export type GetScoresScorersScorerId_Response = {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
-  source: 'code' | 'stored';
+  source: 'code' | 'stored' | 'fs';
 } | null;
 
 export type GetScoresScorersScorerId_Request = Simplify<
