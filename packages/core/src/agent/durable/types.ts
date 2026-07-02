@@ -32,6 +32,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
+import type { CreatedAgentSignal } from '../signals';
 import type { GoalConfig } from '../types';
 
 /**
@@ -650,6 +651,27 @@ export interface RunRegistryEntry {
    * allowing them.
    */
   requireToolApproval?: RequireToolApproval;
+  /**
+   * Signal drain closure. When the durable agent inherits `sendSignal()` from
+   * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This
+   * closure retrieves and clears those queues, keyed by scope:
+   * - `'pending'` — signals sent while the run is active (between iterations)
+   * - `'pre-run'` — signals sent before the first model request
+   *
+   * Non-serializable (a closure); cross-process engines cannot recover it and
+   * signals sent to a restarted worker will not be drained.
+   */
+  drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /**
+   * Signal messages already present in the `messageList` at run start (from
+   * persisted history). These are echoed as `data-signal` stream data parts
+   * so the client sees them without re-fetching history. The array is spliced
+   * once on the first LLM step, so it is only echoed once per run.
+   *
+   * Non-serializable (contains `CreatedAgentSignal` instances with methods);
+   * populated during `prepareForDurableExecution`.
+   */
+  initialSignalEchoes?: CreatedAgentSignal[];
   /**
    * Abort signal for the run. Non-serializable, so it lives only on the
    * in-process registry; cross-process resumes cannot recover it.
