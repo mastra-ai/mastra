@@ -1924,13 +1924,13 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
           ? 2
           : typeof config.semanticRecall?.messageRange === `number`
             ? config.semanticRecall.messageRange
-            : config.semanticRecall?.messageRange.before || 2;
+            : config.semanticRecall?.messageRange.before ?? 2;
       const afterRange =
         typeof config.semanticRecall === `boolean`
           ? 2
           : typeof config.semanticRecall?.messageRange === `number`
             ? config.semanticRecall.messageRange
-            : config.semanticRecall?.messageRange.after || 2;
+            : config.semanticRecall?.messageRange.after ?? 2;
 
       if (resourceScope && config.semanticRecall) {
         config.semanticRecall =

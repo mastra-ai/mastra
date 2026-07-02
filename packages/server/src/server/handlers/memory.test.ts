@@ -1131,6 +1131,80 @@ describe('Memory Handlers', () => {
   });
 
   describe('searchMemoryHandler', () => {
+    it('should preserve zero semantic recall context ranges', async () => {
+      const threadId = 'test-thread';
+      const resourceId = 'test-resource';
+      await mockMemory.createThread({ threadId, resourceId, title: 'Test Thread' });
+      await mockMemory.saveMessages({
+        messages: [
+          {
+            id: 'before-msg',
+            content: 'before content',
+            role: 'user',
+            type: 'text',
+            createdAt: new Date('2025-01-01T00:00:00Z'),
+            threadId,
+            resourceId,
+          },
+          {
+            id: 'match-msg',
+            content: 'needle content',
+            role: 'assistant',
+            type: 'text',
+            createdAt: new Date('2025-01-01T00:01:00Z'),
+            threadId,
+            resourceId,
+          },
+          {
+            id: 'after-msg',
+            content: 'after content',
+            role: 'user',
+            type: 'text',
+            createdAt: new Date('2025-01-01T00:02:00Z'),
+            threadId,
+            resourceId,
+          },
+        ] as MastraDBMessage[],
+        memoryConfig: {},
+      });
+
+      const mastra = new Mastra({
+        logger: false,
+        agents: {
+          'test-agent': mockAgent,
+        },
+        storage,
+      });
+
+      const result = await SEARCH_MEMORY_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'test-agent',
+        resourceId,
+        threadId,
+        searchQuery: 'needle',
+        memoryConfig: {
+          semanticRecall: {
+            topK: 1,
+            scope: 'thread',
+            messageRange: {
+              before: 0,
+              after: 0,
+            },
+          },
+        },
+        limit: 20,
+      });
+
+      const matchResult = result.results.find(result => result.id === 'match-msg');
+      expect(matchResult).toMatchObject({
+        id: 'match-msg',
+        context: {
+          before: [],
+          after: [],
+        },
+      });
+    });
+
     it('should filter resource-scoped search results to FGA-accessible threads', async () => {
       await mockMemory.createThread({ threadId: 'allowed-thread', resourceId: 'test-resource', title: 'Allowed' });
       await mockMemory.createThread({ threadId: 'blocked-thread', resourceId: 'test-resource', title: 'Blocked' });
