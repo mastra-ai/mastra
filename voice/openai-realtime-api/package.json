@@ -33,7 +33,7 @@
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
     "openai-realtime-api": "^1.0.8",
-    "ws": "^8.20.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile, readFile, symlink, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MAX_FS_SUBAGENT_DEPTH } from '@mastra/core/agent';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateFsAgentsModule } from './codegen';
 import { discoverFsAgents } from './discover';
@@ -617,7 +618,7 @@ describe('mirrorFsAgentWorkspaces', () => {
 });
 
 describe('subagents', () => {
-  it('discovers one level of subagents under subagents/', async () => {
+  it('discovers subagents under subagents/', async () => {
     await writeAgent('supervisor', {
       config: `export default { model: 'openai/gpt-4o' };`,
       instructions: 'Delegate.',
@@ -655,7 +656,7 @@ describe('subagents', () => {
     expect(parent.subagents).toEqual([]);
   });
 
-  it('ignores nested subagents (one level only) with a warning', async () => {
+  it('discovers nested subagents recursively', async () => {
     await writeAgent('supervisor', {
       config: `export default { model: 'openai/gpt-4o' };`,
       instructions: 'hi',
@@ -676,9 +677,41 @@ describe('subagents', () => {
 
     const parent = (await discoverFsAgents(dir, m => warnings.push(m)))[0]!;
     const researcher = parent.subagents[0]!;
-    // The grandchild is dropped: a subagent never carries its own subagents.
-    expect(researcher.subagents).toEqual([]);
-    expect(warnings.some(w => /one level deep/.test(w))).toBe(true);
+    expect(researcher.subagents.map(s => s.name)).toEqual(['helper']);
+    expect(researcher.subagents[0]!.subagents).toEqual([]);
+    expect(warnings).toEqual([]);
+  });
+
+  it(`ignores subagents nested deeper than ${MAX_FS_SUBAGENT_DEPTH} levels with a warning`, async () => {
+    // Build a chain one level deeper than the cap: level1..level{MAX+1}.
+    let files: AgentFiles = {
+      config: `export default { model: 'openai/gpt-4o', description: 'Too deep' };`,
+      instructions: 'too deep',
+    };
+    for (let depth = MAX_FS_SUBAGENT_DEPTH; depth >= 1; depth--) {
+      files = {
+        config: `export default { model: 'openai/gpt-4o', description: 'Level ${depth}' };`,
+        instructions: `level ${depth}`,
+        subagents: { [`level${depth + 1}`]: files },
+      };
+    }
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      subagents: { level1: files },
+    });
+    const warnings: string[] = [];
+
+    const parent = (await discoverFsAgents(dir, m => warnings.push(m)))[0]!;
+    // Walk down the chain: every level up to the cap is present.
+    let current = parent;
+    for (let depth = 1; depth <= MAX_FS_SUBAGENT_DEPTH; depth++) {
+      expect(current.subagents.map(s => s.name)).toEqual([`level${depth}`]);
+      current = current.subagents[0]!;
+    }
+    // The level past the cap was dropped with a warning.
+    expect(current.subagents).toEqual([]);
+    expect(warnings.some(w => new RegExp(`nest ${MAX_FS_SUBAGENT_DEPTH} levels`).test(w))).toBe(true);
   });
 
   it('emits nested assembleAgentFromFsEntry entries for subagents with inlined instructions', async () => {
@@ -690,6 +723,12 @@ describe('subagents', () => {
           config: `export default { model: 'openai/gpt-4o', description: 'Writes' };`,
           instructions: 'You are the writer subagent.',
           tools: { 'draft.ts': `export default {};` },
+          subagents: {
+            editor: {
+              config: `export default { model: 'openai/gpt-4o', description: 'Edits' };`,
+              instructions: 'You are the editor subagent.',
+            },
+          },
         },
       },
     });
@@ -704,9 +743,14 @@ describe('subagents', () => {
     expect(source).toContain('name: "writer"');
     // Subagent workspace base path nests under <parent>/<child>.
     expect(source).toContain('defaultWorkspaceBasePath: __workspaceBasePath("supervisor/writer")');
-    // Generated identifiers are unique across parent/child.
+    // Nested subagents are emitted recursively with <parent>/<child>/<grandchild> workspace paths.
+    expect(source).toContain('name: "editor"');
+    expect(source).toContain(JSON.stringify('You are the editor subagent.'));
+    expect(source).toContain('defaultWorkspaceBasePath: __workspaceBasePath("supervisor/writer/editor")');
+    // Generated identifiers are unique across parent/child/grandchild.
     expect(source).toMatch(/import config_0_supervisor from /);
     expect(source).toMatch(/import config_0_0_writer from /);
+    expect(source).toMatch(/import config_0_0_0_editor from /);
   });
 
   it('mirrors subagent workspace seeds to <bundle>/workspace/<parent>/<child>', async () => {
@@ -719,14 +763,24 @@ describe('subagents', () => {
           config: `export default { model: 'openai/gpt-4o', description: 'Writes' };`,
           instructions: 'w',
           workspaceSeed: { 'child.txt': 'c' },
+          subagents: {
+            editor: {
+              config: `export default { model: 'openai/gpt-4o', description: 'Edits' };`,
+              instructions: 'e',
+              workspaceSeed: { 'grandchild.txt': 'g' },
+            },
+          },
         },
       },
     });
     const bundleDir = join(dir, 'output');
 
     const mirrored = await mirrorFsAgentWorkspaces(dir, bundleDir);
-    expect(mirrored.sort()).toEqual(['supervisor', 'supervisor/writer']);
+    expect(mirrored.sort()).toEqual(['supervisor', 'supervisor/writer', 'supervisor/writer/editor']);
     expect(await readFile(join(bundleDir, 'workspace', 'supervisor', 'parent.txt'), 'utf-8')).toBe('p');
     expect(await readFile(join(bundleDir, 'workspace', 'supervisor', 'writer', 'child.txt'), 'utf-8')).toBe('c');
+    expect(
+      await readFile(join(bundleDir, 'workspace', 'supervisor', 'writer', 'editor', 'grandchild.txt'), 'utf-8'),
+    ).toBe('g');
   });
 });
