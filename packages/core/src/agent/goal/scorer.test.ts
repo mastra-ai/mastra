@@ -64,14 +64,14 @@ describe('createGoalScorer tool support', () => {
 });
 
 describe('createGoalScorer JSON fallback', () => {
-  it('falls back to JSON prompt injection text when native structured output is unavailable', async () => {
-    const model = createMockModel({ mockText: { decision: 'done', reason: 'all requirements met' }, version: 'v2' });
+  async function runWithFallbackText(decision: 'done' | 'continue' | 'waiting', reason: string) {
+    const model = createMockModel({ mockText: { decision, reason }, version: 'v2' });
     const streamSpy = vi
       .spyOn(Agent.prototype, 'stream')
       .mockResolvedValueOnce({ object: Promise.resolve(undefined) } as any)
       .mockResolvedValueOnce({
         object: Promise.resolve(undefined),
-        text: Promise.resolve('{"decision":"done","reason":"all requirements met"}'),
+        text: Promise.resolve(JSON.stringify({ decision, reason })),
       } as any);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -86,12 +86,23 @@ describe('createGoalScorer JSON fallback', () => {
       expect(streamSpy).toHaveBeenCalledTimes(2);
       expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
       expect(((streamSpy.mock.calls as any)[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
-      expect(result.score).toBe(1);
-      expect(result.reason).toBe('all requirements met');
+      return result;
     } finally {
       streamSpy.mockRestore();
       warnSpy.mockRestore();
     }
+  }
+
+  it('falls back to JSON prompt injection text when native structured output is unavailable', async () => {
+    const result = await runWithFallbackText('done', 'all requirements met');
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe('all requirements met');
+  });
+
+  it('preserves the waiting score when JSON prompt injection text returns waiting', async () => {
+    const result = await runWithFallbackText('waiting', 'waiting for approval');
+    expect(result.score).toBe(GOAL_SCORE_WAITING);
+    expect(result.reason).toBe('waiting for approval');
   });
 });
 

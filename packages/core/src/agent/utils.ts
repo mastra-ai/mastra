@@ -8,6 +8,41 @@ import type { AgentExecutionOptions, AgentExecutionOptionsBase } from './agent.t
 import type { MessageListInput } from './message-list';
 import type { StructuredOutputOptions } from './types';
 
+async function parseStructuredOutputText<OUTPUT>(
+  textValue: string | Promise<string>,
+  schema: StructuredOutputOptions<OUTPUT>['schema'],
+): Promise<OUTPUT> {
+  const text = (await textValue).trim();
+  const jsonText = text.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]?.trim() ?? text;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    const objectMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (!objectMatch) {
+      throw new MastraError({
+        id: 'STRUCTURED_OUTPUT_TEXT_PARSE_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'structuredOutput text did not contain parseable JSON',
+      });
+    }
+    parsed = JSON.parse(objectMatch[0]);
+  }
+
+  const validation = await schema['~standard'].validate(parsed);
+  if (validation.issues) {
+    throw new MastraError({
+      id: 'STRUCTURED_OUTPUT_TEXT_VALIDATION_FAILED',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `structuredOutput text failed schema validation: ${validation.issues.map(issue => issue.message).join('; ')}`,
+    });
+  }
+
+  return validation.value as OUTPUT;
+}
+
 export const supportedLanguageModelSpecifications = ['v2', 'v3', 'v4'];
 export const isSupportedLanguageModel = (
   model: MastraLanguageModel | MastraLegacyLanguageModel,
@@ -55,7 +90,7 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
     return result;
   } catch (error) {
     console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
-    return await agent.generate(prompt, {
+    const result = await agent.generate(prompt, {
       ...options,
       structuredOutput: {
         ...options.structuredOutput,
@@ -66,6 +101,13 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
             : true,
       },
     });
+    if (result.object === undefined) {
+      return {
+        ...result,
+        object: await parseStructuredOutputText(result.text, options.structuredOutput.schema),
+      };
+    }
+    return result;
   }
 }
 
@@ -115,6 +157,13 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       },
     });
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
+    const object = await result.object;
+    if (object === undefined) {
+      return {
+        ...result,
+        object: Promise.resolve(await parseStructuredOutputText(result.text, streamOptions.structuredOutput.schema)),
+      };
+    }
     return result;
   }
 }
