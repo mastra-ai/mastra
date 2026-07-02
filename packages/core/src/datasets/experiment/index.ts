@@ -150,7 +150,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
       }
 
-      datasetRecord = await datasetsStore.getDatasetById({ id: datasetId });
+      datasetRecord = await datasetsStore.getDatasetById({ id: datasetId, filters: config.filters });
       if (!datasetRecord) {
         throw new MastraError({
           id: 'DATASET_NOT_FOUND',

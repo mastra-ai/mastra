@@ -204,7 +204,7 @@ import type {
   UpdateHeartbeatOptions,
   RunHeartbeatResponse,
 } from './types';
-import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
+import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -1786,10 +1786,16 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Gets a single dataset by ID
+   * Gets a single dataset by ID. Optionally scope the lookup to a specific
+   * tenant organization/project — the server returns 404 if the dataset does
+   * not belong to the given tenant.
    */
-  public getDataset(datasetId: string): Promise<DatasetRecord> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  public getDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<DatasetRecord> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`);
   }
 
   /**
@@ -1800,21 +1806,30 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates a dataset
+   * Updates a dataset. Tenancy fields, when provided, scope the existence
+   * check on the server side so that a caller can only update datasets that
+   * belong to the given tenant.
    */
   public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
-    const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+    const { datasetId, organizationId, projectId, ...body } = params;
+    const qs = buildTenancyQuery({ organizationId, projectId });
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'PATCH',
       body,
     });
   }
 
   /**
-   * Deletes a dataset
+   * Deletes a dataset. When tenancy fields are supplied, the server only
+   * deletes the dataset if it belongs to the given tenant (silent no-op
+   * otherwise).
    */
-  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+  public deleteDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'DELETE',
     });
   }

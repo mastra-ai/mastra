@@ -77,6 +77,235 @@ export function createDatasetsTests({
         expect(await datasetsStorage.getDatasetById({ id: ds.id })).toBeNull();
       });
 
+      // -----------------------------------------------------------------------
+      // Tenancy scoping — getDatasetById + deleteDataset MUST push tenancy
+      // predicates into the query. See MASTRA-4438.
+      // -----------------------------------------------------------------------
+      describe('tenancy scoping', () => {
+        it('getDatasetById returns null when organizationId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'org-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const wrongOrg = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_b' },
+          });
+          expect(wrongOrg).toBeNull();
+
+          const rightOrg = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a' },
+          });
+          expect(rightOrg).not.toBeNull();
+          expect(rightOrg!.id).toBe(ds.id);
+        });
+
+        it('getDatasetById returns null when projectId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'proj-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const wrongProject = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_2' },
+          });
+          expect(wrongProject).toBeNull();
+
+          const rightProject = await datasetsStorage.getDatasetById({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+          expect(rightProject).not.toBeNull();
+          expect(rightProject!.id).toBe(ds.id);
+        });
+
+        it('getDatasetById does not throw on tenancy mismatch (no info leak via error)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'silent-scope',
+            organizationId: 'org_a',
+          });
+
+          // Should return null, not throw. If it threw, the error timing/text
+          // could be used to distinguish "exists but not yours" from "does not
+          // exist at all" — leaking existence across tenants.
+          await expect(
+            datasetsStorage.getDatasetById({ id: ds.id, filters: { organizationId: 'org_b' } }),
+          ).resolves.toBeNull();
+        });
+
+        it('deleteDataset is a silent no-op when organizationId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-scoped',
+            organizationId: 'org_a',
+          });
+
+          await expect(
+            datasetsStorage.deleteDataset({ id: ds.id, filters: { organizationId: 'org_b' } }),
+          ).resolves.toBeUndefined();
+
+          // Dataset must still exist.
+          const stillThere = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(stillThere).not.toBeNull();
+          expect(stillThere!.id).toBe(ds.id);
+        });
+
+        it('deleteDataset is a silent no-op when projectId does not match', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-proj-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          await datasetsStorage.deleteDataset({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_2' },
+          });
+
+          expect(await datasetsStorage.getDatasetById({ id: ds.id })).not.toBeNull();
+        });
+
+        it('deleteDataset with matching tenancy removes the dataset', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'delete-match',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+          await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' } });
+
+          await datasetsStorage.deleteDataset({
+            id: ds.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+
+          expect(await datasetsStorage.getDatasetById({ id: ds.id })).toBeNull();
+        });
+
+        it('mixed-tenancy: deleting scoped to org A does not touch org B rows', async () => {
+          const dsA = await datasetsStorage.createDataset({
+            name: 'ds-a',
+            organizationId: 'org_a',
+          });
+          const dsB = await datasetsStorage.createDataset({
+            name: 'ds-b',
+            organizationId: 'org_b',
+          });
+          await datasetsStorage.addItem({ datasetId: dsA.id, input: { v: 'a' } });
+          await datasetsStorage.addItem({ datasetId: dsB.id, input: { v: 'b' } });
+
+          // Attempt to delete dsB using org A tenancy — must no-op.
+          await datasetsStorage.deleteDataset({
+            id: dsB.id,
+            filters: { organizationId: 'org_a' },
+          });
+
+          // dsB must be intact.
+          const foundB = await datasetsStorage.getDatasetById({ id: dsB.id });
+          expect(foundB).not.toBeNull();
+          const itemsB = await datasetsStorage.listItems({
+            datasetId: dsB.id,
+            pagination: { page: 0, perPage: 10 },
+          });
+          expect(itemsB.items).toHaveLength(1);
+
+          // Now delete dsA with correct tenancy — must succeed.
+          await datasetsStorage.deleteDataset({
+            id: dsA.id,
+            filters: { organizationId: 'org_a' },
+          });
+          expect(await datasetsStorage.getDatasetById({ id: dsA.id })).toBeNull();
+
+          // dsB is still untouched.
+          expect(await datasetsStorage.getDatasetById({ id: dsB.id })).not.toBeNull();
+        });
+
+        it('getDatasetById with undefined filters returns the record regardless of tenancy (legacy behavior)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'unscoped-lookup',
+            organizationId: 'org_a',
+          });
+
+          // No filters => no predicate => legacy OSS behavior preserved.
+          const found = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(found).not.toBeNull();
+          expect(found!.id).toBe(ds.id);
+        });
+
+        it('updateDataset throws NOT_FOUND when tenancy does not match (does not mutate row)', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          // Wrong org — must NOT_FOUND and must NOT mutate.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: ds.id,
+              name: 'renamed-by-attacker',
+              filters: { organizationId: 'org_b' },
+            }),
+          ).rejects.toThrow();
+
+          const after = await datasetsStorage.getDatasetById({ id: ds.id });
+          expect(after).not.toBeNull();
+          expect(after!.name).toBe('update-scoped');
+          expect(after!.organizationId).toBe('org_a');
+        });
+
+        it('updateDataset with matching tenancy applies the update', async () => {
+          const ds = await datasetsStorage.createDataset({
+            name: 'update-scoped-ok',
+            organizationId: 'org_a',
+            projectId: 'proj_1',
+          });
+
+          const updated = await datasetsStorage.updateDataset({
+            id: ds.id,
+            name: 'renamed',
+            filters: { organizationId: 'org_a', projectId: 'proj_1' },
+          });
+
+          expect(updated.name).toBe('renamed');
+          expect(updated.organizationId).toBe('org_a');
+        });
+
+        it('mixed-tenancy: updating scoped to org A does not touch org B rows', async () => {
+          const dsA = await datasetsStorage.createDataset({
+            name: 'A-original',
+            organizationId: 'org_a',
+          });
+          const dsB = await datasetsStorage.createDataset({
+            name: 'B-original',
+            organizationId: 'org_b',
+          });
+
+          // Cross-tenant attempt on dsB using org A tenancy — must NOT_FOUND.
+          await expect(
+            datasetsStorage.updateDataset({
+              id: dsB.id,
+              name: 'B-hijacked',
+              filters: { organizationId: 'org_a' },
+            }),
+          ).rejects.toThrow();
+
+          const afterB = await datasetsStorage.getDatasetById({ id: dsB.id });
+          expect(afterB!.name).toBe('B-original');
+
+          // Legitimate scoped update on dsA — must succeed.
+          const updatedA = await datasetsStorage.updateDataset({
+            id: dsA.id,
+            name: 'A-renamed',
+            filters: { organizationId: 'org_a' },
+          });
+          expect(updatedA.name).toBe('A-renamed');
+        });
+      });
+
       it('listDatasets with pagination', async () => {
         await datasetsStorage.createDataset({ name: 'ds-1' });
         await datasetsStorage.createDataset({ name: 'ds-2' });
