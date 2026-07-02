@@ -262,6 +262,19 @@ describe('Datasets Handlers', () => {
       expect(details.organizationId).toBe('org_a');
     });
 
+    it('throws 404 when unscoped delete targets a non-existent id (legacy behavior)', async () => {
+      // Unscoped callers must still get a 404 on a missing id — this preserves
+      // pre-boolean-return behavior for clients that do not send tenancy scope
+      // query params. Only scoped calls return `{ success: false }` on miss.
+      await expect(
+        (async () =>
+          DELETE_DATASET_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: 'ds_does_not_exist',
+          } as any))(),
+      ).rejects.toThrow();
+    });
+
     it('silently no-ops delete when projectId does not match and dataset remains', async () => {
       const created = await mastra.datasets.create({
         name: 'Guarded',

@@ -303,14 +303,20 @@ export const DELETE_DATASET_ROUTE = createRoute({
     assertDatasetsAvailable();
     try {
       const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
-      // For unscoped deletes, preserve the legacy 404-on-missing behavior via a
-      // preflight get(). For scoped deletes, skip the preflight: a tenancy
-      // mismatch must be a silent no-op (matches "delete non-existent id is a
-      // no-op") so cross-tenant existence is not leaked via error timing/status.
-      if (organizationId === undefined && projectId === undefined) {
-        await mastra.datasets.get({ id: datasetId });
-      }
       const deleted = await mastra.datasets.delete({ id: datasetId, organizationId, projectId });
+      // For unscoped deletes, preserve the legacy 404-on-missing behavior: a
+      // caller with no scope filters that targets a non-existent id gets 404
+      // (not `{ success: false }`). For scoped deletes we return
+      // `{ success: deleted }` — a scope mismatch and a legit 404 look
+      // identical to the client so cross-tenant existence is not leaked.
+      if (!deleted && organizationId === undefined && projectId === undefined) {
+        throw new MastraError({
+          id: 'DATASET_NOT_FOUND',
+          text: `Dataset not found: ${datasetId}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
       return { success: deleted };
     } catch (error) {
       if (error instanceof MastraError) {

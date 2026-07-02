@@ -748,23 +748,29 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
 
   async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
-      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
-      // Silent no-op on mismatch.
+      // Fold the parent-existence probe and the cascade DELETE into a single
+      // batch so the two statements run in one transaction — the parent can't
+      // disappear between the probe and the DELETE. The batch's parent SELECT
+      // is what we key `true` off of: a scoped call returns `true` iff the
+      // parent existed under scope at the moment the batch ran (the cascade
+      // may legitimately affect zero rows if the parent had no results yet).
       const { conditions, params } = tenancyWhere(args.filters);
       if (conditions.length) {
         const parentWhere = ['id = ?', ...conditions].join(' AND ');
-        // Probe parent to distinguish "parent absent / wrong tenant" (return false)
-        // from "parent exists and had zero results" (return true).
-        const parentExists = await this.#client.execute({
-          sql: `SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere}`,
-          args: [args.experimentId, ...params],
-        });
-        if (!parentExists.rows?.[0]) return false;
-        await this.#client.execute({
-          sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere})`,
-          args: [args.experimentId, ...params],
-        });
-        return true;
+        const batchResults = await this.#client.batch(
+          [
+            {
+              sql: `SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere}`,
+              args: [args.experimentId, ...params],
+            },
+            {
+              sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere})`,
+              args: [args.experimentId, ...params],
+            },
+          ],
+          'write',
+        );
+        return (batchResults[0]?.rows?.length ?? 0) > 0;
       }
 
       await this.#client.execute({
