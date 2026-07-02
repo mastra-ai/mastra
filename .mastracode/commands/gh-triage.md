@@ -14,9 +14,13 @@ Triage one open GitHub issue or active PR into the next action. Keep the top-lev
 
 - [ ] Do not post comments, label, assign, close, tag, coordinate externally, implement fixes, or commit without explicit user approval.
 
+- [ ] When posting/updating comments from a file, pass file contents, not `@file` as the literal body.
+
 - [ ] Non-open issues, non-open PRs, and draft PRs stop with no triage file and no `ask_user`.
 
 - [ ] Successful triage ends by updating the triage file, then immediately calling branch-specific `ask_user`. Do not end with `Completed`, `Verdict`, `Key findings`, or a prose-only summary.
+
+- [ ] If the PR already has a previous maintainer-notes comment, treat it as prior lifecycle context: read it, compare it with the current PR state, and prepare an updated maintainer-notes comment that explains what changed in merge confidence.
 
 - [ ] Use shared context files for code-accurate evidence: `.mastracode/shared/pr-review-context.md` for PR context and `.mastracode/shared/issue-debug-context.md` for issue debug context.
 
@@ -41,6 +45,7 @@ Use this compact lifecycle template and update it after each major step with con
 ## GitHub Triage: <issue|PR> #<number> <title>
 
 **Severity:** <🔴 critical|🟠 high|🟡 medium|🟢 low|pending>
+**Merge confidence:** <0-5>/5 — <ready to merge|mergeable with non-blocking follow-up|needs review changes|blocked|not applicable|pending>
 **Scope:** <affected package/API/feature or `Pending.`>
 **Assessment:** <concise assessment or `Pending.`>
 **Linked issue/PR:** <issue #|closing/fixing PR #|multiple #s|none|pending>
@@ -52,6 +57,10 @@ Use this compact lifecycle template and update it after each major step with con
 - Input: <short issue/PR summary>
 - Linked context: <closing/fixing PR or linked issue; mention-only PRs only if useful for debugging>
 - Repo/history: <relevant files, APIs, tests, commits, or `Not inspected.`>
+
+### Confidence basis
+
+<For PR branches: 1-2 bullets supporting the score, then 1-3 explicit confidence limitations.>
 
 ### Evidence
 
@@ -72,8 +81,8 @@ Use this compact lifecycle template and update it after each major step with con
 ### Comment style, only when preparing comments
 
 - Author pre-review: tag the PR author when known, be concise/action-oriented, and request only concrete changes the author needs to make. Do not ask authors to confirm tests, verification, or maintainer review readiness.
-- Maintainer notes: start with a severity-titled heading like `## 🟠 High: Maintainer notes`; use short sections such as `Scope`, `Context`, `Evidence checked`, and `Observations`; keep observations declarative and keep author actions out of maintainer notes.
-- For PR branches, always prepare maintainer notes. Do not write `Maintainer notes: Not needed.` for Branch B or Branch C.
+- Maintainer notes: start with `## 🟠 High: Maintainer notes`, then `Merge confidence - <x>/5`. Keep concise `Scope`, `Context`, `Confidence basis`, `Checks`, `Evidence checked`, and `Observations` sections. In `Confidence basis`, use short support/limit bullets; each limit should state the gap/risk, merge impact, and blocking yes/no. `Checks` must state the checked-at time, required/approved failures, and other visible pending/failing checks with their score impact. Do not count missing human approval or unapproved remote CI checks as confidence limits. If maintainer notes already exist, update that comment instead of preparing a new one.
+- For PR branches, always prepare or update maintainer notes. Do not write `Maintainer notes: Not needed.` for Branch B or Branch C.
 - Do not present maintainer notes as final approval or rejection.
 
 ## Step 1: Resolve and check input
@@ -136,10 +145,25 @@ gh pr view "$PR" --json number,title,state,isDraft,url,author,body,comments,revi
 
 For Branch B/C PRs, do this before branch output or `ask_user`. Do not modify branches, apply suggestions, resolve conflicts, or run broad checks without approval.
 
-- [ ] Check conflicts, failed `statusCheckRollup` lint/typecheck/format/test/CI, and applicable inline suggestions/review nits; ignore unrelated Vercel failures.
-- [ ] If a relevant failure is unclear or stale and the affected package is obvious, run only the narrowest local check needed to confirm it.
+- [ ] Check conflicts, approved/required `statusCheckRollup` failures, and applicable inline suggestions/review nits; ignore unrelated Vercel failures and unapproved remote CI checks for scoring.
+- [ ] Record check state at triage time: required/approved failures, other visible pending/failing checks, and whether each affects the score.
+- [ ] Run relevant local checks for the changed package(s) when practical: lint, typecheck, tests, and/or build, using the narrowest applicable package scripts.
+- [ ] If a relevant local check cannot be run, record why and how that affects merge confidence.
+- [ ] Do not reduce merge confidence for unapproved remote CI checks that did not run; rely on local checks you ran, or approved/required remote checks that actually ran.
+- [ ] If a relevant approved/required failure is unclear or stale, run the narrowest local check needed for the affected package when practical.
 - [ ] Record concise results in `Context gathered` and `Evidence`, using `None found.` when nothing applies.
 - [ ] If a small low/medium-severity fix-up is found, set `Recommended next step` to `maintainer PR fix-up` and include matching final `ask_user` option(s).
+
+### Merge confidence for PR branches
+
+For Branch B/C PRs, assign a merge confidence score after reviewing context. This is the main output maintainers use to decide whether the PR can be merged.
+
+- [ ] Base the score on: problem/solution fit, regression risk, test quality, changed-code correctness, integration with existing patterns, unresolved review comments, local verification, approved/required remote checks that actually ran, and release/user impact.
+- [ ] Do not include unapproved remote CI checks in the score. Treat them as neutral and list them separately only if useful.
+- [ ] Save the score, confidence basis, confidence gaps, and required-to-merge actions in the triage file before preparing comments.
+- [ ] Confidence gaps must name the gap/risk, merge impact, and blocking yes/no.
+- [ ] Avoid generic limits like "needs maintainer review" or "tests not run" unless tied to specific missing evidence and impact.
+- [ ] If author action is needed to raise confidence, prepare an author pre-review comment with concrete requested changes.
 
 ### Repo/history context
 
@@ -148,6 +172,8 @@ For Branch B/C PRs, do this before branch output or `ask_user`. Do not modify br
 - [ ] Prefer narrow search and recent history over broad exploration.
 
 - [ ] Ignore Vercel CI failures unless directly relevant to the issue, PR, or deployment behavior.
+
+- [ ] Treat unapproved remote CI checks as neutral for merge confidence; do not count them as missing verification or as failures. Prefer narrow local checks/lint/typecheck/tests for confidence evidence.
 
 ```bash
 git grep -n "<error text|API|symbol>" -- '<likely/pathspec>'
@@ -195,15 +221,13 @@ Use when exactly one PR clearly closes/fixes the issue, or when the input itself
 
 - [ ] Immediately update the triage file's `Context gathered` and `Evidence` sections with the PR context findings before writing branch conclusions.
 
-- [ ] Write Branch output with severity/assessment/scope, issue summary, PR relevance, evidence checked, review observations, PR maintainer-fix check results, optional author pre-review, optional maintainer PR fix-up, and required maintainer notes.
+- [ ] Write Branch output with severity/assessment/scope, issue summary, PR relevance, evidence checked, merge confidence, review observations, optional author pre-review, optional maintainer fix-up, and required maintainer notes.
 
 - [ ] Update the triage file, then call `ask_user` with exactly the relevant Branch B options:
   - `Post author pre-review comment`
   - `Post maintainer notes comment`
   - `Post both comments`
-  - `Fix conflicts as maintainer, then post maintainer notes` (only if found)
-  - `Fix lint/CI failures as maintainer, then post maintainer notes` (only if found)
-  - `Apply inline suggestions as maintainer, then post maintainer notes` (only if found)
+  - `Fix up PR as maintainer, then post maintainer notes` (only if a small conflict/CI/suggestion fix was found)
   - `End triage`
 
 ### Branch C: Multiple linked PRs
@@ -214,13 +238,11 @@ Use when multiple PRs clearly close/fix the issue.
 
 - [ ] Immediately update the triage file's `Context gathered` and `Evidence` sections with each PR context finding before writing comparison conclusions.
 
-- [ ] Write Branch output with severity/assessment/scope, issue summary, PR list, evidence checked, comparison notes, PR maintainer-fix check results, optional maintainer PR fix-up, and required maintainer notes.
+- [ ] Write Branch output with severity/assessment/scope, issue summary, PR list, evidence checked, merge confidence for each PR, comparison notes, optional maintainer fix-up, and required maintainer notes.
 
 - [ ] Update the triage file, then call `ask_user` with exactly the relevant Branch C options:
   - `Post maintainer notes comment`
-  - `Fix conflicts as maintainer, then post maintainer notes` (only if found)
-  - `Fix lint/CI failures as maintainer, then post maintainer notes` (only if found)
-  - `Apply inline suggestions as maintainer, then post maintainer notes` (only if found)
+  - `Fix up PR as maintainer, then post maintainer notes` (only if a small conflict/CI/suggestion fix was found)
   - `End triage`
 
 ### Branch D: No linked PR

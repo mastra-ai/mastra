@@ -31,7 +31,20 @@ export const mesaFilesystemProvider: FilesystemProvider<MesaFilesystemOptions> =
           },
         },
       },
-      cache: { type: 'object', description: 'Mesa filesystem cache configuration' },
+      cache: {
+        type: 'object',
+        description: 'Mesa filesystem cache configuration',
+        properties: {
+          diskCache: {
+            type: 'object',
+            required: ['path'],
+            properties: {
+              path: { type: 'string', description: 'Disk cache path' },
+              maxSizeBytes: { type: 'number', description: 'Maximum disk cache size in bytes' },
+            },
+          },
+        },
+      },
       ttl: { type: 'number', description: 'Mesa mount token lifetime in seconds' },
       readOnly: { type: 'boolean', description: 'Mount all repos as read-only', default: false },
     },

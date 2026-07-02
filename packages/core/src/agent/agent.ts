@@ -4866,7 +4866,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -4885,7 +4888,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -5001,6 +5007,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
@@ -5022,6 +5032,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
