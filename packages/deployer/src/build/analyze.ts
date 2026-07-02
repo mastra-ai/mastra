@@ -608,7 +608,19 @@ export async function analyzeBundle(
   const externalMetadataParentPaths = [
     projectRoot,
     ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+    // Last resort: resolve from the deployer's own installed location. Some externals are
+    // discovered inside externalized packages (e.g. optional dynamic imports like
+    // `import('typescript')` in @mastra/core) without being installed in the user's project.
+    import.meta.dirname,
   ];
+
+  // Retry externals that were discovered without install metadata (e.g. from entry analysis
+  // where the package isn't resolvable from the entry's own location).
+  for (const [dep, info] of mergedExternalDeps) {
+    if (!info.version && !info.packageSpec) {
+      mergedExternalDeps.set(dep, await resolveDependencyInfo(dep, info, externalMetadataParentPaths));
+    }
+  }
 
   // Add pino transports and user dynamic packages
   for (const transport of detectedPinoTransports) {
