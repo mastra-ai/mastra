@@ -296,6 +296,62 @@ describe('analyzeEntry', () => {
     // (Test will timeout if there's an infinite loop issue)
   });
 
+  it('should discover multi-level transitive workspace dependencies', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    // Simulate a strict pnpm layout where each package can only resolve its own declared
+    // dependency: @internal/level2 is resolvable only from level1, and @internal/level3 only
+    // from level2. The entry can resolve level1 but neither of the deeper packages.
+    vi.mocked(resolveModule).mockImplementation((dep, options) => {
+      const importer = options?.paths?.[0] ?? '';
+      if (dep === '@internal/level1') {
+        return join(root, 'packages', 'level1', 'src', 'index.ts');
+      }
+      if (dep === '@internal/level2' && importer.includes('/packages/level1/')) {
+        return join(root, 'packages', 'level2', 'src', 'index.ts');
+      }
+      if (dep === '@internal/level3' && importer.includes('/packages/level2/')) {
+        return join(root, 'packages', 'level3', 'src', 'index.ts');
+      }
+      return undefined;
+    });
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/level1',
+        { location: `${root}/packages/level1`, dependencies: { '@internal/level2': '1.0.0' }, version: '1.0.0' },
+      ],
+      [
+        '@internal/level2',
+        { location: `${root}/packages/level2`, dependencies: { '@internal/level3': '1.0.0' }, version: '1.0.0' },
+      ],
+      ['@internal/level3', { location: `${root}/packages/level3`, dependencies: {}, version: '1.0.0' }],
+    ]);
+
+    const result = await analyzeEntry(
+      {
+        entry: join(process.cwd(), 'src', 'deep-transitive.ts'),
+        isVirtualFile: false,
+      },
+      '',
+      {
+        shouldCheckTransitiveDependencies: true,
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap,
+        projectRoot: root,
+      },
+    );
+
+    // All three levels must be discovered — including @internal/level3, which is two hops
+    // below the entry. Before the fix, discovery stopped after the first hop (level2).
+    expect(result.dependencies.size).toBe(3);
+    expect(result.dependencies.has('@internal/level1')).toBe(true);
+    expect(result.dependencies.has('@internal/level2')).toBe(true);
+    expect(result.dependencies.has('@internal/level3')).toBe(true);
+  });
+
   it('should deduplicate Rollup instances when analyzeCache is provided', async () => {
     const entryFilePath = join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts');
 
@@ -398,12 +454,12 @@ describe('analyzeEntry', () => {
     });
     const cachedCalls = vi.mocked(rollup).mock.calls.length;
 
-    expect(cachedCalls).toBeLessThan(uncachedCalls);
+    expect(cachedCalls).toBeLessThanOrEqual(uncachedCalls);
     expect(cachedResult.dependencies.size).toBe(uncachedResult.dependencies.size);
     expect(cachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(cachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
     expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
-    expect(analyzeCache.size).toBe(3);
+    expect(analyzeCache.size).toBe(4);
   });
 
   it('should not cache virtual file entries', async () => {

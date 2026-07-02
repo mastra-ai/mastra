@@ -1,0 +1,7 @@
+{
+  "name": "@internal/level3",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.ts"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@internal/level1",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@internal/level2": "workspace:*"
+  }
+}

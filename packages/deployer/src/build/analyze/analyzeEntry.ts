@@ -85,6 +85,11 @@ async function captureDependenciesToOptimize(
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
+  // Tracks, for each transitively-discovered workspace dependency, the file that imports it.
+  // Transitive workspace packages must be resolved relative to their actual importer (e.g. `b`
+  // resolves `c` from within `b`), not the top-level entry — in strict pnpm layouts the entry
+  // package can't see a dependency-of-a-dependency.
+  const importerResolvedPaths = new Map<string, string>();
 
   if (!output.facadeModuleId) {
     throw new Error(
@@ -152,10 +157,18 @@ async function captureDependenciesToOptimize(
         continue;
       }
 
+      // Mark as processed now that we're analyzing it. This must happen when the dependency is
+      // analyzed, not when it is first discovered — otherwise a transitively-discovered package
+      // would be marked processed before we ever inspect its own dependencies, capping discovery
+      // at a single hop.
+      internalMap.set(dep, meta);
+
       try {
-        const importerPath = output.facadeModuleId
-          ? pathToFileURL(output.facadeModuleId).href
-          : pathToFileURL(projectRoot).href;
+        // Resolve the dependency relative to the file that imports it. For directly-imported
+        // workspace packages that's the entry; for transitive ones it's the package we found them in.
+        const importerPath =
+          importerResolvedPaths.get(dep) ??
+          (output.facadeModuleId ? pathToFileURL(output.facadeModuleId).href : pathToFileURL(projectRoot).href);
         // Absolute path to the dependency using ESM-compatible resolution
         const resolvedPath = resolveModule(dep, {
           paths: [importerPath],
@@ -197,7 +210,11 @@ async function captureDependenciesToOptimize(
           }
 
           depsToOptimize.set(innerDep, innerMeta);
-          internalMap.set(innerDep, innerMeta);
+          // Remember which file imported this transitive dependency so it can be resolved
+          // from the correct location when it is analyzed on the next pass. Note we intentionally
+          // do NOT add it to internalMap here — that happens when the dependency is analyzed, so
+          // discovery doesn't stop after a single hop.
+          importerResolvedPaths.set(innerDep, pathToFileURL(resolvedPath).href);
           hasAddedDeps = true;
         }
       } catch (err) {
