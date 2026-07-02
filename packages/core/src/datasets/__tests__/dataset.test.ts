@@ -8,8 +8,15 @@ import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
+import type { DatasetItem, ListDatasetItemsOutput } from '../../storage/types';
 import { Dataset } from '../dataset';
 import { SchemaValidationError, SchemaUpdateValidationError } from '../validation/errors';
+
+// Dataset.listItems returns a union: bare `DatasetItem[]` when only `version`
+// is passed, else the paginated `{ items, pagination }` shape. Narrow to the
+// paginated branch in tests that pass `search`/`page`/`perPage` (with or
+// without `version`).
+const paginated = <T>(r: T | ListDatasetItemsOutput): ListDatasetItemsOutput => r as ListDatasetItemsOutput;
 
 const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<any, any, any, any> => ({
   id: scorerId,
@@ -196,19 +203,45 @@ describe('Dataset', () => {
   // 14. listItems — without version
   it('listItems without version returns { items, pagination }', async () => {
     await ds.addItem({ input: { a: 1 } });
-    const result = await ds.listItems();
-    expect('items' in (result as any)).toBe(true);
-    expect('pagination' in (result as any)).toBe(true);
-    expect((result as any).items.length).toBeGreaterThanOrEqual(1);
+    const result = paginated(await ds.listItems());
+    expect(result.items.length).toBeGreaterThanOrEqual(1);
+    expect(result.pagination).toBeDefined();
   });
 
-  // 15. listItems — with version
-  it('listItems with version returns DatasetItem[]', async () => {
+  // 15. listItems — version-only returns bare DatasetItem[] snapshot
+  it('listItems with only version returns a bare DatasetItem[] snapshot', async () => {
     const item = await ds.addItem({ input: { a: 1 } });
     const result = await ds.listItems({ version: item.datasetVersion });
-    // When version is set, returns DatasetItem[] (from getItemsByVersion)
     expect(Array.isArray(result)).toBe(true);
-    expect((result as any[]).length).toBeGreaterThanOrEqual(1);
+    expect((result as DatasetItem[]).length).toBeGreaterThanOrEqual(1);
+  });
+
+  // 15a. listItems — version + search
+  it('listItems with version + search filters at that version', async () => {
+    await ds.addItem({ input: { q: 'apple' } });
+    await ds.addItem({ input: { q: 'banana' } });
+    const last = await ds.addItem({ input: { q: 'apricot' } });
+
+    const result = paginated(await ds.listItems({ version: last.datasetVersion, search: 'ap' }));
+    expect(result.items.length).toBe(2);
+    expect(result.items.every(i => JSON.stringify(i.input).includes('ap'))).toBe(true);
+  });
+
+  // 15b. listItems — version + pagination
+  it('listItems with version respects page/perPage', async () => {
+    for (let i = 0; i < 5; i++) {
+      await ds.addItem({ input: { a: i } });
+    }
+    const latest = await ds.addItem({ input: { a: 5 } });
+
+    const page0 = paginated(await ds.listItems({ version: latest.datasetVersion, page: 0, perPage: 2 }));
+    expect(page0.items).toHaveLength(2);
+    expect(page0.pagination.total).toBe(6);
+    expect(page0.pagination.hasMore).toBe(true);
+
+    const page1 = paginated(await ds.listItems({ version: latest.datasetVersion, page: 1, perPage: 2 }));
+    expect(page1.items).toHaveLength(2);
+    expect(page1.pagination.hasMore).toBe(true);
   });
 
   // 16. updateItem
@@ -563,9 +596,9 @@ describe('Dataset', () => {
     for (let i = 0; i < 5; i++) {
       await ds.addItem({ input: { i } });
     }
-    const result = await ds.listItems({ perPage: 2 });
-    expect('items' in (result as any)).toBe(true);
-    expect((result as any).items.length).toBe(2);
+    const result = paginated(await ds.listItems({ perPage: 2 }));
+    expect(result.items).toHaveLength(2);
+    expect(result.pagination.total).toBe(5);
   });
 
   // 32. listExperiments filter passthrough
@@ -763,6 +796,97 @@ describe('Dataset', () => {
       expect(results).toHaveLength(1);
       expect(pagination.total).toBe(2);
       expect(pagination.hasMore).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Ownership gates: reject child records that belong to a different dataset
+  // even when the caller holds a valid handle to the current dataset.
+  // ---------------------------------------------------------------------------
+
+  it('getItem returns null when the item belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherItem = await datasetsStorage.addItem({ datasetId: other.id, input: { x: 1 } });
+    const leaked = await ds.getItem({ itemId: otherItem.id });
+    expect(leaked).toBeNull();
+  });
+
+  it('getItemHistory filters out rows that belong to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherItem = await datasetsStorage.addItem({ datasetId: other.id, input: { x: 1 } });
+    const rows = await ds.getItemHistory({ itemId: otherItem.id });
+    expect(rows).toEqual([]);
+  });
+
+  it('getExperiment returns null when the experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    const leaked = await ds.getExperiment({ experimentId: otherExp.id });
+    expect(leaked).toBeNull();
+  });
+
+  it('deleteExperiment throws NOT_FOUND when the experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    await expect(ds.deleteExperiment({ experimentId: otherExp.id })).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
+    // Original experiment should still exist under its true dataset
+    const stillThere = await experimentsStorage.getExperimentById({ id: otherExp.id });
+    expect(stillThere?.id).toBe(otherExp.id);
+  });
+
+  it('listExperimentResults throws NOT_FOUND when experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    await expect(ds.listExperimentResults({ experimentId: otherExp.id })).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
+  });
+
+  it('updateExperimentResult throws when experiment belongs to a different dataset', async () => {
+    const other = await datasetsStorage.createDataset({ name: 'Other DS' });
+    const otherExp = await experimentsStorage.createExperiment({
+      datasetId: other.id,
+      datasetVersion: 0,
+      targetType: 'agent',
+      targetId: 'inline',
+      totalItems: 0,
+    });
+    await expect(
+      ds.updateExperimentResult({ id: 'any-result-id', experimentId: otherExp.id, status: 'reviewed' }),
+    ).rejects.toMatchObject({
+      id: 'EXPERIMENT_NOT_FOUND',
+    });
+  });
+
+  it('updateExperimentResult rejects when called without experimentId', async () => {
+    await expect(
+      // Runtime guard for JS callers that bypass the type narrowing
+      (ds.updateExperimentResult as (input: { id: string; status: string }) => Promise<unknown>)({
+        id: 'any-result-id',
+        status: 'reviewed',
+      }),
+    ).rejects.toMatchObject({
+      id: 'EXPERIMENT_RESULT_MISSING_EXPERIMENT_ID',
     });
   });
 });
