@@ -38,27 +38,10 @@ import type {
   DatasetTenancyFilters,
 } from '@mastra/core/storage';
 
-/**
- * Build additional `AND col = ?` conditions for a tenancy read-scope filter.
- * Returned in the shape expected by the existing SQL builders in this file.
- * When `filters` is undefined or empty, returns empty arrays (no scoping).
- */
-function tenancyWhere(filters?: DatasetTenancyFilters): { conditions: string[]; params: InValue[] } {
-  const conditions: string[] = [];
-  const params: InValue[] = [];
-  if (filters?.organizationId !== undefined) {
-    conditions.push('organizationId = ?');
-    params.push(filters.organizationId);
-  }
-  if (filters?.projectId !== undefined) {
-    conditions.push('projectId = ?');
-    params.push(filters.projectId);
-  }
-  return { conditions, params };
-}
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
@@ -150,6 +133,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#db.deleteData({ tableName: TABLE_DATASET_VERSIONS });
     await this.#db.deleteData({ tableName: TABLE_DATASET_ITEMS });
     await this.#db.deleteData({ tableName: TABLE_DATASETS });
+  }
+
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)`,
+        args: [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+      });
+      const row = result.rows?.[0] as { c?: number | string } | undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
   }
 
   // --- Row transformers ---
@@ -411,42 +407,41 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing row. Never throws on mismatch
-      // so we don't leak existence across tenants via error timing/text. The cascade
-      // DELETEs below are already datasetId-scoped, so gating at the parent is sufficient.
+      // Atomic gate via scoped existence check + tenancy folded into the parent
+      // DELETE, so the destructive statement is itself tenant-scoped rather
+      // than relying only on a pre-check. Silent no-op on mismatch. libsql is
+      // single-writer serialized, so the check + delete cannot race.
       const { conditions, params } = tenancyWhere(filters);
-      const existsSql = `SELECT id FROM ${TABLE_DATASETS} WHERE ${['id = ?', ...conditions].join(' AND ')}`;
-      const exists = await this.#client.execute({ sql: existsSql, args: [id, ...params] });
+      const scopedWhere = ['id = ?', ...conditions].join(' AND ');
+
+      const exists = await this.#client.execute({
+        sql: `SELECT id FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`,
+        args: [id, ...params],
+      });
       if (!exists.rows?.[0]) return;
 
-      // F3 fix: detach experiments (SET NULL) instead of deleting. Delete results for FK safety.
-      // Each operation wrapped separately — experiment_results table may not exist even if experiments does.
-      try {
-        await this.#client.execute({
+      // Detach experiments (SET NULL) + delete their results for FK safety.
+      // Probe sqlite_master rather than swallowing "no such table" errors.
+      const experimentTablesExist = await this.experimentTablesExist();
+
+      // Dataset cascade — atomic batch, parent DELETE scoped by tenancy. When
+      // experiment tables exist, fold the detach DMLs into the same batch so the
+      // whole cascade is one atomic transaction.
+      const statements: { sql: string; args: any[] }[] = [];
+      if (experimentTablesExist) {
+        statements.push({
           sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
           args: [id],
         });
-      } catch {
-        // experiment_results table may not exist
-      }
-      try {
-        await this.#client.execute({
+        statements.push({
           sql: `UPDATE ${TABLE_EXPERIMENTS} SET datasetId = NULL, datasetVersion = NULL WHERE datasetId = ?`,
           args: [id],
         });
-      } catch {
-        // experiments table may not exist
       }
-
-      // Dataset cascade — atomic batch (T3.18)
-      await this.#client.batch(
-        [
-          { sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASETS} WHERE id = ?`, args: [id] },
-        ],
-        'write',
-      );
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] });
+      await this.#client.batch(statements, 'write');
     } catch (error) {
       throw new MastraError(
         {
