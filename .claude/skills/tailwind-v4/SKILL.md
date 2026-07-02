@@ -5,7 +5,15 @@ description: Tailwind CSS v4 usage guide and v3-to-v4 differences. This skill sh
 
 # Tailwind CSS v4
 
-How to write idiomatic Tailwind v4 and spot v3-era syntax that still compiles but should not appear in new code. The playground packages pin `tailwindcss` 4.2.2: v4.2 features are available (logical properties, `font-features-*`), v4.3+ utilities (`scrollbar-*`, `zoom-*`, `tab-*`) are not.
+How to write idiomatic Tailwind v4 and spot v3-era syntax that still compiles but should not appear in new code.
+
+## Version and sources
+
+Check the pinned version before using recent utilities: the playground packages pin `tailwindcss` in their `package.json` (4.2.2 at the time of writing — v4.2 features like logical properties and `font-features-*` are available; v4.3 additions like `scrollbar-*`, `zoom-*`, `tab-*` are not). When unsure whether a utility, variant, or directive exists in the pinned version, verify against the docs instead of guessing:
+
+- Utility/variant reference: https://tailwindcss.com/docs
+- v3 → v4 migration: https://tailwindcss.com/docs/upgrade-guide
+- What each minor added: https://tailwindcss.com/blog/tailwindcss-v4 (and `/tailwindcss-v4-1`, `/tailwindcss-v4-3`, ...)
 
 ## CSS-first configuration
 
@@ -62,6 +70,23 @@ The spacing scale is infinite — every number compiles via `calc(var(--spacing)
 Square brackets remain correct for true one-offs: `max-h-[calc(100dvh-3rem)]`, `grid-cols-[200px_minmax(0,1fr)]`, and arbitrary properties like `[mask-type:luminance]`.
 
 Class strings must stay complete and statically detectable: map props to full strings (`{ success: 'bg-positive1' }[tone]`), never build fragments like `` `bg-${tone}-500` ``.
+
+## Don't hand-write CSS or JS for what a variant covers
+
+Before writing a stylesheet rule, a `style` prop, or an event handler for styling, check for a variant:
+
+| Hand-written                                   | Tailwind                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| `.btn:active { ... }` in CSS                   | `active:bg-surface5`                                                     |
+| `:focus-visible` rules                         | `focus-visible:outline-accent1`                                          |
+| `[aria-expanded="true"]` selectors             | `aria-expanded:rotate-180` (any `aria-*` boolean or value)               |
+| `[data-state="open"]` selectors                | `data-[state=open]:opacity-100`, boolean: `data-current:`                |
+| JS hover/focus state to style a sibling/child  | `group`/`group-hover:`, `peer`/`peer-checked:`, `in-focus:`              |
+| parent-state selectors / JS "has child" checks | `has-checked:bg-accent1`, `has-[>svg]:pl-8`                              |
+| `mask-image` / fade-out gradients in CSS       | `mask-b-from-80%`, `mask-t-from-*`                                       |
+| `@media (hover: none)` blocks                  | `pointer-coarse:`/`pointer-fine:`                                        |
+| first/last/nth rules in CSS                    | `first:`, `last:`, `odd:`, `nth-3:`, `not-first:`                        |
+| styling all children from CSS                  | `*:rounded-full` (children), `**:data-avatar:rounded-full` (descendants) |
 
 ## New capabilities — reach for these before hacks or JS
 
