@@ -1,3 +1,4 @@
+import type { GetAgentResponse } from '@mastra/client-js';
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,9 +9,12 @@ import { forwardRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
+import { systemPackages } from '../../__tests__/fixtures/channels';
+import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { observationalMemory, threadMessages } from '../../__tests__/fixtures/memory-panel';
 import { MemorySidebar } from '../memory-sidebar';
 import {
+  memoryDisabledStatus,
   memoryEnabledStatus,
   observationalMemoryConfig,
   observationalMemoryConfigWithThresholds,
@@ -33,6 +37,15 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';
 const THREAD_ID = 'real-thread';
+
+// The capabilities footer always renders, so it fetches the agent details and the
+// system packages (CMS availability). Keep CMS disabled so the editor capability
+// stays gated and the versions query never fires.
+const capabilityAgent: GetAgentResponse = {
+  ...v2Agent,
+  id: AGENT_ID,
+  name: 'Chef Agent',
+};
 
 const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
   ({ children, to, href, ...props }, ref) => (
@@ -85,6 +98,8 @@ const paths = {
 function registerMemoryHandlers() {
   server.use(
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(readOnlyAuthCapabilities)),
+    http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(capabilityAgent)),
+    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
     http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(semanticRecallConfig)),
     http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabledStatus)),
     http.get(`${BASE_URL}/api/memory/threads/:threadId`, () =>
@@ -101,6 +116,13 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
+  // MemorySidebar derives memory state from useMemory, so drive it via the wire.
+  server.use(
+    http.get(`${BASE_URL}/api/memory/status`, () =>
+      HttpResponse.json(hasMemory ? memoryEnabledStatus : memoryDisabledStatus),
+    ),
+  );
+
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
@@ -109,14 +131,7 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
             <WorkingMemoryProvider agentId={AGENT_ID} threadId={THREAD_ID} resourceId={AGENT_ID}>
               <MemoryTimelineProvider>
                 <TimelineProbe />
-                <MemorySidebar
-                  agentId={AGENT_ID}
-                  threadId={THREAD_ID}
-                  threads={threads}
-                  isLoading={false}
-                  onDelete={vi.fn()}
-                  hasMemory={hasMemory}
-                />
+                <MemorySidebar agentId={AGENT_ID} threadId={THREAD_ID} threads={threads} onDelete={vi.fn()} />
               </MemoryTimelineProvider>
             </WorkingMemoryProvider>
           </ThreadInputProvider>
@@ -160,14 +175,7 @@ function renderSidebarWithOM(threads: StorageThreadType[]) {
                 <MemoryTimelineProvider>
                   <SignalProbe />
                   <TimelineProbe />
-                  <MemorySidebar
-                    agentId={AGENT_ID}
-                    threadId={THREAD_ID}
-                    threads={threads}
-                    isLoading={false}
-                    onDelete={vi.fn()}
-                    hasMemory
-                  />
+                  <MemorySidebar agentId={AGENT_ID} threadId={THREAD_ID} threads={threads} onDelete={vi.fn()} />
                 </MemoryTimelineProvider>
               </ObservationalMemoryProvider>
             </WorkingMemoryProvider>
@@ -222,6 +230,23 @@ describe('MemorySidebar', () => {
     expect(blocks.length).toBe(1);
   });
 
+  it('renders the capabilities footer and reveals capability details on expand', async () => {
+    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    // Collapsed by default: only the capability chips and the enabled/total counter.
+    const footer = await screen.findByTestId('agent-capabilities-footer');
+    expect(footer.getAttribute('aria-expanded')).toBe('false');
+    expect(footer.textContent).toMatch(/\/6/);
+    expect(screen.queryByRole('link', { name: /^Tools:/ })).toBeNull();
+
+    // Expanding reveals the per-capability detail rows (links to the docs).
+    fireEvent.click(footer);
+    expect(footer.getAttribute('aria-expanded')).toBe('true');
+    const toolsRow = await screen.findByRole('link', { name: /^Tools:/ });
+    expect(toolsRow.getAttribute('href')).toBe('https://mastra.ai/docs/agents/using-tools-and-mcp');
+    expect(screen.getByRole('link', { name: /^Memory:/ })).not.toBeNull();
+  });
+
   it('replaces the panel with an empty state and docs CTA when memory is disabled', async () => {
     renderSidebar([], false);
 
@@ -234,7 +259,7 @@ describe('MemorySidebar', () => {
 
     // An outline CTA links to the Agent Memory docs.
     const cta = screen.getByRole('link', { name: /documentation/i });
-    expect(cta.getAttribute('href')).toBe('https://mastra.ai/en/docs/agents/agent-memory');
+    expect(cta.getAttribute('href')).toBe('https://mastra.ai/docs/memory/overview');
   });
 
   it('shows the live memory content, without the static config, when the Memory card is clicked', async () => {

@@ -20,6 +20,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal } from '../signals';
+import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
   AgentMethodType,
@@ -399,6 +400,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // The MastraMemory context (thread + memoryConfig) was already established
   // above, before processor resolution, so processors that need it (working
   // memory, OM, message history) can access it here.
+  let tripwireData: RunRegistryEntry['tripwire'];
   if (inputProcessors.length > 0) {
     try {
       const { ProcessorRunner } = await import('../../processors/runner');
@@ -417,7 +419,22 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         0,
       );
     } catch (error) {
-      logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+      if (error instanceof TripWire) {
+        tripwireData = {
+          reason: error.message,
+          retry: error.options?.retry,
+          metadata: error.options?.metadata,
+          processorId: error.processorId,
+        };
+        logger?.warn?.('Input processor tripwire triggered', {
+          agent: agent.name,
+          reason: error.message,
+          processorId: error.processorId,
+          retry: error.options?.retry,
+        });
+      } else {
+        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+      }
     }
   }
 
@@ -644,6 +661,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Agent-level goal config (judge resolver, tools resolver, scorer).
     // Non-serializable — cross-process engines skip goal evaluation.
     goal: agent.__getGoalConfig(),
+    // Tripwire from processInput (initial input processing). When an input
+    // processor calls abort() during runInputProcessors, we store the tripwire
+    // data here so the first llm-execution step can emit a tripwire chunk and
+    // bail immediately without calling the model.
+    tripwire: tripwireData,
     // Call-time headers from modelSettings.headers. Kept off the serialized
     // workflow input so they never reach durable storage; the durable
     // llm-execution step reads them from this registry slot instead.

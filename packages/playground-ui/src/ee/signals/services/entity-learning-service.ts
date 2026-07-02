@@ -101,7 +101,8 @@ export function createEntityLearningService(config: EntityLearningServiceConfig)
       );
     },
 
-    getEntityTopics(entityId: string, signalName: string, runId: string) {
+    getEntityTopics(entityId: string, signalName: string, runId?: string) {
+      // runId omitted → the API resolves the latest run for that signal.
       return getJson<EntityLearningTopicsResponse>(
         buildUrl(`/entities/${encode(entityId)}/topics`, { signalName, runId }),
       );

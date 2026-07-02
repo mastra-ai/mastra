@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import * as babel from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -14,6 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
+import { getPackageMetadata } from './package-info';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
 import {
   getPackageName,
@@ -29,6 +30,59 @@ type ErrorId =
   | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
   | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
   | 'DEPLOYER_ANALYZE_TYPE_ERROR';
+
+function preferDependencyInfo(
+  existing: ExternalDependencyInfo | undefined,
+  incoming: ExternalDependencyInfo,
+): ExternalDependencyInfo {
+  return {
+    version: incoming.version ?? existing?.version,
+    packageSpec: incoming.packageSpec ?? existing?.packageSpec,
+  };
+}
+
+async function resolveDependencyInfo(
+  dep: string,
+  existing: ExternalDependencyInfo | undefined,
+  parentPaths: string[],
+): Promise<ExternalDependencyInfo> {
+  if (existing?.version || existing?.packageSpec) {
+    return existing;
+  }
+
+  const packageName = getPackageName(dep);
+  const packageNames = [...new Set([dep, packageName].filter(Boolean) as string[])];
+
+  for (const parentPath of parentPaths) {
+    for (const name of packageNames) {
+      const metadata = await getPackageMetadata(name, parentPath);
+      if (metadata.version || metadata.packageSpec) {
+        return preferDependencyInfo(existing, metadata);
+      }
+    }
+  }
+
+  for (const name of packageNames) {
+    const metadata = await getPackageMetadata(name);
+    if (metadata.version || metadata.packageSpec) {
+      return preferDependencyInfo(existing, metadata);
+    }
+  }
+
+  return existing ?? {};
+}
+
+function importerParentPaths(importerId: string | undefined, base: string[]): string[] {
+  if (!importerId || importerId.startsWith('\x00') || !isAbsolute(importerId)) {
+    return base;
+  }
+
+  return [...new Set([importerId, ...base])];
+}
+
+function getLastConcreteModuleId(moduleIds: string[]): string | undefined {
+  return moduleIds.findLast(id => !id.startsWith('\x00') && isAbsolute(id));
+}
 
 function throwExternalDependencyError({
   errorId,
@@ -251,19 +305,32 @@ async function validateOutput(
     workspaceMap,
   };
 
+  const externalMetadataParentPaths = [
+    projectRoot,
+    ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+  ];
+
   // store resolve map for validation
   // we should resolve the version of the deps
   for (const deps of Object.values(usedExternals)) {
-    for (const dep of Object.keys(deps)) {
+    for (const [dep, importerId] of Object.entries(deps)) {
       if (isExternalProtocolImport(dep)) {
         continue;
       }
 
       const pkgName = getPackageName(dep);
       if (pkgName) {
-        // Use version info from analysis if available
-        const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName) || {};
-        result.externalDependencies.set(pkgName, versionInfo);
+        // Use version info from analysis if available, then resolve from the module that imported the external.
+        const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName);
+        const dependencyInfo = await resolveDependencyInfo(
+          dep,
+          versionInfo,
+          importerParentPaths(importerId, externalMetadataParentPaths),
+        );
+        result.externalDependencies.set(
+          pkgName,
+          preferDependencyInfo(result.externalDependencies.get(pkgName), dependencyInfo),
+        );
       }
     }
   }
@@ -393,10 +460,8 @@ export async function analyzeBundle(
       if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
         // Add all packages coming from src/mastra with their version info
         const pkgName = getPackageName(dep);
-        if (pkgName && !allUsedExternals.has(pkgName)) {
-          allUsedExternals.set(pkgName, {
-            version: metadata.version,
-          });
+        if (pkgName) {
+          allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), metadata));
         }
         continue;
       }
@@ -406,11 +471,28 @@ export async function analyzeBundle(
         const existingEntry = depsToOptimize.get(dep)!;
         depsToOptimize.set(dep, {
           ...existingEntry,
+          version: metadata.version ?? existingEntry.version,
+          packageSpec: metadata.packageSpec ?? existingEntry.packageSpec,
           exports: [...new Set([...existingEntry.exports, ...metadata.exports])],
         });
       } else {
         depsToOptimize.set(dep, metadata);
       }
+    }
+  }
+
+  // Build a map of dependency versions from the full analysis result before dev/externalsPreset pruning.
+  // Non-workspace deps are removed from optimization below, but their resolved version/packageSpec metadata
+  // is still needed when they become externals.
+  const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
+  for (const [dep, metadata] of depsToOptimize.entries()) {
+    const pkgName = getPackageName(dep);
+    if (pkgName && (metadata.version || metadata.packageSpec)) {
+      depsVersionInfo.set(pkgName, preferDependencyInfo(depsVersionInfo.get(pkgName), metadata));
+    }
+    // Also store by full import path for subpath imports
+    if (metadata.version || metadata.packageSpec) {
+      depsVersionInfo.set(dep, preferDependencyInfo(depsVersionInfo.get(dep), metadata));
     }
   }
 
@@ -448,27 +530,12 @@ export async function analyzeBundle(
     slash(relative(workspaceRoot || projectRoot, pkgInfo.location)),
   );
 
-  // Build a map of dependency versions from depsToOptimize for lookup
-  const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
-  for (const [dep, metadata] of depsToOptimize.entries()) {
-    const pkgName = getPackageName(dep);
-    if (pkgName && metadata.version) {
-      depsVersionInfo.set(pkgName, {
-        version: metadata.version,
-      });
-    }
-    // Also store by full import path for subpath imports
-    if (metadata.version) {
-      depsVersionInfo.set(dep, {
-        version: metadata.version,
-      });
-    }
-  }
-
   for (const o of output) {
     if (o.type === 'asset') {
       continue;
     }
+
+    const importerId = getLastConcreteModuleId(o.moduleIds);
 
     for (const i of o.imports) {
       if (isBuiltinModule(i)) {
@@ -491,10 +558,18 @@ export async function analyzeBundle(
 
       const pkgName = getPackageName(i);
 
-      if (pkgName && !allUsedExternals.has(pkgName)) {
-        // Try to get version info from our tracked dependencies
-        const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName) || {};
-        allUsedExternals.set(pkgName, versionInfo);
+      if (pkgName) {
+        // Try to get version info from our tracked dependencies, then resolve from the chunk's source module.
+        const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName);
+        const dependencyInfo = await resolveDependencyInfo(
+          i,
+          versionInfo,
+          importerParentPaths(importerId, [
+            projectRoot,
+            ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+          ]),
+        );
+        allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));
       }
     }
   }
@@ -527,21 +602,35 @@ export async function analyzeBundle(
       continue;
     }
 
-    const existing = mergedExternalDeps.get(dep);
-    if (!existing || (!existing.version && info.version)) {
-      mergedExternalDeps.set(dep, info);
+    mergedExternalDeps.set(dep, preferDependencyInfo(mergedExternalDeps.get(dep), info));
+  }
+
+  const externalMetadataParentPaths = [
+    projectRoot,
+    ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+    // Last resort: resolve from the deployer's own installed location. Some externals are
+    // discovered inside externalized packages (e.g. optional dynamic imports like
+    // `import('typescript')` in @mastra/core) without being installed in the user's project.
+    import.meta.dirname,
+  ];
+
+  // Retry externals that were discovered without install metadata (e.g. from entry analysis
+  // where the package isn't resolvable from the entry's own location).
+  for (const [dep, info] of mergedExternalDeps) {
+    if (!info.version && !info.packageSpec) {
+      mergedExternalDeps.set(dep, await resolveDependencyInfo(dep, info, externalMetadataParentPaths));
     }
   }
 
-  // Add pino transports and user dynamic packages (no version info needed)
+  // Add pino transports and user dynamic packages
   for (const transport of detectedPinoTransports) {
     if (!mergedExternalDeps.has(transport)) {
-      mergedExternalDeps.set(transport, {});
+      mergedExternalDeps.set(transport, await resolveDependencyInfo(transport, undefined, externalMetadataParentPaths));
     }
   }
   for (const pkg of userDynamicPackages) {
     if (!mergedExternalDeps.has(pkg)) {
-      mergedExternalDeps.set(pkg, {});
+      mergedExternalDeps.set(pkg, await resolveDependencyInfo(pkg, undefined, externalMetadataParentPaths));
     }
   }
 

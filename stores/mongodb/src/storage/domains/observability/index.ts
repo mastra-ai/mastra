@@ -8,6 +8,10 @@ import {
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   SpanRecord,
   UpdateSpanRecord,
   ListTracesArgs,
@@ -29,6 +33,7 @@ import type {
 import { MongoBulkWriteError } from 'mongodb';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class ObservabilityMongoDB extends ObservabilityStorage {
@@ -38,6 +43,11 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   /** Collections managed by this domain */
   static readonly MANAGED_COLLECTIONS = [TABLE_SPANS] as const;
+
+  /** Anchor is the span's start time, stored as a BSON date. */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+  };
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -51,6 +61,16 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
+  }
+
+  /** Delete spans older than the `spans` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityMongoDB.retentionTables,
+      order: ['spans'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'observability', targets, options, logger: this.logger });
   }
 
   /**

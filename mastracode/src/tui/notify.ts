@@ -3,7 +3,7 @@
  * Sends a terminal bell and optionally a native OS notification.
  */
 
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import type { HookManager } from '../hooks/manager.js';
 
 export type NotificationMode = 'bell' | 'system' | 'both' | 'off';
@@ -50,8 +50,15 @@ function sendSystemNotification(reason: NotificationReason, message?: string): v
   if (process.platform === 'darwin') {
     const title = 'Mastra Code';
     const body = message || reasonToMessage(reason);
-    const escaped = body.replace(/"/g, '\\"');
-    exec(`osascript -e 'display notification "${escaped}" with title "${title}"'`);
+    // The message can contain arbitrary text (including model output), so:
+    // - escape backslashes before quotes for the AppleScript string literal
+    // - pass the script via execFile args so no shell is involved
+    // (CodeQL js/incomplete-sanitization)
+    const escaped = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const script = `display notification "${escaped}" with title "${title}"`;
+    execFile('osascript', ['-e', script], () => {
+      // Best-effort: ignore notification failures
+    });
   }
   // Linux/Windows: could add notify-send / powershell in the future
 }
