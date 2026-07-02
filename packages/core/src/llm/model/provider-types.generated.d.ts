@@ -291,6 +291,7 @@ export type ProviderModelsMap = {
     'amazon/nova-pro',
     'amazon/titan-embed-text-v2',
     'anthropic/claude-3.5-haiku',
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -1844,6 +1845,7 @@ export type ProviderModelsMap = {
     'claude-3-7-sonnet',
     'claude-3-7-sonnet-20250219',
     'claude-3-opus',
+    'claude-fable-5',
     'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
     'claude-haiku-4-5-free',
@@ -2187,7 +2189,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly cerebras: readonly ['gpt-oss-120b', 'zai-glm-4.7'];
+  readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b', 'zai-glm-4.7'];
   readonly 'zai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5.2', 'glm-5v-turbo'];
   readonly nvidia: readonly [
     'abacusai/dracarys-llama-3_1-70b-instruct',
@@ -2338,6 +2340,7 @@ export type ProviderModelsMap = {
   ];
   readonly opencode: readonly [
     'big-pickle',
+    'claude-fable-5',
     'claude-haiku-4-5',
     'claude-opus-4-1',
     'claude-opus-4-5',
@@ -2674,11 +2677,13 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3.7-Max',
     'anthropic/claude-opus-4.6',
     'anthropic/claude-opus-4.7',
+    'anthropic/claude-opus-4.8',
     'anthropic/claude-sonnet-4.6',
     'deepseek-ai/DeepSeek-V4-Flash',
     'deepseek-ai/DeepSeek-V4-Pro',
     'moonshotai/Kimi-K2.6',
     'moonshotai/kimi-k2.7-code-highspeed',
+    'openai/gpt-5.5',
     'zai-org/GLM-5-FP8',
     'zai-org/GLM-5.1-FP8',
     'zai-org/GLM-5.2-FP8',
@@ -3202,6 +3207,7 @@ export type ProviderModelsMap = {
     'amazon/nova-pro-v1',
     'anthracite-org/magnum-v4-72b',
     'anthropic/claude-3-haiku',
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-opus-4',
     'anthropic/claude-opus-4.1',
@@ -4544,14 +4550,11 @@ export type ProviderModelsMap = {
   ];
   readonly synthetic: readonly [
     'hf:MiniMaxAI/MiniMax-M3',
-    'hf:Qwen/Qwen3.5-397B-A17B',
     'hf:Qwen/Qwen3.6-27B',
-    'hf:moonshotai/Kimi-K2.6',
+    'hf:moonshotai/Kimi-K2.7-Code',
     'hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4',
     'hf:openai/gpt-oss-120b',
-    'hf:zai-org/GLM-4.7',
     'hf:zai-org/GLM-4.7-Flash',
-    'hf:zai-org/GLM-5.1',
     'hf:zai-org/GLM-5.2',
   ];
   readonly iflowcn: readonly [
@@ -4580,6 +4583,7 @@ export type ProviderModelsMap = {
   ];
   readonly claudinio: readonly ['claudinio', 'claudius'];
   readonly netlify: readonly [
+    'anthropic/claude-fable-5',
     'anthropic/claude-haiku-4-5',
     'anthropic/claude-haiku-4-5-20251001',
     'anthropic/claude-opus-4-1-20250805',

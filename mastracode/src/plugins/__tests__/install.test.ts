@@ -141,15 +141,16 @@ describe('installLocalPlugin', () => {
 });
 
 describe('installGithubPlugin', () => {
-  it('clones with argv and writes a relative checkout path', async () => {
+  it('clones with gh CLI and writes a relative checkout path', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
     const projectRoot = path.join(tempDir, 'project');
     const homeDir = path.join(tempDir, 'home');
-    execaMock.mockImplementation(async (_cmd: string, args: string[]) => {
-      if (args[0] === 'clone') {
-        const checkoutDir = args[2];
-        if (!checkoutDir) throw new Error('missing checkout dir');
-        writePlugin(checkoutDir, 'acme.github');
+    const checkoutDir = path.join(homeDir, '.mastracode/plugins/sources/github/acme-mastracode-plugin');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.github');
       }
       return { stdout: '' };
     });
@@ -158,13 +159,27 @@ describe('installGithubPlugin', () => {
       installGithubPlugin('https://github.com/acme/mastracode-plugin#main', 'global', { projectRoot, homeDir }),
     ).resolves.toBe('acme.github');
 
-    expect(execaMock).toHaveBeenNthCalledWith(1, 'git', [
-      'clone',
-      'https://github.com/acme/mastracode-plugin.git',
-      path.join(homeDir, '.mastracode/plugins/sources/github/acme-mastracode-plugin'),
-    ]);
-    expect(execaMock).toHaveBeenNthCalledWith(2, 'git', ['checkout', 'main'], {
-      cwd: path.join(homeDir, '.mastracode/plugins/sources/github/acme-mastracode-plugin'),
+    expect(execaMock).toHaveBeenNthCalledWith(
+      1,
+      'gh',
+      ['--version'],
+      expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(execaMock).toHaveBeenNthCalledWith(
+      2,
+      'gh',
+      ['auth', 'status'],
+      expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(execaMock).toHaveBeenNthCalledWith(
+      3,
+      'gh',
+      ['repo', 'clone', 'acme/mastracode-plugin', checkoutDir],
+      expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(execaMock).toHaveBeenNthCalledWith(4, 'git', ['checkout', 'main'], {
+      cwd: checkoutDir,
+      env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
     });
     expect(
       loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins['acme.github'],
@@ -175,13 +190,35 @@ describe('installGithubPlugin', () => {
     });
   });
 
+  it('throws an actionable error when gh is unavailable', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    execaMock.mockRejectedValueOnce(new Error('not found'));
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/plugin', 'project', { projectRoot, homeDir }),
+    ).rejects.toThrow('GitHub CLI is required to install GitHub plugins. Install gh and run gh auth login.');
+  });
+
+  it('throws an actionable error when gh is unauthenticated', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    execaMock.mockResolvedValueOnce({ stdout: '' }).mockRejectedValueOnce(new Error('not authenticated'));
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/plugin', 'project', { projectRoot, homeDir }),
+    ).rejects.toThrow('GitHub CLI is not authenticated. Run gh auth login, then install the plugin again.');
+  });
+
   it('uses a repository plugin manifest for nested scaffolded GitHub plugins', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
     const projectRoot = path.join(tempDir, 'project');
     const homeDir = path.join(tempDir, 'home');
-    execaMock.mockImplementation(async (_cmd: string, args: string[]) => {
-      if (args[0] === 'clone') {
-        const checkoutDir = args[2];
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const checkoutDir = args[3];
         if (!checkoutDir) throw new Error('missing checkout dir');
         writePlugin(path.join(checkoutDir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria'), 'alexandria');
         fs.writeFileSync(
@@ -203,6 +240,16 @@ describe('installGithubPlugin', () => {
       installGithubPlugin('https://github.com/acme/alexandria', 'project', { projectRoot, homeDir }),
     ).resolves.toBe('alexandria');
 
+    expect(execaMock).toHaveBeenCalledWith(
+      'gh',
+      [
+        'repo',
+        'clone',
+        'acme/alexandria',
+        path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria'),
+      ],
+      expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
     expect(
       loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins.alexandria,
     ).toMatchObject({

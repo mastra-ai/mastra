@@ -175,7 +175,13 @@ Each delegation creates a fresh `threadId` and a deterministic `resourceId` for 
 
 - **Thread ID**: Unique per delegation. The subagent starts with a clean message history every time it's called.
 - **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
-- **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance. If the subagent defines its own, that takes precedence.
+- **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance, including all of its options. If the subagent defines its own, that takes precedence.
+
+:::note
+
+Title generation (`generateTitle`) is a top-level thread concern and is **not** applied to inherited subagent threads. Because each delegation creates an ephemeral thread that no one sees, running title generation for it would waste an LLM call per delegation. To generate titles for a subagent's own threads, give that subagent its own memory configuration.
+
+:::
 
 The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
 

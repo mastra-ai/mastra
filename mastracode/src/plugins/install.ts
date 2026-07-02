@@ -15,6 +15,7 @@ import type { InstalledPluginRecord, PluginScope } from './types.js';
 export type InstallPluginOptions = PluginPathOptions & {
   entry?: string;
   ref?: string;
+  githubCliPath?: string;
 };
 
 export type DiscoveredLocalPlugin = {
@@ -24,6 +25,10 @@ export type DiscoveredLocalPlugin = {
 };
 
 const ENTRY_CANDIDATES = ['src/index.ts', 'index.ts'];
+
+export const NON_INTERACTIVE_GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+
+const NON_INTERACTIVE_EXEC_OPTIONS = { env: NON_INTERACTIVE_GIT_ENV };
 
 export async function installLocalPlugin(
   localPath: string,
@@ -62,12 +67,16 @@ export async function installGithubPlugin(
   const paths = getPluginScopePaths(scope, options);
   const checkoutDir = path.join(paths.sourcesPath, 'github', `${parsed.owner}-${parsed.repo}`);
 
+  const githubCli = options.githubCliPath ?? 'gh';
+  await assertGithubCliAvailable(githubCli);
+  await assertGithubCliAuthenticated(githubCli);
+
   fs.rmSync(checkoutDir, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(checkoutDir), { recursive: true });
-  await execa('git', ['clone', parsed.cloneUrl, checkoutDir]);
+  await execa(githubCli, ['repo', 'clone', parsed.repoSpec, checkoutDir], NON_INTERACTIVE_EXEC_OPTIONS);
   const ref = options.ref ?? parsed.ref;
   if (ref) {
-    await execa('git', ['checkout', ref], { cwd: checkoutDir });
+    await execa('git', ['checkout', ref], { cwd: checkoutDir, env: NON_INTERACTIVE_GIT_ENV });
   }
 
   const entry = detectEntry(checkoutDir, options.entry);
@@ -168,7 +177,23 @@ function isInsideDirectory(targetPath: string, root: string): boolean {
   return targetPath === root || targetPath.startsWith(root + path.sep);
 }
 
-function parseGithubUrl(specifier: string): { owner: string; repo: string; cloneUrl: string; ref?: string } {
+async function assertGithubCliAvailable(githubCli: string): Promise<void> {
+  try {
+    await execa(githubCli, ['--version'], NON_INTERACTIVE_EXEC_OPTIONS);
+  } catch {
+    throw new Error('GitHub CLI is required to install GitHub plugins. Install gh and run gh auth login.');
+  }
+}
+
+async function assertGithubCliAuthenticated(githubCli: string): Promise<void> {
+  try {
+    await execa(githubCli, ['auth', 'status'], NON_INTERACTIVE_EXEC_OPTIONS);
+  } catch {
+    throw new Error('GitHub CLI is not authenticated. Run gh auth login, then install the plugin again.');
+  }
+}
+
+function parseGithubUrl(specifier: string): { owner: string; repo: string; repoSpec: string; ref?: string } {
   const [urlPart, ref] = specifier.split('#', 2);
   if (!urlPart) {
     throw new Error(`Invalid GitHub URL: ${specifier}`);
@@ -197,7 +222,7 @@ function parseGithubUrl(specifier: string): { owner: string; repo: string; clone
   return {
     owner,
     repo,
-    cloneUrl: `https://github.com/${owner}/${repo}.git`,
+    repoSpec: `${owner}/${repo}`,
     ...(ref ? { ref } : {}),
   };
 }
