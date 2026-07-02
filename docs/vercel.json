@@ -832,7 +832,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
       "permanent": true
     },
     {
@@ -1467,7 +1467,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming/llms.txt",
-      "destination": "/docs/agents/background-tasks/llms.txt",
+      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
       "permanent": true
     },
     {

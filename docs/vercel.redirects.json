@@ -832,7 +832,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
       "permanent": true
     },
     {
