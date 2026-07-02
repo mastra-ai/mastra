@@ -176,4 +176,4 @@ When the agent calls an MCP App tool, CopilotKit fetches and renders that tool's
 Some capabilities sit next to the spectrum rather than on it: they control your app or gate a run instead of rendering agent output. Both are covered in [Get started](/guides/build-your-ui/copilotkit/get-started#app-control-and-interactivity):
 
 - **Frontend tools** (`useFrontendTool`): let the agent act on your application. This is part of CopilotKit's separate [App Control](https://docs.copilotkit.ai/) concept, alongside shared state and agent context.
-- **Human-in-the-loop** (`useHumanInTheLoop`): pause a run and wait for user approval or edits.
+- **Human-in-the-loop**: pause a run and wait for user approval or edits. Backend side, see Mastra's [Agent approval](/docs/agents/agent-approval); frontend side, see CopilotKit's [`useHumanInTheLoop`](https://docs.copilotkit.ai/reference/hooks/useHumanInTheLoop).
