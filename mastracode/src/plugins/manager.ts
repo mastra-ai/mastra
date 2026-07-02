@@ -4,9 +4,11 @@ import path from 'node:path';
 import { execa } from 'execa';
 
 import type { MastraCodePluginConfigValue } from '../plugin.js';
+import { reconcilePluginDependencies } from './dependencies.js';
 import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from './install.js';
 import type { InstallPluginOptions } from './install.js';
 import { collectActivePluginTools, isInsideDirectory, loadPlugins, resolvePluginEntryPath } from './loader.js';
+import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { NON_INTERACTIVE_GIT_ENV } from './process-env.js';
@@ -261,6 +263,8 @@ export class PluginManager {
 
     if (remoteOnly > 0 || localOnly > 0 || hasLocalChanges) {
       await execa('git', ['reset', '--hard', upstream], gitExecOptions(checkoutPath));
+      await reconcilePluginDependencies(checkoutPath);
+      ensureMastraCodePackageLink(checkoutPath);
       return true;
     }
 
