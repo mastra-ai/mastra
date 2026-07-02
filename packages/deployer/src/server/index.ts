@@ -485,7 +485,7 @@ export async function createHonoServer(
         apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
-        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        cloudApiEndpoint: `'${escapeStudioHtmlValue(cloudApiEndpoint)}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
         telemetryDisabled: `'${escapeStudioHtmlValue(process.env.MASTRA_TELEMETRY_DISABLED ?? '')}'`,

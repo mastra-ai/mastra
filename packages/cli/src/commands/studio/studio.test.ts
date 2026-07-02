@@ -251,7 +251,7 @@ describe('studio base path support', () => {
       // Browsers close an inline script at the first `</script>`, wherever it
       // appears. If a value could smuggle one in, the page would grow a second
       // script block containing the injected payload.
-      const scripts = [...htmlResponse.body.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+      const scripts = [...htmlResponse.body.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
       expect(scripts).toHaveLength(1);
 
       // Execute the served config script the way a browser would: it must
