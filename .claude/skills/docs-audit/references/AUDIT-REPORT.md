@@ -185,4 +185,6 @@ After fixes and re-linting, append or produce a follow-up section:
 - Harness/environment friction observed: `$HARNESS_FRICTION_OR_NONE`
 ````
 
+When an eval is rerun after a follow-up fix, the table must show the latest outcome and the notes must state where the original failure is preserved. If the latest result is `passed`, do not leave a stale failed result in `result.md`; keep the original failure in `commands.log` or a dated result snapshot.
+
 If the eval finds doc-caused friction, create additional `PRAC-*`, `CODE-*`, or `API-*` findings and return to the fix-plan loop. Do not create follow-up doc findings for package-manager, temp-directory, missing local binary, credential, or other harness/environment friction unless the doc itself caused that friction.

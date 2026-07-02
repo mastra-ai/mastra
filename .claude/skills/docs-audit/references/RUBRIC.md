@@ -91,6 +91,7 @@ Check each fenced code block:
 - Constructor names, method names, function names, and property names exist in source.
 - Constructor and function options match actual TypeScript types.
 - Method signatures, return types, and async usage match source.
+- Generic and overload-heavy examples typecheck under realistic TypeScript inference, including narrow string literal inference from IDs, registry keys, version selectors, and constructor options.
 - Example snippets are complete enough for their page type. Quickstarts and tutorials need complete, copyable code; reference pages can use focused snippets but must be real.
 - Any `new Agent()` example includes at least `id`, `name`, `instructions`, and `model`.
 - Model names and IDs use placeholder tokens from `docs/src/plugins/remark-model-tokens/models.ts`, not literal model IDs.

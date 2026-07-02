@@ -56,6 +56,7 @@ Rules:
 - Copy audited doc files into `snapshots/original-docs/` immediately after scope confirmation, before edits.
 - Copy changed audited doc files into `snapshots/improved-docs/` after approved fixes and before the agent-build eval.
 - Save raw command output under `commands/`.
+- Run commands that change directories in subshells or with explicit `cwd` so the shell does not remain in `docs/` or an eval project for later artifact-copy commands.
 - Save `audit-report.md`, `fix-plan.md`, and any follow-up eval report under the run directory, then summarize key findings in chat.
 - Do not commit or stage files from `/tmp/mastra-docs-audit/`.
 - Keep the temporary directory until the final response so the user can inspect it if needed. Mention the path in the final response.
@@ -171,7 +172,8 @@ For code accuracy:
 - verify constructors, functions, methods, and properties exist,
 - verify option objects and required fields match source,
 - verify `new Agent()` examples include `id`, `name`, `instructions`, and `model`,
-- verify model names and IDs use tokens from `docs/src/plugins/remark-model-tokens/models.ts`.
+- verify model names and IDs use tokens from `docs/src/plugins/remark-model-tokens/models.ts`,
+- for generic or overload-heavy APIs, verify examples under TypeScript inference, not only runtime behavior. Watch for narrow string literal inference from constructor options, registry keys, IDs, version selectors, and overload parameters.
 
 For completeness:
 
@@ -185,7 +187,8 @@ For practicability:
 - use the selected jobs-to-be-done,
 - check whether a beginner can follow the doc without unstated context,
 - check whether an agent could build the selected job using only the doc,
-- identify missing prerequisites, ambiguous steps, undefined jargon, missing expected output, and verification gaps.
+- identify missing prerequisites, ambiguous steps, undefined jargon, missing expected output, and verification gaps,
+- when a selected job depends on fallback behavior, registry lookup, versioning, overloads, or inferred IDs, include a TypeScript-copyability check that mirrors the documented snippet closely enough to catch inference errors.
 
 Every finding must include `file:line` evidence. Include source `file:line` evidence when the finding concerns code accuracy or API completeness.
 
@@ -274,7 +277,8 @@ Set up the eval project as follows:
 7. Do not use credentials, external paid services, or production deploy targets unless the doc's selected job requires them and the user has explicitly provided safe test credentials. If credentials are missing, continue until the first credential boundary and report whether the docs got the eval to that boundary cleanly.
 8. Bound the eval to the selected job. Do not add extra features, refactors, or tests that the job does not require.
 9. Record every command, failed attempt, workaround, and result in `<run-dir>/evals/<job-slug>/commands.log`.
-10. Write the eval outcome to `<run-dir>/evals/<job-slug>/result.md`. Separate `Doc friction` from `Harness/environment friction`. Only doc-caused friction becomes follow-up audit findings.
+10. Build the eval from the documented code as closely as possible. For reference pages, extract or recreate the exact relevant snippet first, then add only the minimal surrounding setup needed to typecheck or run it. Do not silently simplify away registry keys, literal IDs, overload arguments, or version selectors that the doc is trying to teach.
+11. Write the eval outcome to `<run-dir>/evals/<job-slug>/result.md`. Separate `Doc friction` from `Harness/environment friction`. Only doc-caused friction becomes follow-up audit findings.
 
 For each selected job-to-be-done, spawn a focused build task using a subagent or fresh isolated turn. The eval agent receives only:
 
@@ -299,7 +303,8 @@ If the eval reveals doc-caused friction:
 1. Convert it into new findings.
 2. Produce a follow-up report section using `references/AUDIT-REPORT.md`.
 3. Submit a follow-up fix plan with `submit_plan`.
-4. Repeat deterministic checks and the eval after approved fixes.
+4. Repeat deterministic checks and the affected eval after approved fixes.
+5. Preserve the original failure in `commands.log`, then append the rerun command and replace `result.md` with the latest outcome so the final result is unambiguous.
 
 ### 11. Finish with proof
 
