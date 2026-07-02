@@ -23,7 +23,9 @@
       }
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run"
+  },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
@@ -38,6 +40,7 @@
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "vitest": "catalog:",
     "zod": "catalog:"
   }
 }
