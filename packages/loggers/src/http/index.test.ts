@@ -60,6 +60,23 @@ describe('HttpTransport', () => {
       expect(minimalTransport['flushInterval']).toBe(10000);
       expect(minimalTransport['timeout']).toBe(30000);
     });
+
+    it('should preserve explicit retry option falsy values', () => {
+      const noRetryTransport = new HttpTransport({
+        url: 'https://example.com',
+        retryOptions: {
+          maxRetries: 0,
+          retryDelay: 0,
+          exponentialBackoff: false,
+        },
+      });
+
+      expect(noRetryTransport['retryOptions']).toEqual({
+        maxRetries: 0,
+        retryDelay: 0,
+        exponentialBackoff: false,
+      });
+    });
   });
 
   describe('logging functionality', () => {
