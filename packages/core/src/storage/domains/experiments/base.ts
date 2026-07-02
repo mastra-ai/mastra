@@ -68,21 +68,23 @@ export abstract class ExperimentsStorage extends StorageDomain {
   }): Promise<ExperimentResult | null>;
   abstract listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput>;
   /**
-   * Deletes all results for an experiment. Returns `true` if the parent
-   * experiment existed under the (optional) tenancy scope and its result set
-   * was cleared. Returns `false` on tenancy miss or when the parent does not
-   * exist — a `false` result does not distinguish those, matching the parent
-   * `deleteExperiment` contract.
+   * Deletes all results for an experiment.
    *
-   * When `filters` is set, silent no-op on tenancy mismatch (never throws).
-   * Result rows carry `organizationId`/`projectId` from their parent, so
-   * implementers must fold the tenancy predicate into the destructive DML —
-   * a parent pre-check followed by an unscoped `DELETE WHERE experimentId = ?`
-   * is unsafe under concurrent id reuse.
+   * When `filters` is set: returns `true` iff the parent experiment existed
+   * under the tenancy scope and its result set was cleared. Returns `false`
+   * on tenancy miss or when the parent does not exist — a `false` result does
+   * not distinguish those, matching the parent `deleteExperiment` contract.
+   * Silent no-op on tenancy mismatch (never throws). Result rows carry
+   * `organizationId`/`projectId` from their parent, so implementers must fold
+   * the tenancy predicate into the destructive DML — a parent pre-check
+   * followed by an unscoped `DELETE WHERE experimentId = ?` is unsafe under
+   * concurrent id reuse.
    *
-   * When `filters` is omitted, implementations MAY skip the tenancy predicate
-   * entirely (backward compat: callers explicitly opt out of scoping). This is
-   * why pg/mysql/spanner take an unscoped fast path here while mongodb/libsql
+   * When `filters` is omitted: returns `true` unconditionally after the DELETE
+   * runs (even if the parent does not exist and zero rows were affected).
+   * Implementations MAY skip the tenancy predicate entirely on this path —
+   * leak-prevention is only material when a scope was supplied. This is why
+   * pg/mysql/spanner take an unscoped fast path here while mongodb/libsql
    * fold the (empty) filter unconditionally — both are correct.
    */
   abstract deleteExperimentResults(args: {
