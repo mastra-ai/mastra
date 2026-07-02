@@ -2625,6 +2625,20 @@ export interface DatasetTenancyFilters {
 export interface ListDatasetsFilters extends DatasetTenancyFilters {
   candidateKey?: string;
   candidateId?: string;
+  /**
+   * Filter by dataset target type (agent | workflow | scorer | processor).
+   */
+  targetType?: TargetType;
+  /**
+   * Filter to datasets whose `targetIds` intersect this list. A dataset
+   * matches if any of its targetIds is in this array. An empty array is
+   * treated as "no filter" (matches all datasets), not "match none".
+   */
+  targetIds?: string[];
+  /**
+   * Substring match on dataset `name`, case-insensitive.
+   */
+  name?: string;
 }
 
 export interface ListDatasetsInput {

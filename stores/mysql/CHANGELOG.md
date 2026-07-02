@@ -1,5 +1,16 @@
 # @mastra/mysql
 
+## 0.3.3-alpha.0
+
+### Patch Changes
+
+- Fixed `listExperiments` in the MySQL store ignoring `targetType`, `targetId`, `agentVersion`, and `status` filters. Queries now correctly narrow on these fields, matching the behavior of the other stores (Postgres, LibSQL, Spanner, in-memory). ([#18769](https://github.com/mastra-ai/mastra/pull/18769))
+
+  Also persisted `agentVersion` on experiment rows in the MySQL store. The column existed in the schema but `createExperiment` never wrote it and `getExperimentById`/`listExperiments` never returned it, so filtering by `agentVersion` would have matched nothing on rows created by this backend. New experiments now round-trip `agentVersion` end-to-end. Existing tables gain the column via the `init()` backfill.
+
+- Updated dependencies [[`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44)]:
+  - @mastra/core@1.49.0-alpha.4
+
 ## 0.3.2
 
 ### Patch Changes

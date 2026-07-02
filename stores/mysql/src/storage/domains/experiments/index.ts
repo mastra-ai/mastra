@@ -48,6 +48,7 @@ interface ExperimentRow {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion: string | null;
   organizationId: string | null;
   projectId: string | null;
   targetType: string;
@@ -178,7 +179,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
     });
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
@@ -199,6 +200,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       id: row.id,
       datasetId: row.datasetId ?? null,
       datasetVersion: row.datasetVersion ?? null,
+      agentVersion: row.agentVersion ?? null,
       organizationId: row.organizationId ?? null,
       projectId: row.projectId ?? null,
       targetType: row.targetType as Experiment['targetType'],
@@ -251,6 +253,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           id,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
+          agentVersion: input.agentVersion ?? null,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
           targetType: input.targetType,
@@ -274,6 +277,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: input.datasetVersion,
+        agentVersion: input.agentVersion ?? null,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
         targetType: input.targetType,
@@ -378,6 +382,22 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (args.datasetId) {
         conditions.push(`${quoteIdentifier('datasetId', 'column name')} = ?`);
         params.push(args.datasetId);
+      }
+      if (args.targetType) {
+        conditions.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        params.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push(`${quoteIdentifier('targetId', 'column name')} = ?`);
+        params.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push(`${quoteIdentifier('agentVersion', 'column name')} = ?`);
+        params.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
       }
       if (args.filters) {
         const { organizationId, projectId } = args.filters;

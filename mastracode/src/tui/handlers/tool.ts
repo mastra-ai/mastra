@@ -235,6 +235,10 @@ export function handleToolApprovalRequired(
   // Send notification to alert the user
   ctx.notify('tool_approval', `Approve ${toolName}?`);
 
+  const firePermissionResult = (decision: 'approved' | 'declined' | 'dismissed' | 'auto_approved') => {
+    state.hookManager?.runPermissionResult('tool_approval', toolCallId, toolName, decision, args).catch(() => {});
+  };
+
   const dialog = new ToolApprovalDialogComponent({
     toolCallId,
     toolName,
@@ -244,13 +248,17 @@ export function handleToolApprovalRequired(
       state.ui.hideOverlay();
       state.pendingApprovalDismiss = null;
       if (action.type === 'approve') {
+        firePermissionResult('approved');
         state.session.respondToToolApproval({ decision: 'approve' });
       } else if (action.type === 'always_allow_category') {
+        firePermissionResult('approved');
         state.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
+        firePermissionResult('auto_approved');
         void state.session.state.set({ yolo: true } as any);
         state.session.respondToToolApproval({ decision: 'approve' });
       } else {
+        firePermissionResult('declined');
         state.session.respondToToolApproval({ decision: 'decline' });
       }
     },
@@ -260,6 +268,7 @@ export function handleToolApprovalRequired(
   state.pendingApprovalDismiss = declineContext => {
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
+    firePermissionResult('dismissed');
     state.session.respondToToolApproval({ decision: 'decline', declineContext });
   };
 

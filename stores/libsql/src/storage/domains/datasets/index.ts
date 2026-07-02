@@ -245,8 +245,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
           version: 0,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
@@ -480,6 +480,23 @@ export class DatasetsLibSQL extends DatasetsStorage {
       if (args.filters?.candidateId !== undefined) {
         filterConditions.push('candidateId = ?');
         filterParams.push(args.filters.candidateId);
+      }
+      if (args.filters?.targetType !== undefined) {
+        filterConditions.push('targetType = ?');
+        filterParams.push(args.filters.targetType);
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        const placeholders = args.filters.targetIds.map(() => '?').join(',');
+        // targetIds is stored as JSON text; check intersection via json_each.
+        filterConditions.push(
+          `EXISTS (SELECT 1 FROM json_each(${TABLE_DATASETS}.targetIds) WHERE value IN (${placeholders}))`,
+        );
+        for (const id of args.filters.targetIds) filterParams.push(id);
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        // Case-insensitive substring match (LIKE in SQLite is case-insensitive for ASCII)
+        filterConditions.push('LOWER(name) LIKE ?');
+        filterParams.push(`%${args.filters.name.toLowerCase()}%`);
       }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
 

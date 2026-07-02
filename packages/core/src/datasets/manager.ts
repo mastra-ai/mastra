@@ -186,6 +186,14 @@ export class DatasetsManager {
       projectId?: string;
       candidateKey?: string;
       candidateId?: string;
+      /** Filter by dataset target type. */
+      targetType?: TargetType;
+      /**
+       * Filter to datasets whose `targetIds` intersect this list (any overlap matches).
+       */
+      targetIds?: string[];
+      /** Substring match on dataset `name`, case-insensitive. */
+      name?: string;
     };
   }) {
     const store = await this.#getDatasetsStore();

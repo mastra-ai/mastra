@@ -8,8 +8,15 @@ import { DatasetsInMemory } from '../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { ScoresInMemory } from '../../storage/domains/scores/inmemory';
+import type { DatasetItem, ListDatasetItemsOutput } from '../../storage/types';
 import { Dataset } from '../dataset';
 import { SchemaValidationError, SchemaUpdateValidationError } from '../validation/errors';
+
+// Dataset.listItems returns a union: bare `DatasetItem[]` when only `version`
+// is passed, else the paginated `{ items, pagination }` shape. Narrow to the
+// paginated branch in tests that pass `search`/`page`/`perPage` (with or
+// without `version`).
+const paginated = <T>(r: T | ListDatasetItemsOutput): ListDatasetItemsOutput => r as ListDatasetItemsOutput;
 
 const createMockScorer = (scorerId: string, scorerName: string): MastraScorer<any, any, any, any> => ({
   id: scorerId,
@@ -196,19 +203,45 @@ describe('Dataset', () => {
   // 14. listItems — without version
   it('listItems without version returns { items, pagination }', async () => {
     await ds.addItem({ input: { a: 1 } });
-    const result = await ds.listItems();
-    expect('items' in (result as any)).toBe(true);
-    expect('pagination' in (result as any)).toBe(true);
-    expect((result as any).items.length).toBeGreaterThanOrEqual(1);
+    const result = paginated(await ds.listItems());
+    expect(result.items.length).toBeGreaterThanOrEqual(1);
+    expect(result.pagination).toBeDefined();
   });
 
-  // 15. listItems — with version
-  it('listItems with version returns DatasetItem[]', async () => {
+  // 15. listItems — version-only returns bare DatasetItem[] snapshot
+  it('listItems with only version returns a bare DatasetItem[] snapshot', async () => {
     const item = await ds.addItem({ input: { a: 1 } });
     const result = await ds.listItems({ version: item.datasetVersion });
-    // When version is set, returns DatasetItem[] (from getItemsByVersion)
     expect(Array.isArray(result)).toBe(true);
-    expect((result as any[]).length).toBeGreaterThanOrEqual(1);
+    expect((result as DatasetItem[]).length).toBeGreaterThanOrEqual(1);
+  });
+
+  // 15a. listItems — version + search
+  it('listItems with version + search filters at that version', async () => {
+    await ds.addItem({ input: { q: 'apple' } });
+    await ds.addItem({ input: { q: 'banana' } });
+    const last = await ds.addItem({ input: { q: 'apricot' } });
+
+    const result = paginated(await ds.listItems({ version: last.datasetVersion, search: 'ap' }));
+    expect(result.items.length).toBe(2);
+    expect(result.items.every(i => JSON.stringify(i.input).includes('ap'))).toBe(true);
+  });
+
+  // 15b. listItems — version + pagination
+  it('listItems with version respects page/perPage', async () => {
+    for (let i = 0; i < 5; i++) {
+      await ds.addItem({ input: { a: i } });
+    }
+    const latest = await ds.addItem({ input: { a: 5 } });
+
+    const page0 = paginated(await ds.listItems({ version: latest.datasetVersion, page: 0, perPage: 2 }));
+    expect(page0.items).toHaveLength(2);
+    expect(page0.pagination.total).toBe(6);
+    expect(page0.pagination.hasMore).toBe(true);
+
+    const page1 = paginated(await ds.listItems({ version: latest.datasetVersion, page: 1, perPage: 2 }));
+    expect(page1.items).toHaveLength(2);
+    expect(page1.pagination.hasMore).toBe(true);
   });
 
   // 16. updateItem
@@ -563,9 +596,207 @@ describe('Dataset', () => {
     for (let i = 0; i < 5; i++) {
       await ds.addItem({ input: { i } });
     }
-    const result = await ds.listItems({ perPage: 2 });
-    expect('items' in (result as any)).toBe(true);
-    expect((result as any).items.length).toBe(2);
+    const result = paginated(await ds.listItems({ perPage: 2 }));
+    expect(result.items).toHaveLength(2);
+    expect(result.pagination.total).toBe(5);
+  });
+
+  // 32. listExperiments filter passthrough
+  describe('listExperiments filter passthrough', () => {
+    beforeEach(async () => {
+      await experimentsStorage.createExperiment({
+        datasetId,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-a',
+        agentVersion: 'v1',
+        totalItems: 1,
+        organizationId: 'org-1',
+        projectId: 'proj-1',
+      });
+      await experimentsStorage.createExperiment({
+        datasetId,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-a',
+        agentVersion: 'v2',
+        totalItems: 1,
+        organizationId: 'org-2',
+        projectId: 'proj-2',
+      });
+      await experimentsStorage.createExperiment({
+        datasetId,
+        datasetVersion: 1,
+        targetType: 'workflow',
+        targetId: 'wf-1',
+        totalItems: 1,
+        organizationId: 'org-1',
+        projectId: 'proj-1',
+      });
+    });
+
+    it('scopes results to the dataset by default', async () => {
+      const { experiments, pagination } = await ds.listExperiments();
+      expect(experiments).toHaveLength(3);
+      expect(pagination.total).toBe(3);
+      expect(experiments.every(e => e.datasetId === datasetId)).toBe(true);
+    });
+
+    it('filters by targetType', async () => {
+      const { experiments } = await ds.listExperiments({ targetType: 'workflow' });
+      expect(experiments).toHaveLength(1);
+      expect(experiments[0]!.targetType).toBe('workflow');
+    });
+
+    it('filters by targetId', async () => {
+      const { experiments } = await ds.listExperiments({ targetId: 'agent-a' });
+      expect(experiments).toHaveLength(2);
+      expect(experiments.every(e => e.targetId === 'agent-a')).toBe(true);
+    });
+
+    it('filters by agentVersion', async () => {
+      const { experiments } = await ds.listExperiments({ agentVersion: 'v2' });
+      expect(experiments).toHaveLength(1);
+      expect(experiments[0]!.agentVersion).toBe('v2');
+    });
+
+    it('filters by status', async () => {
+      const [firstExp] = await experimentsStorage
+        .listExperiments({
+          datasetId,
+          pagination: { page: 0, perPage: 100 },
+        })
+        .then(r => r.experiments);
+      expect(firstExp).toBeDefined();
+      await experimentsStorage.updateExperiment({ id: firstExp!.id, status: 'completed' });
+
+      const { experiments } = await ds.listExperiments({ status: 'completed' });
+      expect(experiments).toHaveLength(1);
+      expect(experiments[0]!.status).toBe('completed');
+    });
+
+    it('forwards tenancy filters', async () => {
+      const { experiments } = await ds.listExperiments({
+        filters: { organizationId: 'org-1', projectId: 'proj-1' },
+      });
+      expect(experiments).toHaveLength(2);
+      expect(experiments.every(e => e.organizationId === 'org-1' && e.projectId === 'proj-1')).toBe(true);
+    });
+
+    it('respects pagination alongside filters', async () => {
+      const { experiments, pagination } = await ds.listExperiments({
+        targetType: 'agent',
+        page: 0,
+        perPage: 1,
+      });
+      expect(experiments).toHaveLength(1);
+      expect(pagination.total).toBe(2);
+      expect(pagination.hasMore).toBe(true);
+    });
+  });
+
+  // 33. listExperimentResults filter passthrough
+  describe('listExperimentResults filter passthrough', () => {
+    let experimentId: string;
+
+    beforeEach(async () => {
+      const experiment = await experimentsStorage.createExperiment({
+        datasetId,
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'agent-a',
+        totalItems: 3,
+      });
+      experimentId = experiment.id;
+
+      await experimentsStorage.addExperimentResult({
+        experimentId,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: { prompt: 'p1' },
+        output: { text: 'r1' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(1000),
+        completedAt: new Date(2000),
+        retryCount: 0,
+        traceId: 'trace-a',
+        status: 'reviewed',
+        organizationId: 'org-1',
+        projectId: 'proj-1',
+      });
+      await experimentsStorage.addExperimentResult({
+        experimentId,
+        itemId: 'item-2',
+        itemDatasetVersion: 1,
+        input: { prompt: 'p2' },
+        output: { text: 'r2' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(3000),
+        completedAt: new Date(4000),
+        retryCount: 0,
+        traceId: 'trace-b',
+        status: 'needs-review',
+        organizationId: 'org-2',
+        projectId: 'proj-2',
+      });
+      await experimentsStorage.addExperimentResult({
+        experimentId,
+        itemId: 'item-3',
+        itemDatasetVersion: 1,
+        input: { prompt: 'p3' },
+        output: { text: 'r3' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(5000),
+        completedAt: new Date(6000),
+        retryCount: 0,
+        traceId: 'trace-a',
+        status: null,
+        organizationId: 'org-1',
+        projectId: 'proj-1',
+      });
+    });
+
+    it('scopes results to the experiment by default', async () => {
+      const { results, pagination } = await ds.listExperimentResults({ experimentId });
+      expect(results).toHaveLength(3);
+      expect(pagination.total).toBe(3);
+    });
+
+    it('filters by traceId', async () => {
+      const { results } = await ds.listExperimentResults({ experimentId, traceId: 'trace-a' });
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.traceId === 'trace-a')).toBe(true);
+    });
+
+    it('filters by status', async () => {
+      const { results } = await ds.listExperimentResults({ experimentId, status: 'reviewed' });
+      expect(results).toHaveLength(1);
+      expect(results[0]!.status).toBe('reviewed');
+    });
+
+    it('forwards tenancy filters', async () => {
+      const { results } = await ds.listExperimentResults({
+        experimentId,
+        filters: { organizationId: 'org-1', projectId: 'proj-1' },
+      });
+      expect(results).toHaveLength(2);
+      expect(results.every(r => r.organizationId === 'org-1' && r.projectId === 'proj-1')).toBe(true);
+    });
+
+    it('respects pagination alongside filters', async () => {
+      const { results, pagination } = await ds.listExperimentResults({
+        experimentId,
+        traceId: 'trace-a',
+        page: 0,
+        perPage: 1,
+      });
+      expect(results).toHaveLength(1);
+      expect(pagination.total).toBe(2);
+      expect(pagination.hasMore).toBe(true);
+    });
   });
 
   // ---------------------------------------------------------------------------

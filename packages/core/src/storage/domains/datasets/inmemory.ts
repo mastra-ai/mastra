@@ -180,12 +180,19 @@ export class DatasetsInMemory extends DatasetsStorage {
     let datasets = Array.from(this.db.datasets.values());
 
     if (args.filters) {
-      const { organizationId, projectId, candidateKey, candidateId } = args.filters;
+      const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+      const nameLower = name?.toLowerCase();
+      const targetIdsSet = targetIds && targetIds.length > 0 ? new Set(targetIds) : undefined;
       datasets = datasets.filter(d => {
         if (organizationId !== undefined && d.organizationId !== organizationId) return false;
         if (projectId !== undefined && d.projectId !== projectId) return false;
         if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;
         if (candidateId !== undefined && d.candidateId !== candidateId) return false;
+        if (targetType !== undefined && d.targetType !== targetType) return false;
+        if (targetIdsSet) {
+          if (!d.targetIds || !d.targetIds.some(id => targetIdsSet.has(id))) return false;
+        }
+        if (nameLower !== undefined && !d.name.toLowerCase().includes(nameLower)) return false;
         return true;
       });
     }

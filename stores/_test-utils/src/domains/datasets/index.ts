@@ -320,6 +320,102 @@ export function createDatasetsTests({
         expect(page1.datasets).toHaveLength(1);
         expect(page1.pagination.hasMore).toBe(false);
       });
+
+      it('listDatasets filters by targetType', async () => {
+        await datasetsStorage.createDataset({ name: 'agent-ds', targetType: 'agent' });
+        await datasetsStorage.createDataset({ name: 'workflow-ds', targetType: 'workflow' });
+        await datasetsStorage.createDataset({ name: 'untyped-ds' });
+
+        const agentOnly = await datasetsStorage.listDatasets({
+          filters: { targetType: 'agent' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(agentOnly.datasets).toHaveLength(1);
+        expect(agentOnly.datasets[0]!.name).toBe('agent-ds');
+
+        const workflowOnly = await datasetsStorage.listDatasets({
+          filters: { targetType: 'workflow' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(workflowOnly.datasets).toHaveLength(1);
+        expect(workflowOnly.datasets[0]!.name).toBe('workflow-ds');
+      });
+
+      it('listDatasets filters by targetIds with overlap semantics', async () => {
+        await datasetsStorage.createDataset({ name: 'ds-a', targetType: 'agent', targetIds: ['a1', 'a2'] });
+        await datasetsStorage.createDataset({ name: 'ds-b', targetType: 'agent', targetIds: ['a2', 'a3'] });
+        await datasetsStorage.createDataset({ name: 'ds-c', targetType: 'agent', targetIds: ['a4'] });
+        await datasetsStorage.createDataset({ name: 'ds-d' });
+
+        // Single id matches any dataset whose targetIds contain it
+        const matchA2 = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['a2'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(matchA2.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-b']);
+
+        // Multiple ids match any dataset whose targetIds overlap with the filter (union)
+        const matchA1OrA4 = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['a1', 'a4'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(matchA1OrA4.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-c']);
+
+        // No overlap returns empty
+        const noMatch = await datasetsStorage.listDatasets({
+          filters: { targetIds: ['zzz'] },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(noMatch.datasets).toHaveLength(0);
+      });
+
+      it('listDatasets filters by name substring case-insensitively', async () => {
+        await datasetsStorage.createDataset({ name: 'Production Tickets' });
+        await datasetsStorage.createDataset({ name: 'production-logs' });
+        await datasetsStorage.createDataset({ name: 'staging-tickets' });
+
+        const prod = await datasetsStorage.listDatasets({
+          filters: { name: 'PROD' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(prod.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'production-logs']);
+
+        const tickets = await datasetsStorage.listDatasets({
+          filters: { name: 'tickets' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(tickets.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'staging-tickets']);
+      });
+
+      it('listDatasets combines targetType, targetIds, and name filters', async () => {
+        await datasetsStorage.createDataset({
+          name: 'agent-prod-alpha',
+          targetType: 'agent',
+          targetIds: ['a1'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'agent-prod-beta',
+          targetType: 'agent',
+          targetIds: ['a2'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'workflow-prod-alpha',
+          targetType: 'workflow',
+          targetIds: ['a1'],
+        });
+        await datasetsStorage.createDataset({
+          name: 'agent-staging-alpha',
+          targetType: 'agent',
+          targetIds: ['a1'],
+        });
+
+        const result = await datasetsStorage.listDatasets({
+          filters: { targetType: 'agent', targetIds: ['a1'], name: 'prod' },
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(result.datasets).toHaveLength(1);
+        expect(result.datasets[0]!.name).toBe('agent-prod-alpha');
+      });
     });
 
     // ---------------------------------------------------------------------------
@@ -684,6 +780,58 @@ export function createDatasetsTests({
           pagination: { page: 0, perPage: 10 },
         });
         expect(v3.items).toHaveLength(2);
+      });
+
+      it('listItems applies search alongside version', async () => {
+        // Use a fresh dataset with string-valued inputs because some adapters
+        // (mongodb) only run search against string-valued input fields.
+        const searchDs = await datasetsStorage.createDataset({ name: 'version-search' });
+        const a = await datasetsStorage.addItem({ datasetId: searchDs.id, input: 'alpha-original' });
+        await datasetsStorage.addItem({ datasetId: searchDs.id, input: 'beta-original' });
+        // v2 now. Updating a -> v3
+        await datasetsStorage.updateItem({ id: a.id, datasetId: searchDs.id, input: 'alpha-updated' });
+
+        const searchUpdated = await datasetsStorage.listItems({
+          datasetId: searchDs.id,
+          version: 3,
+          search: 'updated',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(searchUpdated.items).toHaveLength(1);
+        expect(searchUpdated.items[0]!.input).toBe('alpha-updated');
+
+        // Search at an older version reaches into historical input values
+        const searchOriginalAtV2 = await datasetsStorage.listItems({
+          datasetId: searchDs.id,
+          version: 2,
+          search: 'alpha-original',
+          pagination: { page: 0, perPage: 10 },
+        });
+        expect(searchOriginalAtV2.items).toHaveLength(1);
+        expect(searchOriginalAtV2.items[0]!.input).toBe('alpha-original');
+      });
+
+      it('listItems applies pagination alongside version', async () => {
+        // Add two more items so v4 has 3 items: item1 'updated', second, third
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'second' } });
+        await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'third' } });
+
+        const page0 = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          version: 4,
+          pagination: { page: 0, perPage: 2 },
+        });
+        expect(page0.items).toHaveLength(2);
+        expect(page0.pagination.total).toBe(3);
+        expect(page0.pagination.hasMore).toBe(true);
+
+        const page1 = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          version: 4,
+          pagination: { page: 1, perPage: 2 },
+        });
+        expect(page1.items).toHaveLength(1);
+        expect(page1.pagination.hasMore).toBe(false);
       });
     });
 

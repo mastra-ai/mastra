@@ -11,6 +11,13 @@ import type {
   DatasetItemRow,
   DatasetTenancyFilters,
   DatasetVersion,
+  ExperimentResultStatus,
+  ExperimentStatus,
+  ExperimentTenancyFilters,
+  ListDatasetItemsOutput,
+  ListExperimentResultsOutput,
+  ListExperimentsOutput,
+  TargetType,
   UpdateDatasetInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
@@ -228,26 +235,46 @@ export class Dataset {
   }
 
   /**
-   * List items in the dataset, optionally at a specific version.
+   * List items in the dataset, optionally at a specific version, with
+   * optional substring search and pagination.
+   *
+   * Return shape depends on the arguments:
+   *
+   * - When `version` is the only argument provided (no `search`, `page`, or
+   *   `perPage`), returns a bare `DatasetItem[]` snapshot of every item at
+   *   that version. This shape is retained for callers that predate
+   *   server-side pagination on the versioned path; new code should pass
+   *   `page` / `perPage` (or `search`) to opt into the paginated shape.
+   * - In all other cases (no arguments, or `search` / `page` / `perPage`
+   *   provided with or without `version`), returns the paginated
+   *   `{ items, pagination }` shape.
+   *
+   * @deprecated The `DatasetItem[]` branch of the return type is retained
+   * for backwards compatibility with the `version`-only call form; pass
+   * `page` / `perPage` (or `search`) to always receive the paginated
+   * `{ items, pagination }` shape.
    */
   async listItems(args?: {
     version?: number;
     page?: number;
     perPage?: number;
     search?: string;
-  }): Promise<
-    | DatasetItem[]
-    | { items: DatasetItem[]; pagination: { total: number; page: number; perPage: number | false; hasMore: boolean } }
-  > {
+  }): Promise<DatasetItem[] | ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
-    if (args?.version) {
+
+    const onlyVersion =
+      args?.version !== undefined && args.search === undefined && args.page === undefined && args.perPage === undefined;
+
+    if (onlyVersion) {
       // getItemsByVersion is keyed by datasetId — gate via scoped parent existence
       await this.#assertScope();
-      return store.getItemsByVersion({ datasetId: this.id, version: args.version });
+      return store.getItemsByVersion({ datasetId: this.id, version: args.version! });
     }
+
     return store.listItems({
       datasetId: this.id,
-      search: args?.search,
+      ...(args?.version !== undefined ? { version: args.version } : {}),
+      ...(args?.search ? { search: args.search } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
       filters: this.#scope,
     });
@@ -401,13 +428,36 @@ export class Dataset {
   }
 
   /**
-   * List all experiments (runs) for this dataset.
+   * List experiments (runs) for this dataset, with optional filters and
+   * pagination. All filters are pushed to the storage layer.
+   *
+   * @param args.targetType   Restrict to a specific target type (e.g. `agent`).
+   * @param args.targetId     Restrict to a specific target ID.
+   * @param args.agentVersion Restrict to a specific agent version — useful for
+   *                          baseline vs variant read patterns.
+   * @param args.status       Restrict to a specific experiment status.
+   * @param args.filters      Multi-tenant scoping filters (organization/project).
+   * @param args.page         Page number. Defaults to `0`.
+   * @param args.perPage      Page size. Defaults to `20`.
    */
-  async listExperiments(args?: { page?: number; perPage?: number }) {
+  async listExperiments(args?: {
+    targetType?: TargetType;
+    targetId?: string;
+    agentVersion?: string;
+    status?: ExperimentStatus;
+    filters?: ExperimentTenancyFilters;
+    page?: number;
+    perPage?: number;
+  }): Promise<ListExperimentsOutput> {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.listExperiments({
       datasetId: this.id,
+      ...(args?.targetType !== undefined ? { targetType: args.targetType } : {}),
+      ...(args?.targetId !== undefined ? { targetId: args.targetId } : {}),
+      ...(args?.agentVersion !== undefined ? { agentVersion: args.agentVersion } : {}),
+      ...(args?.status !== undefined ? { status: args.status } : {}),
+      ...(args?.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }
@@ -445,13 +495,31 @@ export class Dataset {
   }
 
   /**
-   * List results for a specific experiment.
+   * List results for a specific experiment, with optional filters and
+   * pagination. All filters are pushed to the storage layer.
+   *
+   * @param args.experimentId The experiment whose results to list.
+   * @param args.traceId      Restrict to results linked to a specific trace.
+   * @param args.status       Restrict to a specific per-result review status.
+   * @param args.filters      Multi-tenant scoping filters (organization/project).
+   * @param args.page         Page number. Defaults to `0`.
+   * @param args.perPage      Page size. Defaults to `20`.
    */
-  async listExperimentResults(args: { experimentId: string; page?: number; perPage?: number }) {
+  async listExperimentResults(args: {
+    experimentId: string;
+    traceId?: string;
+    status?: ExperimentResultStatus;
+    filters?: ExperimentTenancyFilters;
+    page?: number;
+    perPage?: number;
+  }): Promise<ListExperimentResultsOutput> {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.listExperimentResults({
       experimentId: args.experimentId,
+      ...(args.traceId !== undefined ? { traceId: args.traceId } : {}),
+      ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(args.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }

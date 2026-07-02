@@ -33,7 +33,7 @@ function AgentViewHeaderLoadingSkeleton() {
   );
 }
 
-function AgentSidebarLoadingSkeleton() {
+export function AgentSidebarLoadingSkeleton() {
   return (
     <SidebarPanel>
       <div className="min-h-0 flex-1 p-1" data-testid="agent-route-sidebar-skeleton">
