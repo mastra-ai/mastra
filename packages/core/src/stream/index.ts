@@ -42,6 +42,10 @@ export type {
   GoalEvaluationPayload,
   TripwirePayload,
 
+  // Callback Types
+  MastraOnFinishCallback,
+  MastraOnFinishCallbackArgs,
+
   // JSON & Data Types
   JSONArray,
   JSONObject,

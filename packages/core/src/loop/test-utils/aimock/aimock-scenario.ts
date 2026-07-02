@@ -115,7 +115,6 @@ async function buildScenarioAgent({
   pubsub,
   engine,
   inputProcessors,
-  outputProcessors,
   fsRouted,
 }: Pick<
   RunLoopScenarioOptions,
@@ -136,7 +135,6 @@ async function buildScenarioAgent({
   | 'pubsub'
   | 'engine'
   | 'inputProcessors'
-  | 'outputProcessors'
   | 'fsRouted'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
@@ -202,9 +200,10 @@ async function buildScenarioAgent({
       ...(goal ? { goal } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
       ...(defaultOptions ? { defaultOptions } : {}),
-      // For durable engine, processors must be on the agent constructor
+      // For durable engine, inputProcessors must be on the agent constructor
+      // (not yet supported as call-time options for durable); outputProcessors
+      // are forwarded at call-time via preparation.ts.
       ...(engine === 'durable' && inputProcessors ? { inputProcessors } : {}),
-      ...(engine === 'durable' && outputProcessors ? { outputProcessors } : {}),
     });
   }
 
@@ -334,7 +333,6 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       pubsub,
       engine,
       inputProcessors,
-      outputProcessors,
       fsRouted,
     });
     agent = built.agent;
@@ -358,7 +356,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       : {};
 
   // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors/outputProcessors are on the agent constructor, not call-time options;
+  // inputProcessors are on the agent constructor, not call-time options;
   // abortSignal is inapplicable (durable workflows manage their own lifecycle).
   const isDurable = engine === 'durable';
 

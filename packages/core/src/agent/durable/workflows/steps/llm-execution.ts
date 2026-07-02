@@ -1067,8 +1067,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               // Try processAPIError before deciding retry/break
               const registryEntryInner = globalRunRegistry.get(runId);
-              const canRetryErrorInner =
-                maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
+              const canRetryErrorInner = maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
               if (registryEntryInner?.errorProcessors?.length && canRetryErrorInner) {
                 try {
                   const runner = new ProcessorRunner({
@@ -1405,8 +1404,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // rejections that throw before the stream opens). Stream-level
             // errors are already handled in the inner catch above.
             const registryEntry = globalRunRegistry.get(runId);
-            const canRetryError =
-              maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
+            const canRetryError = maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
             if (registryEntry?.errorProcessors?.length && canRetryError) {
               try {
                 const runner = new ProcessorRunner({
@@ -1481,7 +1479,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               isContinued: false,
             },
             output: {
-              usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } as any,
+              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
             },
             metadata: {},
           },

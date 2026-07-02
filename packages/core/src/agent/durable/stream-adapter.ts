@@ -5,7 +5,12 @@ import type { IMastraLogger } from '../../logger';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType, MastraOnFinishCallback, MastraOnStepFinishCallback } from '../../stream/types';
+import type {
+  ChunkType,
+  MastraOnFinishCallback,
+  MastraOnStepFinishCallback,
+  LanguageModelUsage,
+} from '../../stream/types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
@@ -19,6 +24,20 @@ import type {
   AgentAbortEventData,
   AgentIterationCompleteEventData,
 } from './types';
+
+/**
+ * Map workflow usage (which may use legacy promptTokens/completionTokens) to
+ * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
+ */
+function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
+  if (!raw) {
+    return { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  }
+  const inputTokens = (raw.inputTokens as number) ?? (raw.promptTokens as number) ?? 0;
+  const outputTokens = (raw.outputTokens as number) ?? (raw.completionTokens as number) ?? 0;
+  const totalTokens = (raw.totalTokens as number) ?? inputTokens + outputTokens;
+  return { inputTokens, outputTokens, totalTokens };
+}
 
 /**
  * Options for creating a durable agent stream
@@ -238,8 +257,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 reasoning: [],
                 content: [],
                 finishReason: data.stepResult?.reason ?? 'stop',
-                usage: data.output?.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-                totalUsage: data.output?.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                usage: normalizeUsage(data.output?.usage),
+                totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
                 request: { body: undefined },
                 response: {},
