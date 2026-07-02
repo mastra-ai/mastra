@@ -839,6 +839,21 @@
       "source": "/reference/harness/session",
       "destination": "/reference/agent-controller/session",
       "permanent": true
+    },
+    {
+      "source": "/docs/community/contributing-templates",
+      "destination": "/templates",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/discord",
+      "destination": "https://discord.gg/BTYqqHKUrf",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing",
+      "destination": "/docs/license",
+      "permanent": true
     }
   ]
 }

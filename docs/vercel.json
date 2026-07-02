@@ -841,6 +841,21 @@
       "permanent": true
     },
     {
+      "source": "/docs/community/contributing-templates",
+      "destination": "/templates",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/discord",
+      "destination": "https://discord.gg/BTYqqHKUrf",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing",
+      "destination": "/docs/license",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
       "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
@@ -1423,6 +1438,11 @@
     {
       "source": "/reference/harness/session/llms.txt",
       "destination": "/reference/agent-controller/session/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing/llms.txt",
+      "destination": "/docs/license/llms.txt",
       "permanent": true
     }
   ]
