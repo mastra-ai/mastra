@@ -8,6 +8,7 @@ import { NotificationSummaryComponent } from '../../components/notification-summ
 import { NotificationComponent } from '../../components/notification.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
 import { StateSignalComponent } from '../../components/state-signal.js';
+import { SubagentExecutionComponent } from '../../components/subagent-execution.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
@@ -308,6 +309,38 @@ describe('handleMessageUpdate system reminders', () => {
     const renderedLines = stripAnsi((component as NotificationComponent).render(80).join('\n')).split('\n');
     expect(renderedLines.some(line => line.includes('automatically unsubscribed'))).toBe(true);
     expect(Math.max(...renderedLines.map(line => line.length))).toBeLessThanOrEqual(80);
+  });
+
+  it('splits parent assistant text around static plugin subagent renderers', () => {
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        { type: 'text', text: 'before plugin' },
+        {
+          type: 'tool_call',
+          id: 'tool-1',
+          name: 'mastra_expert',
+          args: { question: 'Explain the agent loop' },
+        } as never,
+        { type: 'text', text: 'after plugin' },
+      ]),
+    );
+
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(3);
+    expect(children[0]).toBeInstanceOf(AssistantMessageComponent);
+    expect(children[1]).toBeInstanceOf(SubagentExecutionComponent);
+    expect(children[2]).toBeInstanceOf(AssistantMessageComponent);
+    expect(stripAnsi((children[0] as AssistantMessageComponent).render(100).join('\n'))).toContain('before plugin');
+    expect(stripAnsi((children[1] as SubagentExecutionComponent).render(100).join('\n'))).toContain(
+      'Explain the agent loop',
+    );
+    expect(stripAnsi((children[2] as AssistantMessageComponent).render(100).join('\n'))).toContain('after plugin');
+    expect(state.streamingComponent).toBe(children[2]);
   });
 
   it('deduplicates repeated streamed reminders within the same assistant run', () => {

@@ -101,6 +101,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/mcp`              | Show/reload MCP server connections                                          |
 | `/sandbox`          | Manage allowed paths (add/remove dirs)                                      |
 | `/permissions`      | View/manage tool approval permissions                                       |
+| `/plugins`          | Install and manage trusted Mastra Code plugins                              |
 | `/settings`         | General settings (notifications, YOLO, etc.)                                |
 | `/yolo`             | Toggle YOLO mode (auto-approve all tools)                                   |
 | `/resource`         | Show/switch resource ID (tag for sharing)                                   |
@@ -110,6 +111,10 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/setup`            | Re-run the interactive setup wizard                                         |
 | `/help`             | Show available commands                                                     |
 | `/exit`             | Exit the TUI                                                                |
+
+### Plugins
+
+Use `/plugins` to install and manage trusted local or GitHub plugins. Plugins can add tools, commands, skills, and system instructions. Because plugins execute code inside Mastra Code and their instructions are appended to the agent prompt, only install plugins from sources you trust.
 
 ### Goals
 
@@ -417,15 +422,67 @@ export MASTRACODE_MAX_SANDBOXES=50
 
 ## Development
 
+Mastra Code lives inside the [mastra monorepo](https://github.com/mastra-ai/mastra). All commands below assume you have cloned the repo and are in the repository root.
+
+### Setup
+
 ```bash
-# Run in development mode (with watch)
-pnpm dev
+# Install dependencies (from repo root)
+pnpm i
 
-# Type check
-pnpm typecheck
-
-# Build
+# Build all packages (required before first run)
 pnpm build
+```
+
+### Running from source
+
+```bash
+# Run the TUI directly via tsx (from repo root)
+pnpx tsx mastracode/src/main.ts
+```
+
+### Building
+
+```bash
+# Build only the mastracode package (and its dependencies)
+pnpm build:mastracode
+
+# Build the library bundle (from mastracode/)
+pnpm --filter ./mastracode run build:lib
+```
+
+### Type checking
+
+```bash
+# Type-check mastracode
+pnpm --filter ./mastracode run check
+```
+
+### Linting
+
+```bash
+# Lint mastracode
+pnpm --filter ./mastracode run lint
+```
+
+### Testing
+
+```bash
+# Run unit tests
+pnpm --filter ./mastracode test
+
+# Run e2e smoke tests
+pnpm --filter ./mastracode run e2e:smoke
+```
+
+### Web UI development
+
+```bash
+# Start the web UI dev server (API + Vite)
+pnpm --filter ./mastracode run web:dev
+
+# With GitHub App integration (starts Postgres first)
+pnpm --filter ./mastracode run web:dev:github
 ```
 
 ## Credits

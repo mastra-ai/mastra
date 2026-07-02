@@ -15,16 +15,11 @@ RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments
 
 ### Stage 1: Understand the Context
 
-1. Verify the checked-out branch matches the PR head branch before reviewing
-2. Read the PR title and description carefully
-3. Check linked issues (if any) using `gh issue view`
-4. Review the commit history to understand the progression of changes
-5. Note any labels, assignees, and check status
+Use `.mastracode/shared/pr-review-context.md` for the context-gathering portion of this review. Keep this command responsible for the critique, summary artifact, optional review draft, and posting flow.
 
 ### Stage 2: Analyze the Code
 
-1. List all changed files using `gh pr diff`
-2. Create a .pr-review/PR_SUMMARY.md file with sections for:
+1. Create a .pr-review/PR_SUMMARY.md file with sections for:
    - **Overview**: What this PR accomplishes
    - **How It Works**: Technical explanation of the implementation
    - **Key Changes**: File-by-file breakdown with links (use format: `path/to/file.ts:line`)
@@ -33,10 +28,10 @@ RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments
    - **Testing**: What tests cover these changes, what validation you ran, and whether dependencies were installed and affected packages were built first
    - **Potential Concerns**: Confirmed issues, speculative risks, or areas that need attention
 
-3. Before running tests, check whether dependencies are installed. If dependencies are missing, stale, or package manifests / lockfiles changed, run the project install command first. For this repo, prefer `pnpm i` unless local instructions say otherwise.
-4. Build affected packages before relying on tests that consume their compiled outputs. Prefer narrow package/workspace build commands over repo-wide builds.
-5. Do not claim a test, build, or check passed unless you ran it or verified the matching CI check.
-6. For each significant file change:
+2. Before running tests, check whether dependencies are installed. If dependencies are missing, stale, or package manifests / lockfiles changed, run the project install command first. For this repo, prefer `pnpm i` unless local instructions say otherwise.
+3. Build affected packages before relying on tests that consume their compiled outputs. Prefer narrow package/workspace build commands over repo-wide builds.
+4. Do not claim a test, build, or check passed unless you ran it or verified the matching CI check.
+5. For each significant file change:
    - Understand the context and purpose
    - Explain the logic flow and implementation details
    - Note how it connects to other parts of the codebase

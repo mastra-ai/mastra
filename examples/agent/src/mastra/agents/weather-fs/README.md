@@ -7,7 +7,7 @@ example (which are created with `new Agent()` and exported from
 automatically.
 
 It exercises every file-based capability: config, instructions, tools, skills,
-a default workspace with seed files, and a declared subagent.
+memory, a default workspace with seed files, and a declared subagent.
 
 ## Layout
 
@@ -15,6 +15,7 @@ a default workspace with seed files, and a declared subagent.
 weather-fs/
   config.ts                       # model + config overrides (uses agentConfig() for typing)
   instructions.md                 # the agent instructions
+  memory.ts                       # default-exported Memory instance, wired in as the agent memory
   tools/
     get_weather.ts                # default-exported tool, keyed by filename -> "get_weather"
   skills/
@@ -40,6 +41,7 @@ weather-fs/
 | -------------------------------- | ------------------------------------------------------------------------------- |
 | `config.ts`                      | merged agent config; `id`/`name` default to `weather-fs`.                       |
 | `instructions.md`                | the agent `instructions`.                                                       |
+| `memory.ts`                      | the agent `memory` (default export).                                            |
 | `tools/get_weather.ts`           | a tool keyed `get_weather`.                                                     |
 | `skills/units.md`                | a flat skill named `units`.                                                     |
 | `skills/severe-weather/SKILL.md` | a packaged skill; frontmatter supplies name/description, `references/` inlined. |

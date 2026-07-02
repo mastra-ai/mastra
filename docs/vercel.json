@@ -192,7 +192,7 @@
     },
     {
       "source": "/examples/agents/image-analysis",
-      "destination": "/docs/agents/overview#analyzing-images",
+      "destination": "/docs/agents/overview",
       "permanent": true
     },
     {
@@ -262,22 +262,22 @@
     },
     {
       "source": "/examples/rag/rerank/rerank",
-      "destination": "/docs/rag/retrieval#re-ranking",
+      "destination": "/docs/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank-rag",
-      "destination": "/docs/rag/retrieval#re-ranking",
+      "destination": "/docs/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-cohere",
-      "destination": "/docs/rag/retrieval#re-ranking",
+      "destination": "/docs/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-zeroentropy",
-      "destination": "/docs/rag/retrieval#re-ranking",
+      "destination": "/docs/rag/retrieval",
       "permanent": true
     },
     {
@@ -422,7 +422,7 @@
     },
     {
       "source": "/examples/rag/query/hybrid-vector-search",
-      "destination": "/docs/rag/retrieval#metadata-filtering",
+      "destination": "/docs/rag/retrieval",
       "permanent": true
     },
     {
@@ -607,7 +607,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai",
       "permanent": true
     },
     {
@@ -757,17 +757,17 @@
     },
     {
       "source": "/docs/agents/response-caching",
-      "destination": "/docs/agents/processors#response-caching",
+      "destination": "/docs/agents/processors",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/skills",
-      "destination": "/docs/getting-started/build-with-ai#mastra-skills",
+      "destination": "/docs/getting-started/build-with-ai",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai",
       "permanent": true
     },
     {
@@ -782,22 +782,22 @@
     },
     {
       "source": "/docs/streaming/events",
-      "destination": "/guides/concepts/streaming#event-types",
+      "destination": "/guides/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/tool-streaming",
-      "destination": "/docs/agents/using-tools#streaming",
+      "destination": "/docs/agents/using-tools",
       "permanent": true
     },
     {
       "source": "/docs/streaming/workflow-streaming",
-      "destination": "/docs/workflows/overview#inspecting-workflow-stream-payloads",
+      "destination": "/docs/workflows/overview",
       "permanent": true
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/agents/background-tasks#subscribe-to-all-task-events",
+      "destination": "/docs/agents/background-tasks",
       "permanent": true
     },
     {
@@ -841,18 +841,588 @@
       "permanent": true
     },
     {
-      "source": "/docs/community/contributing-templates",
-      "destination": "/templates",
+      "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/community/discord",
-      "destination": "https://discord.gg/BTYqqHKUrf",
+      "source": "/docs/observability/tracing/exporters/default/llms.txt",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage/llms.txt",
       "permanent": true
     },
     {
-      "source": "/docs/community/licensing",
-      "destination": "/docs/license",
+      "source": "/docs/observability/tracing/exporters/:path*/llms.txt",
+      "destination": "/docs/observability/integrations/exporters/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/bridges/:path*/llms.txt",
+      "destination": "/docs/observability/integrations/bridges/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/processors/:path*/llms.txt",
+      "destination": "/docs/observability/integrations/processors/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/start/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/index/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/:path*/llms.txt",
+      "destination": "/docs/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/v1/:path*/llms.txt",
+      "destination": "/models/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/:path*/llms.txt",
+      "destination": "/guides/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/:path*/llms.txt",
+      "destination": "/reference/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/installation/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/logging/llms.txt",
+      "destination": "/docs/observability/logging/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/ai-sdk/llms.txt",
+      "destination": "/guides/build-your-ui/ai-sdk-ui/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/assistant-ui/llms.txt",
+      "destination": "/guides/build-your-ui/assistant-ui/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/copilotkit/llms.txt",
+      "destination": "/guides/build-your-ui/copilotkit/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/openrouter/llms.txt",
+      "destination": "/models/gateways/openrouter/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/astro/llms.txt",
+      "destination": "/guides/getting-started/astro/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/next-js/llms.txt",
+      "destination": "/guides/getting-started/next-js/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/sveltekit/llms.txt",
+      "destination": "/guides/getting-started/sveltekit/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/vite-react/llms.txt",
+      "destination": "/guides/getting-started/vite-react/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/servers/express/llms.txt",
+      "destination": "/guides/getting-started/express/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/manual-install/llms.txt",
+      "destination": "/docs/getting-started/manual-install/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/manual-install/llms.txt",
+      "destination": "/docs/getting-started/manual-install/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/nextjs/llms.txt",
+      "destination": "/guides/getting-started/next-js/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/standalone-server/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/quickstart/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/templates/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/human-in-the-loop-with-tools/llms.txt",
+      "destination": "/docs/agents/agent-approval/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/workflows/streamVNext/llms.txt",
+      "destination": "/reference/streaming/workflows/stream/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/workflows/observeStreamVNext/llms.txt",
+      "destination": "/reference/streaming/workflows/observeStream/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/workflows/resumeStreamVNext/llms.txt",
+      "destination": "/reference/streaming/workflows/resumeStream/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/listThreadsByResourceId/llms.txt",
+      "destination": "/reference/memory/listThreads/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/storage/llms.txt",
+      "destination": "/docs/memory/storage/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/mastra-server/llms.txt",
+      "destination": "/docs/server/mastra-server/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/server-adapters/llms.txt",
+      "destination": "/docs/server/server-adapters/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/custom-adapters/llms.txt",
+      "destination": "/docs/server/custom-adapters/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/middleware/llms.txt",
+      "destination": "/docs/server/middleware/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/request-context/llms.txt",
+      "destination": "/docs/server/request-context/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/custom-api-routes/llms.txt",
+      "destination": "/docs/server/custom-api-routes/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/mastra-client/llms.txt",
+      "destination": "/docs/server/mastra-client/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/llms.txt",
+      "destination": "/docs/server/auth/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/index/llms.txt",
+      "destination": "/docs/server/auth/index/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/jwt/llms.txt",
+      "destination": "/docs/server/auth/jwt/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/clerk/llms.txt",
+      "destination": "/docs/server/auth/clerk/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/supabase/llms.txt",
+      "destination": "/docs/server/auth/supabase/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/firebase/llms.txt",
+      "destination": "/docs/server/auth/firebase/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/workos/llms.txt",
+      "destination": "/docs/server/auth/workos/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/auth0/llms.txt",
+      "destination": "/docs/server/auth/auth0/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/overview/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/setting-up/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/dashboard/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/observability/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/amazon-ec2/llms.txt",
+      "destination": "/guides/deployment/amazon-ec2/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/aws-lambda/llms.txt",
+      "destination": "/guides/deployment/aws-lambda/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/azure-app-services/llms.txt",
+      "destination": "/guides/deployment/azure-app-services/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/cloudflare-deployer/llms.txt",
+      "destination": "/guides/deployment/cloudflare/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/digital-ocean/llms.txt",
+      "destination": "/guides/deployment/digital-ocean/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/netlify-deployer/llms.txt",
+      "destination": "/guides/deployment/netlify/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/vercel-deployer/llms.txt",
+      "destination": "/guides/deployment/vercel/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/building-mastra/llms.txt",
+      "destination": "/docs/deployment/mastra-server/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/inngest-workflow/llms.txt",
+      "destination": "/guides/deployment/inngest/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/overview/llms.txt",
+      "destination": "/docs/memory/storage/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-pg/llms.txt",
+      "destination": "/reference/storage/postgresql/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-libsql/llms.txt",
+      "destination": "/reference/storage/libsql/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-mongodb/llms.txt",
+      "destination": "/reference/storage/mongodb/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-upstash/llms.txt",
+      "destination": "/reference/storage/upstash/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/threads-and-resources/llms.txt",
+      "destination": "/docs/memory/storage/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/conversation-history/llms.txt",
+      "destination": "/docs/memory/message-history/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/setting-up/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/dashboard/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/llms.txt",
+      "destination": "/docs/deployment/cloud-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/setTelemetry/llms.txt",
+      "destination": "/reference/logging/pino-logger/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workflows/workflow-methods/sendEvent/llms.txt",
+      "destination": "/docs/workflows/suspend-and-resume/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workflows/workflow-methods/waitForEvent/llms.txt",
+      "destination": "/docs/workflows/suspend-and-resume/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/query/llms.txt",
+      "destination": "/reference/memory/recall/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/overview/llms.txt",
+      "destination": "/docs/evals/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/mcp-docs-server/llms.txt",
+      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/netlify-deployer/llms.txt",
+      "destination": "/guides/deployment/netlify/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/vercel-deployer/llms.txt",
+      "destination": "/guides/deployment/vercel/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/advanced-usage/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/mcp-overview/llms.txt",
+      "destination": "/docs/mcp/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/overview/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/input-data-mapping/llms.txt",
+      "destination": "/docs/workflows/control-flow/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/tools/client/llms.txt",
+      "destination": "/reference/tools/mcp-client/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/cloudflare-deployer/llms.txt",
+      "destination": "/guides/deployment/cloudflare/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/network-approval/llms.txt",
+      "destination": "/docs/agents/networks/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/agent-memory/llms.txt",
+      "destination": "/docs/memory/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/studio/llms.txt",
+      "destination": "/docs/studio/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/studio/llms.txt",
+      "destination": "/docs/studio/deployment/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/studio/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/overview/llms.txt",
+      "destination": "/docs/evals/datasets/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/datasets/running-experiments/llms.txt",
+      "destination": "/docs/evals/datasets/running-experiments/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/listStoredAgents/llms.txt",
+      "destination": "/reference/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/getStoredAgentById/llms.txt",
+      "destination": "/reference/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/overview/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/setup/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/deployment/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/observability/llms.txt",
+      "destination": "/docs/mastra-platform/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/publishing-mcp-server/llms.txt",
+      "destination": "/guides/guide/publishing-mcp-server/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/response-caching/llms.txt",
+      "destination": "/docs/agents/processors/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/skills/llms.txt",
+      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/mcp-docs-server/llms.txt",
+      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/llms.txt",
+      "destination": "/guides/concepts/streaming/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/overview/llms.txt",
+      "destination": "/guides/concepts/streaming/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/events/llms.txt",
+      "destination": "/guides/concepts/streaming/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/tool-streaming/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/workflow-streaming/llms.txt",
+      "destination": "/docs/workflows/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/background-task-streaming/llms.txt",
+      "destination": "/docs/agents/background-tasks/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/modes/llms.txt",
+      "destination": "/docs/agent-controller/modes/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/overview/llms.txt",
+      "destination": "/docs/agent-controller/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/session/llms.txt",
+      "destination": "/docs/agent-controller/session/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/subagents/llms.txt",
+      "destination": "/docs/agent-controller/subagents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/threads-and-state/llms.txt",
+      "destination": "/docs/agent-controller/threads-and-state/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/tool-approvals/llms.txt",
+      "destination": "/docs/agent-controller/tool-approvals/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/harness/harness-class/llms.txt",
+      "destination": "/reference/agent-controller/agent-controller-class/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/harness/session/llms.txt",
+      "destination": "/reference/agent-controller/session/llms.txt",
       "permanent": true
     }
   ]

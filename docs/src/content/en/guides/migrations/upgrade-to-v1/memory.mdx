@@ -294,6 +294,7 @@ To migrate, move processor configuration from Memory to Agent using `inputProces
   });
 
   const agent = new Agent({
+    id: 'agent',
     memory,
 +   inputProcessors: [
 +     new TokenLimiter({ limit: 4000 }), // Limits historical messages to fit context window

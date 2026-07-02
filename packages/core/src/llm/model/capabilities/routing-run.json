@@ -10,5 +10,32 @@
     "route/mimo-v2.5-pro-6bit",
     "route/mistral-medium-2505",
     "route/mistral-small-2503"
+  ],
+  "temperature": [
+    "route/deepseek-v3.2",
+    "route/deepseek-v4-flash",
+    "route/deepseek-v4-flash-6bit",
+    "route/deepseek-v4-pro",
+    "route/deepseek-v4-pro-6bit",
+    "route/gemma-4-31b-it",
+    "route/glm-5.1",
+    "route/glm-5.1-6bit",
+    "route/kimi-k2.6",
+    "route/kimi-k2.6-6bit",
+    "route/mimo-v2.5",
+    "route/mimo-v2.5-pro",
+    "route/mimo-v2.5-pro-6bit",
+    "route/minimax-m2.5",
+    "route/minimax-m2.5-highspeed",
+    "route/minimax-m2.7",
+    "route/minimax-m2.7-highspeed",
+    "route/mistral-large-3",
+    "route/mistral-medium-2505",
+    "route/mistral-small-2503",
+    "route/qwen3.6-27b",
+    "route/qwen3.6-27b-202k",
+    "route/step-3.5-flash",
+    "route/step-3.5-flash-2603",
+    "route/stepfun-3.5-flash"
   ]
 }

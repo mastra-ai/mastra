@@ -10,6 +10,11 @@ const sidebars = {
     'index',
     'embeddings',
     {
+      type: 'doc',
+      id: 'environment-variables',
+      label: 'Environment Variables',
+    },
+    {
       type: 'category',
       label: 'Gateways',
       collapsed: false,
@@ -575,6 +580,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/routing-run',
           label: 'routing.run',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sakana',
+          label: 'Sakana AI',
         },
         {
           type: 'doc',

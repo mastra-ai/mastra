@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { createSkill } from '../../skills';
 import type { InlineSkill } from '../../skills/types';
@@ -493,6 +494,68 @@ describe('assembleAgentFromFsEntry', () => {
       expect(Object.keys(agents)).toEqual(['researcher']);
       const researcher = await (agents.researcher as Agent).listAgents();
       expect(Object.keys(researcher)).toEqual([]);
+    });
+  });
+
+  describe('memory', () => {
+    it('wires memory.ts onto the assembled agent', async () => {
+      const memory = new MockMemory();
+      const agent = assembleAgentFromFsEntry({
+        name: 'support',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        memory,
+      });
+
+      expect(agent.hasOwnMemory()).toBe(true);
+      expect(await agent.getMemory()).toBe(memory);
+    });
+
+    it('config.memory wins over memory.ts and warns', async () => {
+      const onWarn = vi.fn();
+      const fromConfig = new MockMemory();
+      const fromFile = new MockMemory();
+
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'support',
+          config: { model: 'openai/gpt-4o', memory: fromConfig },
+          instructionsMd: 'hi',
+          memory: fromFile,
+        },
+        { onWarn },
+      );
+
+      expect(await agent.getMemory()).toBe(fromConfig);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('config.memory wins'));
+    });
+
+    it('warns and ignores memory.ts when config.ts exports a new Agent()', async () => {
+      const onWarn = vi.fn();
+      const coded = new Agent({
+        id: 'support',
+        name: 'support',
+        instructions: 'Code-defined.',
+        model: 'openai/gpt-4o',
+      });
+      const fromFile = new MockMemory();
+
+      const result = assembleAgentFromFsEntry({ name: 'support', config: coded, memory: fromFile }, { onWarn });
+
+      expect(result).toBe(coded);
+      expect(result.hasOwnMemory()).toBe(false);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('memory.ts is ignored'));
+    });
+
+    it('leaves the agent without memory when none is provided', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'support',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+      });
+
+      expect(agent.hasOwnMemory()).toBe(false);
+      expect(await agent.getMemory()).toBeUndefined();
     });
   });
 });

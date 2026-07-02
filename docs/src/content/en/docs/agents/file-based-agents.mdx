@@ -94,6 +94,7 @@ The following table shows the supported file-based agent surface:
 | `agents/<name>/skills/*.ts` | Each default-exported [`createSkill()`](/reference/agents/createSkill), added to the agent `skills`. |
 | `agents/<name>/skills/<skill>/SKILL.md` | A packaged skill. Frontmatter supplies `name` and `description`, the body is the instructions, and files under `references/` are inlined. |
 | `agents/<name>/skills/<skill>.md` | A flat skill. The filename is the skill name and the body is the instructions. |
+| `agents/<name>/memory.ts` | Default export: a [`Memory`](/reference/memory/memory-class) instance used as the agent `memory`. |
 | `agents/<name>/workspace.ts` | Default export: a [`Workspace`](/reference/workspace/workspace-class) for the agent. |
 | `agents/<name>/workspace/` | Seed files mirrored into the agent's default workspace at build time. |
 | `agents/<name>/subagents/<childId>/` | A declared subagent with the same layout as an agent directory. Wired into the parent as a delegation tool named `<childId>`. |
@@ -139,6 +140,18 @@ Add skills to a file-based agent by placing them under `agents/<name>/skills/`. 
 
 Discovered skills merge with any `skills` in `config.ts`. On a name collision, `config.skills` wins and a warning is logged. If `config.skills` is a function, discovered skills are ignored with a warning because they can't be statically merged.
 
+## Add memory
+
+Give a file-based agent [memory](/docs/memory/overview) by adding a `memory.ts` that default-exports a [`Memory`](/reference/memory/memory-class) instance:
+
+```typescript title="src/mastra/agents/weather/memory.ts"
+import { Memory } from '@mastra/memory'
+
+export default new Memory()
+```
+
+The exported instance becomes the agent's `memory`. You can also set `memory` directly in `config.ts`. `config.memory` wins over `memory.ts`, and a warning is logged when both are present. If neither is present, the agent has no memory, which is the default.
+
 ## Add a workspace
 
 When a file-based agent is discovered through `mastra dev` or `mastra build`, it gets a default workspace unless `config.workspace` or `workspace.ts` supplies one. The default workspace uses a contained filesystem and shell sandbox rooted at a per-agent `workspace/` directory in the bundle.
@@ -173,7 +186,7 @@ Seed files are copied into the bundle next to the running server. Commit the sta
 
 ## Add subagents
 
-A file-based agent can declare **subagents**, specialist child agents it can delegate to. Add a `subagents/` directory under the agent, with one directory per subagent. Each subagent directory has the same layout as a top-level agent: `config.ts`, `instructions.md`, `tools/`, `skills/`, `workspace.ts`, and `workspace/`.
+A file-based agent can declare **subagents**, specialist child agents it can delegate to. Add a `subagents/` directory under the agent, with one directory per subagent. Each subagent directory has the same layout as a top-level agent: `config.ts`, `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, and `workspace/`.
 
 ```text
 src/mastra/agents/
@@ -217,11 +230,12 @@ Naming rules:
 File-based and code-based agents coexist with deterministic rules:
 
 - **Code wins on name collisions:** If an agent name exists in both code and the filesystem, the code-registered agent is kept and a warning is logged.
-- **A folder can hold a code agent:** If `config.ts` exports `new Agent({...})`, that instance is used as-is. Sibling `instructions.md`, `tools/`, `skills/`, `workspace.ts`, and `subagents/` entries are ignored with warnings.
+- **A folder can hold a code agent:** If `config.ts` exports a configured `new Agent({ id: 'file-based-agent', ... })`, that instance is used as-is. Sibling `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, and `subagents/` entries are ignored with warnings.
 - **Instructions:** Dynamic function instructions in `config.ts` win over `instructions.md`. Otherwise, `instructions.md` wins over a static `instructions` string. If neither is present, the build fails for that agent.
 - **Model:** A missing `model` fails the build and names the agent directory.
 - **Tools:** Tools from `tools/*.ts` merge with `config.tools`. On a key collision, `config.tools` wins and a warning is logged. If `config.tools` is a function, discovered tools are ignored with a warning.
 - **Skills:** Skills from `skills/` merge with `config.skills`. On a name collision, `config.skills` wins and a warning is logged. If `config.skills` is a function, discovered skills are ignored with a warning.
+- **Memory:** `config.memory` wins over `memory.ts`, and a warning is logged when both are present. If neither is set, the agent has no memory.
 - **Workspace:** `config.workspace` wins over `workspace.ts`, which wins over the default workspace.
 - **Subagents:** Subagents from `subagents/` merge with `config.agents`. On an id collision, `config.agents` wins and a warning is logged. A subagent id that collides with a tool key, or a duplicate subagent id, is a build error.
 
@@ -254,10 +268,12 @@ export const mastra = new Mastra({
 - [Agents overview](/docs/agents/overview)
 - [Tools](/docs/agents/using-tools)
 - [Skills](/docs/agents/skills)
+- [Memory](/docs/memory/overview)
 - [Supervisor agents](/docs/agents/supervisor-agents)
 - [Workspace](/docs/workspace/overview)
 - [Studio overview](/docs/studio/overview)
 - [`Agent` reference](/reference/agents/agent)
 - [`createTool()` reference](/reference/tools/create-tool)
 - [`createSkill()` reference](/reference/agents/createSkill)
+- [`Memory` reference](/reference/memory/memory-class)
 - [`Workspace` reference](/reference/workspace/workspace-class)
