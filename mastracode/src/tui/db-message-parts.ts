@@ -71,11 +71,13 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
  */
 export function getAssistantRenderParts(message: MastraDBMessage): AssistantRenderPart[] {
   const out: AssistantRenderPart[] = [];
+  const toolCalls = new Map<string, { toolName: string; args: unknown }>();
 
   for (const part of getParts(message)) {
-    switch (part.type) {
+    const partType = (part as { type: string }).type;
+    switch (partType) {
       case 'text': {
-        out.push({ kind: 'text', text: part.text });
+        out.push({ kind: 'text', text: (part as { text: string }).text });
         break;
       }
       case 'reasoning': {
@@ -96,6 +98,28 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
         });
         break;
       }
+      case 'tool-call': {
+        const legacyPart = part as { toolCallId?: string; toolName?: string; args?: unknown };
+        const toolCallId = String(legacyPart.toolCallId ?? '');
+        toolCalls.set(toolCallId, { toolName: String(legacyPart.toolName ?? ''), args: legacyPart.args });
+        break;
+      }
+      case 'tool-result': {
+        const legacyPart = part as { toolCallId?: string; toolName?: string; result?: unknown; isError?: boolean };
+        const toolCallId = String(legacyPart.toolCallId ?? '');
+        const call = toolCalls.get(toolCallId);
+        out.push({
+          kind: 'tool',
+          toolCallId,
+          toolName: String(legacyPart.toolName ?? call?.toolName ?? ''),
+          args: call?.args,
+          result: legacyPart.result,
+          hasResult: true,
+          isError: legacyPart.isError === true || isErrorResult(legacyPart.result),
+        });
+        toolCalls.delete(toolCallId);
+        break;
+      }
       default: {
         const event = OM_EVENT_BY_TYPE[part.type];
         if (event) {
@@ -110,6 +134,18 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
         break;
       }
     }
+  }
+
+  for (const [toolCallId, call] of toolCalls) {
+    out.push({
+      kind: 'tool',
+      toolCallId,
+      toolName: call.toolName,
+      args: call.args,
+      result: undefined,
+      hasResult: false,
+      isError: false,
+    });
   }
 
   return out;

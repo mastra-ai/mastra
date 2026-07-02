@@ -40,6 +40,9 @@ function createState(): TUIState {
         get: () => ({ isRunning: false }),
         restoreTasks: vi.fn(),
       },
+      mode: {
+        resolve: vi.fn(() => ({ id: 'build', metadata: {} })),
+      },
     },
   } as unknown as TUIState;
 }
@@ -174,6 +177,32 @@ function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
           ...(tool.result !== undefined ? { result: tool.result } : {}),
         },
       })),
+    },
+  } as unknown as MastraDBMessage;
+}
+
+function legacyAssistantToolMessage(id: string, tool: ToolPair): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-call',
+          toolCallId: tool.id,
+          toolName: tool.name,
+          args: tool.args,
+        },
+        {
+          type: 'tool-result',
+          toolCallId: tool.id,
+          toolName: tool.name,
+          result: tool.result,
+          isError: tool.isError,
+        },
+      ],
     },
   } as unknown as MastraDBMessage;
 }
@@ -791,6 +820,31 @@ describe('renderExistingMessages tasks', () => {
 });
 
 describe('renderExistingMessages subagents', () => {
+  it('replays legacy persisted tool-call/tool-result parts', async () => {
+    const message = legacyAssistantToolMessage('assistant-legacy-tool', {
+      id: 'tool-legacy-1',
+      name: 'view',
+      args: { path: 'src/quiet-mode-e2e.ts', offset: 1, limit: 3 },
+      result: 'src/quiet-mode-e2e.ts:1-3\n     1→export const QUIET_MODE_LOADED_PREVIEW = "loaded quiet compact preview";',
+      isError: false,
+    });
+    const state = createState();
+    state.quietMode = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('▐view▌src/quiet-mode-e2e.ts');
+    expect(rendered).toContain('QUIET_MODE_LOADED_PREVIEW');
+  });
+
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {
     const message = assistantToolMessage('assistant-plugin-renderer', [
       {
