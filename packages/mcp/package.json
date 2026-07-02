@@ -42,7 +42,7 @@
     "fast-deep-equal": "^3.1.3"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <3.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.11",
