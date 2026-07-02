@@ -131,12 +131,7 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
             <WorkingMemoryProvider agentId={AGENT_ID} threadId={THREAD_ID} resourceId={AGENT_ID}>
               <MemoryTimelineProvider>
                 <TimelineProbe />
-                <MemorySidebar
-                  agentId={AGENT_ID}
-                  threadId={THREAD_ID}
-                  threads={threads}
-                  onDelete={vi.fn()}
-                />
+                <MemorySidebar agentId={AGENT_ID} threadId={THREAD_ID} threads={threads} onDelete={vi.fn()} />
               </MemoryTimelineProvider>
             </WorkingMemoryProvider>
           </ThreadInputProvider>
@@ -180,12 +175,7 @@ function renderSidebarWithOM(threads: StorageThreadType[]) {
                 <MemoryTimelineProvider>
                   <SignalProbe />
                   <TimelineProbe />
-                  <MemorySidebar
-                    agentId={AGENT_ID}
-                    threadId={THREAD_ID}
-                    threads={threads}
-                    onDelete={vi.fn()}
-                  />
+                  <MemorySidebar agentId={AGENT_ID} threadId={THREAD_ID} threads={threads} onDelete={vi.fn()} />
                 </MemoryTimelineProvider>
               </ObservationalMemoryProvider>
             </WorkingMemoryProvider>
