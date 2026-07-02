@@ -681,14 +681,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   request = r || {};
                   rawResponse = rr || {};
                   modelSpanTracker?.updateStep?.({ request, inputMessages, warnings, messageId: currentMessageId });
-
-                  if (pubsub) {
-                    void emitStepStartEvent(pubsub, runId, {
-                      stepId: DurableStepIds.LLM_EXECUTION,
-                      request,
-                      warnings,
-                    });
-                  }
                 },
               });
             }
@@ -731,8 +723,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             try {
+              let stepStartEmitted = false;
               for await (const rawChunk of trackedStream) {
                 if (!rawChunk) continue;
+
+                // Emit step-start before the first stream chunk so the
+                // ordering matches the regular agent: start → step-start → response-metadata → …
+                // onResult has already fired by the time the first chunk arrives,
+                // so `request` and `warnings` are populated.
+                if (!stepStartEmitted && pubsub) {
+                  stepStartEmitted = true;
+                  await emitStepStartEvent(pubsub, runId, {
+                    stepId: DurableStepIds.LLM_EXECUTION,
+                    request,
+                    warnings,
+                  });
+                }
 
                 // Enrich tool-related chunks with the in-process payload transform
                 // policy (mirrors the non-durable agentic-execution layer). The

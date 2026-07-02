@@ -64,8 +64,7 @@ describeForAllEngines(
       expect(finalText).toBe(scriptedText);
     });
 
-    // Durable emits response-metadata before start — chunk ordering fix tracked separately.
-    it.skipIf(engine === 'durable')('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
+    it('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
       const scriptedText = 'Hello world, this is a streaming fidelity test.';
 
       const { output, chunks } = await runLoopScenario({
