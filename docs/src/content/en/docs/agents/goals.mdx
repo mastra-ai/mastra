@@ -12,7 +12,7 @@ packages:
 
 :::experimental
 
-The Goals feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
+The Goals feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
 
 :::
 
@@ -38,6 +38,7 @@ Goals require a configured [storage](/docs/memory/storage) backend and a memory-
 import { Agent } from '@mastra/core/agent'
 
 const worker = new Agent({
+  id: 'worker',
   name: 'worker',
   instructions: 'You complete software tasks end to end.',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -78,6 +79,7 @@ By default the step uses a built-in LLM-as-judge scorer that returns `1` when th
 
 ```typescript title="src/mastra/agents/worker.ts"
 const worker = new Agent({
+  id: 'worker',
   name: 'worker',
   instructions: 'You complete software tasks end to end.',
   model: '__GATEWAY_OPENAI_MODEL__',

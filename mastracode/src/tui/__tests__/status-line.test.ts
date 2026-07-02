@@ -97,7 +97,7 @@ function createState() {
   return {
     options: {},
     session,
-    harness: {
+    controller: {
       listModes: vi.fn(() => [{ id: 'build', name: 'build', metadata: { color: '#00ff00' } }]),
       session,
     },
@@ -155,6 +155,59 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).not.toContain('queued');
+  });
+
+  it('shows active elapsed time directly after the model name', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(62_000);
+    const state = createState();
+    state.agentRunStartedAt = 1_000;
+    state.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('openai/gpt-5 1m1s');
+    expect(rendered).not.toContain('worked for');
+    vi.useRealTimers();
+  });
+
+  it('keeps successful completed run timing beside the model with a checkmark', () => {
+    const state = createState();
+    state.lastAgentRunDurationMs = 61_000;
+    state.lastAgentRunEndedAt = 1_000;
+    state.lastAgentRunEndReason = 'done';
+    state.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('openai/gpt-5 1m1s ✓');
+    expect(rendered).not.toContain('done in');
+  });
+
+  it('keeps aborted timing beside the model without an icon and errored timing with an x', () => {
+    const aborted = createState();
+    aborted.lastAgentRunDurationMs = 61_000;
+    aborted.lastAgentRunEndedAt = 1_000;
+    aborted.lastAgentRunEndReason = 'aborted';
+    aborted.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(aborted);
+
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s');
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m1s ×');
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m1s ✓');
+
+    const errored = createState();
+    errored.lastAgentRunDurationMs = 61_000;
+    errored.lastAgentRunEndedAt = 1_000;
+    errored.lastAgentRunEndReason = 'error';
+    errored.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(errored);
+
+    expect(errored.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s ×');
   });
 
   it('shows the active GitHub PR subscription beside the thread path', () => {
@@ -222,7 +275,7 @@ describe('updateStatusLine', () => {
 
   it('preserves the gateway prefix when compacting gateway-backed model ids', () => {
     const state = createState();
-    state.harness.session.model.get.mockReturnValue('mastra/anthropic/claude-opus-4.6');
+    state.controller.session.model.get.mockReturnValue('mastra/anthropic/claude-opus-4.6');
     process.stdout.columns = 25;
 
     updateStatusLine(state);
@@ -234,7 +287,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites fireworks-ai long paths and kimi version separator at full width', () => {
     const state = createState();
-    state.harness.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
+    state.controller.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
     process.stdout.columns = 200;
 
     updateStatusLine(state);
@@ -247,7 +300,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites fireworks-ai long paths and kimi version separator when compacted', () => {
     const state = createState();
-    state.harness.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
+    state.controller.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/kimi-k2p6');
     process.stdout.columns = 25;
 
     updateStatusLine(state);
@@ -260,7 +313,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites kimi version separator for non-fireworks models', () => {
     const state = createState();
-    state.harness.session.model.get.mockReturnValue('moonshot/kimi-k1p5');
+    state.controller.session.model.get.mockReturnValue('moonshot/kimi-k1p5');
     process.stdout.columns = 200;
 
     updateStatusLine(state);
@@ -272,7 +325,7 @@ describe('updateStatusLine', () => {
 
   it('rewrites minimax-m2p7 version separator', () => {
     const state = createState();
-    state.harness.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/minimax-m2p7');
+    state.controller.session.model.get.mockReturnValue('fireworks-ai/accounts/fireworks/models/minimax-m2p7');
     process.stdout.columns = 200;
 
     updateStatusLine(state);
@@ -284,7 +337,7 @@ describe('updateStatusLine', () => {
 
   it('shows judge mode and judge model while goal judge is active', () => {
     const state = createState();
-    state.harness.listModes.mockReturnValue([
+    state.controller.listModes.mockReturnValue([
       { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
       { id: 'fast', name: 'Fast', metadata: { color: '#f97316' } },
     ]);
@@ -387,7 +440,7 @@ describe('updateStatusLine', () => {
     vi.mocked(formatObservationStatus).mockReturnValue('msg 100%');
     vi.mocked(formatReflectionStatus).mockReturnValue('mem 100%');
     const state = createState();
-    state.harness.session.displayState.get.mockReturnValue({
+    state.controller.session.displayState.get.mockReturnValue({
       omProgress: { status: 'observing' },
       bufferingMessages: true,
       bufferingObservations: true,

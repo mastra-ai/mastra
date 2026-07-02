@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { MainContentLayout } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';

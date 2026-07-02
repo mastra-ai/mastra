@@ -1,7 +1,10 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import type { MCPToolType } from '@mastra/core/mcp';
-import { useCodemirrorTheme, MainContentContent, Tabs, Tab, TabList, cn } from '@mastra/playground-ui';
+import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
+import { Tabs, Tab, TabList } from '@mastra/playground-ui/components/Tabs';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState } from 'react';
 import type { ZodType } from 'zod';

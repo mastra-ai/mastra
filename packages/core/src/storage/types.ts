@@ -1078,6 +1078,10 @@ export interface BufferedObservationChunk {
   currentTask?: string;
   /** Optional thread title from observer output */
   threadTitle?: string;
+  /** Values extracted during this buffered observation cycle. */
+  extractedValues?: Record<string, unknown>;
+  /** Extractor failures from this buffered observation cycle. */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -1102,6 +1106,10 @@ export interface BufferedObservationChunkInput {
   currentTask?: string;
   /** Optional thread title from observer output */
   threadTitle?: string;
+  /** Values extracted during this buffered observation cycle. */
+  extractedValues?: Record<string, unknown>;
+  /** Extractor failures from this buffered observation cycle. */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -2488,6 +2496,16 @@ export interface CreateDatasetInput {
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
   requestContextSchema?: Record<string, unknown> | null;
+  /**
+   * Discriminator for the target this dataset's items will be replayed against.
+   * Optional because a dataset can exist purely as a collection of items
+   * (e.g. emitted by a detector for a target kind OSS doesn't yet know how to
+   * run). Datasets created without a {@link TargetType} are **not
+   * experiment-eligible**: the experiment runner requires a non-null
+   * {@link CreateExperimentInput.targetType} to resolve an executor, so a
+   * downstream consumer must either set this on create or refuse to run an
+   * experiment against the dataset.
+   */
   targetType?: TargetType;
   targetIds?: string[];
   scorerIds?: string[];
@@ -2538,8 +2556,18 @@ export interface UpdateDatasetInput {
   scorerIds?: string[] | null;
 }
 
-export interface AddDatasetItemInput {
-  datasetId: string;
+/**
+ * The mutable, user-supplied payload portion of a dataset item.
+ *
+ * Identity (`id`, `datasetId`) and storage-managed audit fields (`datasetVersion`,
+ * `organizationId`, `projectId`, `createdAt`, `updatedAt`) live on {@link DatasetItem}
+ * and are not part of the payload.
+ *
+ * Used as the base shape for {@link AddDatasetItemInput} and
+ * {@link BatchInsertItemsInput.items}, and (as `Partial<…>`) for
+ * {@link UpdateDatasetItemInput}.
+ */
+export interface DatasetItemPayload {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2549,16 +2577,17 @@ export interface AddDatasetItemInput {
   source?: DatasetItemSource;
 }
 
-export interface UpdateDatasetItemInput {
+export interface AddDatasetItemInput extends DatasetItemPayload {
+  datasetId: string;
+}
+
+/**
+ * Update input for a dataset item. All payload fields are optional; only the
+ * provided fields are patched.
+ */
+export interface UpdateDatasetItemInput extends Partial<DatasetItemPayload> {
   id: string;
   datasetId: string;
-  input?: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
 }
 
 export interface DatasetTenancyFilters {
@@ -2606,15 +2635,7 @@ export interface ListDatasetVersionsOutput {
 
 export interface BatchInsertItemsInput {
   datasetId: string;
-  items: Array<{
-    input: unknown;
-    groundTruth?: unknown;
-    expectedTrajectory?: unknown;
-    toolMocks?: DatasetItemToolMock[];
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-    source?: DatasetItemSource;
-  }>;
+  items: DatasetItemPayload[];
 }
 
 export interface BatchDeleteItemsInput {
@@ -2635,6 +2656,14 @@ export interface Experiment {
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
+  /**
+   * The kind of executor this experiment runs against (agent / workflow / scorer / processor).
+   *
+   * Required: an experiment by definition replays inputs against a specific target, so the runner
+   * always needs a target type to resolve the executor. This differs from
+   * {@link CreateDatasetInput.targetType} (optional) — a dataset can exist without a designated
+   * target, but a dataset without one is not experiment-eligible.
+   */
   targetType: TargetType;
   targetId: string;
   status: ExperimentStatus;
@@ -2643,6 +2672,10 @@ export interface Experiment {
   failedCount: number;
   skippedCount: number;
   agentVersion?: string | null;
+  /** Multi-tenant organization/account scope. Hydrated from the parent dataset on create. */
+  organizationId?: string | null;
+  /** Platform project scope. Pairs with {@link Experiment.organizationId} to form the experiment's tenancy bucket. */
+  projectId?: string | null;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -2667,6 +2700,10 @@ export interface ExperimentResult {
   status: ExperimentResultStatus | null;
   tags: string[] | null;
   toolMockReport?: DatasetToolMockReport | null;
+  /** Multi-tenant organization/account scope. Denormalized from the parent experiment for efficient tenancy-scoped queries. */
+  organizationId?: string | null;
+  /** Platform project scope. Pairs with {@link ExperimentResult.organizationId} to form the result's tenancy bucket. */
+  projectId?: string | null;
   createdAt: Date;
 }
 
@@ -2686,9 +2723,26 @@ export interface CreateExperimentInput {
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion?: string;
+  /**
+   * Discriminator for the target this experiment runs against. Required because
+   * an experiment by definition replays inputs through a specific target; the
+   * runner uses this to resolve the correct executor. Datasets whose
+   * {@link CreateDatasetInput.targetType} is absent are not experiment-eligible.
+   */
   targetType: TargetType;
   targetId: string;
   totalItems: number;
+  /**
+   * Multi-tenant organization/account scope. Should be hydrated from the parent
+   * dataset on create so experiments inherit their dataset's tenancy bucket.
+   */
+  organizationId?: string | null;
+  /**
+   * Platform project scope. Pairs with {@link CreateExperimentInput.organizationId}
+   * to form the (organizationId, projectId) tenancy bucket. Hydrated from the
+   * parent dataset on create.
+   */
+  projectId?: string | null;
 }
 
 export interface UpdateExperimentInput {
@@ -2726,6 +2780,20 @@ export interface AddExperimentResultInput {
    * ran with mocks — see `served`/`unconsumed`/`liveCalls`/`failure`.
    */
   toolMockReport?: DatasetToolMockReport | null;
+  /** Multi-tenant organization/account scope. Should be hydrated from the parent experiment on insert. */
+  organizationId?: string | null;
+  /** Platform project scope. Hydrated from the parent experiment on insert. */
+  projectId?: string | null;
+}
+
+/**
+ * Multi-tenant scoping filters for experiment queries. Mirrors
+ * {@link DatasetTenancyFilters} so the experiments domain can be queried
+ * within a tenancy bucket using the same shape.
+ */
+export interface ExperimentTenancyFilters {
+  organizationId?: string;
+  projectId?: string;
 }
 
 export interface ListExperimentsInput {
@@ -2734,6 +2802,8 @@ export interface ListExperimentsInput {
   targetId?: string;
   agentVersion?: string;
   status?: ExperimentStatus;
+  /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
+  filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
 }
 
@@ -2746,6 +2816,8 @@ export interface ListExperimentResultsInput {
   experimentId: string;
   traceId?: string;
   status?: ExperimentResultStatus;
+  /** Multi-tenant scoping filters. See {@link ExperimentTenancyFilters}. */
+  filters?: ExperimentTenancyFilters;
   pagination: StoragePagination;
 }
 

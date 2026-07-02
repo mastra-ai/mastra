@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Remember this: the secret is 42"
+      },
+      "response": {
+        "content": "HISTORY_STORED: I will remember that the secret is 42."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "What is the secret?"
+      },
+      "response": {
+        "content": "HISTORY_RECALLED: the secret is 42."
+      }
+    }
+  ]
+}

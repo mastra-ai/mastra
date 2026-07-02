@@ -1,8 +1,8 @@
-corepack pnpm@11.5.1 --version || {
-  echo "Pre-commit requires corepack pnpm@11.5.1"
+corepack pnpm --version || {
+  echo "Pre-commit requires pnpm (via corepack)"
   exit 0
 }
 
 # Formatting on staged files
-corepack pnpm@11.5.1 lint-staged --quiet
+corepack pnpm lint-staged --quiet
 

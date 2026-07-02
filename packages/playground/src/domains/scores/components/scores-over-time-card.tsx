@@ -1,7 +1,7 @@
-import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
-import { MetricsDataTable } from '@mastra/playground-ui/components/MetricsDataTable';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
+import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { useMemo } from 'react';
 import type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-score-metrics';
 
@@ -74,16 +74,31 @@ export function ScoresOverTimeCard({
                 )}
               </TabContent>
               <TabContent value="summary">
-                <MetricsDataTable
-                  columns={[
-                    { label: 'Scorer', value: row => row.scorer },
-                    { label: 'Avg', value: row => row.avg.toFixed(2), highlight: true },
-                    { label: 'Min', value: row => row.min.toFixed(2) },
-                    { label: 'Max', value: row => row.max.toFixed(2) },
-                    { label: 'Count', value: row => row.count.toLocaleString() },
-                  ]}
-                  data={summaryData.map(row => ({ ...row, key: row.scorer }))}
-                />
+                <DataList
+                  columns="auto auto auto auto auto"
+                  className="max-h-80"
+                  mask={{ left: false }}
+                  stickyHeaderBackground="tinted"
+                >
+                  <DataList.Top>
+                    <DataList.TopCell sticky="start">Scorer</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Avg</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Min</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Max</DataList.TopCell>
+                    <DataList.TopCell className="justify-end text-right">Count</DataList.TopCell>
+                  </DataList.Top>
+                  {summaryData.map(row => (
+                    <DataList.RowStatic key={row.scorer}>
+                      <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                        {row.scorer}
+                      </DataList.RowHeaderCell>
+                      <DataList.NumberCell highlight>{row.avg.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.min.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.max.toFixed(2)}</DataList.NumberCell>
+                      <DataList.NumberCell>{row.count.toLocaleString()}</DataList.NumberCell>
+                    </DataList.RowStatic>
+                  ))}
+                </DataList>
               </TabContent>
             </Tabs>
           )}

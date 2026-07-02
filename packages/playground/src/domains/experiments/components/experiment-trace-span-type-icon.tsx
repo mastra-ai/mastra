@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 type ExperimentTraceSpanTypeIconProps = {
   icon: React.ReactNode;

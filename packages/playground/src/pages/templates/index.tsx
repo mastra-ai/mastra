@@ -1,5 +1,6 @@
-import { Icon, MainContentLayout } from '@mastra/playground-ui';
 import { Header, HeaderTitle } from '@mastra/playground-ui/components/Header';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { PackageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';

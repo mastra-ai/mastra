@@ -1,8 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Button, ButtonsGroup, cn, ScrollArea } from '@mastra/playground-ui';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
 import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
@@ -17,6 +20,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './composer-sending.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
@@ -155,6 +159,8 @@ export const Thread = ({
             <BrowserThumbnail agentName={agentName} />
           </div>
         )}
+
+        <TaskPanel />
 
         <Composer
           agentId={agentId}

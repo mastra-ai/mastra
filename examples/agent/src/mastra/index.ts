@@ -33,6 +33,8 @@ import {
   requestContextDemoAgent,
   mcpAppsAgent,
   slackDemoAgent,
+  billingAgent,
+  balanceAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
@@ -68,6 +70,7 @@ const externalMcpClient = new MCPClient({
   },
 });
 import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { refundWorkflow } from './workflows/refund-workflow';
 import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
@@ -97,6 +100,7 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 
@@ -117,6 +121,7 @@ const storage = new MastraCompositeStore({
 export const mastra = new Mastra({
   agents: {
     gatewayAgent,
+    askUserAgent,
     chefAgent,
     chefAgentResponses,
     codeOverrideEditableAgent,
@@ -124,6 +129,8 @@ export const mastra = new Mastra({
     codeOverrideDescriptionsOnlyAgent,
     dynamicAgent,
     dynamicToolsAgent,
+    billingAgent,
+    balanceAgent,
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
@@ -172,6 +179,7 @@ export const mastra = new Mastra({
     findUserWorkflow,
     heartbeatWorkflow,
     multiCadenceWorkflow,
+    refundWorkflow,
   },
   bundler: {
     sourcemap: true,

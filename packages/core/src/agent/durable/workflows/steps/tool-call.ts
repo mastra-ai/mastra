@@ -7,16 +7,26 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import type { ExportedSpan, SpanType } from '../../../../observability';
+import type { ProcessorState } from '../../../../processors';
+import { ProcessorRunner } from '../../../../processors/runner';
+import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
-import { createStep } from '../../../../workflows';
+import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
+import { createStep } from '../../../../workflows/workflow';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
-import type { DurableToolCallInput, SerializableDurableOptions, AgentSuspendedEventData } from '../../types';
+import type {
+  DurableToolCallInput,
+  SerializableDurableOptions,
+  AgentSuspendedEventData,
+  RunRegistryEntry,
+} from '../../types';
+import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
 
@@ -96,6 +106,81 @@ async function flushMessagesBeforeSuspension({
     await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
   } catch {
     // Log but don't throw — suspension should proceed even if flush fails
+  }
+}
+
+/**
+ * Run a tool-result or tool-error chunk through the run's output processor pipeline.
+ * Returns the processed chunk (possibly modified), or `null` if a processor blocked it
+ * (in which case a tripwire chunk is emitted instead).
+ *
+ * Mirrors the regular agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
+ */
+async function processChunkThroughOutputProcessors(
+  chunk: ChunkType,
+  registryEntry: RunRegistryEntry | undefined,
+  pubsub: PubSub | undefined,
+  runId: string,
+  agentName: string,
+  logger: any,
+  messageList?: MessageList,
+): Promise<ChunkType | null> {
+  if (!registryEntry?.outputProcessors?.length || !registryEntry.processorStates) {
+    return chunk;
+  }
+
+  try {
+    const runner = new ProcessorRunner({
+      inputProcessors: [],
+      outputProcessors: registryEntry.outputProcessors,
+      logger,
+      agentName,
+      processorStates: registryEntry.processorStates,
+    });
+
+    const {
+      part: processed,
+      blocked,
+      reason,
+      tripwireOptions,
+      processorId,
+    } = await runner.processPart(
+      chunk,
+      registryEntry.processorStates as Map<string, ProcessorState>,
+      undefined, // observabilityContext
+      registryEntry.requestContext,
+      messageList,
+      0,
+      pubsub
+        ? {
+            custom: async (data: { type: string }) => {
+              await emitChunkEvent(pubsub, runId, data as ChunkType);
+            },
+          }
+        : undefined,
+    );
+
+    if (blocked) {
+      // Emit a tripwire chunk so downstream knows about the block
+      if (pubsub) {
+        await emitChunkEvent(pubsub, runId, {
+          type: 'tripwire',
+          payload: {
+            reason: reason || 'Output processor blocked content',
+            retry: tripwireOptions?.retry,
+            metadata: tripwireOptions?.metadata,
+            processorId,
+          },
+        } as ChunkType);
+      }
+      return null;
+    }
+
+    return (processed as ChunkType) ?? null;
+  } catch (error) {
+    logger?.warn?.(`[DurableAgent] Output processor error for tool chunk: ${error}`);
+    // Fall through: emit the original chunk if processor fails
+    return chunk;
   }
 }
 
@@ -188,17 +273,52 @@ export function createDurableToolCallStep() {
         };
       }
 
-      // 1. Resolve the tool from global registry first, then Mastra
+      // 1. Resolve the tool from global registry first, then by provider-tool
+      // model-facing name (e.g. `web_search` resolves to `webSearch` when the
+      // provider tool advertises the snake-case name), then by id, then fall
+      // back to the Mastra-wide tool registry (exact name, provider-tool
+      // name, then by id). Mirrors the non-durable tool-call step.
       const registryEntry = globalRunRegistry.get(runId);
       let tool = registryEntry?.tools?.[toolName];
+      let mastraTools: Record<string, any> | undefined;
+
+      if (!tool) {
+        tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
+      }
+
+      if (!tool) {
+        tool = Object.values(registryEntry?.tools ?? {}).find(
+          (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+        ) as typeof tool;
+      }
 
       if (!tool) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
+      if (!tool && mastra) {
+        mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
+        if (mastraTools) {
+          tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
+          if (!tool) {
+            tool = Object.values(mastraTools).find(
+              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+            ) as typeof tool;
+          }
+        }
+      }
+
+      // Resolve the key the tool is registered under for activeTools filtering.
+      // Prefer the per-run registryEntry key (exact name then identity match),
+      // and fall back to the Mastra-wide registry when the tool was resolved
+      // there. Without this fallback, a globally-registered tool like
+      // `webSearch` invoked by its model-facing name `web_search` would be
+      // hidden whenever `activeTools` was set, because the key from
+      // registryEntry.tools would be `undefined`.
       const toolKey = registryEntry?.tools?.[toolName]
         ? toolName
-        : Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0];
+        : (Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
+          Object.entries(mastraTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0]);
       const effectiveActiveTools = activeTools === null ? undefined : (activeTools ?? agentOptions.activeTools);
       const activeToolKey = toolKey ?? toolName;
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
@@ -256,8 +376,22 @@ export function createDurableToolCallStep() {
           },
         });
 
-      // 2. Check if tool requires approval
-      const requiresApproval = await toolRequiresApproval(tool, agentOptions.requireToolApproval, args);
+      // 2. Check if tool requires approval. Prefer the live policy on the
+      //    in-process registry (which preserves the function form with real
+      //    toolName/args); fall back to the JSON-safe boolean shadow on the
+      //    serialized workflow input for cross-process engines.
+      const registryRequireToolApproval = registryEntry?.requireToolApproval;
+      const effectiveRequireToolApproval =
+        registryRequireToolApproval !== undefined ? registryRequireToolApproval : agentOptions.requireToolApproval;
+      const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
+        toolName,
+        requestContext: registryEntry?.requestContext
+          ? Object.fromEntries(
+              [...registryEntry.requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+            )
+          : undefined,
+        workspace: registryEntry?.workspace,
+      });
 
       if (requiresApproval && !resumeData) {
         const resumeSchema = JSON.stringify({
@@ -360,6 +494,9 @@ export function createDurableToolCallStep() {
         workspace,
         requestContext,
         tracingContext: toolTracingContext,
+        // Forward per-call ActorSignal so FGA checks inside tool execution
+        // see the same actor as the non-durable Agent path.
+        actor: agentOptions?.actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
 
         // In-execution suspend callback — allows tools to suspend mid-execution
@@ -611,26 +748,15 @@ export function createDurableToolCallStep() {
                 onExecution: async (params: any) => {
                   if (!messageList) return;
 
-                  messageList.updateToolInvocation(
-                    {
-                      type: 'tool-invocation',
-                      toolInvocation: {
-                        state: 'call',
-                        toolCallId: params.toolCallId,
-                        toolName: params.toolName,
-                        args: cleanedArgs,
+                  messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+                    backgroundTasks: {
+                      [params.toolCallId]: {
+                        startedAt: params.startedAt,
+                        suspendedAt: params.suspendedAt,
+                        taskId: params.taskId,
                       },
                     },
-                    {
-                      backgroundTasks: {
-                        [params.toolCallId]: {
-                          startedAt: params.startedAt,
-                          suspendedAt: params.suspendedAt,
-                          taskId: params.taskId,
-                        },
-                      },
-                    },
-                  );
+                  });
                 },
 
                 onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
@@ -701,12 +827,32 @@ export function createDurableToolCallStep() {
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {
           try {
-            await emitChunkEvent(pubsub, runId, {
-              type: 'tool-result',
+            const resultChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-result' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, result },
+              },
+              {
+                policy: registryEntry?.toolPayloadTransform,
+                tools: registryEntry?.tools,
+                logger: logger as any,
+              },
+            );
+            // Run through output processors (tripwire/blocking/redaction)
+            const processed = await processChunkThroughOutputProcessors(
+              resultChunk,
+              registryEntry,
+              pubsub,
               runId,
-              from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, result },
-            });
+              initData.agentId,
+              logger,
+              messageList,
+            );
+            if (processed) {
+              await emitChunkEvent(pubsub, runId, processed);
+            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
@@ -722,12 +868,32 @@ export function createDurableToolCallStep() {
         // Emit tool-error chunk (non-fatal — error result is returned regardless)
         if (pubsub) {
           try {
-            await emitChunkEvent(pubsub, runId, {
-              type: 'tool-error',
+            const errorChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-error' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, error: toolError },
+              },
+              {
+                policy: registryEntry?.toolPayloadTransform,
+                tools: registryEntry?.tools,
+                logger: logger as any,
+              },
+            );
+            // Run through output processors (tripwire/blocking/redaction)
+            const processed = await processChunkThroughOutputProcessors(
+              errorChunk,
+              registryEntry,
+              pubsub,
               runId,
-              from: ChunkFrom.AGENT,
-              payload: { toolCallId, toolName, args, error: toolError },
-            });
+              initData.agentId,
+              logger,
+              messageList,
+            );
+            if (processed) {
+              await emitChunkEvent(pubsub, runId, processed);
+            }
           } catch (emitError) {
             logger?.warn?.(`[DurableAgent] Failed to emit tool-error chunk for ${toolName}: ${emitError}`);
           }

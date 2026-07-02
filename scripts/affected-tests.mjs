@@ -84,7 +84,16 @@ function discoverTestFiles() {
   // Use two patterns: '*.test.ts' catches top-level files (e.g. src/foo.test.ts)
   // and '**/*.test.ts' catches nested files. Dedupe via Set.
   // Also include .test.tsx and .spec.ts/.spec.tsx for completeness.
-  const patterns = ['*.test.ts', '**/*.test.ts', '*.test.tsx', '**/*.test.tsx', '*.spec.ts', '**/*.spec.ts'];
+  const patterns = [
+    '*.test.ts',
+    '**/*.test.ts',
+    '*.test.tsx',
+    '**/*.test.tsx',
+    '*.spec.ts',
+    '**/*.spec.ts',
+    '*.spec.tsx',
+    '**/*.spec.tsx',
+  ];
 
   const files = new Set();
   for (const pattern of patterns) {
@@ -299,6 +308,10 @@ const allAffected = new Set();
 const verboseChains = new Map(); // testFile → chain of files
 
 for (const changedFile of changedRelative) {
+  if (testSet.has(changedFile)) {
+    allAffected.add(changedFile);
+  }
+
   // BFS through the reverse index starting from the changed file
   const visited = new Set();
   const queue = [changedFile];

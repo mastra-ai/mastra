@@ -180,5 +180,10 @@ describeForAllEngines(
       expect(iterations[1].isFinal).toBe(true);
     });
   },
+  // TODO(Phase 3): The "inject feedback" test hangs on durable because the
+  // feedback message changes the LLM request shape, causing the AIMock fixture
+  // to not match. The onIterationComplete + feedback mechanism itself works
+  // (covered by durable-agent-iteration-callback.test.ts), but the scenario
+  // test needs a durable-specific fixture or a more flexible matcher.
   { skip: ['durable'] },
 );

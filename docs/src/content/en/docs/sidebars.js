@@ -104,8 +104,21 @@ const sidebars = {
           label: 'Tools',
         },
         {
+          type: 'doc',
+          id: 'agents/skills',
+          label: 'Skills',
+        },
+        {
           type: 'html',
           value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
+        },
+        {
+          type: 'doc',
+          id: 'agents/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -137,7 +150,7 @@ const sidebars = {
           id: 'agents/goals',
           label: 'Goals',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -186,7 +199,7 @@ const sidebars = {
           id: 'agents/code-mode',
           label: 'Code Mode',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -194,7 +207,7 @@ const sidebars = {
           id: 'agents/signals',
           label: 'Signals',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -202,7 +215,15 @@ const sidebars = {
           id: 'agents/signal-providers',
           label: 'Signal Providers',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'agents/heartbeats',
+          label: 'Heartbeats',
+          customProps: {
+            tags: ['beta'],
           },
         },
         {
@@ -357,39 +378,39 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Harness',
+      label: 'AgentController',
       customProps: {
-        tags: ['alpha'],
+        tags: ['beta'],
       },
       items: [
         {
           type: 'doc',
-          id: 'harness/overview',
+          id: 'agent-controller/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'harness/session',
+          id: 'agent-controller/session',
           label: 'Session',
         },
         {
           type: 'doc',
-          id: 'harness/modes',
+          id: 'agent-controller/modes',
           label: 'Modes',
         },
         {
           type: 'doc',
-          id: 'harness/threads-and-state',
+          id: 'agent-controller/threads-and-state',
           label: 'Threads and State',
         },
         {
           type: 'doc',
-          id: 'harness/subagents',
+          id: 'agent-controller/subagents',
           label: 'Subagents',
         },
         {
           type: 'doc',
-          id: 'harness/tool-approvals',
+          id: 'agent-controller/tool-approvals',
           label: 'Tool Approvals',
         },
       ],
@@ -551,6 +572,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/fga',
               label: 'Fine-Grained Authorization',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/google',
+              label: 'Google',
             },
             {
               type: 'doc',
@@ -789,6 +815,16 @@ const sidebars = {
           type: 'doc',
           id: 'evals/built-in-scorers',
           label: 'Built-in Scorers',
+        },
+        {
+          type: 'doc',
+          id: 'evals/quick-checks',
+          label: 'Quick Checks',
+        },
+        {
+          type: 'doc',
+          id: 'evals/gates-and-verdicts',
+          label: 'Gates and Verdicts',
         },
         {
           type: 'doc',

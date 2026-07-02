@@ -232,5 +232,40 @@ describe('RedisServerCache', () => {
       // node-redis uses { MATCH, COUNT } style
       expect(mockClient.scan).toHaveBeenCalledWith('0', { MATCH: 'mastra:cache:*', COUNT: 100 });
     });
+
+    it('routes list length through lLen (camelCase) on node-redis clients', async () => {
+      const nodeMock: any = { ...createMockClient(), lLen: vi.fn().mockResolvedValue(7) };
+      const nodeCache = new RedisServerCache({ client: nodeMock }, nodeRedisPreset);
+
+      const result = await nodeCache.listLength('my-list');
+
+      expect(result).toBe(7);
+      expect(nodeMock.lLen).toHaveBeenCalledWith('mastra:cache:my-list');
+      expect(nodeMock.llen).not.toHaveBeenCalled();
+    });
+
+    it('routes list push through rPush (camelCase) on node-redis clients', async () => {
+      const nodeMock: any = { ...createMockClient(), rPush: vi.fn().mockResolvedValue(1) };
+      const nodeCache = new RedisServerCache({ client: nodeMock }, nodeRedisPreset);
+
+      await nodeCache.listPush('my-list', { event: 'test' });
+
+      expect(nodeMock.rPush).toHaveBeenCalledWith('mastra:cache:my-list', '{"event":"test"}');
+      expect(nodeMock.rpush).not.toHaveBeenCalled();
+    });
+
+    it('routes list range through lRange (camelCase) on node-redis clients', async () => {
+      const nodeMock: any = {
+        ...createMockClient(),
+        lRange: vi.fn().mockResolvedValue(['"a"', '"b"']),
+      };
+      const nodeCache = new RedisServerCache({ client: nodeMock }, nodeRedisPreset);
+
+      const result = await nodeCache.listFromTo('my-list', 0, -1);
+
+      expect(result).toEqual(['a', 'b']);
+      expect(nodeMock.lRange).toHaveBeenCalledWith('mastra:cache:my-list', 0, -1);
+      expect(nodeMock.lrange).not.toHaveBeenCalled();
+    });
   });
 });

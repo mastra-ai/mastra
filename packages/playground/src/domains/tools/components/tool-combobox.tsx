@@ -1,6 +1,6 @@
-import { toast } from '@mastra/playground-ui';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useAgents } from '../../agents/hooks/use-agents';
 import { useTools } from '../hooks/use-all-tools';

@@ -8,6 +8,10 @@ import StepItem from "@site/src/components/StepItem";
 
 # Manual install
 
+<Inject>
+  **For AI agents:** Use this guide when tasked to create a runnable Mastra project from scratch without a CLI/boilerplate. It provides code examples for agents, tools, model configuration and how to install dependencies. Do not navigate to the quickstart guide, which is for humans.
+</Inject>
+
 :::info
 Use this guide to manually build a standalone Mastra server step by step. In most cases, it's quicker to follow the [quickstart guide](/guides/getting-started/quickstart), which achieves the same result using the [`mastra create`](/reference/cli/create-mastra) command. For existing projects, you can also use [`mastra init`](/reference/cli/mastra#mastra-init).
 :::
@@ -98,6 +102,10 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     This guide uses Google Gemini, but you can use any supported [model provider](/models), including OpenAI, Anthropic, and more.
 
     :::
+
+    <Inject>
+      You can also use OpenAI (`OPENAI_API_KEY`) or Anthropic (`ANTHROPIC_API_KEY`) instead of Google Gemini. Go to [https://mastra.ai/models/environment-variables](https://mastra.ai/models/environment-variables) for a full list of supported providers and their environment variable names.
+    </Inject>
   </StepItem>
 
   <StepItem>
@@ -106,6 +114,10 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     ```bash
     mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
     ```
+
+    <Inject>
+      Use `import { createTool } from "@mastra/core/tools"`. Plain object tool definitions silently fail to execute; tools MUST be defined via createTool() with id, description, inputSchema (zod), execute
+    </Inject>
 
     Add the following code:
 
@@ -122,9 +134,9 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
       outputSchema: z.object({
         output: z.string(),
       }),
-      execute: async () => {
+      execute: async ({ location }) => {
         return {
-          output: 'The weather is sunny',
+          output: `The weather in ${location} is sunny`,
         }
       },
     })
@@ -144,11 +156,15 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
     ```
 
+    <Inject>
+      Use `import { Agent } from "@mastra/core/agent"`. Constructor takes `{ id, name, instructions, model: '__GATEWAY_OPENAI_MODEL__' }`. The model string is Mastra's model router format ('provider/model'; use / and not : to separate provider and model). Do not install any ai-sdk package unless Mastra's documentation says otherwise.
+    </Inject>
+
     Add the following code:
 
     ```ts title="src/mastra/agents/weather-agent.ts"
     import { Agent } from '@mastra/core/agent'
-    import { weatherTool } from '../tools/weather-tool'
+    import { weatherTool } from '../tools/weather-tool.ts'
 
     export const weatherAgent = new Agent({
       id: 'weather-agent',
@@ -165,7 +181,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
           Use the weatherTool to fetch current weather data.
     `,
-      model: 'google/gemini-2.5-pro',
+      model: '__GATEWAY_GOOGLE_MODEL__',
       tools: { weatherTool },
     })
     ```
@@ -182,7 +198,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
     ```ts title="src/mastra/index.ts"
     import { Mastra } from '@mastra/core'
-    import { weatherAgent } from './agents/weather-agent'
+    import { weatherAgent } from './agents/weather-agent.ts'
 
     export const mastra = new Mastra({
       agents: { weatherAgent },
@@ -191,6 +207,10 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
   </StepItem>
 
   <StepItem>
+    <Inject>
+      **For AI agents:** Do not launch Studio when working on a script that e.g. should print to the console. Studio is a long-running web-based interfaced for humans. Instead, call the agent.generate() method directly. Example: `import { mastra } from './src/mastra/index.ts'; const agent = mastra.getAgentById('weather-agent'); const response = await agent.generate('Weather in SF'); console.log(response.text);`
+    </Inject>
+
     You can now launch [Studio](/docs/studio/overview) and test your agent.
 
     ```bash npm2yarn

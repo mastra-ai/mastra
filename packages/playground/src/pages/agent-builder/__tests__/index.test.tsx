@@ -9,7 +9,7 @@ import { AgentBuilderRoot } from '../index';
 import { emptyStoredAgents, oneDraftAgent, onePublishedAgent } from './fixtures/stored-agents';
 import { server } from '@/test/msw-server';
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/components/Spinner', () => ({
   Spinner: () => <div data-testid="spinner" />,
 }));
 

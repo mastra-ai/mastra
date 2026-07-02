@@ -1,8 +1,12 @@
-import { Badge, Button, ButtonsGroup, Txt, Icon } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CheckCircle, FileInputIcon, FileOutputIcon, GaugeIcon, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReviewItem } from './review-item-card';

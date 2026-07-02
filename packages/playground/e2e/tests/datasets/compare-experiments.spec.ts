@@ -74,35 +74,37 @@ test.afterEach(async () => {
  * BEHAVIOR UNDER TEST: Selecting compare checkboxes must keep me on the dataset page until I explicitly trigger comparison,
  * then navigate to the comparison view with both experiment IDs encoded in the URL.
  */
-test('dataset experiments compare mode keeps checkbox selection on-page and opens comparison view', async ({
-  page,
-}) => {
-  const { datasetId, experimentIds } = await seedDatasetWithExperiments();
-  const [baselineId, contenderId] = experimentIds;
+test.describe('Dataset experiment comparison', () => {
+  test.describe('when two experiments are selected in compare mode', () => {
+    test('keeps checkbox selection on-page and opens the comparison view', async ({ page }) => {
+      const { datasetId, experimentIds } = await seedDatasetWithExperiments();
+      const [baselineId, contenderId] = experimentIds;
 
-  await page.goto(`/datasets/${datasetId}?tab=experiments`);
+      await page.goto(`/datasets/${datasetId}?tab=experiments`);
 
-  await expect(page.getByText('weather-agent')).toHaveCount(2);
+      await expect(page.getByText('weather-agent')).toHaveCount(2);
 
-  await page.getByRole('button', { name: 'Compare' }).click();
+      await page.getByRole('button', { name: 'Compare' }).click();
 
-  const baselineCheckbox = page.getByRole('checkbox', { name: `Select experiment ${baselineId}` });
-  const contenderCheckbox = page.getByRole('checkbox', { name: `Select experiment ${contenderId}` });
-  const compareButton = page.getByRole('button', { name: 'Compare Experiments' });
+      const baselineCheckbox = page.getByRole('checkbox', { name: `Select experiment ${baselineId}` });
+      const contenderCheckbox = page.getByRole('checkbox', { name: `Select experiment ${contenderId}` });
+      const compareButton = page.getByRole('button', { name: 'Compare Experiments' });
 
-  await baselineCheckbox.click();
-  await expect(page).toHaveURL(`${BASE_URL}/datasets/${datasetId}?tab=experiments`);
-  await expect(baselineCheckbox).toBeChecked();
-  await expect(compareButton).toBeDisabled();
+      await baselineCheckbox.click();
+      await expect(page).toHaveURL(`${BASE_URL}/datasets/${datasetId}?tab=experiments`);
+      await expect(baselineCheckbox).toBeChecked();
+      await expect(compareButton).toBeDisabled();
 
-  await contenderCheckbox.click();
-  await expect(contenderCheckbox).toBeChecked();
-  await expect(compareButton).toBeEnabled();
+      await contenderCheckbox.click();
+      await expect(contenderCheckbox).toBeChecked();
+      await expect(compareButton).toBeEnabled();
 
-  await compareButton.click();
+      await compareButton.click();
 
-  await expect(page).toHaveURL(
-    `${BASE_URL}/datasets/${datasetId}/experiments?baseline=${baselineId}&contender=${contenderId}`,
-  );
-  await expect(page.getByText('Dataset Experiments Comparison')).toBeVisible();
+      await expect(page).toHaveURL(
+        `${BASE_URL}/datasets/${datasetId}/experiments?baseline=${baselineId}&contender=${contenderId}`,
+      );
+      await expect(page.getByText('Dataset Experiments Comparison')).toBeVisible();
+    });
+  });
 });

@@ -1,7 +1,9 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Button, TextAndIcon, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { InfoIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useTriggerScorer } from '../hooks/use-trigger-scorer';

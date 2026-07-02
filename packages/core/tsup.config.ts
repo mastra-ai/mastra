@@ -61,6 +61,7 @@ export default defineConfig({
     'src/a2a/client.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
+    'src/utils/collect-tool-mocks.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
@@ -102,6 +103,7 @@ export default defineConfig({
         '@internal/voice',
         'hono',
         'hono-openapi',
+        '@internal/auth',
       ]),
     );
 

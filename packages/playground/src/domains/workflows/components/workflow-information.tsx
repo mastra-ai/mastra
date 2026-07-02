@@ -1,9 +1,13 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { Button, Icon, ScrollArea, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
 import { useState, useEffect, useContext } from 'react';
 
+import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
@@ -125,6 +129,8 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     runId: contextRunId,
   } = useContext(WorkflowRunContext);
 
+  const { setSelectedStepId } = useWorkflowSelectedStep();
+
   const [runId, setRunId] = useState<string>('');
 
   const isCurrentRunFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResult?.status ?? '');
@@ -171,6 +177,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     clearData();
     setRunId('');
     setContextRunId('');
+    setSelectedStepId(null);
   };
 
   return (

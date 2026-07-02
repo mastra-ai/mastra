@@ -762,14 +762,14 @@ Returns an `AgentThreadSubscription` object with these members:
   {
     name: 'id',
     type: 'string',
-    isOptional: true,
-    description: 'Unique identifier for the agent. Defaults to `name` if not provided.',
+    isOptional: false,
+    description: 'Unique identifier for the agent.',
   },
   {
     name: 'name',
     type: 'string',
     isOptional: false,
-    description: 'Display name for the agent. Used as the identifier if `id` is not provided.',
+    description: 'Display name for the agent.',
   },
   {
     name: 'description',
@@ -958,6 +958,7 @@ Use `hooks` to run logic around every tool call the agent makes, including assig
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   instructions: 'Help users with their questions.',
   model: '__GATEWAY_OPENAI_MODEL__',

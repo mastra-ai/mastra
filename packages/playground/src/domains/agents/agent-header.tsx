@@ -1,6 +1,9 @@
-import { Button, Icon, DocsIcon, AgentIcon } from '@mastra/playground-ui';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Header, HeaderAction } from '@mastra/playground-ui/components/Header';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { DocsIcon } from '@mastra/playground-ui/icons/DocsIcon';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Link } from 'react-router';
 import { AgentCombobox } from '@/domains/agents/components/agent-combobox';
 

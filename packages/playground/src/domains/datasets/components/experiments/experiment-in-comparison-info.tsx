@@ -1,7 +1,8 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { Button, TextAndIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import type { ChipProps } from '@mastra/playground-ui/components/Chip';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns';
 import { LayersIcon, TargetIcon, CalendarIcon, ArrowRightIcon, ArrowLeftIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';

@@ -91,6 +91,16 @@ minimumReleaseAgeExclude:
   # to any later @libsql/client versions.
   - '@libsql/client@0.17.4'
   - '@libsql/core@0.17.4'
+  # AI SDK v7 (LanguageModelV4) support. These were adopted on release day, so
+  # they are pinned to exact versions to clear the release-age gate while still
+  # applying it to any later AI SDK v7 releases.
+  - 'ai@7.0.0'
+  - '@ai-sdk/provider@4.0.0'
+  - '@ai-sdk/provider-utils@5.0.0'
+  - '@ai-sdk/gateway@4.0.0'
+  - '@ai-sdk/openai@4.0.0'
+  - '@ai-sdk/anthropic@4.0.0'
+  - '@ai-sdk/google@4.0.0'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -102,6 +112,9 @@ trustPolicyExclude:
   - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
+  # Required for the Mesa workspace filesystem provider. 0.38.0 is published
+  # without the trusted-publisher evidence that older @mesadev/sdk versions had.
+  - '@mesadev/sdk@0.38.0'
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
@@ -258,4 +271,6 @@ allowBuilds:
   sqlite3: false
   ssh2: false
   unrs-resolver: false
+  '@mongodb-js/zstd': false
+  node-liblzma: false
   workerd: false

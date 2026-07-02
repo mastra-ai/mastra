@@ -30,6 +30,7 @@ import type {
 } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
+import type { ReasoningLevel } from '../loop/types';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -49,6 +50,7 @@ import type {
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
+import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
@@ -70,6 +72,7 @@ export type {
   UIMessageWithMetadata,
   MessageList,
 } from './message-list/index';
+export type { ReasoningLevel } from '../loop/types';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type {
   NotificationDeliveryPolicyConfig,
@@ -373,9 +376,12 @@ export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   useAgent?: boolean;
 
   /**
-   * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+   * Whether to use prompt injection instead of native response format to coerce the LLM to respond with JSON text.
+   * true and 'system' inject JSON instructions into the leading system message.
+   * 'inline' appends JSON instructions to the latest user message.
+   * false or omitted uses the provider's native response format.
    */
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
 
   /**
    * Optional logger instance for structured logging
@@ -418,7 +424,18 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'> & {
+  /**
+   * Reasoning effort level for the model. Controls how much reasoning
+   * the model performs before generating a response.
+   *
+   * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
+   * When used with older model providers (V2/V3), this option is a no-op.
+   *
+   * @default undefined (provider default behavior)
+   */
+  reasoning?: ReasoningLevel;
+};
 
 export type ModelWithRetries = {
   id?: string;
@@ -475,6 +492,11 @@ export interface GoalConfig {
    * own judging). When omitted, the default judge is text-only.
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
+   * Max steps the judge agent may take per evaluation (its internal agentic-loop
+   * budget). When omitted the judge uses the model loop's default (5).
+   */
+  maxSteps?: number;
   /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.
@@ -671,6 +693,45 @@ interface AgentConfigBase<
    * Memory module used for storing and retrieving stateful context.
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
+  /**
+   * Skills that guide agent behavior — reusable instructions the model loads on demand.
+   *
+   * Accepts an array of path strings (pointing to SKILL.md directories on disk) and/or
+   * inline skills created with `createSkill()`. Can also be a dynamic function that
+   * resolves skills per request.
+   *
+   * Skills work without a Workspace. When both `skills` and `workspace.skills` are
+   * configured, they are merged (agent-level skills win on name conflicts).
+   *
+   * @example Path-based skills
+   * ```typescript
+   * skills: ['./skills/review', './skills/testing']
+   * ```
+   *
+   * @example Inline skills
+   * ```typescript
+   * import { createSkill } from '@mastra/core/skills';
+   *
+   * skills: [
+   *   createSkill({
+   *     name: 'code-review',
+   *     description: 'Use when reviewing code.',
+   *     instructions: 'When reviewing code...',
+   *   }),
+   * ]
+   * ```
+   *
+   * @example Dynamic skills
+   * ```typescript
+   * skills: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   return tier === 'premium'
+   *     ? ['./skills/basic', './skills/premium']
+   *     : ['./skills/basic'];
+   * }
+   * ```
+   */
+  skills?: AgentSkillsInput;
   /**
    * Format for skill information injection when workspace has skills.
    * @default 'xml'

@@ -195,6 +195,7 @@ export async function executeStep(
     executionContext,
     workflowStatus: 'running',
     requestContext,
+    phase: 'start',
   });
 
   // Check if this is a nested workflow that requires special handling
