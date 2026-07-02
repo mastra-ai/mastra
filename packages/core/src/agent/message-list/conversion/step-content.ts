@@ -39,6 +39,9 @@ export class StepContentExtractor {
         stepBoundaries.push(index);
       }
     });
+    if (stepBoundaries[0] === 0) {
+      stepBoundaries.shift();
+    }
 
     // Handle -1 to get the last step (the current/most recent step)
     if (stepNumber === -1) {
