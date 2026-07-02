@@ -15,7 +15,7 @@ Do not produce walls of text. Every response should be short, dense, and end wit
 **Shell note:** `gh` output often contains ANSI color codes that break `jq`. Use `gh`'s built-in `--jq` flag instead of piping to `jq`, or prefix commands with `NO_COLOR=1`.
 
 1. Parse the PR number and optional `--working-file <path>` from `$ARGUMENTS`.
-2. If `--working-file` is present, verify the file exists and read it first. Use the same file as the only artifact and update it before ending. Before any stop/final prompt, include relevant options from the working file. If the file does not exist, tell the user and end.
+2. If `--working-file` is present, verify the file exists and read it first. Use the same file as the only artifact, use it as context and make all instructions in the file a priority during the review lifecycle. Update it before ending and make sure all instructions it has are fulfilled. If the file does not exist but `--working-file` argument was passed, tell the user and end.
 3. Verify the checked-out branch matches the PR head branch.
 4. Run `gh pr view --json title,body,commits,files,labels,number,headRefName,author` to get PR metadata.
 5. Run `gh pr diff` to get the full diff.
@@ -25,6 +25,7 @@ Do not produce walls of text. Every response should be short, dense, and end wit
 ### People
 
 Figure out who's involved:
+
 - **PR author** — who opened this PR? Are they a maintainer, a regular contributor, or a first-time community contributor? Check with `gh api repos/{owner}/{repo}/collaborators/{author} --silent` (404 = not a collaborator).
 - **Current reviewer** (you, the user running this command) — are you the PR author (self-review) or someone else?
 - **Linked issue author(s)** — if the PR references issues, who opened them? Same person as the PR author, or someone else reporting a problem that this PR claims to fix?
@@ -36,6 +37,7 @@ Note these relationships briefly — they inform how to read the PR. A maintaine
 ### Linked Issues
 
 If the PR description or commits reference any issues (e.g. "fixes #1234", "closes #456", or just "#789"), read them now:
+
 - Run `gh issue view <number> --json title,body,labels,comments,author,state` for each linked issue
 - Understand what was originally reported, by whom, and what the expected fix looks like
 - Check if the issue discussion contains context that the PR description doesn't mention
@@ -104,6 +106,7 @@ For each file changed in the PR:
 ### Architecture & surrounding code
 
 Read the code around the changed areas — not just the changed lines. Understand:
+
 - The module/package architecture and where the changed code fits in it
 - Surrounding features that interact with or depend on the changed code
 - Interfaces, types, and contracts the changed code participates in
@@ -113,6 +116,7 @@ Read the code around the changed areas — not just the changed lines. Understan
 ### Tests
 
 Examine the PR's test changes (or lack thereof) and the existing test patterns in the codebase:
+
 - Does the PR add or modify tests? Read them carefully.
 - Do the tests actually verify the claimed behavior, or do they just exercise code paths without meaningful assertions?
 - Look at how similar features are tested elsewhere in the codebase — is the PR following those patterns or doing something weaker?
@@ -128,6 +132,7 @@ Given the history and the PR's stated goal, does the approach make sense? Is it 
 If a working file was provided, update that same file with what you learned and any requested outputs from its handoff instructions. Otherwise, write `.pr-review/HISTORY.md`.
 
 Capture what you learned:
+
 - Why does each changed file/module exist? What problem did it originally solve?
 - How has it evolved? Key commits that shaped the current state.
 - Recent activity — has this area been actively worked on or dormant?
@@ -155,6 +160,7 @@ Do not move to Phase 4 until the user has seen the history for all major changed
 Walk through the actual PR diff one piece at a time, grounded in the history context from Phase 3.
 
 For each chunk:
+
 - Show what changed (keep it brief — the user can read the diff themselves)
 - Explain why it matters given the history you just covered
 - Flag anything that contradicts established patterns, seems risky, or raises questions
@@ -194,6 +200,7 @@ What do you think — is this ready to merge? Any concerns?
 ```
 
 Wait for the user's response. Then share your opinion — be direct and honest. Agree where you agree, disagree where you disagree. Do not soften your position to match the user's. Call out:
+
 - Things that should be fixed before merge
 - Risks or unknowns
 - Missing tests, docs, changesets, or other repo requirements
