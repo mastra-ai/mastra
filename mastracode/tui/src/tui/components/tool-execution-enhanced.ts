@@ -464,10 +464,29 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private getQuietCodePreviewLines(preview: string, maxLineWidth: number): string[] {
     const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
+    const isTailPreview = preview.startsWith('…');
     return this.highlightQuietCodePreview(preview)
       .split('\n')
       .slice(-this.quietPreviewLineLimit)
-      .map(line => truncateAnsi(`${linePrefix}${line}`, maxLineWidth));
+      .map(line =>
+        isTailPreview
+          ? `${linePrefix}${this.truncatePlainLineFromStart(this.stripAnsi(line), maxLineWidth - visibleWidth(linePrefix))}`
+          : truncateAnsi(`${linePrefix}${line}`, maxLineWidth),
+      );
+  }
+
+  private truncatePlainLineFromStart(line: string, maxWidth: number): string {
+    if (visibleWidth(line) <= maxWidth) return line;
+    const availableWidth = Math.max(0, maxWidth - 1);
+    let result = '';
+    let width = 0;
+    for (const char of [...line].reverse()) {
+      const charWidth = visibleWidth(char);
+      if (width + charWidth > availableWidth) break;
+      result = `${char}${result}`;
+      width += charWidth;
+    }
+    return `…${result}`;
   }
 
   private isQuietCodePreviewTool(): boolean {
@@ -736,7 +755,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.STRING_REPLACE_LSP:
         return this.formatQuietEditPreview();
       case MC_TOOLS.WRITE_FILE:
-        return this.getMultilinePreview('content', QUIET_CODE_PREVIEW_MAX_CHARS, false);
+        return this.getMultilinePreview('content', QUIET_CODE_PREVIEW_MAX_CHARS, false, 'tail');
       case MC_TOOLS.SEARCH_CONTENT:
         return this.formatSearchDetail();
       case MC_TOOLS.LSP_INSPECT:
@@ -748,8 +767,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private formatQuietEditPreview(): string {
     return (
-      this.getMultilinePreview('new_str', QUIET_CODE_PREVIEW_MAX_CHARS, false) ||
-      this.getMultilinePreview('new_string', QUIET_CODE_PREVIEW_MAX_CHARS, false)
+      this.getMultilinePreview('new_str', QUIET_CODE_PREVIEW_MAX_CHARS, false, 'tail') ||
+      this.getMultilinePreview('new_string', QUIET_CODE_PREVIEW_MAX_CHARS, false, 'tail')
     );
   }
 
@@ -912,16 +931,23 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return output.split('\n').some(line => /^\s*\d+[\t→]/.test(line));
   }
 
-  private getMultilinePreview(key: string, maxLength = 80, includeLineCount = true): string {
+  private getMultilinePreview(
+    key: string,
+    maxLength = 80,
+    includeLineCount = true,
+    truncateFrom: 'head' | 'tail' = 'head',
+  ): string {
     const value = this.getFirstStringArg(key);
     if (!value) return '';
 
     const lines = value.split('\n');
     const previewText = includeLineCount ? (lines[0] ?? '') : value.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
-    const truncated =
-      Number.isFinite(maxLength) && previewText.length > maxLength
-        ? `${previewText.slice(0, maxLength)}…`
-        : previewText;
+    const shouldTruncate = Number.isFinite(maxLength) && previewText.length > maxLength;
+    const truncated = shouldTruncate
+      ? truncateFrom === 'tail'
+        ? `…${previewText.slice(-maxLength)}`
+        : `${previewText.slice(0, maxLength)}…`
+      : previewText;
     return includeLineCount && lines.length > 1 ? `${truncated} (${lines.length} lines)` : truncated;
   }
 
