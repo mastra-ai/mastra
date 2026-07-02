@@ -4,18 +4,12 @@ import { useCallback, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { AppLayout } from './AppLayout';
-import { redirectToLogin, redirectToLogout } from './auth';
-import { SLASH_COMMANDS } from './commands';
-import type { SlashCommand } from './commands';
-import { useToast } from './toast';
-import { useActiveProject } from './useActiveProject';
-import { useAgentControllerSession } from './useAgentControllerSession';
-import { useDensityPreference } from './useDensityPreference';
-import { useGlobalShortcuts } from './useGlobalShortcuts';
-import { useProjectModalAutoOpen } from './useProjectModalAutoOpen';
-import { useProjectSessionSync } from './useProjectSessionSync';
-import { useTranscriptScroll } from './useTranscriptScroll';
-import { useWebAuth } from './useWebAuth';
+import { redirectToLogin, redirectToLogout, useWebAuth } from './domains/auth';
+import type { SlashCommand } from './domains/chat';
+import { SLASH_COMMANDS, useAgentControllerSession, useGlobalShortcuts, useTranscriptScroll } from './domains/chat';
+import { useDensityPreference } from './domains/settings';
+import { useProjectModalAutoOpen, useProjectSessionSync, useActiveProject } from './domains/workspaces';
+import { useToast } from './ui';
 
 export default function App() {
   const { toast } = useToast();

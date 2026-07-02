@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import App from '../App';
-import { loginUrl, logoutUrl } from '../auth';
-import type { Project } from '../projects';
+import { loginUrl, logoutUrl } from '../domains/auth';
+import type { Project } from '../domains/workspaces';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
@@ -158,6 +158,18 @@ describe('MastraCode sidebar auth actions', () => {
 
   it('given an authenticated user, when the logout URL is generated, then it targets the logout route', () => {
     expect(logoutUrl()).toBe('/auth/logout');
+  });
+});
+
+describe('MastraCode empty thread state', () => {
+  it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
+    renderSeededApp();
+
+    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    const wordmark = screen.getByLabelText('Mastra Code');
+    expect(wordmark).toBeInTheDocument();
+    // The hero sits inside the transcript scroller, which centers empty content vertically.
+    expect(wordmark.closest('.place-items-center')).not.toBeNull();
   });
 });
 

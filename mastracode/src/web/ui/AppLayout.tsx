@@ -4,26 +4,22 @@ import type { Theme } from '@mastra/playground-ui';
 import { ArrowDown, Menu } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import type { WebAuthState } from './auth';
-import { ChatLayout } from './ChatLayout';
-import { CommandPalette } from './CommandPalette';
-import type { SlashCommand } from './commands';
-import { GoalPanel, StatusLine, Transcript } from './components';
-import { Composer } from './Composer';
-import type { Project } from './projects';
-import { ProjectsModal } from './ProjectsModal';
-import { SettingsPanel } from './SettingsPanel';
-import { ShortcutsOverlay } from './ShortcutsOverlay';
+import type { WebAuthState } from './domains/auth';
+import { CommandPalette, GoalPanel, StatusLine, Transcript, Composer, ShortcutsOverlay } from './domains/chat';
+import type { SlashCommand, useAgentControllerSession } from './domains/chat';
+import { SettingsPanel } from './domains/settings';
+import type { Density } from './domains/settings/services/density';
+import type { Project } from './domains/workspaces';
+import { ProjectsModal } from './domains/workspaces';
 import { Sidebar } from './Sidebar';
-import type { Density } from './theme';
-import type { useAgentControllerSession } from './useAgentControllerSession';
+import { ChatLayout, Wordmark } from './ui';
 
 type Session = ReturnType<typeof useAgentControllerSession>;
 type TranscriptState = Session['transcript'];
 
 const transcriptScrollClass =
-  'flex flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]';
-const emptyThreadClass = 'm-auto w-full max-w-[80ch] px-7 py-10 text-left font-mono text-sm leading-relaxed text-icon3';
+  'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]';
+const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm leading-relaxed text-icon3';
 const composerPanelClass = 'mx-auto w-full max-w-[80ch] shrink-0';
 
 export type WebAuthViewModel = {
@@ -302,8 +298,8 @@ function ActiveProjectContent({
   transcript,
 }: ActiveProjectContentProps) {
   return (
-    <div className="h-full overflow-y-scroll grid grid-rows-[1fr_auto]">
-      <div className="h-full overflow-y-scroll">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+      <div className="flex min-h-0 flex-col overflow-y-auto">
         {transcript.goal && (
           <GoalPanel
             goal={transcript.goal}
@@ -375,6 +371,14 @@ function TranscriptPanel({
   onApprove,
   onRespond,
 }: TranscriptPanelProps) {
+  if (transcript.entries.length === 0 && !showWorkingIndicator) {
+    return (
+      <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-3 py-8 md:px-5" ref={threadRef}>
+        <EmptyThreadState activeProject={activeProject} />
+      </div>
+    );
+  }
+
   return (
     <div className={transcriptScrollClass} ref={threadRef}>
       {transcript.entries.length === 0 && <EmptyThreadState activeProject={activeProject} />}
@@ -387,6 +391,7 @@ function TranscriptPanel({
 function EmptyThreadState({ activeProject }: { activeProject: Project }) {
   return (
     <div className={emptyThreadClass}>
+      <Wordmark className="mb-6" />
       <dl className="mb-4 mt-0 grid gap-0.5">
         <ProjectMetadata label="Project" value={activeProject.name} />
         {activeProject.resourceId && <ProjectMetadata label="Resource ID" value={activeProject.resourceId} />}

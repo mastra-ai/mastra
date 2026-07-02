@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../e2e/web-ui/render';
-import type { Project } from './projects';
+import type { Project } from './domains/workspaces';
 import { Sidebar } from './Sidebar';
 
 const project: Project = {

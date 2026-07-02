@@ -4,7 +4,7 @@ import { ChevronsUpDown, Circle, Folder, LogOut, MoreHorizontal, Plus, Settings 
 import { useEffect, useRef, useState } from 'react';
 
 import type { WebAuthViewModel } from './AppLayout';
-import type { Project } from './projects';
+import type { Project } from './domains/workspaces';
 
 const MAX_THREADS = 5;
 
@@ -35,8 +35,8 @@ interface SidebarProps {
   onDeleteThread: (threadId: string) => void;
   onRenameThread: (threadId: string, title: string) => void;
   onCloneThread: (threadId: string) => void;
-  status: string;
-  running: boolean;
+  status?: string;
+  running?: boolean;
   open?: boolean;
 }
 
@@ -396,8 +396,8 @@ function statusDotClass(status: string): string {
 }
 
 function SidebarFooter({
-  status,
-  running,
+  status = 'ready',
+  running = false,
   auth,
   onOpenSettings,
 }: Pick<SidebarProps, 'status' | 'running' | 'auth' | 'onOpenSettings'>) {
