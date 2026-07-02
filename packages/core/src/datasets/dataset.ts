@@ -182,17 +182,17 @@ export class Dataset {
    * List items in the dataset, optionally at a specific version, with
    * optional substring search and pagination.
    *
-   * Returns a paginated `{ items, pagination }` shape in all cases. The
-   * union return type is preserved for backwards compatibility with callers
-   * that previously narrowed on the `version`-specific `DatasetItem[]`
-   * branch; that branch is no longer produced at runtime.
+   * Always returns the paginated `{ items, pagination }` shape. Prior to
+   * MASTRA-4433, passing `version` returned a bare `DatasetItem[]` via
+   * `store.getItemsByVersion`; that branch is gone so `search` and
+   * pagination can reach the storage layer alongside `version`.
    */
   async listItems(args?: {
     version?: number;
     page?: number;
     perPage?: number;
     search?: string;
-  }): Promise<DatasetItem[] | ListDatasetItemsOutput> {
+  }): Promise<ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
     return store.listItems({
       datasetId: this.id,
