@@ -113,14 +113,14 @@ overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
   cookie: '>=1.1.1'
-  tmp: '>=0.2.5'
+  tmp: '>=0.2.6'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
   jws: ^4.0.1
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
   better-auth: ^1.4.18
-  js-yaml: ^3.14.2
+  js-yaml: ^3.15.0
   glob@<=10.5.0: 10.5.0
   # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
   # (CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr). No fixed 2.x exists, so pin to the
@@ -136,6 +136,35 @@ overrides:
   lodash@<=4.17.23: ^4.18.0
   prismjs@<1.30.0: ^1.30.0
   serialize-javascript@<7.0.5: ^7.0.5
+  # Security floors for Dependabot alerts (transitive deps; patched versions
+  # are within the parents' declared ranges).
+  simple-git@<3.36.0: 3.36.0
+  axios@>=1.0.0 <1.16.0: 1.16.0
+  protobufjs@>=7.0.0 <7.5.8: 7.5.8
+  minimatch@>=5.0.0 <5.1.8: 5.1.8
+  minimatch@>=9.0.0 <9.0.7: 9.0.7
+  ws@>=8.0.0 <8.21.0: 8.21.0
+  webpack-dev-server@<5.2.5: 5.2.5
+  qs@>=6.7.0 <6.15.2: 6.15.2
+  fast-uri@<3.1.2: 3.1.2
+  form-data@<2.5.6: 2.5.6
+  form-data@>=4.0.0 <4.0.6: 4.0.6
+  brace-expansion@<1.1.13: 1.1.13
+  brace-expansion@>=2.0.0 <2.0.3: 2.0.3
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.5
+  js-cookie@>=3.0.0 <3.0.7: 3.0.7
+  path-to-regexp@<0.1.13: 0.1.13
+  joi@>=17.0.0 <17.13.4: 17.13.4
+  svgo@>=3.0.0 <3.3.3: 3.3.3
+  undici@>=6.0.0 <6.27.0: 6.27.0
+  undici@>=7.0.0 <7.28.0: 7.28.0
+  uuid@>=13.0.0 <13.0.1: 13.0.1
+  http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
+  launch-editor@<2.14.1: 2.14.1
+  mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
+  '@babel/core@>=7.0.0 <7.29.6': 7.29.6
+  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.4
+  dompurify@>=3.0.0 <3.4.11: 3.4.11
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1
   'aggregate-error': 'npm:@socketregistry/aggregate-error@^1'
