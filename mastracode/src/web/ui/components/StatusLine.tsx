@@ -1,6 +1,6 @@
 import type { AgentControllerModeInfo, AgentControllerOMProgress } from '@mastra/client-js';
 import { Button, ButtonsGroup } from '@mastra/playground-ui';
-import { Brain, Folder, Target } from 'lucide-react';
+import { Brain, Target } from 'lucide-react';
 
 import type { GoalSnapshot, OMPhase } from '../transcript';
 
@@ -32,29 +32,21 @@ function lastSegment(id: string): string {
 }
 
 export function StatusLine({
-  status,
   modelId,
-  running,
   followUpCount,
   omPhase,
   omProgress,
   goal,
-  workspaceReady,
-  projectName,
   tokensPerSec,
   modes,
   activeModeId,
   onModeChange,
 }: {
-  status: string;
   modelId?: string;
-  running: boolean;
   followUpCount?: number;
   omPhase?: OMPhase;
   omProgress?: AgentControllerOMProgress;
   goal?: GoalSnapshot;
-  workspaceReady?: boolean;
-  projectName?: string;
   tokensPerSec?: number;
   modes?: AgentControllerModeInfo[];
   activeModeId?: string;
@@ -65,7 +57,7 @@ export function StatusLine({
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
 
   return (
-    <div className="flex shrink-0 items-center gap-3 py-2 text-ui-sm text-icon3">
+    <div aria-label="Session status line" className="flex shrink-0 items-center gap-3 py-2 text-ui-sm text-icon3">
       {modes && modes.length > 0 && onModeChange && (
         <div role="group" aria-label="Session mode" className="shrink-0">
           <ButtonsGroup spacing="close">
@@ -110,16 +102,6 @@ export function StatusLine({
         </span>
       )}
 
-      {projectName && (
-        <span className={statusItem}>
-          <Folder size={13} /> {projectName}
-        </span>
-      )}
-      {!projectName && workspaceReady !== undefined && (
-        <span className={statusItem}>
-          <Folder size={13} /> {workspaceReady ? 'workspace' : 'no workspace'}
-        </span>
-      )}
       {omPhase && omPhase !== 'idle' && (
         <span className={statusItem}>
           <Brain size={13} /> {omPhase}
@@ -134,8 +116,6 @@ export function StatusLine({
       )}
 
       <span className="flex-1" />
-      <span className={`connection-dot ${status}`} />
-      <span className="capitalize">{running ? 'working…' : status === 'reconnecting' ? 'reconnecting…' : status}</span>
     </div>
   );
 }

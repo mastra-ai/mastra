@@ -8,7 +8,6 @@ import { createQueryClient } from '../../shared/query-client';
 import App from './App';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
-import './styles.css';
 import { ToastProvider } from './toast';
 
 // The web app talks to the Mastra server same-origin (Vite proxies `/api`), so

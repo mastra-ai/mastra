@@ -1,51 +1,7 @@
-import hljs from 'highlight.js/lib/core';
-import bash from 'highlight.js/lib/languages/bash';
-import css from 'highlight.js/lib/languages/css';
-import diff from 'highlight.js/lib/languages/diff';
-import javascript from 'highlight.js/lib/languages/javascript';
-import json from 'highlight.js/lib/languages/json';
-import markdown from 'highlight.js/lib/languages/markdown';
-import python from 'highlight.js/lib/languages/python';
-import shell from 'highlight.js/lib/languages/shell';
-import sql from 'highlight.js/lib/languages/sql';
-import typescript from 'highlight.js/lib/languages/typescript';
-import xml from 'highlight.js/lib/languages/xml';
-import yaml from 'highlight.js/lib/languages/yaml';
 import { Marked } from 'marked';
 import { useMemo } from 'react';
 
-// Register commonly-used languages (tree-shakeable vs importing the full bundle).
-hljs.registerLanguage('bash', bash);
-hljs.registerLanguage('sh', shell);
-hljs.registerLanguage('shell', shell);
-hljs.registerLanguage('css', css);
-hljs.registerLanguage('diff', diff);
-hljs.registerLanguage('json', json);
-hljs.registerLanguage('javascript', javascript);
-hljs.registerLanguage('js', javascript);
-hljs.registerLanguage('jsx', javascript);
-hljs.registerLanguage('markdown', markdown);
-hljs.registerLanguage('md', markdown);
-hljs.registerLanguage('python', python);
-hljs.registerLanguage('py', python);
-hljs.registerLanguage('sql', sql);
-hljs.registerLanguage('typescript', typescript);
-hljs.registerLanguage('ts', typescript);
-hljs.registerLanguage('tsx', typescript);
-hljs.registerLanguage('xml', xml);
-hljs.registerLanguage('html', xml);
-hljs.registerLanguage('yaml', yaml);
-hljs.registerLanguage('yml', yaml);
-
-/** Escape HTML special characters so text can't inject markup. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+import { escapeHtml, highlightCode, normalizeLanguage } from './highlight';
 
 /**
  * Return a safe href, or null if the URL uses a dangerous scheme. Agent output
@@ -75,15 +31,15 @@ const marked = new Marked({
 marked.use({
   renderer: {
     code({ text, lang }) {
-      const language = lang && hljs.getLanguage(lang) ? lang : undefined;
-      // hljs.highlight/highlightAuto return HTML-escaped, token-wrapped output.
-      const highlighted = language ? hljs.highlight(text, { language }).value : hljs.highlightAuto(text).value;
-      return `<pre class="code-block"><code class="hljs${language ? ` language-${language}` : ''}">${highlighted}</code></pre>`;
+      const language = normalizeLanguage(lang);
+      const highlighted = highlightCode(text, language);
+      const codeClass = `block bg-transparent p-0 font-inherit text-inherit leading-inherit dark:[&_span]:![color:var(--shiki-dark)] dark:[&_span]:![background-color:var(--shiki-dark-bg)]${language ? ` language-${language}` : ''}`;
+      return `<pre class="my-[0.6em] overflow-x-auto rounded-md border border-border1 bg-surface2 px-3.5 py-3 font-mono text-[12.5px] leading-[1.55] shadow-sm"><code class="${codeClass}">${highlighted}</code></pre>`;
     },
     codespan({ text }) {
       // marked does not escape custom-renderer text, so escape it ourselves to
       // prevent inline code like `<img onerror=...>` from injecting markup.
-      return `<code class="inline-code">${escapeHtml(text)}</code>`;
+      return `<code class="rounded-[3px] bg-surface2 px-1.5 py-px font-mono text-[0.9em]">${escapeHtml(text)}</code>`;
     },
     // Neutralize raw inline/block HTML in the markdown source: render it as
     // visible escaped text instead of live markup. Agent output should not be
@@ -137,5 +93,10 @@ interface MarkdownProps {
 export function Markdown({ children, className }: MarkdownProps) {
   const html = useMemo(() => renderMarkdown(children), [children]);
 
-  return <div className={`markdown ${className ?? ''}`} dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <div
+      className={`break-words font-sans text-[13.5px] leading-[1.7] [&_a:hover]:underline [&_a]:text-accent1 [&_blockquote]:my-2 [&_blockquote]:border-l-3 [&_blockquote]:border-border1 [&_blockquote]:py-1 [&_blockquote]:pl-3 [&_blockquote]:text-icon3 [&_em]:italic [&_h1]:my-3 [&_h1]:text-[1.3em] [&_h2]:my-3 [&_h2]:text-[1.15em] [&_h3]:my-3 [&_h3]:text-[1.05em] [&_h4]:my-3 [&_h4]:text-[1em] [&_h1]:font-bold [&_h2]:font-bold [&_h3]:font-bold [&_h4]:font-bold [&_h1]:leading-tight [&_h2]:leading-tight [&_h3]:leading-tight [&_h4]:leading-tight [&_hr]:my-3 [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-border1 [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:pl-6 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_p]:my-[0.4em] [&_strong]:font-bold [&_ul]:my-2 [&_ul]:pl-6 ${className ?? ''}`}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }

@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { AppLayout } from './AppLayout';
+import { redirectToLogin, redirectToLogout } from './auth';
 import { SLASH_COMMANDS } from './commands';
 import type { SlashCommand } from './commands';
 import { useToast } from './toast';
@@ -14,10 +15,12 @@ import { useGlobalShortcuts } from './useGlobalShortcuts';
 import { useProjectModalAutoOpen } from './useProjectModalAutoOpen';
 import { useProjectSessionSync } from './useProjectSessionSync';
 import { useTranscriptScroll } from './useTranscriptScroll';
+import { useWebAuth } from './useWebAuth';
 
 export default function App() {
   const { toast } = useToast();
   const { baseUrl } = useApiConfig();
+  const webAuth = useWebAuth();
   const { projects, activeProject, activeProjectId, resourceId, sessionEnabled, setProjects, selectProject } =
     useActiveProject();
 
@@ -68,6 +71,13 @@ export default function App() {
   const closeSidebar = () => setSidebarOpen(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
+
+  const auth = {
+    state: webAuth.data,
+    loading: webAuth.isLoading,
+    onSignIn: redirectToLogin,
+    onSignOut: redirectToLogout,
+  };
 
   useProjectModalAutoOpen(projects.length, setProjectsOpen);
   useGlobalShortcuts({
@@ -173,6 +183,7 @@ export default function App() {
       activeProject={activeProject}
       activeProjectId={activeProjectId}
       projects={projects}
+      auth={auth}
       threads={threads}
       transcript={transcript}
       status={status}

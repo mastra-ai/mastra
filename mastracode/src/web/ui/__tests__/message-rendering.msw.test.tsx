@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -7,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import App from '../App';
+import { loginUrl, logoutUrl } from '../auth';
 import type { Project } from '../projects';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -14,6 +17,15 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 const PROJECT_PATH = '/tmp/mastracode-test';
+
+describe('web UI stylesheet entry', () => {
+  it('imports the shared Playground UI stylesheet instead of the removed local stylesheet', () => {
+    const mainSource = readFileSync(join(process.cwd(), 'src/web/ui/main.tsx'), 'utf8');
+
+    expect(mainSource).toContain("import '@mastra/playground-ui/style.css';");
+    expect(mainSource).not.toContain("import './styles.css';");
+  });
+});
 
 function seedProject() {
   const project: Project = {
@@ -84,12 +96,25 @@ function useAgentControllerHandlers({
     ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
+    http.get('/auth/me', () => new Response(null, { status: 404 })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
+    http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages })),
     http.get(`${SESSION}/stream`, () => sse(events)),
   );
+}
+
+function useAuthMe(response: Response) {
+  server.use(http.get('/auth/me', () => response));
+}
+
+function renderSeededApp(authResponse: Response = new Response(null, { status: 404 })) {
+  seedProject();
+  useAgentControllerHandlers();
+  useAuthMe(authResponse);
+  return renderWithProviders(<App />);
 }
 
 /** Locate a migrated tool card by its accessible group label ("Tool: <name>"). */
@@ -98,6 +123,43 @@ async function findToolCard(toolName: string): Promise<HTMLElement> {
 }
 
 afterEach(() => localStorage.clear());
+
+describe('MastraCode sidebar auth actions', () => {
+  it('given web auth is disabled, when the app renders, then no auth action appears', async () => {
+    renderSeededApp(new Response(null, { status: 404 }));
+
+    await waitFor(() => expect(screen.queryByText('Checking sign-in…')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+  });
+
+  it('given web auth is enabled and unauthenticated, when the app renders, then the sidebar shows Sign in', async () => {
+    renderSeededApp(HttpResponse.json({ authenticated: false, user: null }));
+
+    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+  });
+
+  it('given web auth is enabled and authenticated, when the app renders, then the sidebar shows identity and Sign out', async () => {
+    renderSeededApp(
+      HttpResponse.json({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } }),
+    );
+
+    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+  });
+
+  it('given an unauthenticated user, when the login URL is generated, then it preserves the current route', () => {
+    window.history.replaceState(null, '', '/projects?thread=abc');
+
+    expect(loginUrl()).toBe('/auth/login?returnTo=%2Fprojects%3Fthread%3Dabc');
+  });
+
+  it('given an authenticated user, when the logout URL is generated, then it targets the logout route', () => {
+    expect(logoutUrl()).toBe('/auth/logout');
+  });
+});
 
 describe('MastraCode message rendering', () => {
   it('renders hydrated persisted text, thinking, and tool content through Mastra message parts', async () => {
@@ -171,7 +233,7 @@ describe('MastraCode message rendering', () => {
 
     renderWithProviders(<App />);
 
-    expect(await screen.findByText('ready')).toBeInTheDocument();
+    expect(await screen.findByText('Ready')).toBeInTheDocument();
     await stream.emit();
 
     expect(await screen.findByText('Streaming now')).toBeInTheDocument();
@@ -389,6 +451,66 @@ describe('MastraCode message rendering', () => {
 
       expect(screen.queryByText(/\*\*plan mode\*\*/)).not.toBeInTheDocument();
     });
+
+    it('renders fenced code blocks through Shiki while keeping raw HTML escaped', async () => {
+      seedProject();
+      useAgentControllerHandlers({
+        events: [
+          {
+            type: 'info',
+            message: '```ts\nconst value = 1\n```\n\n<script>alert("xss")</script>',
+          },
+        ],
+      });
+
+      renderWithProviders(<App />);
+
+      const code = await screen.findByText(/const/);
+      expect(code.closest('pre')).toHaveClass('font-mono');
+      expect(code.closest('code')).toHaveClass('language-typescript');
+      expect(code.closest('code')?.innerHTML).toContain('style=');
+      expect(code.closest('code')?.innerHTML).toContain('color:#005CC5');
+      expect(code.closest('code')?.innerHTML).toContain('--shiki-dark:#79C0FF');
+      expect(code.closest('code')).toHaveClass('dark:[&_span]:![color:var(--shiki-dark)]');
+      expect(code.closest('code')).not.toHaveClass('hljs');
+
+      expect(screen.getByText('<script>alert("xss")</script>')).toBeInTheDocument();
+      expect(document.querySelector('script')).not.toBeInTheDocument();
+    });
+  });
+
+  it('renders edit diffs without highlight.js classes', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        {
+          id: 'assistant-edit',
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_call',
+              id: 'tool-edit',
+              name: 'string_replace',
+              args: { path: 'src/example.ts', old_string: 'const value = 1', new_string: 'const value = 2' },
+            },
+            { type: 'tool_result', id: 'tool-edit', name: 'string_replace', result: 'updated' },
+          ],
+        },
+      ],
+    });
+
+    renderWithProviders(<App />);
+
+    const card = await findToolCard('string_replace');
+    await userEvent.click(within(card).getByRole('button'));
+
+    const diff = within(card).getByRole('group', { name: 'File change' });
+    expect(diff).toHaveClass('font-mono');
+    expect(diff).not.toHaveClass('hljs');
+    expect(within(diff).getByText('-')).toBeInTheDocument();
+    expect(within(diff).getByText('+')).toBeInTheDocument();
+    expect(within(diff).getByText('1')).toBeInTheDocument();
+    expect(within(diff).getByText('2')).toBeInTheDocument();
   });
 });
 
@@ -471,7 +593,7 @@ describe('App mode + theme controls', () => {
       expect(header).not.toContainElement(switchers[0]);
     });
 
-    it('renders the settings control in the sidebar, not the header', async () => {
+    it('renders the ready status above settings in the sidebar', async () => {
       seedMultiMode();
 
       renderWithProviders(<App />);
@@ -481,7 +603,22 @@ describe('App mode + theme controls', () => {
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
       expect(within(header as HTMLElement).queryByRole('button', { name: 'Open settings' })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
+
+      const settings = screen.getByRole('button', { name: 'Open settings' });
+      const readyStatus = screen.getByRole('status', { name: '' });
+      expect(readyStatus).toHaveTextContent('Ready');
+      expect(readyStatus.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('does not duplicate the project name in the status line', async () => {
+      seedMultiMode();
+
+      renderWithProviders(<App />);
+
+      await screen.findByRole('button', { name: 'Build' });
+
+      const statusLine = screen.getByLabelText('Session status line');
+      expect(within(statusLine).queryByText('MastraCode Test')).not.toBeInTheDocument();
     });
   });
 });

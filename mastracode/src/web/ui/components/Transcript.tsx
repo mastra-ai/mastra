@@ -118,17 +118,27 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const removed = oldText.split('\n');
   const added = newText.split('\n');
   return (
-    <div className="diff hljs rounded-xl" role="group" aria-label="File change">
+    <div
+      className="overflow-x-auto rounded-xl border border-border1 bg-surface1 font-mono text-xs leading-normal"
+      role="group"
+      aria-label="File change"
+    >
       {removed.map((line, i) => (
-        <div key={`r${i}`} className="diff-line removed">
-          <span className="diff-gutter">-</span>
-          <span className="diff-text" dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }} />
+        <div key={`r${i}`} className="flex whitespace-pre bg-error/10">
+          <span className="w-5 shrink-0 select-none text-center text-error opacity-70">-</span>
+          <span
+            className="flex-1 pr-2.5 text-icon6 [&_span]:font-inherit [&_span]:text-inherit [&_span]:leading-inherit dark:[&_span]:![color:var(--shiki-dark)] dark:[&_span]:![background-color:var(--shiki-dark-bg)]"
+            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
+          />
         </div>
       ))}
       {added.map((line, i) => (
-        <div key={`a${i}`} className="diff-line added">
-          <span className="diff-gutter">+</span>
-          <span className="diff-text" dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }} />
+        <div key={`a${i}`} className="flex whitespace-pre bg-accent1/10">
+          <span className="w-5 shrink-0 select-none text-center text-accent1 opacity-70">+</span>
+          <span
+            className="flex-1 pr-2.5 text-icon6 [&_span]:font-inherit [&_span]:text-inherit [&_span]:leading-inherit dark:[&_span]:![color:var(--shiki-dark)] dark:[&_span]:![background-color:var(--shiki-dark-bg)]"
+            dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
+          />
         </div>
       ))}
     </div>
@@ -675,11 +685,13 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
         ) : (
           <div className="prose">
             <Markdown>{part.text}</Markdown>
-            {entry.streaming && part === lastTextPart && <span className="streaming-cursor" />}
+            {entry.streaming && part === lastTextPart && (
+              <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
+            )}
           </div>
         ),
       Reasoning: (part: ReasoningPart) => (
-        <div className="thinking-block">
+        <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
           <Markdown>{part.reasoning}</Markdown>
         </div>
       ),

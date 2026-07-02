@@ -35,9 +35,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="toast-viewport" role="region" aria-label="Notifications" aria-live="polite">
+      <div
+        className="pointer-events-none fixed bottom-3 right-3 z-80 flex flex-col items-stretch gap-2 sm:bottom-5 sm:right-5 sm:items-end"
+        role="region"
+        aria-label="Notifications"
+        aria-live="polite"
+      >
         {toasts.map(t => (
-          <div key={t.id} className={`toast toast-${t.level}`} role="status">
+          <div
+            key={t.id}
+            className={`pointer-events-auto flex max-w-none items-center gap-2 rounded-lg border px-3.5 py-2.5 text-ui-sm font-medium text-icon6 shadow-lg sm:max-w-80 ${
+              t.level === 'error' ? 'border-error/45 bg-surface5' : 'border-border2 bg-surface5'
+            } before:size-1.5 before:shrink-0 before:rounded-full before:content-[''] ${
+              t.level === 'success'
+                ? 'before:bg-accent1'
+                : t.level === 'error'
+                  ? 'before:bg-error'
+                  : 'before:bg-accent2'
+            }`}
+            role="status"
+          >
             {t.text}
           </div>
         ))}

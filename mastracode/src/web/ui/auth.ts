@@ -5,8 +5,8 @@
  * - `fetchAuthState()` reads `/auth/me` to decide whether to show the splash
  *   (unauthenticated) or the app, and to render identity / sign-out. Degrades
  *   gracefully to "auth disabled" when the route is absent.
- * - `redirectToLogin()` / `loginUrl()` send the user to the hosted WorkOS login
- *   from the splash "Sign in" button.
+ * - `redirectToLogin()` / `loginUrl()` send the user to the hosted WorkOS login.
+ * - `redirectToLogout()` / `logoutUrl()` send the user through the server logout route.
  */
 
 export interface WebAuthState {
@@ -31,6 +31,14 @@ export function loginUrl(): string {
  */
 export function redirectToLogin(): void {
   window.location.assign(loginUrl());
+}
+
+export function logoutUrl(): string {
+  return '/auth/logout';
+}
+
+export function redirectToLogout(): void {
+  window.location.assign(logoutUrl());
 }
 
 /**
