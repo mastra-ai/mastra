@@ -274,6 +274,9 @@ export interface StudioInjectionConfig {
   experimentalUI: string;
   agentSignals: string;
   signalsUI: string;
+  organizationId: string;
+  platformProjectId: string;
+  platformObservabilityEndpoint: string;
   autoDetectUrl?: string;
 }
 
@@ -308,6 +311,9 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
   replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
   replace(`'%%MASTRA_SIGNALS_UI%%'`, config.signalsUI);
+  replace(`'%%MASTRA_ORGANIZATION_ID%%'`, config.organizationId);
+  replace(`'%%MASTRA_PLATFORM_PROJECT_ID%%'`, config.platformProjectId);
+  replace(`'%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%'`, config.platformObservabilityEndpoint);
   if (config.autoDetectUrl) {
     replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }

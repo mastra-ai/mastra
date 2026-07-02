@@ -87,5 +87,5 @@ describeForAllEngines(
       expect(fsRun.requests).toHaveLength(codeRequestCount);
     });
   },
-  { skip: ['durable', 'fs'] },
+  { skip: ['fs'] },
 );

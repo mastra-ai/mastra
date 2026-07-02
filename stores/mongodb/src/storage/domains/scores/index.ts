@@ -12,9 +12,16 @@ import {
   safelyParseJSON,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type {
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  StoragePagination,
+  TableRetentionPolicy,
+} from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 /**
@@ -35,6 +42,11 @@ export class ScoresStorageMongoDB extends ScoresStorage {
   /** Collections managed by this domain */
   static readonly MANAGED_COLLECTIONS = [TABLE_SCORERS] as const;
 
+  /** Anchor is the score row's creation time, stored as a BSON date. */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    scorers: { table: TABLE_SCORERS, column: 'createdAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -47,6 +59,16 @@ export class ScoresStorageMongoDB extends ScoresStorage {
 
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
+  }
+
+  /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ScoresStorageMongoDB.retentionTables,
+      order: ['scorers'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'scores', targets, options, logger: this.logger });
   }
 
   /**

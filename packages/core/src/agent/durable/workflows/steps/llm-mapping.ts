@@ -127,6 +127,12 @@ export function createDurableLLMMappingStep() {
       });
       messageList.deserialize(llmOutput.messageListState);
 
+      // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
+      // with the approval decision (rather than as a successful `result`) so it round-trips on
+      // recall. Mirrors the non-durable llm-mapping-step.
+      const isDeniedApproval = (toolResult: { approval?: { approved?: boolean } }) =>
+        toolResult?.approval?.approved === false;
+
       // 2. Add tool results to message list
       // Look up tools from the in-process registry for toModelOutput support
       const registryEntry = globalRunRegistry.get(_runId);
@@ -151,6 +157,24 @@ export function createDurableLLMMappingStep() {
 
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          if (isDeniedApproval(toolResult)) {
+            messageList.updateToolInvocation({
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'output-denied' as const,
+                toolCallId: toolResult.toolCallId,
+                toolName: toolResult.toolName,
+                args: toolResult.args,
+                approval: {
+                  id: toolResult.approval!.id,
+                  approved: false,
+                  reason: toolResult.approval!.reason,
+                },
+              },
+            });
+            continue;
+          }
+
           const result = toolResult.error ? toolResult.error.message : toolResult.result;
 
           // Compute toModelOutput for successful tool results (Bug 9 parity).
@@ -206,6 +230,9 @@ export function createDurableLLMMappingStep() {
               toolName: toolResult.toolName,
               args: toolResult.args,
               result,
+              // Preserve the approval decision for an approved approval-gated tool so it
+              // round-trips on recall as `approval: { approved: true }`.
+              ...(toolResult.approval ? { approval: toolResult.approval } : {}),
             },
             ...(providerMetadata ? { providerMetadata: providerMetadata as any } : {}),
           });
