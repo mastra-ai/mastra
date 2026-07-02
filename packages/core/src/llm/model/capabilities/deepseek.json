@@ -1,3 +1,4 @@
 {
-  "attachment": ["deepseek-chat", "deepseek-reasoner"]
+  "attachment": ["deepseek-chat", "deepseek-reasoner"],
+  "temperature": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"]
 }
