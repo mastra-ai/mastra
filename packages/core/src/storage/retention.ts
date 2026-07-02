@@ -130,7 +130,7 @@ export interface PruneResult {
 export interface DomainRetentionTables {
   memory: 'threads' | 'messages' | 'resources';
   threadState: 'threadState';
-  observability: 'spans' | 'traces';
+  observability: 'spans';
   scores: 'scorers';
   workflows: 'workflowSnapshot';
   backgroundTasks: 'backgroundTasks';

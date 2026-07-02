@@ -16,7 +16,7 @@ import type { RetentionConfig, RetentionTableKey } from './retention';
 describe('RetentionConfig typing', () => {
   it('resolves per-domain table keys from the domain descriptor', () => {
     expectTypeOf<RetentionTableKey<'memory'>>().toEqualTypeOf<'threads' | 'messages' | 'resources'>();
-    expectTypeOf<RetentionTableKey<'observability'>>().toEqualTypeOf<'spans' | 'traces'>();
+    expectTypeOf<RetentionTableKey<'observability'>>().toEqualTypeOf<'spans'>();
     expectTypeOf<RetentionTableKey<'threadState'>>().toEqualTypeOf<'threadState'>();
     expectTypeOf<RetentionTableKey<'workflows'>>().toEqualTypeOf<'workflowSnapshot'>();
     expectTypeOf<RetentionTableKey<'backgroundTasks'>>().toEqualTypeOf<'backgroundTasks'>();
