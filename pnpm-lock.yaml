@@ -2087,6 +2087,9 @@ importers:
       '@mastra/auth-workos':
         specifier: workspace:*
         version: link:../auth/workos
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../client-sdks/client-js
       '@mastra/core':
         specifier: workspace:*
         version: link:../packages/core
@@ -2117,6 +2120,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../stores/pg
+      '@mastra/playground-ui':
+        specifier: workspace:*
+        version: link:../packages/playground-ui
       '@mastra/railway':
         specifier: workspace:*
         version: link:../workspaces/railway
@@ -2174,6 +2180,9 @@ importers:
       hono:
         specifier: ^4.12.8
         version: 4.12.25
+      lucide-react:
+        specifier: ^0.474.0
+        version: 0.474.0(react@19.2.6)
       partial-json:
         specifier: ^0.1.7
         version: 0.1.7
@@ -2211,9 +2220,12 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../packages/_types-builder
-      '@mastra/client-js':
-        specifier: workspace:*
-        version: link:../client-sdks/client-js
+      '@tailwindcss/postcss':
+        specifier: ^4.2.2
+        version: 4.3.0
+      '@tailwindcss/vite':
+        specifier: 4.2.2
+        version: 4.2.2(vite@6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
       '@testing-library/dom':
         specifier: ^10.4.0
         version: 10.4.1
@@ -2277,12 +2289,18 @@ importers:
       react-dom:
         specifier: ^19.2.5
         version: 19.2.6(react@19.2.6)
+      tailwindcss:
+        specifier: 4.2.2
+        version: 4.2.2
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.15)(tsx@4.22.4)(typescript@6.0.3)(yaml@2.9.0)
       tsx:
         specifier: 'catalog:'
         version: 4.22.4
+      tw-animate-css:
+        specifier: ^1.4.0
+        version: 1.4.0
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -4678,6 +4696,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -9022,8 +9043,8 @@ importers:
   workspaces/railway:
     dependencies:
       railway:
-        specifier: ^3.3.1
-        version: 3.3.1
+        specifier: ^3.4.1
+        version: 3.4.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -26399,8 +26420,8 @@ packages:
   raf-schd@4.0.3:
     resolution: {integrity: sha512-tQkJl2GRWh83ui2DiPTJz9wEiMN20syf+5oKfB03yYP7ioZcJwsIK8FjrtLwH1m7C7e+Tt2yYBlrOpdT+dyeIQ==}
 
-  railway@3.3.1:
-    resolution: {integrity: sha512-1GiaejHe9HPM1mt7dMgh3RSqJdZasXzjtbynn0Nb7oRxF2vT+Y57mOt8W/sVkM2H4WpVa4Ks2WDsE8krVyvrGw==}
+  railway@3.4.1:
+    resolution: {integrity: sha512-SKzV9Ugyo1Q1RqQo+cYM3mCsIR69g9qMQBpSC6HKoakdFHgDI6p2EUQ+Sq9vJfuQP+ABkaKL29hixWreZoc/dA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -40571,6 +40592,13 @@ snapshots:
       postcss-selector-parser: 6.0.10
       tailwindcss: 4.2.2
 
+  '@tailwindcss/vite@4.2.2(vite@6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))':
+    dependencies:
+      '@tailwindcss/node': 4.2.2
+      '@tailwindcss/oxide': 4.2.2
+      tailwindcss: 4.2.2
+      vite: 6.4.3(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0)
+
   '@tailwindcss/vite@4.2.2(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))':
     dependencies:
       '@tailwindcss/node': 4.2.2
@@ -50721,7 +50749,7 @@ snapshots:
 
   raf-schd@4.0.3: {}
 
-  railway@3.3.1:
+  railway@3.4.1:
     dependencies:
       '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.0)
       graphql: 16.14.0

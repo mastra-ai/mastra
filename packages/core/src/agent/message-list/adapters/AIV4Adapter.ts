@@ -209,8 +209,13 @@ export class AIV4Adapter {
           continue;
         } else if (part.type === 'tool-invocation') {
           // Handle tool invocations with step number logic
+          const isDeniedApproval = part.toolInvocation.state === 'output-denied';
           const toolInvocation = {
             ...part.toolInvocation,
+            // v4 has no denied state and AI SDK v4's convertToCoreMessages requires every
+            // tool invocation to carry a result. Downgrade a declined approval to a normal
+            // result whose value is the decline reason so the conversion accepts it.
+            ...(isDeniedApproval ? { state: 'result' as const } : {}),
             args: getDisplayTransform(
               part.providerMetadata,
               'input-available',
@@ -231,7 +236,9 @@ export class AIV4Adapter {
                     transformToolPayloads,
                   ),
                 }
-              : {}),
+              : isDeniedApproval
+                ? { result: part.toolInvocation.approval?.reason ?? 'Tool call was not approved by the user' }
+                : {}),
           };
 
           // Find the step number for this tool invocation
