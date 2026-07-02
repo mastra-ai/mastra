@@ -48,6 +48,9 @@ export abstract class ExperimentsStorage extends StorageDomain {
    * deleted. Implementers must fold the tenancy predicate into the destructive
    * DML itself — a pre-check followed by an unscoped DELETE is unsafe under
    * concurrent id reuse across tenants.
+   *
+   * When `filters` is omitted, implementations MAY skip the tenancy predicate
+   * entirely (backward compat: callers explicitly opt out of scoping).
    */
   abstract deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void>;
 
@@ -71,6 +74,11 @@ export abstract class ExperimentsStorage extends StorageDomain {
    * implementers must fold the tenancy predicate into the destructive DML —
    * a parent pre-check followed by an unscoped `DELETE WHERE experimentId = ?`
    * is unsafe under concurrent id reuse.
+   *
+   * When `filters` is omitted, implementations MAY skip the tenancy predicate
+   * entirely (backward compat: callers explicitly opt out of scoping). This is
+   * why pg/mysql/spanner take an unscoped fast path here while mongodb/libsql
+   * fold the (empty) filter unconditionally — both are correct.
    */
   abstract deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void>;
 
