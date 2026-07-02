@@ -26,5 +26,3 @@ await client.getDataset('abc123', { organizationId: 'org_a', projectId: 'proj_1'
 await client.deleteDataset('abc123', { organizationId: 'org_a' });
 await client.updateDataset({ id: 'abc123', name: 'renamed', organizationId: 'org_a' });
 ```
-
-Related: [MASTRA-4438](https://linear.app/kepler-crm/issue/MASTRA-4438)
