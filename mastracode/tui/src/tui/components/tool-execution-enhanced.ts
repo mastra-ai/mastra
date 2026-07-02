@@ -51,6 +51,8 @@ const COMPACT_TOOL_COLOR = mastra.orange;
 const COMPACT_TOOL_ARGS_BG = '#141414';
 const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
 const QUIET_CODE_PREVIEW_MAX_CHARS = 2_000;
+const QUIET_SHELL_COMMAND_PREVIEW_TRUNCATE_AT_CHARS = 2_000;
+const QUIET_SHELL_COMMAND_PREVIEW_MAX_CHARS = 500;
 
 function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
@@ -755,6 +757,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     );
   }
 
+  private getQuietShellCommandPreview(command: string): string {
+    if (!this.isPartial || command.length <= QUIET_SHELL_COMMAND_PREVIEW_TRUNCATE_AT_CHARS) return command;
+    return `…${command.slice(-QUIET_SHELL_COMMAND_PREVIEW_MAX_CHARS)}`;
+  }
+
   private getLatestCodePreview(key: string): string {
     const value = this.getFirstStringArg(key);
     if (!value) return '';
@@ -1383,10 +1390,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     // Strip "cd $CWD && " from the start since we show cwd in the footer
     const cdPattern = /^cd\s+[^\s]+\s+&&\s+/;
     command = command.replace(cdPattern, '');
+    const displayCommand = this.getQuietShellCommandPreview(command);
 
     // Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
     let maxStreamLines: number | undefined;
-    const tailMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
+    const tailMatch = displayCommand.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
     if (tailMatch) {
       maxStreamLines = Math.abs(parseInt(tailMatch[1]!, 10));
     }
@@ -1417,7 +1425,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
       const footerWrapWidth = Math.max(1, contentWidth - 4);
-      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
+      const footerLines = this.wrapQuietShellCommand(displayCommand, footerWrapWidth);
       const footerSuffixWidth = visibleWidth(footerSuffix);
       footerLines.forEach((footerLine, index) => {
         const prefix = index === 0 ? footerPrompt : '  ';

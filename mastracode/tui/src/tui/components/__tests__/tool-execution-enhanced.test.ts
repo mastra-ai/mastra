@@ -924,6 +924,23 @@ Test plan:
     expect(output).toContain(theme.fg('toolArgs', '-f'));
   });
 
+  it('shows a rolling tail for large partial quiet shell command footers', () => {
+    const command = `node -e "${'START '.repeat(600)}${'MIDDLE '.repeat(600)}"`;
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    component.updateArgs({ command: `${command}${'LATEST '.repeat(20)}` }, true);
+
+    const visible = stripAnsi(component.render(100).join('\n'));
+    expect(visible).toContain('…');
+    expect(visible).toContain('LATEST');
+    expect(visible).not.toContain('START');
+  });
+
   it('keeps shell keywords inside quoted strings highlighted as strings', () => {
     const command = 'echo "if then fi" && printf \'done\'';
     const component = new ToolExecutionComponentEnhanced(
