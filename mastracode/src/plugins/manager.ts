@@ -4,11 +4,12 @@ import path from 'node:path';
 import { execa } from 'execa';
 
 import type { MastraCodePluginConfigValue } from '../plugin.js';
-import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin, NON_INTERACTIVE_GIT_ENV } from './install.js';
+import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from './install.js';
 import type { InstallPluginOptions } from './install.js';
 import { collectActivePluginTools, isInsideDirectory, loadPlugins, resolvePluginEntryPath } from './loader.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
+import { NON_INTERACTIVE_GIT_ENV } from './process-env.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { LoadedPlugin, PluginScope } from './types.js';
 

@@ -4,11 +4,13 @@ import path from 'node:path';
 import { execa } from 'execa';
 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
+import { reconcilePluginDependencies } from './dependencies.js';
 import { loadPluginFromEntry } from './loader.js';
 import { getSingleManifestPlugin } from './manifest.js';
 import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginRoot, getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
+import { NON_INTERACTIVE_GIT_ENV } from './process-env.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { InstalledPluginRecord, PluginScope } from './types.js';
 
@@ -25,8 +27,6 @@ export type DiscoveredLocalPlugin = {
 };
 
 const ENTRY_CANDIDATES = ['src/index.ts', 'index.ts'];
-
-export const NON_INTERACTIVE_GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
 
 const NON_INTERACTIVE_EXEC_OPTIONS = { env: NON_INTERACTIVE_GIT_ENV };
 
@@ -80,6 +80,7 @@ export async function installGithubPlugin(
   }
 
   const entry = detectEntry(checkoutDir, options.entry);
+  await reconcilePluginDependencies(checkoutDir);
   ensureMastraCodePackageLink(checkoutDir);
   const plugin = await loadPluginFromEntry(path.join(checkoutDir, entry));
   const registry = removePluginRecord(loadPluginRegistry(paths.registryPath), plugin.id);

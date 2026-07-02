@@ -33,6 +33,17 @@ export default defineMastraCodePlugin({ id: '${id}', version: '1.2.3', tools: { 
   );
 }
 
+async function installGithubPluginAllowingBaselineImportFailure(
+  ...args: Parameters<typeof installGithubPlugin>
+): Promise<void> {
+  try {
+    await installGithubPlugin(...args);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Cannot find package 'mastracode/plugin'")) return;
+    throw error;
+  }
+}
+
 describe('detectEntry', () => {
   it('detects TypeScript entry candidates', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
@@ -187,6 +198,116 @@ describe('installGithubPlugin', () => {
       source: 'github',
       path: 'sources/github/acme-mastracode-plugin',
       ref: 'main',
+    });
+  });
+
+  it('installs GitHub plugin dependencies before linking and importing', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.github');
+        fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.29.3' }));
+        fs.writeFileSync(path.join(destination, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n');
+      }
+      if (cmd === 'pnpm') {
+        expect(fs.existsSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(false);
+      }
+      return { stdout: '' };
+    });
+
+    await installGithubPluginAllowingBaselineImportFailure('https://github.com/acme/plugin', 'project', {
+      projectRoot,
+      homeDir,
+    });
+
+    const installCallIndex = execaMock.mock.calls.findIndex(call => call[0] === 'pnpm' && call[1][0] === 'install');
+    expect(installCallIndex).toBeGreaterThan(-1);
+    expect(installCallIndex).toBe(3);
+    expect(execaMock).toHaveBeenNthCalledWith(4, 'pnpm', ['install', '--frozen-lockfile'], {
+      cwd: checkoutDir,
+      env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
+    });
+    expect(fs.realpathSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(
+      fs.realpathSync(mastracodePackageRoot),
+    );
+  });
+
+  it('does not install dependencies when a GitHub plugin has no package.json', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.github');
+      }
+      return { stdout: '' };
+    });
+
+    await installGithubPluginAllowingBaselineImportFailure('https://github.com/acme/plugin', 'project', {
+      projectRoot,
+      homeDir,
+    });
+
+    expect(execaMock.mock.calls.some(call => ['pnpm', 'npm', 'yarn', 'bun'].includes(call[0]))).toBe(false);
+  });
+
+  it('uses npm ci for GitHub plugins with package-lock.json', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.github');
+        fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({}));
+        fs.writeFileSync(path.join(destination, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3 }));
+      }
+      return { stdout: '' };
+    });
+
+    await installGithubPluginAllowingBaselineImportFailure('https://github.com/acme/plugin', 'project', {
+      projectRoot,
+      homeDir,
+    });
+
+    expect(execaMock).toHaveBeenCalledWith('npm', ['ci'], {
+      cwd: checkoutDir,
+      env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
+    });
+  });
+
+  it('uses npm install for GitHub plugins with package.json but no package manager hints', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.github');
+        fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({}));
+      }
+      return { stdout: '' };
+    });
+
+    await installGithubPluginAllowingBaselineImportFailure('https://github.com/acme/plugin', 'project', {
+      projectRoot,
+      homeDir,
+    });
+
+    expect(execaMock).toHaveBeenCalledWith('npm', ['install'], {
+      cwd: checkoutDir,
+      env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
     });
   });
 
