@@ -122,7 +122,7 @@ export function createContextRelevanceScorerLLM({
       if (context.length === 0) {
         // Default score when no context is available
         // Return 1.0 since the agent had to work without any context
-        return 1.0 * (options.scale || 1);
+        return 1.0 * (options.scale ?? 1);
       }
 
       if (evaluations.length === 0) {
@@ -183,7 +183,7 @@ export function createContextRelevanceScorerLLM({
       // Final score calculation: base_score - penalties (clamped to [0,1])
       // Formula: max(0, relevance_score - usage_penalty - missing_penalty) × scale
       const finalScore = Math.max(0, relevanceScore - usagePenalty - missingContextPenalty);
-      const scaledScore = finalScore * (options.scale || 1);
+      const scaledScore = finalScore * (options.scale ?? 1);
 
       return roundToTwoDecimals(scaledScore);
     })
@@ -207,7 +207,7 @@ export function createContextRelevanceScorerLLM({
           score,
           evaluations,
           missingContext,
-          scale: options.scale || 1,
+          scale: options.scale ?? 1,
         });
       },
     });

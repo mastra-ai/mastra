@@ -374,6 +374,71 @@ describe('Context Relevance Scorer', () => {
       expect(scorer.name).toBe('Context Relevance (LLM)');
     });
 
+    it('should preserve scale 0 when generating scores', () => {
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          context: ['test context'],
+          scale: 0,
+        },
+      });
+      const generateScoreStep = scorer['steps'].find(step => step.name === 'generateScore');
+      const run = createAgentTestRun({
+        inputMessages: [createTestMessage({ id: 'user-1', role: 'user', content: 'Test question' })],
+        output: [createTestMessage({ id: 'assistant-1', role: 'assistant', content: 'Test response' })],
+      });
+
+      const score = generateScoreStep?.definition?.({
+        run,
+        results: {
+          analyzeStepResult: {
+            evaluations: [
+              {
+                context_index: 0,
+                contextPiece: 'test context',
+                relevanceLevel: 'high',
+                wasUsed: true,
+                reasoning: 'Relevant',
+              },
+            ],
+            missingContext: [],
+            overallAssessment: 'Relevant',
+          },
+        },
+      } as any);
+
+      expect(score).toBe(0);
+    });
+
+    it('should preserve scale 0 when no context is available', () => {
+      const contextExtractor = () => [];
+      const scorer = createContextRelevanceScorerLLM({
+        model: mockModel,
+        options: {
+          contextExtractor,
+          scale: 0,
+        },
+      });
+      const generateScoreStep = scorer['steps'].find(step => step.name === 'generateScore');
+      const run = createAgentTestRun({
+        inputMessages: [createTestMessage({ id: 'user-1', role: 'user', content: 'Test question' })],
+        output: [createTestMessage({ id: 'assistant-1', role: 'assistant', content: 'Test response' })],
+      });
+
+      const score = generateScoreStep?.definition?.({
+        run,
+        results: {
+          analyzeStepResult: {
+            evaluations: [],
+            missingContext: [],
+            overallAssessment: 'No context',
+          },
+        },
+      } as any);
+
+      expect(score).toBe(0);
+    });
+
     it('should prefer contextExtractor when both context and contextExtractor are provided', async () => {
       // Mock the contextExtractor to return specific context
       const contextExtractor = vi.fn().mockReturnValue(['extracted context from extractor']);
