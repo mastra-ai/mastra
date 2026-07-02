@@ -1,7 +1,7 @@
 {
   "name": "template-meeting-notes",
   "version": "1.0.0",
-  "description": "A meeting-notes agent that ingests Zoom cloud recordings, summarizes them into structured notes (decisions, action items, attendees), and optionally pushes results to Linear or Notion. Uses the Gateway and Turso (libSQL).",
+  "description": "A meeting-notes agent that ingests Zoom cloud recordings, summarizes them into structured notes (decisions, action items, attendees), and optionally pushes results to Linear or Notion. Uses Mastra's Gateway and Turso (libSQL).",
   "main": "index.js",
   "scripts": {
     "dev": "mastra dev",

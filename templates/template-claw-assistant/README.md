@@ -1,6 +1,6 @@
 # Claw — Autonomous Personal Assistant
 
-An autonomous assistant that operates a computer to finish multi-step tasks — read/write files, run shell commands in a sandboxed workspace, browse the web with Playwright (`@mastra/agent-browser`), search the web through the Gateway, and follow reusable skills checked into `workspace/skills/`.
+An autonomous assistant that operates a computer to finish multi-step tasks — read/write files, run shell commands in a sandboxed workspace, browse the web with Playwright (`@mastra/agent-browser`), search the web through Mastra's Gateway, and follow reusable skills checked into `workspace/skills/`.
 
 Claw has resource-scoped observational memory, so it remembers your preferences and context across threads.
 

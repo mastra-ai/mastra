@@ -1,6 +1,6 @@
 # Company Knowledge Agent
 
-Indexes your Linear issues and Notion pages into [pgvector](https://github.com/pgvector/pgvector) (on [Neon](https://neon.tech)) and exposes a single agent that answers questions over them. The agent searches the indexed corpus first, falls back to live Linear/Notion lookups via MCP ([mcp.linear.app](https://mcp.linear.app/mcp) and `@notionhq/notion-mcp-server`), and uses provider-native web search through the Gateway as a last resort.
+Indexes your Linear issues and Notion pages into [pgvector](https://github.com/pgvector/pgvector) (on [Neon](https://neon.tech)) and exposes a single agent that answers questions over them. The agent searches the indexed corpus first, falls back to live Linear/Notion lookups via MCP ([mcp.linear.app](https://mcp.linear.app/mcp) and `@notionhq/notion-mcp-server`), and uses provider-native web search through Mastra's Gateway as a last resort.
 
 A scheduled workflow (`index-knowledge`) re-indexes every 6 hours automatically. Input is normalized with `UnicodeNormalizer`, and `PIIDetector` redacts emails, phone numbers, SSNs, credit card numbers, and API keys from responses before they reach the user.
 
