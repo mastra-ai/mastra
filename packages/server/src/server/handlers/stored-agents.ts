@@ -510,6 +510,8 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Agents storage domain is not available' });
       }
 
+      // Use getAgentByIdResolved to automatically resolve from active version
+      // Returns StorageResolvedAgentType (thin record + version config)
       const agent = await agentsStore.getByIdResolved(storedAgentId, { status });
 
       if (!agent) {
