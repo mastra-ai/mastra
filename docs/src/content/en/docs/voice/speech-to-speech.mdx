@@ -73,6 +73,7 @@ Realtime voice providers can use tools configured on the agent. Add the tools to
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
+import { RequestContext } from '@mastra/core/request-context'
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
 import { calculate, search } from '../tools'
 
@@ -129,6 +130,10 @@ export const agent = new Agent({
       apiKey: requestContext.get('apiKey'),
     }),
 })
+
+const requestContext = new RequestContext()
+requestContext.set('user', 'user-123')
+requestContext.set('apiKey', process.env.OPENAI_API_KEY)
 
 const voice = await agent.getVoice({ requestContext })
 await voice.connect()
