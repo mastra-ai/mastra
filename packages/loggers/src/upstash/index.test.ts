@@ -91,6 +91,26 @@ describe('UpstashTransport', () => {
     });
   });
 
+  it('should trim logs as a separate pipeline command', async () => {
+    const logger = new PinoLogger({
+      name: 'test-logger',
+      level: LogLevel.INFO,
+      transports: {
+        upstash: transport,
+      },
+    });
+
+    logger.info('message to trim');
+    await transport._flush();
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+
+    expect(body).toHaveLength(2);
+    expect(body[0][0]).toBe('LPUSH');
+    expect(body[0]).not.toContain('LTRIM');
+    expect(body[1]).toEqual(['LTRIM', defaultOptions.listName, 0, defaultOptions.maxListLength - 1]);
+  });
+
   it('should properly clean up resources on destroy', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());
