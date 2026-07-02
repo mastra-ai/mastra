@@ -405,6 +405,9 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            // Reset per attempt so a stale hit from an aborted-then-retried
+            // transaction can't suppress the delete-no-op log on the final retry.
+            gateHit = false;
             const [rows] = await tx.run({
               sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${scopedWhere}`,
               params: { id: args.id, ...tenancyParams },

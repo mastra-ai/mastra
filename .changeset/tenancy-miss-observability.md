@@ -27,7 +27,7 @@ tenancy are never logged. Debug level only, no rate-limiting, no metrics; grep
 for `tenancy: scoped read miss` / `tenancy: scoped delete no-op` when
 investigating.
 
-```
+```text
 DEBUG  tenancy: scoped read miss   { op: 'getExperimentById', table: 'mastra_experiments', token: '3a1f9b21' }
 DEBUG  tenancy: scoped delete no-op { op: 'deleteDataset',     table: 'mastra_datasets',    token: '3a1f9b21' }
 ```

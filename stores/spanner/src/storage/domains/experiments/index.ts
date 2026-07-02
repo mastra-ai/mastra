@@ -439,6 +439,9 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            // Reset per attempt so a stale hit from an aborted-then-retried
+            // transaction can't suppress the delete-no-op log on the final retry.
+            gateHit = false;
             const [gateRows] = await tx.run({
               sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
                     WHERE ${gateWhere} LIMIT 1`,
