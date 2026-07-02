@@ -32,6 +32,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
+import type { CreatedAgentSignal } from '../signals';
 import type { GoalConfig } from '../types';
 
 /**
@@ -148,9 +149,9 @@ export interface SerializableStructuredOutput {
  * step of a durable agentic loop. Mirrors `LoopOptions['modelSettings']` minus
  * `abortSignal` (non-serializable; handled separately via the run registry).
  *
- * `headers` is restricted to a plain record of strings so it survives JSON
- * round-trips across workers / persistence; provider extensions belong in
- * `providerOptions` on `SerializableDurableOptions`.
+ * `headers` are intentionally excluded — they are stored on the in-process
+ * `RunRegistryEntry` so they never reach durable storage. The durable
+ * `llm-execution` step merges them back from the registry at call time.
  */
 export interface SerializableModelSettings {
   maxOutputTokens?: number;
@@ -162,7 +163,6 @@ export interface SerializableModelSettings {
   stopSequences?: string[];
   seed?: number;
   maxRetries?: number;
-  headers?: Record<string, string>;
 }
 
 /**
@@ -175,7 +175,7 @@ export interface SerializableDurableOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */
   activeTools?: string[];
-  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed, headers). */
+  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed). Headers are excluded — see RunRegistryEntry. */
   modelSettings?: SerializableModelSettings;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
@@ -357,6 +357,16 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
     message: string;
     stack?: string;
   };
+  /**
+   * Approval decision for a `requireApproval` tool, present once the user has approved or declined.
+   * A declined call carries `approved: false` and no `result`, so it persists as `output-denied`.
+   * An approved call carries `approved: true` alongside the `result`.
+   */
+  approval?: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  };
 }
 
 /**
@@ -521,6 +531,8 @@ export interface RegistryModelListEntry {
   model: MastraLanguageModel;
   maxRetries: number;
   enabled: boolean;
+  /** Model-config-level headers (from `AgentModelManagerConfig.headers`). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -640,6 +652,27 @@ export interface RunRegistryEntry {
    */
   requireToolApproval?: RequireToolApproval;
   /**
+   * Signal drain closure. When the durable agent inherits `sendSignal()` from
+   * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This
+   * closure retrieves and clears those queues, keyed by scope:
+   * - `'pending'` — signals sent while the run is active (between iterations)
+   * - `'pre-run'` — signals sent before the first model request
+   *
+   * Non-serializable (a closure); cross-process engines cannot recover it and
+   * signals sent to a restarted worker will not be drained.
+   */
+  drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /**
+   * Signal messages already present in the `messageList` at run start (from
+   * persisted history). These are echoed as `data-signal` stream data parts
+   * so the client sees them without re-fetching history. The array is spliced
+   * once on the first LLM step, so it is only echoed once per run.
+   *
+   * Non-serializable (contains `CreatedAgentSignal` instances with methods);
+   * populated during `prepareForDurableExecution`.
+   */
+  initialSignalEchoes?: CreatedAgentSignal[];
+  /**
    * Abort signal for the run. Non-serializable, so it lives only on the
    * in-process registry; cross-process resumes cannot recover it.
    *
@@ -669,6 +702,35 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Tripwire data from `processInput` (initial input processing). When an
+   * input processor calls `abort()` during `runInputProcessors` in
+   * `preparation.ts`, the TripWire is caught and stored here instead of
+   * swallowed. The first durable `llm-execution` step checks this slot and
+   * immediately emits a `tripwire` chunk + bail response, preventing the
+   * model from ever being called.
+   *
+   * Non-serializable (contains metadata of unknown shape); populated during
+   * `prepareForDurableExecution`.
+   */
+  tripwire?: {
+    reason: string;
+    retry?: boolean;
+    metadata?: unknown;
+    processorId?: string;
+  };
+  /**
+   * Call-time headers from `modelSettings.headers`. These are intentionally
+   * excluded from the serialized `workflowInput` so they never reach durable
+   * storage. The durable `llm-execution` step reads them from this in-process
+   * registry slot and passes them as `callTimeHeaders` to `mergeLlmCallHeaders`.
+   *
+   * Cross-process engines (e.g. Inngest after a worker restart) lose this
+   * slot; callers that need credentials on the LLM HTTP call should configure
+   * them on the model factory (e.g. `openai({ apiKey })`) or via environment
+   * variables.
+   */
+  callTimeHeaders?: Record<string, string>;
 }
 
 /**

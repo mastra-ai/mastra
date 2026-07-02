@@ -562,7 +562,7 @@ class MastraScorer<
         output: prepared.output,
         groundTruth: prepared.groundTruth,
         expectedTrajectory: prepared.expectedTrajectory,
-        requestContext: normalizedRequestContext,
+        requestContext: normalizedRequestContext?.serializeForSpan(),
       },
       attributes: {
         scorerId: this.id,

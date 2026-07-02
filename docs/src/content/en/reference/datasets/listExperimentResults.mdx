@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Lists individual item results for a specific experiment with pagination.
+Lists individual item results for a specific experiment with optional filters and pagination. Filters are applied at the storage layer.
 
 ## Usage example
 
@@ -28,6 +28,18 @@ const { results, pagination } = await dataset.listExperimentResults({
   perPage: 50,
 })
 
+// Restrict to results that still need review
+const { results: pending } = await dataset.listExperimentResults({
+  experimentId: 'exp-id',
+  status: 'needs-review',
+})
+
+// Restrict to results tied to a specific trace
+const { results: byTrace } = await dataset.listExperimentResults({
+  experimentId: 'exp-id',
+  traceId: 'trace-abc',
+})
+
 for (const result of results) {
   console.log(`Item ${result.itemId}: ${result.error ? 'FAILED' : 'OK'}`)
 }
@@ -41,6 +53,24 @@ for (const result of results) {
     name: 'experimentId',
     type: 'string',
     description: 'ID of the experiment to list results for.',
+  },
+  {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Restrict results to those linked to this trace ID.',
+  },
+  {
+    name: 'status',
+    type: "'needs-review' | 'reviewed' | 'complete'",
+    isOptional: true,
+    description: 'Restrict results to this per-result review status.',
+  },
+  {
+    name: 'filters',
+    type: 'ExperimentTenancyFilters',
+    isOptional: true,
+    description: 'Multi-tenant scoping filters (`organizationId`, `projectId`). Forwarded to the storage layer.',
   },
   {
     name: 'page',

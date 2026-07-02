@@ -58,6 +58,15 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       stack: z.string().optional(),
     })
     .optional(),
+  // Approval decision for a `requireApproval` tool. Without this field Zod would strip the
+  // approval off the step output, so a declined call would lose its `output-denied` marker.
+  approval: z
+    .object({
+      id: z.string(),
+      approved: z.boolean(),
+      reason: z.string().optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -446,12 +455,30 @@ export function createDurableToolCallStep() {
       // Check if resuming from approval
       if (resumeData && typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData) {
         if (!(resumeData as { approved: boolean }).approved) {
+          // Return the approval decision (not a `result` string) so it persists as
+          // `state: 'output-denied'` with `approval`. The denial reason carries the
+          // existing string so downstream consumers/UI keep the same message.
           return {
             ...typedInput,
-            result: 'Tool call was not approved by the user',
+            approval: {
+              id: toolCallId,
+              approved: false,
+              reason: 'Tool call was not approved by the user',
+            },
           };
         }
       }
+
+      // When an approval-gated tool is approved on resume, tag the resolved output with the
+      // approval decision so it round-trips through persistence as `approval: { approved: true }`.
+      const approvalGrant =
+        requiresApproval &&
+        resumeData &&
+        typeof resumeData === 'object' &&
+        resumeData !== null &&
+        (resumeData as { approved?: boolean }).approved === true
+          ? ({ approval: { id: toolCallId, approved: true as const } } as const)
+          : undefined;
 
       // Check if resuming from in-execution suspension
       // Pass resumeData through to the tool so it can continue from where it left off
@@ -471,11 +498,25 @@ export function createDurableToolCallStep() {
         delete (cleanedArgs as any)._background;
       }
 
+      // Fire onInputAvailable lifecycle hook before execution (matches non-durable path).
+      if (tool && 'onInputAvailable' in tool && typeof (tool as any).onInputAvailable === 'function') {
+        try {
+          await (tool as any).onInputAvailable({
+            toolCallId,
+            input: cleanedArgs,
+            messages: messageList ? messageList.get.input.aiV5.model() : [],
+          });
+        } catch (hookError) {
+          logger?.error?.('Error calling onInputAvailable', hookError);
+        }
+      }
+
       // Execute the tool
       if (!tool.execute) {
         return {
           ...typedInput,
           result: undefined,
+          ...(approvalGrant ?? {}),
         };
       }
 
@@ -686,6 +727,9 @@ export function createDurableToolCallStep() {
                         toolName: params.toolName,
                         args: cleanedArgs,
                         result,
+                        // Preserve the approval decision for an approved approval-gated tool that
+                        // ran in the background so it round-trips on recall, matching the sync path.
+                        ...(approvalGrant ?? {}),
                       },
                     },
                     {
@@ -810,6 +854,7 @@ export function createDurableToolCallStep() {
                 ...typedInput,
                 args: cleanedArgs,
                 result: `Background task started. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
+                ...(approvalGrant ?? {}),
               };
             }
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
@@ -823,6 +868,19 @@ export function createDurableToolCallStep() {
 
       try {
         const result = await tool.execute(cleanedArgs, toolOptions);
+
+        // Fire onOutput lifecycle hook after successful execution (matches non-durable path).
+        if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
+          try {
+            await (tool as any).onOutput({
+              toolCallId,
+              toolName,
+              output: result,
+            });
+          } catch (hookError) {
+            logger?.error?.('Error calling onOutput', hookError);
+          }
+        }
 
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {
@@ -861,6 +919,7 @@ export function createDurableToolCallStep() {
         return {
           ...typedInput,
           result,
+          ...(approvalGrant ?? {}),
         };
       } catch (error) {
         const toolError = serializeError(error);
@@ -902,6 +961,7 @@ export function createDurableToolCallStep() {
         return {
           ...typedInput,
           error: toolError,
+          ...(approvalGrant ?? {}),
         };
       }
     },

@@ -8,7 +8,7 @@ import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { MastraAuthProvider } from './auth';
+import type { IMastraAuthProvider } from './auth';
 
 type RouteFGAConfig = FGARouteConfig;
 
@@ -289,7 +289,7 @@ export type ServerConfig = {
    * Handles WHO the user is (authentication only).
    * For authorization (WHAT the user can do), use the `rbac` option.
    */
-  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+  auth?: MastraAuthConfig<any> | IMastraAuthProvider<any>;
 
   /**
    * Role-based access control (RBAC) provider for EE (Enterprise Edition).
@@ -457,7 +457,7 @@ export type StudioConfig = {
    *
    * When not configured, Studio operates without authentication (development mode).
    */
-  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+  auth?: MastraAuthConfig<any> | IMastraAuthProvider<any>;
 
   /**
    * Role-based access control (RBAC) provider for Studio.

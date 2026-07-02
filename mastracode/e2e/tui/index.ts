@@ -45,6 +45,7 @@ import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubsc
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
+import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
@@ -77,6 +78,7 @@ import {
   pluginsAssetsLoadingScenario,
   pluginsBlockedConfigScenario,
   pluginsCommandUiScenario,
+  pluginsGithubInstallGhCliScenario,
   pluginsGithubPollUpdateScenario,
   pluginsLocalHotReloadScenario,
   pluginsLocalToolScenario,
@@ -192,6 +194,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'lifecycle-hooks-configured': lifecycleHooksConfiguredScenario,
+  'lifecycle-hooks-events': lifecycleHooksEventsScenario,
   'login-dialog-masked-input': loginDialogMaskedInputScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
@@ -222,6 +225,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
+  'plugins-github-install-gh-cli': pluginsGithubInstallGhCliScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
   'plugins-blocked-config': pluginsBlockedConfigScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,

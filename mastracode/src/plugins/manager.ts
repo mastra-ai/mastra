@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execa } from 'execa';
 
 import type { MastraCodePluginConfigValue } from '../plugin.js';
-import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from './install.js';
+import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin, NON_INTERACTIVE_GIT_ENV } from './install.js';
 import type { InstallPluginOptions } from './install.js';
 import { collectActivePluginTools, isInsideDirectory, loadPlugins, resolvePluginEntryPath } from './loader.js';
 import { getPluginScopePaths } from './paths.js';
@@ -14,10 +14,18 @@ import type { LoadedPlugin, PluginScope } from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
 
+function gitExecOptions(cwd: string) {
+  return { cwd, env: NON_INTERACTIVE_GIT_ENV };
+}
+
 function getEntryVersion(entryPath: string): string {
   const stat = fs.statSync(entryPath, { bigint: true });
   return `${stat.mtimeNs}:${stat.size}`;
 }
+
+type PluginManagerOptions = PluginPathOptions & {
+  githubCliPath?: string;
+};
 
 export class PluginManager {
   private loadedPlugins: LoadedPlugin[] = [];
@@ -31,7 +39,7 @@ export class PluginManager {
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
 
-  constructor(private readonly options: PluginPathOptions) {}
+  constructor(private readonly options: PluginManagerOptions) {}
 
   onReload(listener: (plugins: LoadedPlugin[]) => void | Promise<void>): () => void {
     this.reloadListeners.add(listener);
@@ -240,7 +248,7 @@ export class PluginManager {
     checkoutPath: string,
     currentHead: string,
   ): Promise<boolean> {
-    await execa('git', ['fetch', 'origin'], { cwd: checkoutPath });
+    await execa('git', ['fetch', 'origin'], gitExecOptions(checkoutPath));
     const upstream = await this.resolveGitUpstream(checkoutPath, plugin.ref);
     if (!upstream) return false;
     const [localOnly, remoteOnly] = await this.readGitAheadBehind(checkoutPath, upstream);
@@ -251,7 +259,7 @@ export class PluginManager {
     }
 
     if (remoteOnly > 0 || localOnly > 0 || hasLocalChanges) {
-      await execa('git', ['reset', '--hard', upstream], { cwd: checkoutPath });
+      await execa('git', ['reset', '--hard', upstream], gitExecOptions(checkoutPath));
       return true;
     }
 
@@ -267,8 +275,8 @@ export class PluginManager {
 
     if (includeWorkingTree) {
       const currentBranch = await this.readGitCurrentBranch(checkoutPath);
-      await execa('git', ['switch', '-c', backupBranch], { cwd: checkoutPath });
-      await execa('git', ['add', '-A'], { cwd: checkoutPath });
+      await execa('git', ['switch', '-c', backupBranch], gitExecOptions(checkoutPath));
+      await execa('git', ['add', '-A'], gitExecOptions(checkoutPath));
       const hasStagedChanges = await this.hasGitStagedChanges(checkoutPath);
       if (hasStagedChanges) {
         await execa(
@@ -282,19 +290,23 @@ export class PluginManager {
             '-m',
             'chore: backup local plugin checkout changes',
           ],
-          { cwd: checkoutPath },
+          gitExecOptions(checkoutPath),
         );
       }
       await this.restoreGitCheckout(checkoutPath, currentBranch, currentHead);
       return;
     }
 
-    await execa('git', ['branch', backupBranch, 'HEAD'], { cwd: checkoutPath });
+    await execa('git', ['branch', backupBranch, 'HEAD'], gitExecOptions(checkoutPath));
   }
 
   private async resolveGitUpstream(cwd: string, installedRef?: string): Promise<string | undefined> {
     try {
-      const { stdout } = await execa('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd });
+      const { stdout } = await execa(
+        'git',
+        ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+        gitExecOptions(cwd),
+      );
       return stdout.trim();
     } catch {
       return installedRef ? undefined : 'origin/main';
@@ -302,19 +314,23 @@ export class PluginManager {
   }
 
   private async readGitAheadBehind(cwd: string, upstream: string): Promise<[number, number]> {
-    const { stdout } = await execa('git', ['rev-list', '--left-right', '--count', `HEAD...${upstream}`], { cwd });
+    const { stdout } = await execa(
+      'git',
+      ['rev-list', '--left-right', '--count', `HEAD...${upstream}`],
+      gitExecOptions(cwd),
+    );
     const [ahead = '0', behind = '0'] = stdout.trim().split(/\s+/);
     return [Number(ahead) || 0, Number(behind) || 0];
   }
 
   private async hasGitWorkingTreeChanges(cwd: string): Promise<boolean> {
-    const { stdout } = await execa('git', ['status', '--porcelain'], { cwd });
+    const { stdout } = await execa('git', ['status', '--porcelain'], gitExecOptions(cwd));
     return stdout.trim().length > 0;
   }
 
   private async hasGitStagedChanges(cwd: string): Promise<boolean> {
     try {
-      await execa('git', ['diff', '--cached', '--quiet'], { cwd });
+      await execa('git', ['diff', '--cached', '--quiet'], gitExecOptions(cwd));
       return false;
     } catch {
       return true;
@@ -323,14 +339,14 @@ export class PluginManager {
 
   private async restoreGitCheckout(cwd: string, branch: string | undefined, fallbackHead: string): Promise<void> {
     if (branch) {
-      await execa('git', ['switch', branch], { cwd });
+      await execa('git', ['switch', branch], gitExecOptions(cwd));
       return;
     }
-    await execa('git', ['checkout', fallbackHead], { cwd });
+    await execa('git', ['checkout', fallbackHead], gitExecOptions(cwd));
   }
 
   private async readGitCurrentBranch(cwd: string): Promise<string | undefined> {
-    const { stdout } = await execa('git', ['branch', '--show-current'], { cwd });
+    const { stdout } = await execa('git', ['branch', '--show-current'], gitExecOptions(cwd));
     const branch = stdout.trim();
     return branch.length > 0 ? branch : undefined;
   }
@@ -346,7 +362,7 @@ export class PluginManager {
   }
 
   private async readGitHead(cwd: string): Promise<string> {
-    const { stdout } = await execa('git', ['rev-parse', 'HEAD'], { cwd });
+    const { stdout } = await execa('git', ['rev-parse', 'HEAD'], gitExecOptions(cwd));
     return stdout.trim();
   }
 

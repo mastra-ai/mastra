@@ -38,9 +38,9 @@ export async function generateRootLlmsTxt(outDir: string, siteDir: string): Prom
 /**
  * Write an individual llms.txt file
  */
-export async function writeLlmsTxt(outputPath: string, content: string): Promise<void> {
+export async function writeLlmsTxt(outputPath: string, content: string, prefix = ''): Promise<void> {
   await fs.ensureDir(path.dirname(outputPath))
-  await fs.writeFile(outputPath, content, 'utf-8')
+  await fs.writeFile(outputPath, `${prefix}${content}`, 'utf-8')
 }
 
 const ROOT_LLMS_PREFIX_BLOCK = `# Mastra
