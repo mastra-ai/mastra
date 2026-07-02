@@ -37,6 +37,7 @@ function baseProps() {
     activeProjectId: project.id,
     onManageProjects: vi.fn(),
     onOpenSettings: vi.fn(),
+    session: { setState: vi.fn().mockResolvedValue(undefined) },
     threads: [threadOne, threadTwo],
     activeThreadId: threadOne.id,
     onSwitchThread: vi.fn(),

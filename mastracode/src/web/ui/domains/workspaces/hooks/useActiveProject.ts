@@ -1,23 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 
-import {
-  DEFAULT_RESOURCE_ID,
-  ensureResourceId,
-  loadActiveProjectId,
-  loadProjects,
-  saveActiveProjectId,
-} from '../services/projects';
+import { DEFAULT_RESOURCE_ID, loadActiveProjectId, saveActiveProjectId } from '../services/projects';
 import type { Project } from '../services/projects';
+import { useEnsureResourceIdMutation, useProjectsQuery } from './useProjects';
 
 export function useActiveProject() {
-  const [projects, setProjects] = useState<Project[]>(() => loadProjects());
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => {
-    const saved = loadActiveProjectId();
-    return saved && loadProjects().some(p => p.id === saved) ? saved : null;
-  });
+  const { data: projects } = useProjectsQuery();
+  const ensureResourceId = useEnsureResourceIdMutation();
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => loadActiveProjectId());
   const activeProject = projects.find(p => p.id === activeProjectId) ?? null;
   const resourceId = activeProject?.resourceId ?? DEFAULT_RESOURCE_ID;
   const sessionEnabled = !!activeProject?.resourceId;
+
+  useEffect(() => {
+    if (activeProjectId && !projects.some(p => p.id === activeProjectId)) {
+      setActiveProjectId(null);
+    }
+  }, [activeProjectId, projects]);
 
   useEffect(() => {
     saveActiveProjectId(activeProjectId);
@@ -27,9 +26,9 @@ export function useActiveProject() {
   useEffect(() => {
     if (activeProject && !activeProject.resourceId && backfilledRef.current !== activeProject.id) {
       backfilledRef.current = activeProject.id;
-      void ensureResourceId(activeProject).then(() => setProjects(loadProjects()));
+      ensureResourceId.mutate(activeProject);
     }
-  }, [activeProject]);
+  }, [activeProject, ensureResourceId]);
 
   const selectProject = async (project: Project | null) => {
     if (!project) {
@@ -39,8 +38,7 @@ export function useActiveProject() {
 
     if (!project.resourceId) {
       try {
-        const filled = await ensureResourceId(project);
-        setProjects(loadProjects());
+        const filled = await ensureResourceId.mutateAsync(project);
         setActiveProjectId(filled.id);
         return;
       } catch {
@@ -56,7 +54,6 @@ export function useActiveProject() {
     activeProjectId,
     resourceId,
     sessionEnabled,
-    setProjects,
     selectProject,
   };
 }

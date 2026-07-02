@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import type { useAgentControllerSession } from '../../chat/hooks/useAgentControllerSession';
 import type { Project } from '../services/projects';
+import { deriveProjectPath } from './useWorkspaces';
 
 type Session = ReturnType<typeof useAgentControllerSession>;
 
@@ -21,7 +22,7 @@ export function useProjectSessionSync({
     if (resourceId !== prevResourceId.current) {
       prevResourceId.current = resourceId;
       if (status === 'ready') {
-        void session.setState({ projectPath: activeProject?.path ?? '' });
+        void session.setState({ projectPath: deriveProjectPath(activeProject) });
       }
     }
   }, [resourceId, status, activeProject, session]);
@@ -30,7 +31,7 @@ export function useProjectSessionSync({
   useEffect(() => {
     if (status === 'ready' && !initialSet.current && activeProject) {
       initialSet.current = true;
-      void session.setState({ projectPath: activeProject.path });
+      void session.setState({ projectPath: deriveProjectPath(activeProject) });
     }
   }, [status, activeProject, session]);
 }

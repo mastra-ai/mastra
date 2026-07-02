@@ -59,7 +59,6 @@ type AppLayoutProps = {
   density: Density;
   resourceId: string;
   sessionEnabled: boolean;
-  setProjects: (projects: Project[]) => void;
   selectProject: (project: Project | null) => Promise<void>;
   changeDensity: (density: Density) => void;
   setTheme: (theme: Theme) => void;
@@ -104,7 +103,6 @@ export function AppLayout(props: AppLayoutProps) {
           sessionEnabled={props.sessionEnabled}
           projects={props.projects}
           activeProjectId={props.activeProjectId}
-          setProjects={props.setProjects}
           selectProject={props.selectProject}
           changeDensity={props.changeDensity}
           setTheme={props.setTheme}
@@ -127,6 +125,7 @@ type SidebarSlotProps = Pick<
   | 'busy'
   | 'closeSidebar'
   | 'projects'
+  | 'resourceId'
   | 'setProjectsOpen'
   | 'setSettingsOpen'
   | 'session'
@@ -143,6 +142,7 @@ function SidebarSlot({
   busy,
   closeSidebar,
   projects,
+  resourceId,
   setProjectsOpen,
   setSettingsOpen,
   session,
@@ -158,6 +158,8 @@ function SidebarSlot({
       projects={projects}
       activeProjectId={activeProjectId}
       auth={auth}
+      session={session}
+      resourceId={resourceId}
       onManageProjects={() => {
         setProjectsOpen(true);
         closeSidebar();
@@ -502,7 +504,6 @@ type AppOverlaysProps = Pick<
   | 'session'
   | 'sessionEnabled'
   | 'setPaletteOpen'
-  | 'setProjects'
   | 'setProjectsOpen'
   | 'setSettingsOpen'
   | 'setShortcutsOpen'
@@ -530,7 +531,6 @@ function AppOverlays({
   session,
   sessionEnabled,
   setPaletteOpen,
-  setProjects,
   setProjectsOpen,
   setSettingsOpen,
   setShortcutsOpen,
@@ -578,7 +578,6 @@ function AppOverlays({
           projects={projects}
           activeProjectId={activeProjectId}
           onSelectProject={project => void selectProject(project)}
-          onProjectsChange={setProjects}
           onClose={() => setProjectsOpen(false)}
         />
       )}

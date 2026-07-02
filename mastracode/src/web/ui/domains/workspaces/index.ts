@@ -1,8 +1,12 @@
 export { DirectoryBrowser } from './components/DirectoryPicker';
 export { GithubConnectModal } from './components/GithubConnectModal';
 export { ProjectsModal } from './components/ProjectsModal';
+export { WorkspacesSection } from './components/WorkspacesSection';
 export { useActiveProject } from './hooks/useActiveProject';
 export { useProjectModalAutoOpen } from './hooks/useProjectModalAutoOpen';
 export { useProjectSessionSync } from './hooks/useProjectSessionSync';
+export * from './hooks/useGithubRepos';
+export * from './hooks/useProjects';
+export * from './hooks/useWorkspaces';
 export * from './services/github';
 export * from './services/projects';

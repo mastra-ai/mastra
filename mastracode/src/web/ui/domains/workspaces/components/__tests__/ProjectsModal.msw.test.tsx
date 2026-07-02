@@ -7,7 +7,8 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
 import type { Project } from '../../index';
-import { ProjectsModal } from '../../index';
+import { ProjectsModal, useProjectsQuery } from '../../index';
+import { loadProjects, saveProjects } from '../../services/projects';
 
 const FS_URL = `${TEST_BASE_URL}/api/web/fs/list`;
 
@@ -51,7 +52,6 @@ describe('ProjectsModal', () => {
           projects={[alpha, beta]}
           activeProjectId="p-alpha"
           onSelectProject={vi.fn()}
-          onProjectsChange={vi.fn()}
           onClose={vi.fn()}
         />,
       );
@@ -75,7 +75,6 @@ describe('ProjectsModal', () => {
           projects={[alpha, beta]}
           activeProjectId="p-alpha"
           onSelectProject={onSelectProject}
-          onProjectsChange={vi.fn()}
           onClose={onClose}
         />,
       );
@@ -88,24 +87,23 @@ describe('ProjectsModal', () => {
   });
 
   describe('when a project is removed', () => {
-    it('drops it from the list via onProjectsChange', async () => {
-      localStorage.setItem('mastracode-projects', JSON.stringify([alpha, beta]));
-      const onProjectsChange = vi.fn();
+    it('refreshes the rendered project list through the projects query', async () => {
+      saveProjects([alpha, beta]);
       const user = userEvent.setup();
 
-      renderWithProviders(
-        <ProjectsModal
-          projects={[alpha, beta]}
-          activeProjectId="p-alpha"
-          onSelectProject={vi.fn()}
-          onProjectsChange={onProjectsChange}
-          onClose={vi.fn()}
-        />,
-      );
+      function Harness() {
+        const { data: projects } = useProjectsQuery();
+        return (
+          <ProjectsModal projects={projects} activeProjectId="p-alpha" onSelectProject={vi.fn()} onClose={vi.fn()} />
+        );
+      }
+
+      renderWithProviders(<Harness />);
 
       await user.click(screen.getByRole('button', { name: 'Remove Beta' }));
 
-      expect(onProjectsChange).toHaveBeenCalledWith([alpha]);
+      await waitFor(() => expect(screen.queryByText('Beta')).not.toBeInTheDocument());
+      expect(loadProjects()).toEqual([alpha]);
     });
   });
 
@@ -114,13 +112,7 @@ describe('ProjectsModal', () => {
       server.use(http.get(FS_URL, () => HttpResponse.json(rootListing)));
 
       renderWithProviders(
-        <ProjectsModal
-          projects={[]}
-          activeProjectId={null}
-          onSelectProject={vi.fn()}
-          onProjectsChange={vi.fn()}
-          onClose={vi.fn()}
-        />,
+        <ProjectsModal projects={[]} activeProjectId={null} onSelectProject={vi.fn()} onClose={vi.fn()} />,
       );
 
       expect(await screen.findByText('gamma')).toBeInTheDocument();
@@ -135,13 +127,7 @@ describe('ProjectsModal', () => {
       const user = userEvent.setup();
 
       renderWithProviders(
-        <ProjectsModal
-          projects={[alpha]}
-          activeProjectId="p-alpha"
-          onSelectProject={vi.fn()}
-          onProjectsChange={vi.fn()}
-          onClose={vi.fn()}
-        />,
+        <ProjectsModal projects={[alpha]} activeProjectId="p-alpha" onSelectProject={vi.fn()} onClose={vi.fn()} />,
       );
 
       await user.click(screen.getByRole('button', { name: /Add a project/ }));
@@ -157,13 +143,7 @@ describe('ProjectsModal', () => {
       const user = userEvent.setup();
 
       renderWithProviders(
-        <ProjectsModal
-          projects={[alpha]}
-          activeProjectId="p-alpha"
-          onSelectProject={vi.fn()}
-          onProjectsChange={vi.fn()}
-          onClose={onClose}
-        />,
+        <ProjectsModal projects={[alpha]} activeProjectId="p-alpha" onSelectProject={vi.fn()} onClose={onClose} />,
       );
 
       await user.click(screen.getByRole('button', { name: 'Close' }));

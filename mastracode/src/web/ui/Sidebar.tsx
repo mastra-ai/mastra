@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { WebAuthViewModel } from './AppLayout';
 import type { Project } from './domains/workspaces';
+import { WorkspacesSection } from './domains/workspaces';
 
 const MAX_THREADS = 5;
 
@@ -26,6 +27,10 @@ interface SidebarProps {
   projects: Project[];
   activeProjectId: string | null;
   auth?: WebAuthViewModel;
+  session: {
+    setState: (updates: Record<string, unknown>) => Promise<unknown>;
+  };
+  resourceId?: string;
   onManageProjects: () => void;
   onOpenSettings: () => void;
   threads: AgentControllerThreadInfo[];
@@ -44,6 +49,8 @@ export function Sidebar({
   projects,
   activeProjectId,
   auth,
+  session,
+  resourceId,
   onManageProjects,
   onOpenSettings,
   threads,
@@ -64,6 +71,13 @@ export function Sidebar({
       className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-full md:max-w-none md:translate-x-0 md:border-r-0 md:bg-transparent md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
     >
       <ProjectSwitcher activeProject={activeProject} onManageProjects={onManageProjects} />
+
+      <WorkspacesSection
+        activeProject={activeProject}
+        session={session}
+        agentControllerId="code"
+        resourceId={resourceId}
+      />
 
       {activeProject && (
         <ThreadList

@@ -2,15 +2,14 @@ import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Txt } from '@
 import { Folder, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { useAddProjectMutation, useRemoveProjectMutation } from '../hooks/useProjects';
 import type { Project } from '../services/projects';
-import { addProject, loadProjects, removeProject } from '../services/projects';
 import { DirectoryBrowser } from './DirectoryPicker';
 
 interface ProjectsModalProps {
   projects: Project[];
   activeProjectId: string | null;
   onSelectProject: (project: Project) => void;
-  onProjectsChange: (projects: Project[]) => void;
   onClose: () => void;
 }
 
@@ -22,17 +21,17 @@ interface ProjectsModalProps {
  * Two views: the project list, and an "add" view that embeds the server-driven
  * directory browser. On first run (no projects) it opens straight into "add".
  */
-export function ProjectsModal({
-  projects,
-  activeProjectId,
-  onSelectProject,
-  onProjectsChange,
-  onClose,
-}: ProjectsModalProps) {
+export function ProjectsModal({ projects, activeProjectId, onSelectProject, onClose }: ProjectsModalProps) {
   const empty = projects.length === 0;
   const [adding, setAdding] = useState(empty);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const addProject = useAddProjectMutation();
+  const removeProject = useRemoveProjectMutation();
+  const busy = addProject.isPending;
+  const error = addProject.error
+    ? addProject.error instanceof Error
+      ? addProject.error.message
+      : String(addProject.error)
+    : null;
 
   // Escape backs out of the add view to the list first (when projects exist);
   // the DS Dialog otherwise owns close-on-Escape for the list view.
@@ -48,26 +47,18 @@ export function ProjectsModal({
   }, [adding, empty]);
 
   const handlePick = async (path: string, name: string) => {
-    setBusy(true);
-    setError(null);
     try {
-      // addProject resolves the server-side (TUI-matching) resourceId, then
-      // persists to localStorage. Reload so we don't double-append.
-      const project = await addProject(name || path, path);
-      onProjectsChange(loadProjects());
+      const project = await addProject.mutateAsync({ name: name || path, path });
       onSelectProject(project);
       onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+    } catch {
+      // Mutation state owns the rendered error.
     }
   };
 
   const handleRemove = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    removeProject(id);
-    onProjectsChange(projects.filter(p => p.id !== id));
+    removeProject.mutate(id);
   };
 
   return (

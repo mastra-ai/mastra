@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import { CloseIcon, FolderIcon, LogoMark, SearchIcon } from '../../../ui/icons';
+import { useGithubReposQuery } from '../hooks/useGithubRepos';
+import { useCreateGithubProjectMutation } from '../hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../services/github';
-import { connectGithub, createProjectFromRepo, listGithubRepos } from '../services/github';
+import { connectGithub } from '../services/github';
 import type { Project } from '../services/projects';
-import { addGithubProject } from '../services/projects';
 
 interface GithubConnectModalProps {
   status: GithubStatus;
@@ -24,10 +25,12 @@ interface GithubConnectModalProps {
 export function GithubConnectModal({ status, onProjectCreated, onClose }: GithubConnectModalProps) {
   const connected = status.connected;
   const [query, setQuery] = useState('');
-  const [repos, setRepos] = useState<GithubRepo[]>([]);
-  const [loading, setLoading] = useState(connected);
-  const [busyRepoId, setBusyRepoId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const reposQuery = useGithubReposQuery(query || undefined, connected);
+  const createProject = useCreateGithubProjectMutation();
+  const repos = reposQuery.data ?? [];
+  const loading = reposQuery.isPending;
+  const error = reposQuery.error ?? createProject.error;
+  const busyRepoId = createProject.isPending ? createProject.variables?.id : null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -37,39 +40,13 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Load repos once connected. Searching re-queries the server.
-  useEffect(() => {
-    if (!connected) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    listGithubRepos(query || undefined)
-      .then(list => {
-        if (!cancelled) setRepos(list);
-      })
-      .catch(e => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connected, query]);
-
   const handlePick = async (repo: GithubRepo) => {
-    setBusyRepoId(repo.id);
-    setError(null);
     try {
-      const created = await createProjectFromRepo(repo);
-      const stored = addGithubProject(created);
+      const stored = await createProject.mutateAsync(repo);
       onProjectCreated(stored);
       onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusyRepoId(null);
+    } catch {
+      // Mutation state renders the error.
     }
   };
 
@@ -126,7 +103,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
               />
             </div>
 
-            {error && <p className="mb-3 mt-0 text-ui-sm text-notice-destructive-fg">{error}</p>}
+            {error && <p className="mb-3 mt-0 text-ui-sm text-notice-destructive-fg">{error.message}</p>}
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               {loading ? (

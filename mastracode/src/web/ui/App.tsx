@@ -8,20 +8,24 @@ import { redirectToLogin, redirectToLogout, useWebAuth } from './domains/auth';
 import type { SlashCommand } from './domains/chat';
 import { SLASH_COMMANDS, useAgentControllerSession, useGlobalShortcuts, useTranscriptScroll } from './domains/chat';
 import { useDensityPreference } from './domains/settings';
-import { useProjectModalAutoOpen, useProjectSessionSync, useActiveProject } from './domains/workspaces';
+import {
+  deriveProjectPath,
+  useProjectModalAutoOpen,
+  useProjectSessionSync,
+  useActiveProject,
+} from './domains/workspaces';
 import { useToast } from './ui';
 
 export default function App() {
   const { toast } = useToast();
   const { baseUrl } = useApiConfig();
   const webAuth = useWebAuth();
-  const { projects, activeProject, activeProjectId, resourceId, sessionEnabled, setProjects, selectProject } =
-    useActiveProject();
+  const { projects, activeProject, activeProjectId, resourceId, sessionEnabled, selectProject } = useActiveProject();
 
   const session = useAgentControllerSession({
     agentControllerId: 'code',
     resourceId,
-    projectPath: activeProject?.path,
+    projectPath: deriveProjectPath(activeProject),
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -203,7 +207,6 @@ export default function App() {
       density={density}
       resourceId={resourceId}
       sessionEnabled={sessionEnabled}
-      setProjects={setProjects}
       selectProject={selectProject}
       changeDensity={changeDensity}
       setTheme={setTheme}
