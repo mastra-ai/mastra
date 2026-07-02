@@ -24,63 +24,60 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
-describeForAllEngines(
-  'AIMock loop scenario: provider options passthrough',
-  engine => {
-    const getMock = useLoopScenarioAimock();
+describeForAllEngines('AIMock loop scenario: provider options passthrough', engine => {
+  const getMock = useLoopScenarioAimock();
 
-    it('forwards providerOptions while observable model settings reach the body', async () => {
-      const { output, requests } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Hello with metadata.',
-        stopWhen: stepCountIs(1),
-        modelSettings: { temperature: 0.42 },
-        providerOptions: {
-          openai: {
-            prediction: { type: 'content', content: 'Hello with metadata.' },
-            store: true,
-          },
+  it('forwards providerOptions while observable model settings reach the body', async () => {
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Hello with metadata.',
+      stopWhen: stepCountIs(1),
+      modelSettings: { temperature: 0.42 },
+      providerOptions: {
+        openai: {
+          prediction: { type: 'content', content: 'Hello with metadata.' },
+          store: true,
         },
-        fixtures: llm => {
-          llm.on({ endpoint: 'chat' }, { content: 'Response received.' });
-        },
-      });
-
-      expect(requests).toHaveLength(1);
-
-      // The observable setting reached the request body, proving the request was
-      // assembled from our options rather than silently dropped.
-      expect((requests[0]?.body as { temperature?: number })?.temperature).toBe(0.42);
-
-      // The loop completed with providerOptions present.
-      expect(await output.text).toBe('Response received.');
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Response received.' });
+      },
     });
 
-    it('forwards multiple provider option namespaces without breaking the loop', async () => {
-      const { output, requests } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Request with multiple provider options.',
-        stopWhen: stepCountIs(1),
-        modelSettings: { temperature: 0.13 },
-        providerOptions: {
-          openai: {
-            parallel_tool_calls: false,
-            user: 'test-user-123',
-          },
-          anthropic: {
-            cache_control: { type: 'ephemeral' },
-          },
-        },
-        fixtures: llm => {
-          llm.on({ endpoint: 'chat' }, { content: 'Response with metadata.' });
-        },
-      });
+    expect(requests).toHaveLength(1);
 
-      expect(requests).toHaveLength(1);
-      expect((requests[0]?.body as { temperature?: number })?.temperature).toBe(0.13);
-      expect(await output.text).toBe('Response with metadata.');
+    // The observable setting reached the request body, proving the request was
+    // assembled from our options rather than silently dropped.
+    expect((requests[0]?.body as { temperature?: number })?.temperature).toBe(0.42);
+
+    // The loop completed with providerOptions present.
+    expect(await output.text).toBe('Response received.');
+  });
+
+  it('forwards multiple provider option namespaces without breaking the loop', async () => {
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Request with multiple provider options.',
+      stopWhen: stepCountIs(1),
+      modelSettings: { temperature: 0.13 },
+      providerOptions: {
+        openai: {
+          parallel_tool_calls: false,
+          user: 'test-user-123',
+        },
+        anthropic: {
+          cache_control: { type: 'ephemeral' },
+        },
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: 'Response with metadata.' });
+      },
     });
-  },
-);
+
+    expect(requests).toHaveLength(1);
+    expect((requests[0]?.body as { temperature?: number })?.temperature).toBe(0.13);
+    expect(await output.text).toBe('Response with metadata.');
+  });
+});
