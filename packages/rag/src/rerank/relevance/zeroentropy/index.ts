@@ -8,9 +8,9 @@ export class ZeroEntropyRelevanceScorer implements RelevanceScoreProvider {
 
   constructor(model?: string, apiKey?: string) {
     this.client = new ZeroEntropy({
-      apiKey: apiKey || process.env.ZEROENTROPY_API_KEY || '',
+      apiKey: apiKey ?? process.env.ZEROENTROPY_API_KEY ?? '',
     });
-    this.model = model || 'zerank-1';
+    this.model = model ?? 'zerank-1';
   }
 
   async getRelevanceScore(query: string, text: string): Promise<number> {
