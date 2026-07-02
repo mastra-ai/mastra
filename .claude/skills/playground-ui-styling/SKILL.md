@@ -1,11 +1,11 @@
 ---
 name: playground-ui-styling
-description: Styling policy for the @mastra/playground-ui design system and every app built on it. This skill should be used when writing, reviewing, or refactoring UI code in packages/playground-ui, packages/playground, mastracode/src/web, or any other consumer of the design system. Triggers on tasks involving components, Tailwind classes, or design tokens in those surfaces.
+description: Styling policy for the @mastra/playground-ui design system. This skill should be used when writing, reviewing, or refactoring any frontend application UI — in this repo or in an external consumer of the design system. The docs site has its own styling and is out of scope. Triggers on tasks involving components, Tailwind classes, or design tokens in frontend UI.
 ---
 
 # Playground UI Styling
 
-`packages/playground-ui` is the shared design system for all Mastra studio apps: local Studio (`packages/playground`), Cloud Studio (Next.js, separate repo), and the mastracode web UI (`mastracode/src/web/ui`). This policy applies wherever its components are consumed. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
+`packages/playground-ui` is the design system for Mastra frontend interfaces. Every application UI builds on it — inside this repo and in external consumers of the package. Do not hand-roll product UI outside the design system. Exception: the docs site, which has its own styling. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
 
 ## Wiring
 
