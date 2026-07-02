@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
-    "ws": "^8.20.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

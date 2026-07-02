@@ -6,6 +6,7 @@ settings:
 
 overrides:
   '@mastra/core': 1.45.0
+  '@mastra/editor': 0.13.2
   '@mastra/memory': 1.21.1
   '@mastra/deployer-vercel': link:../../deployers/vercel
   mastra: link:../../packages/cli
@@ -22,6 +23,9 @@ importers:
       '@mastra/deployer-vercel':
         specifier: link:../../deployers/vercel
         version: link:../../deployers/vercel
+      '@mastra/editor':
+        specifier: 0.13.2
+        version: 0.13.2(@mastra/core@1.45.0(express@5.2.1)(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
       '@mastra/memory':
         specifier: 1.21.1
         version: 1.21.1(@mastra/core@1.45.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)
@@ -89,6 +93,30 @@ packages:
       { integrity: sha512-Q3BZ27qfpYqnCYGvE3vt+Qi6LGOF9R5Nmzn+9JoM1lCRsD9mYaIhfJLkSunN48nfGXJ6n+XNV0J/XVpqGQl7Dw== }
     engines: { node: '>=18' }
 
+  '@arcadeai/arcadejs@2.4.1':
+    resolution: {integrity: sha512-DLpvvDBvRNjzVmFYJ+upPrUJ8YRBoGWqPfzhuFp2+lh5Shxm0l9qLwe1Ah4pKvuCatU7TLOOTkFpICitTuuJeQ==}
+    hasBin: true
+
+  '@composio/client@0.1.0-alpha.66':
+    resolution: {integrity: sha512-SDHcTWzz2dgdYAew/gQsRpjHpEzHKm6sW7KM4wCoJWNJuuMuey9Ahje91ZucNjfaqpI8CFW+pXY4nWkZf5LD7Q==}
+
+  '@composio/core@0.6.11':
+    resolution: {integrity: sha512-0uNA1DhHF0l3d51GVRw4CA8oYgqsps+aGMW6J4jA6Ut53HfBHwHJ4JAa9HU/2Psho8tCoprM6NR5DxWGD50H+A==}
+    peerDependencies:
+      zod: ^3.25 || ^4
+
+  '@composio/json-schema-to-zod@0.1.20':
+    resolution: {integrity: sha512-d4V34itLrUWG/VBh7ciznKcxF/T22MBLHmuEzHoX0zsBOHsUmjYz5qtDh20S2p3FE+HHvLZxpXiv8yfdd4yI+Q==}
+    peerDependencies:
+      zod: '>=3.25.76 <5'
+
+  '@composio/mastra@0.6.11':
+    resolution: {integrity: sha512-lN9JOf4o+oO7ff8yUKcPCJWqLaII6zlW2ZWZiuimHilPjEKwjRenK6gc+soCoMU5s26cziY39I3S2eh1vII3Aw==}
+    peerDependencies:
+      '@composio/core': 0.6.11
+      '@mastra/core': 1.45.0
+      zod: ^3.25 || ^4
+
   '@hono/node-server@1.19.14':
     resolution:
       { integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw== }
@@ -118,6 +146,16 @@ packages:
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
+  '@mastra/editor@0.13.2':
+    resolution: {integrity: sha512-SQkgPoo0E/0klTDywTVmBc1cf6T5rXlTBlCBz/4KaoTtrRSzUkmxueV2gnJKUKUViNAUVn8YwelSjhCsY8w0FQ==}
+    engines: {node: '>=22.13.0'}
+    peerDependencies:
+      '@mastra/core': 1.45.0
+      '@mastra/mcp': '>=1.0.0-0 <2.0.0-0'
+    peerDependenciesMeta:
+      '@mastra/mcp':
+        optional: true
+
   '@mastra/memory@1.21.1':
     resolution:
       { integrity: sha512-L4VS/aJXqilVnHntSwwagHb3hfQ7R/c0wsC9cAOmI2ktUa7atooO15Yx9z6NYJfRIkyqJXuWkpge+2I59Mo4lQ== }
@@ -129,6 +167,12 @@ packages:
     resolution:
       { integrity: sha512-VAWCXGuWuTqnljkheb3zKUujNK6rdGhFISxdSoSz3/d3HJWZOHY10mUnXw5lg0s73FdFDGg4tehbq28fAZz+lA== }
     engines: { node: '>=22.13.0' }
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+
+  '@mastra/schema-compat@1.3.1':
+    resolution: {integrity: sha512-OEQ2jak1OvWiWCgm13Qps4IHNNGeHS4Hx+3+uh0Zw1SsCA9f3gZBd6hNAXGJcxXHO0AT/4aqO94UDZEPQSNfCQ==}
+    engines: {node: '>=22.13.0'}
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
@@ -214,6 +258,9 @@ packages:
     resolution:
       { integrity: sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw== }
 
+  '@types/json-schema@7.0.15':
+    resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
+
   '@types/mdast@4.0.4':
     resolution:
       { integrity: sha512-kGaNbPh1k7AFzgpud/gMdvIm5xuECykRR+JnWKQno9TAXVa6WIVCGTPvYGekIDL4uwCZQSYbUxNBSb1aUo79oA== }
@@ -252,6 +299,10 @@ packages:
     resolution:
       { integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA== }
 
+  ansi-styles@4.3.0:
+    resolution: {integrity: sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==}
+    engines: {node: '>=8'}
+
   argparse@1.0.10:
     resolution:
       { integrity: sha512-o5Roy6tNG4SL/FOkCAN6RzjiakZS25RLYFrcMttJqbdd8BWrnA+fGz57iN5Pb06pvBGvl5gQ0B48dJlslXvoTg== }
@@ -288,6 +339,10 @@ packages:
     resolution:
       { integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg== }
 
+  chalk@4.1.2:
+    resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
+    engines: {node: '>=10'}
+
   character-entities@2.0.2:
     resolution:
       { integrity: sha512-shx7oQ0Awen/BRIdkjkvz54PnEEI/EjwXDSIZp86/KKdbafHh1Df/RYGBhn4hbe2+uKC9FnT5UCEdyPz3ai9hQ== }
@@ -304,6 +359,13 @@ packages:
         optional: true
       zod:
         optional: true
+
+  color-convert@2.0.1:
+    resolution: {integrity: sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==}
+    engines: {node: '>=7.0.0'}
+
+  color-name@1.1.4:
+    resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
 
   content-disposition@1.1.0:
     resolution:
@@ -546,6 +608,10 @@ packages:
     resolution:
       { integrity: sha512-5v6yZd4JK3eMI3FqqCouswVqwugaA9r4dNZB1wwcmrD02QkV5H0y7XBQW8QwQqEaZY1pM9aqORSORhJRdNK44Q== }
     engines: { node: '>=6.0' }
+
+  has-flag@4.0.0:
+    resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
+    engines: {node: '>=8'}
 
   has-symbols@1.1.0:
     resolution:
@@ -916,6 +982,26 @@ packages:
     resolution:
       { integrity: sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w== }
 
+  openai@6.45.0:
+    resolution: {integrity: sha512-5DQVNErssk0afNpTTHUm/qZPU4iKR9OYdNid8Ib4puq4gHNNvGWZht2zY4h9a8JMF949Ik6m8gQutllVPbjdnw==}
+    peerDependencies:
+      '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
+      '@smithy/hash-node': '>=4.3.0 <5'
+      '@smithy/signature-v4': '>=5.4.0 <6'
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@aws-sdk/credential-provider-node':
+        optional: true
+      '@smithy/hash-node':
+        optional: true
+      '@smithy/signature-v4':
+        optional: true
+      ws:
+        optional: true
+      zod:
+        optional: true
+
   p-map@7.0.4:
     resolution:
       { integrity: sha512-tkAQEw8ysMzmkhgw8k+1U/iPhWNhykKnSk4Rd5zLoPJCuJaGRPo6YposrZgaxHKzDHdDWWZvE/Sk7hsL2X/CpQ== }
@@ -984,6 +1070,9 @@ packages:
       { integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg== }
     engines: { node: '>= 0.10' }
 
+  pusher-js@8.5.0:
+    resolution: {integrity: sha512-V7uzGi9bqOOOyM/6IkJdpFyjGZj7llz1v0oWnYkZKcYLvbz6VcHVLmzKqkvegjuMumpfIEKGLmWHwFb39XFCpw==}
+
   qs@6.15.2:
     resolution:
       { integrity: sha512-Rzq0KEyX/w/tEybncDgdkZrJgVUsUMk3xjh3t5bv3S1HTAtg+uOYt72+ZfwiQwKdysThkTBdL/rTi6HDmX9Ddw== }
@@ -1047,6 +1136,11 @@ packages:
     resolution:
       { integrity: sha512-vfD3pmTzGpufjScBh50YHKzEu2lxBWhVEHsNGoEXmCmn2hKGfeNLYMzCJpe8cD7gqX7TJluOVpBkAequ6dgMmA== }
     engines: { node: '>=4' }
+
+  semver@7.8.5:
+    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
+    engines: {node: '>=10'}
+    hasBin: true
 
   send@1.2.1:
     resolution:
@@ -1120,6 +1214,10 @@ packages:
       { integrity: sha512-aulFJcD6YK8V1G7iRB5tigAP4TsHBZZrOV8pjV++zdUwmeV8uzbY7yn6h9MswN62adStNZFuCIx4haBnRuMDaw== }
     engines: { node: '>=18' }
 
+  supports-color@7.2.0:
+    resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
+    engines: {node: '>=8'}
+
   toidentifier@1.0.1:
     resolution:
       { integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA== }
@@ -1141,6 +1239,9 @@ packages:
     resolution:
       { integrity: sha512-bwabv6PupzeavybzEoArBAkwq5fnzwf8OFnRtpHwnviFWuwJPFxtyH+aVp36TmIqK3aYYgtTJ3J0m2ysxxSzQg== }
     hasBin: true
+
+  tweetnacl@1.0.3:
+    resolution: {integrity: sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw==}
 
   type-is@2.1.0:
     resolution:
@@ -1292,6 +1393,38 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
+  '@arcadeai/arcadejs@2.4.1': {}
+
+  '@composio/client@0.1.0-alpha.66': {}
+
+  '@composio/core@0.6.11(ws@8.21.0)(zod@4.4.3)':
+    dependencies:
+      '@composio/client': 0.1.0-alpha.66
+      '@composio/json-schema-to-zod': 0.1.20(zod@4.4.3)
+      '@types/json-schema': 7.0.15
+      chalk: 4.1.2
+      openai: 6.45.0(ws@8.21.0)(zod@4.4.3)
+      pusher-js: 8.5.0
+      semver: 7.8.5
+      zod: 4.4.3
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - ws
+
+  '@composio/json-schema-to-zod@0.1.20(zod@4.4.3)':
+    dependencies:
+      zod: 4.4.3
+
+  '@composio/mastra@0.6.11(@composio/core@0.6.11(ws@8.21.0)(zod@4.4.3))(@mastra/core@1.45.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)':
+    dependencies:
+      '@composio/core': 0.6.11(ws@8.21.0)(zod@4.4.3)
+      '@mastra/core': 1.45.0(express@5.2.1)(zod@4.4.3)
+      '@mastra/schema-compat': 1.3.1(zod@4.4.3)
+      zod: 4.4.3
+
   '@hono/node-server@1.19.14(hono@4.12.26)':
     dependencies:
       hono: 4.12.26
@@ -1347,6 +1480,22 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@mastra/editor@0.13.2(@mastra/core@1.45.0(express@5.2.1)(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)':
+    dependencies:
+      '@arcadeai/arcadejs': 2.4.1
+      '@composio/core': 0.6.11(ws@8.21.0)(zod@4.4.3)
+      '@composio/mastra': 0.6.11(@composio/core@0.6.11(ws@8.21.0)(zod@4.4.3))(@mastra/core@1.45.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/core': 1.45.0(express@5.2.1)(zod@4.4.3)
+      '@mastra/memory': 1.21.1(@mastra/core@1.45.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)
+      '@mastra/schema-compat': 1.3.1(zod@4.4.3)
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - supports-color
+      - ws
+      - zod
+
   '@mastra/memory@1.21.1(@mastra/core@1.45.0(express@5.2.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@mastra/core': 1.45.0(express@5.2.1)(zod@4.4.3)
@@ -1364,6 +1513,14 @@ snapshots:
       - zod
 
   '@mastra/schema-compat@1.3.0(zod@4.4.3)':
+    dependencies:
+      json-schema-to-zod: 2.8.1
+      zod: 4.4.3
+      zod-from-json-schema: 0.5.3
+      zod-from-json-schema-v3: zod-from-json-schema@0.0.5
+      zod-to-json-schema: 3.25.2(zod@4.4.3)
+
+  '@mastra/schema-compat@1.3.1(zod@4.4.3)':
     dependencies:
       json-schema-to-zod: 2.8.1
       zod: 4.4.3
@@ -1436,6 +1593,8 @@ snapshots:
     dependencies:
       '@types/ms': 2.1.0
 
+  '@types/json-schema@7.0.15': {}
+
   '@types/mdast@4.0.4':
     dependencies:
       '@types/unist': 3.0.3
@@ -1465,6 +1624,10 @@ snapshots:
       fast-uri: 3.1.2
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
+
+  ansi-styles@4.3.0:
+    dependencies:
+      color-convert: 2.0.1
 
   argparse@1.0.10:
     dependencies:
@@ -1504,6 +1667,11 @@ snapshots:
 
   ccount@2.0.1: {}
 
+  chalk@4.1.2:
+    dependencies:
+      ansi-styles: 4.3.0
+      supports-color: 7.2.0
+
   character-entities@2.0.2: {}
 
   chat@4.31.0(zod@4.4.3):
@@ -1519,6 +1687,12 @@ snapshots:
       zod: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  color-convert@2.0.1:
+    dependencies:
+      color-name: 1.1.4
+
+  color-name@1.1.4: {}
 
   content-disposition@1.1.0: {}
 
@@ -1722,6 +1896,8 @@ snapshots:
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
+
+  has-flag@4.0.0: {}
 
   has-symbols@1.1.0: {}
 
@@ -2138,6 +2314,11 @@ snapshots:
     dependencies:
       wrappy: 1.0.2
 
+  openai@6.45.0(ws@8.21.0)(zod@4.4.3):
+    optionalDependencies:
+      ws: 8.21.0
+      zod: 4.4.3
+
   p-map@7.0.4: {}
 
   p-retry@7.1.1:
@@ -2178,6 +2359,10 @@ snapshots:
     dependencies:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
+
+  pusher-js@8.5.0:
+    dependencies:
+      tweetnacl: 1.0.3
 
   qs@6.15.2:
     dependencies:
@@ -2246,6 +2431,8 @@ snapshots:
     dependencies:
       extend-shallow: 2.0.1
       kind-of: 6.0.3
+
+  semver@7.8.5: {}
 
   send@1.2.1:
     dependencies:
@@ -2324,6 +2511,10 @@ snapshots:
 
   strip-final-newline@4.0.0: {}
 
+  supports-color@7.2.0:
+    dependencies:
+      has-flag: 4.0.0
+
   toidentifier@1.0.1: {}
 
   tokenx@1.3.0: {}
@@ -2340,6 +2531,8 @@ snapshots:
       '@turbo/linux-arm64': 2.9.18
       '@turbo/windows-64': 2.9.18
       '@turbo/windows-arm64': 2.9.18
+
+  tweetnacl@1.0.3: {}
 
   type-is@2.1.0:
     dependencies:
