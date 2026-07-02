@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.28.0-alpha.4
+
+### Patch Changes
+
+- Removed named exports from the `@mastra/playground-ui` root entry. Import public APIs from exact package subpaths instead. ([#18791](https://github.com/mastra-ai/mastra/pull/18791))
+
+  **Before**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui';
+  ```
+
+  **After**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui/components/Button';
+  ```
+
+  `mastracode` now uses the exact subpath imports, and lint rules prevent new broad `@mastra/playground-ui` imports.
+
+- Updated dependencies [[`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44), [`7952b3d`](https://github.com/mastra-ai/mastra/commit/7952b3d90e2437093ee322585e361ea6e62ed497)]:
+  - @mastra/core@1.49.0-alpha.4
+  - @mastra/playground-ui@38.1.0-alpha.4
+  - @mastra/client-js@1.29.1-alpha.4
+  - @mastra/react@1.2.2-alpha.4
+  - @mastra/server@1.49.0-alpha.4
+  - @mastra/hono@1.5.4-alpha.4
+
 ## 0.28.0-alpha.3
 
 ### Minor Changes

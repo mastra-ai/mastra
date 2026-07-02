@@ -1,5 +1,14 @@
 # @mastra/mongodb
 
+## 1.12.0-alpha.1
+
+### Patch Changes
+
+- Fixed `createExperiment` in the MongoDB store persisting `agentVersion` as `null` regardless of the input. `listExperiments` already accepts an `agentVersion` filter, but rows created by this backend would never match it. New experiments now round-trip `agentVersion` end-to-end. ([#18769](https://github.com/mastra-ai/mastra/pull/18769))
+
+- Updated dependencies [[`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44)]:
+  - @mastra/core@1.49.0-alpha.4
+
 ## 1.12.0-alpha.0
 
 ### Minor Changes
