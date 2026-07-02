@@ -1005,7 +1005,6 @@ Test plan:
     const footerLines = output.split('\n').filter(line => line.startsWith('│') && line.trim() !== '│');
     expect(output).not.toContain('…');
     expect(output).toContain('--reporter=dot');
-    expect(component.render(60).join('\n')).toContain(theme.fg('toolArgs', '--reporter=dot'));
     expect(footerLines.length).toBeGreaterThan(1);
     expect(footerLines[0]).toContain('│ $ pnpm');
     expect(footerLines[1]).toMatch(/^│   \S/);

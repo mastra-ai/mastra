@@ -66,6 +66,18 @@ function makeLargeCommand() {
   return parts.join('');
 }
 
+function makeQuotedCommand() {
+  const parts = [`if [ -f package.json ]; then echo "quoted if then fi ${'TEXT '.repeat(40)}" && printf 'single quoted && || ; ${'MORE '.repeat(40)}' || echo fallback; fi > /tmp/render-smoke-command.txt && node -e "`];
+  let size = parts.join('').length;
+  for (let i = 0; size < LARGE_SIZE; i++) {
+    const part = `console.log('QUOTED_COMMAND_${String(i).padStart(5, '0')} && || if then fi');`;
+    parts.push(part);
+    size += part.length;
+  }
+  parts.push(`"`);
+  return parts.join('');
+}
+
 async function streamToolCall(res, { id, toolName, args }) {
   const created = Math.floor(Date.now() / 1000);
   const callId = `call_${Math.random().toString(36).slice(2)}`;
@@ -185,6 +197,18 @@ const server = http.createServer(async (req, res) => {
         new_string: makeLargeTypeScriptContent('NEW_STREAM'),
       },
     });
+  } else if (prompt.includes('quoted command') || prompt.includes('shell highlight')) {
+    await streamToolCall(res, {
+      id,
+      toolName: 'execute_command',
+      args: {
+        command: makeQuotedCommand(),
+        timeout: 30,
+        cwd: null,
+        tail: 200,
+        background: false,
+      },
+    });
   } else if (prompt.includes('command') || prompt.includes('output')) {
     await streamToolCall(res, {
       id,
@@ -198,7 +222,7 @@ const server = http.createServer(async (req, res) => {
       },
     });
   } else {
-    await streamText(res, 'Render Smoke ready. Send a prompt containing write, edit, command, or output.');
+    await streamText(res, 'Render Smoke ready. Send a prompt containing write, edit, command, quoted command, shell highlight, or output.');
   }
 
   res.end();
@@ -206,6 +230,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Mastra Code Render Smoke mock listening on http://localhost:${PORT}/v1`);
-  console.log('Prompts: "write", "edit", or "command output"');
+  console.log('Prompts: "write", "edit", "command output", or "quoted command"');
   console.log(`LARGE_SIZE=${LARGE_SIZE} CHUNK_SIZE=${CHUNK_SIZE} DELAY_MS=${DELAY_MS}`);
 });
