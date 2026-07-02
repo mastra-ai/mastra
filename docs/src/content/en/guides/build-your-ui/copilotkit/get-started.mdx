@@ -222,6 +222,88 @@ export default function Home() {
 
 For fully custom chat UIs (bring your own components), see [CopilotKit's headless UI guide](https://docs.copilotkit.ai/).
 
+## App control and interactivity
+
+Beyond rendering agent output as UI (see the [generative UI spectrum](/guides/build-your-ui/copilotkit/generative-ui)), CopilotKit lets the agent act on your application and pause for the user. Both patterns run against the same Mastra setup.
+
+### Frontend tools
+
+Give the agent the ability to act on your app. Register the tool on the frontend with `useFrontendTool`; the `handler` runs in the browser when the agent calls it:
+
+```tsx title="app/page.tsx"
+import { CopilotChat } from '@copilotkit/react-ui'
+import { CopilotKit, useFrontendTool } from '@copilotkit/react-core'
+
+function Chat() {
+  useFrontendTool({
+    name: 'colorChangeTool',
+    description: 'Changes the background color',
+    parameters: [
+      { name: 'color', type: 'string', description: 'The color to change to', required: true },
+    ],
+    handler: ({ color }) => {
+      document.body.style.setProperty('--background', color)
+    },
+  })
+
+  return <CopilotChat labels={{ title: 'Background Color Changer' }} />
+}
+
+export default function Page() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="bgColorAgent">
+      <Chat />
+    </CopilotKit>
+  )
+}
+```
+
+The matching Mastra agent is a normal agent instructed to call `colorChangeTool` with the requested color.
+
+### Human-in-the-loop
+
+Pause the agent mid-run and wait for the user to approve, edit, or reject before continuing. Use `useHumanInTheLoop`: its `render` function receives a `respond` callback, and the agent's run stays suspended until you call it.
+
+```tsx title="app/page.tsx"
+import { CopilotChat } from '@copilotkit/react-ui'
+import { CopilotKit, useHumanInTheLoop } from '@copilotkit/react-core'
+import { StepsFeedback } from '@/components/steps-feedback'
+
+function Chat() {
+  useHumanInTheLoop({
+    name: 'generate_task_steps',
+    description: 'Generates a list of steps for the user to perform',
+    parameters: [
+      {
+        name: 'steps',
+        type: 'object[]',
+        attributes: [
+          { name: 'description', type: 'string' },
+          { name: 'status', type: 'string', enum: ['enabled', 'disabled', 'executing'] },
+        ],
+      },
+    ],
+    available: 'enabled',
+    // `respond` resumes the agent with the user's edited selection.
+    render: ({ args, respond, status }) => (
+      <StepsFeedback args={args} respond={respond} status={status} />
+    ),
+  })
+
+  return <CopilotChat labels={{ title: 'Planning Agent' }} />
+}
+
+export default function Page() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="planningAgent">
+      <Chat />
+    </CopilotKit>
+  )
+}
+```
+
+Inside `StepsFeedback`, let the user toggle steps and then call `respond({ accepted: true, steps })` to resume the agent, or `respond({ accepted: false })` to reject. The agent reads the returned value and continues accordingly. See the full component in the [UI Dojo](https://ui-dojo.mastra.ai/).
+
 ## Configuration options
 
 `registerCopilotKit()` accepts the following options:
