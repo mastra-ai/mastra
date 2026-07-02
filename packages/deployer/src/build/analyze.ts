@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { basename, join, relative } from 'node:path';
+import { basename, isAbsolute, join, relative } from 'node:path';
 import * as babel from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
@@ -46,7 +46,7 @@ async function resolveDependencyInfo(
   existing: ExternalDependencyInfo | undefined,
   parentPaths: string[],
 ): Promise<ExternalDependencyInfo> {
-  if (existing?.version && existing.packageSpec) {
+  if (existing?.version || existing?.packageSpec) {
     return existing;
   }
 
@@ -62,7 +62,26 @@ async function resolveDependencyInfo(
     }
   }
 
+  for (const name of packageNames) {
+    const metadata = await getPackageMetadata(name);
+    if (metadata.version || metadata.packageSpec) {
+      return preferDependencyInfo(existing, metadata);
+    }
+  }
+
   return existing ?? {};
+}
+
+function importerParentPaths(importerId: string | undefined, base: string[]): string[] {
+  if (!importerId || importerId.startsWith('\x00') || !isAbsolute(importerId)) {
+    return base;
+  }
+
+  return [...new Set([importerId, ...base])];
+}
+
+function getLastConcreteModuleId(moduleIds: string[]): string | undefined {
+  return moduleIds.findLast(id => !id.startsWith('\x00') && isAbsolute(id));
 }
 
 function throwExternalDependencyError({
@@ -294,16 +313,20 @@ async function validateOutput(
   // store resolve map for validation
   // we should resolve the version of the deps
   for (const deps of Object.values(usedExternals)) {
-    for (const dep of Object.keys(deps)) {
+    for (const [dep, importerId] of Object.entries(deps)) {
       if (isExternalProtocolImport(dep)) {
         continue;
       }
 
       const pkgName = getPackageName(dep);
       if (pkgName) {
-        // Use version info from analysis if available, then resolve from project/workspace package locations.
+        // Use version info from analysis if available, then resolve from the module that imported the external.
         const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(dep, versionInfo, externalMetadataParentPaths);
+        const dependencyInfo = await resolveDependencyInfo(
+          dep,
+          versionInfo,
+          importerParentPaths(importerId, externalMetadataParentPaths),
+        );
         result.externalDependencies.set(
           pkgName,
           preferDependencyInfo(result.externalDependencies.get(pkgName), dependencyInfo),
@@ -458,6 +481,21 @@ export async function analyzeBundle(
     }
   }
 
+  // Build a map of dependency versions from the full analysis result before dev/externalsPreset pruning.
+  // Non-workspace deps are removed from optimization below, but their resolved version/packageSpec metadata
+  // is still needed when they become externals.
+  const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
+  for (const [dep, metadata] of depsToOptimize.entries()) {
+    const pkgName = getPackageName(dep);
+    if (pkgName && (metadata.version || metadata.packageSpec)) {
+      depsVersionInfo.set(pkgName, preferDependencyInfo(depsVersionInfo.get(pkgName), metadata));
+    }
+    // Also store by full import path for subpath imports
+    if (metadata.version || metadata.packageSpec) {
+      depsVersionInfo.set(dep, preferDependencyInfo(depsVersionInfo.get(dep), metadata));
+    }
+  }
+
   /**
    * Only during `mastra dev` we want to optimize workspace packages. In previous steps we might have added dependencies that are not workspace packages, so we gotta remove them again.
    */
@@ -492,23 +530,12 @@ export async function analyzeBundle(
     slash(relative(workspaceRoot || projectRoot, pkgInfo.location)),
   );
 
-  // Build a map of dependency versions from depsToOptimize for lookup
-  const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
-  for (const [dep, metadata] of depsToOptimize.entries()) {
-    const pkgName = getPackageName(dep);
-    if (pkgName && (metadata.version || metadata.packageSpec)) {
-      depsVersionInfo.set(pkgName, preferDependencyInfo(depsVersionInfo.get(pkgName), metadata));
-    }
-    // Also store by full import path for subpath imports
-    if (metadata.version || metadata.packageSpec) {
-      depsVersionInfo.set(dep, preferDependencyInfo(depsVersionInfo.get(dep), metadata));
-    }
-  }
-
   for (const o of output) {
     if (o.type === 'asset') {
       continue;
     }
+
+    const importerId = getLastConcreteModuleId(o.moduleIds);
 
     for (const i of o.imports) {
       if (isBuiltinModule(i)) {
@@ -532,12 +559,16 @@ export async function analyzeBundle(
       const pkgName = getPackageName(i);
 
       if (pkgName) {
-        // Try to get version info from our tracked dependencies, then resolve from project/workspace package locations.
+        // Try to get version info from our tracked dependencies, then resolve from the chunk's source module.
         const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName);
-        const dependencyInfo = await resolveDependencyInfo(i, versionInfo, [
-          projectRoot,
-          ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
-        ]);
+        const dependencyInfo = await resolveDependencyInfo(
+          i,
+          versionInfo,
+          importerParentPaths(importerId, [
+            projectRoot,
+            ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+          ]),
+        );
         allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));
       }
     }

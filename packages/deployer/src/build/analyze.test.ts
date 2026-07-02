@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
@@ -29,6 +29,81 @@ describe('workspace path normalization (issue #13022)', () => {
     expect(rollupImport.startsWith(windowsPath)).toBe(false);
     expect(rollupImport.startsWith(slash(windowsPath))).toBe(true);
   });
+});
+
+describe('external dependency versions', () => {
+  it('resolves an external dependency version from the bundled workspace importer', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-importer-version-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
+    const externalPackageDir = join(workspacePackageDir, 'node_modules', 'external-only-from-workspace');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(externalPackageDir, { recursive: true });
+    await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(workspacePackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/workspace-package',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: {
+          'external-only-from-workspace': '4.5.6',
+        },
+      }),
+    );
+    await writeFile(
+      join(externalPackageDir, 'package.json'),
+      JSON.stringify({ name: 'external-only-from-workspace', version: '4.5.6', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(externalPackageDir, 'index.js'), `export const externalValue = 'external';`);
+    await writeFile(
+      join(workspacePackageDir, 'src', 'index.js'),
+      `import { externalValue } from 'external-only-from-workspace';\nexport const workspaceValue = externalValue;`,
+    );
+    await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
+    await writeFile(
+      entryFile,
+      `import { workspaceValue } from '@internal/workspace-package';\nexport const value = workspaceValue;`,
+    );
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: appDir,
+          platform: 'node',
+          isDev: true,
+          bundlerOptions: {
+            externals: ['external-only-from-workspace'],
+            enableSourcemap: false,
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result.externalDependencies.get('external-only-from-workspace')).toEqual({
+        version: '4.5.6',
+        packageSpec: undefined,
+      });
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15000);
 });
 
 describe('protocol imports', () => {
