@@ -6,8 +6,8 @@ describe('package exports', () => {
     expect(packageJson).not.toHaveProperty('main');
     expect(packageJson).not.toHaveProperty('module');
     expect(packageJson).not.toHaveProperty('types');
-    expect(Object.keys(packageJson.exports)).not.toEqual(
-      expect.arrayContaining(['.', './components', './hooks', './utils']),
-    );
+    for (const barrel of ['.', './components', './hooks', './utils']) {
+      expect(packageJson.exports).not.toHaveProperty([barrel]);
+    }
   });
 });
