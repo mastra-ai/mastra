@@ -15,16 +15,12 @@ export class RenderScheduler {
     if (this.pending) return;
 
     const elapsed = this.now() - this.lastRenderAt;
-    if (elapsed >= this.intervalMs) {
-      this.run();
-      return;
-    }
-
+    const delay = Math.max(0, this.intervalMs - elapsed);
     this.pending = true;
     this.timer = setTimeout(() => {
       this.timer = undefined;
       this.run();
-    }, this.intervalMs - elapsed);
+    }, delay);
   }
 
   flush(): void {

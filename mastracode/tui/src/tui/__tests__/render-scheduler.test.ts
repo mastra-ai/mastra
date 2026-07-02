@@ -10,6 +10,11 @@ describe('RenderScheduler', () => {
     const scheduler = new RenderScheduler(render, 80, () => now);
 
     scheduler.request();
+    scheduler.request();
+    scheduler.request();
+    expect(render).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(0);
     expect(render).toHaveBeenCalledTimes(1);
 
     now += 10;
@@ -40,11 +45,11 @@ describe('RenderScheduler', () => {
     scheduler.request();
 
     scheduler.flush();
-    expect(render).toHaveBeenCalledTimes(2);
+    expect(render).toHaveBeenCalledTimes(1);
 
     now += 80;
     vi.advanceTimersByTime(80);
-    expect(render).toHaveBeenCalledTimes(2);
+    expect(render).toHaveBeenCalledTimes(1);
 
     scheduler.dispose();
     vi.useRealTimers();

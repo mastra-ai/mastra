@@ -16,7 +16,7 @@ import type { EventHandlerContext } from './types.js';
 async function flushParser(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setTimeout(resolve, 100));
 }
 
 function visibleChildren(ctx: EventHandlerContext) {

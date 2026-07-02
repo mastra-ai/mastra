@@ -21,7 +21,7 @@ import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
 import { showModalOverlay } from '../overlay.js';
-import { requestRender, flushRender } from '../render-scheduler.js';
+import { DEFAULT_RENDER_COALESCE_MS, requestRender, flushRender } from '../render-scheduler.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
 
@@ -49,6 +49,13 @@ function reconcileToolBoundaries(ctx: EventHandlerContext): void {
 }
 
 const pluginSubagentToolCallIds = new Set<string>();
+
+interface PendingShellOutput {
+  output: string;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const pendingShellOutputs = new Map<string, PendingShellOutput>();
 
 type JsonObject = Record<string, unknown>;
 
@@ -95,6 +102,7 @@ interface ToolInputParserState {
   queue: AsyncStringQueue;
   iterator: AsyncIterableIterator<unknown>;
   latestArgs?: JsonObject;
+  applyTimer?: ReturnType<typeof setTimeout>;
   closed: boolean;
 }
 
@@ -119,6 +127,10 @@ function closeToolInputParser(toolCallId: string): void {
   const parser = toolInputParsers.get(toolCallId);
   if (!parser) return;
   parser.closed = true;
+  if (parser.applyTimer) {
+    clearTimeout(parser.applyTimer);
+    parser.applyTimer = undefined;
+  }
   parser.queue.close();
   toolInputParsers.delete(toolCallId);
 }
@@ -462,19 +474,40 @@ export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, p
 /**
  * Handle streaming shell output from execute_command tool.
  */
+function flushPendingShellOutput(ctx: EventHandlerContext, toolCallId: string): void {
+  const pending = pendingShellOutputs.get(toolCallId);
+  if (!pending) return;
+  pendingShellOutputs.delete(toolCallId);
+  clearTimeout(pending.timer);
+
+  const { state } = ctx;
+  const component = state.pendingTools.get(toolCallId);
+  if (component?.appendStreamingOutput) {
+    component.appendStreamingOutput(pending.output);
+    reconcileToolBoundaries(ctx);
+    requestRender(state);
+  }
+}
+
+/**
+ * Handle streaming shell output from execute_command tool.
+ */
 export function handleShellOutput(
   ctx: EventHandlerContext,
   toolCallId: string,
   output: string,
   _stream: 'stdout' | 'stderr',
 ): void {
-  const { state } = ctx;
-  const component = state.pendingTools.get(toolCallId);
-  if (component?.appendStreamingOutput) {
-    component.appendStreamingOutput(output);
-    reconcileToolBoundaries(ctx);
-    requestRender(state);
+  const pending = pendingShellOutputs.get(toolCallId);
+  if (pending) {
+    pending.output += output;
+    return;
   }
+
+  pendingShellOutputs.set(toolCallId, {
+    output,
+    timer: setTimeout(() => flushPendingShellOutput(ctx, toolCallId), DEFAULT_RENDER_COALESCE_MS),
+  });
 }
 
 /**
@@ -632,6 +665,18 @@ function applyParsedToolArgs(
   requestRender(state);
 }
 
+function scheduleParsedToolArgsApply(ctx: EventHandlerContext, toolCallId: string, parser: ToolInputParserState): void {
+  if (parser.applyTimer) return;
+  parser.applyTimer = setTimeout(() => {
+    parser.applyTimer = undefined;
+    if (parser.closed || !parser.latestArgs) return;
+
+    const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
+    if (!buffer) return;
+    applyParsedToolArgs(ctx, toolCallId, buffer.toolName, parser.latestArgs);
+  }, DEFAULT_RENDER_COALESCE_MS);
+}
+
 async function processToolInputParser(
   ctx: EventHandlerContext,
   toolCallId: string,
@@ -644,9 +689,8 @@ async function processToolInputParser(
       if (!isJsonObject(next.value)) continue;
 
       parser.latestArgs = next.value;
-      const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
-      if (!buffer || parser.closed) return;
-      applyParsedToolArgs(ctx, toolCallId, buffer.toolName, next.value);
+      if (parser.closed) return;
+      scheduleParsedToolArgsApply(ctx, toolCallId, parser);
     }
   } catch {
     closeToolInputParser(toolCallId);
@@ -678,6 +722,7 @@ export function handleToolInputEnd(_ctx: EventHandlerContext, toolCallId: string
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
+  flushPendingShellOutput(ctx, toolCallId);
   const { state } = ctx;
   // If this is a subagent tool, store the result in the SubagentExecutionComponent
   const subagentComponent = state.pendingSubagents.get(toolCallId);

@@ -5,7 +5,7 @@ import { clearToolInputParsers, handleToolInputDelta, handleToolInputStart, hand
 async function flushParser(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 100));
 }
 
 function createContext(bufferText: string | undefined, toolName = 'view') {
