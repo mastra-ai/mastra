@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import assert from 'node:assert';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 import { downloadJson } from '../downloadJson';
 
 // jsdom's Blob exposes no `.text()`, and the global `Response` doesn't recognize it.

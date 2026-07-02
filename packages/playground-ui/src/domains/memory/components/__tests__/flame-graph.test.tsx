@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import assert from 'node:assert';
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { timestampsToTDomain } from '../../lib/timeline';
 import { FlameGraph } from '../flame-graph';

@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import assert from 'node:assert';
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { ThreadList, ThreadListItem } from './thread-list';
 

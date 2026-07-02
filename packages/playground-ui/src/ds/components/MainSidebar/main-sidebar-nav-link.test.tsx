@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
-import assert from 'node:assert';
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebarProvider } from './main-sidebar-context';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';

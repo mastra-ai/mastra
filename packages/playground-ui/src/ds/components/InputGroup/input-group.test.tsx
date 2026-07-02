@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import assert from 'node:assert';
 
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
 

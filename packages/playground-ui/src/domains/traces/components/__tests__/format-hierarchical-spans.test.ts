@@ -1,6 +1,4 @@
-import assert from 'node:assert';
-
-import { describe, it, expect } from 'vitest';
+import { assert, describe, it, expect } from 'vitest';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 
 type Span = Parameters<typeof formatHierarchicalSpans>[0][number];

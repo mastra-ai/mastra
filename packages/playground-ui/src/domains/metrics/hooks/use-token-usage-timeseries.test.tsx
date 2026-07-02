@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import assert from 'node:assert';
 
 import { EntityType } from '@mastra/core/observability';
 import { MastraReactProvider } from '@mastra/react';
@@ -8,7 +7,7 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { emptyTokenSeries, inputTokenSeries, outputTokenSeries } from './__tests__/fixtures/token-usage-timeseries';
 import { MetricsProvider } from './use-metrics';

@@ -1,7 +1,5 @@
-import assert from 'node:assert';
-
 import type { UsageStats } from '@mastra/core/observability';
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 import { getTokenUsageView } from '../span-token-usage.utils';
 
 const getRequiredTokenUsageView = (usage: UsageStats) => {

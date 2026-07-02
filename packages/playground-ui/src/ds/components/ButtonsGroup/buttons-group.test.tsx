@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import assert from 'node:assert';
 
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { Button } from '../Button';
 import { DropdownMenu } from '../DropdownMenu';
