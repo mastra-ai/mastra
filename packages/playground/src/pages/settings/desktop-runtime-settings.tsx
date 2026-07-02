@@ -3,6 +3,7 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EnvironmentVariablesEditor } from '@mastra/playground-ui/components/EnvironmentVariablesEditor';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { useEnvironmentVariablesEditor } from '@mastra/playground-ui/hooks/use-environment-variables-editor';
@@ -142,39 +143,58 @@ function RuntimeBadge({ state }: { state: DesktopRuntimeState }) {
   );
 }
 
-function ProbeResult({
+function probeStatusLabel(probe: ProbeModelsResult | undefined, isPending: boolean) {
+  if (isPending) return 'Detecting models...';
+  if (!probe) return undefined;
+  if (!probe.ok) return probe.error ?? 'Model server unavailable';
+  if (probe.models.length === 0) return 'No models detected';
+  return `${probe.models.length} detected`;
+}
+
+function modelOptionsFor(probe: ProbeModelsResult | undefined, modelId: string) {
+  const detected = probe?.ok ? probe.models : [];
+  if (modelId.trim() && !detected.includes(modelId)) return [...detected, modelId];
+  return detected;
+}
+
+function ModelIdControl({
+  isPending,
   modelId,
+  onChange,
   probe,
-  onSelectModel,
 }: {
+  isPending: boolean;
   modelId: string;
+  onChange: (nextModelId: string) => void;
   probe: ProbeModelsResult | undefined;
-  onSelectModel: (nextModelId: string) => void;
 }) {
-  if (!probe) return null;
+  const modelOptions = modelOptionsFor(probe, modelId);
 
-  if (!probe.ok) {
-    return <p className="text-sm text-accent2">{probe.error ?? 'Unable to reach the model server.'}</p>;
-  }
-
-  if (!probe.models.length) {
-    return <p className="text-sm text-neutral4">Server reachable, but no loaded models were reported.</p>;
+  if (modelOptions.length > 0) {
+    return (
+      <Select value={modelId || modelOptions[0]} onValueChange={onChange}>
+        <SelectTrigger id="desktop-model-id" size="sm" className="w-full">
+          <SelectValue placeholder="Select detected model" />
+        </SelectTrigger>
+        <SelectContent>
+          {modelOptions.map(model => (
+            <SelectItem key={model} value={model}>
+              {model}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
   }
 
   return (
-    <ButtonsGroup spacing="default" aria-label="Detected models" className="flex-wrap justify-start">
-      {probe.models.map(model => (
-        <Button
-          key={model}
-          type="button"
-          variant={model === modelId ? 'default' : 'outline'}
-          size="xs"
-          onClick={() => onSelectModel(model)}
-        >
-          {model}
-        </Button>
-      ))}
-    </ButtonsGroup>
+    <Input
+      id="desktop-model-id"
+      value={modelId}
+      placeholder={isPending ? 'Detecting models...' : 'Model ID'}
+      size="sm"
+      onChange={event => onChange(event.currentTarget.value)}
+    />
   );
 }
 
@@ -211,10 +231,7 @@ function RuntimeEnvironmentEditor({ endpoint, state }: { endpoint: string; state
 
   return (
     <div className="space-y-4">
-      <SettingsRow
-        label="Runtime environment"
-        description="Add provider keys for the bundled runtime. LM Studio tokens are created in LM Studio and pasted here when authentication is enabled."
-      >
+      <SettingsRow label="Runtime environment">
         <StatusBadge variant={dirty ? 'warning' : 'neutral'} size="sm">
           {dirty ? 'Unsaved' : `${savedVariableCount} saved`}
         </StatusBadge>
@@ -265,36 +282,86 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
   const [modelUrl, setModelUrl] = useState(() => state.settings.modelUrl);
   const [modelId, setModelId] = useState(() => state.settings.modelId);
   const [modelApiKey, setModelApiKey] = useState(() => state.settings.modelApiKey);
-  const [probe, setProbe] = useState<ProbeModelsResult>();
+  const [modelIdEdited, setModelIdEdited] = useState(false);
   const selectedProvider = LOCAL_MODEL_PRESETS[providerId];
-  const isModelApplied = modelMatchesSettings(state.settings, modelUrl, modelId, modelApiKey);
 
-  const probeModels = useMutation({
-    mutationFn: () =>
+  const {
+    data: probeData,
+    isFetching: isProbeFetching,
+    refetch: refetchProbeModels,
+  } = useQuery({
+    enabled: Boolean(modelUrl.trim()) && providerId !== 'custom',
+    queryFn: () =>
       desktopRequest<ProbeModelsResult>(endpoint, '/probe-models', {
-        body: JSON.stringify({ apiKey: modelApiKey, modelUrl, providerName: selectedProvider.name }),
+        body: JSON.stringify({
+          apiKey: modelApiKey,
+          modelUrl,
+          providerId,
+          providerName: selectedProvider.name,
+        }),
         method: 'POST',
       }),
-    onSuccess: result => {
-      setProbe(result);
-      if (result.ok && result.models[0]) {
-        setModelId(result.models[0]);
-      }
-    },
-    onError: error => {
-      toast.error(error instanceof Error ? error.message : 'Unable to probe model server');
-    },
+    queryKey: ['desktop-runtime-models', endpoint, providerId, modelUrl, modelApiKey],
+    retry: false,
+    staleTime: 30_000,
   });
+
+  const detectedModelId = probeData?.ok ? probeData.models[0] : undefined;
+  const shouldUseDetectedModel =
+    Boolean(detectedModelId) && !modelIdEdited && (!modelId.trim() || modelId === selectedProvider.modelId);
+  const effectiveModelId = shouldUseDetectedModel ? detectedModelId! : modelId;
+  const isModelApplied = modelMatchesSettings(state.settings, modelUrl, effectiveModelId, modelApiKey);
+
+  async function refreshModels() {
+    const result = await refetchProbeModels();
+    if (result.error) {
+      toast.error(result.error instanceof Error ? result.error.message : 'Unable to refresh models');
+    }
+  }
+
+  function updateModelId(nextModelId: string) {
+    setModelId(nextModelId);
+    setModelIdEdited(true);
+  }
+
+  function updateProvider(nextProviderId: LocalModelProviderId) {
+    const provider = LOCAL_MODEL_PRESETS[nextProviderId];
+    setProviderId(provider.id);
+    setModelIdEdited(false);
+    if (provider.id !== 'custom') {
+      setModelUrl(provider.modelUrl);
+      setModelId(provider.modelId);
+      setModelApiKey(provider.modelApiKey);
+    }
+  }
+
+  function updateModelUrl(nextModelUrl: string) {
+    setModelUrl(nextModelUrl);
+    setProviderId(providerForModelUrl(nextModelUrl));
+    setModelIdEdited(false);
+  }
+
+  const probeLabel = probeStatusLabel(probeData, isProbeFetching);
+  const probeVariant: 'error' | 'neutral' | 'success' =
+    isProbeFetching || !probeData
+      ? 'neutral'
+      : probeData.ok && probeData.models.length > 0
+        ? 'success'
+        : probeData.ok
+          ? 'neutral'
+          : 'error';
+  const probeWithDot = Boolean(probeData?.ok && probeData.models.length > 0);
+  const isRefreshDisabled = !modelUrl.trim() || isProbeFetching;
 
   const applyModel = useMutation({
     mutationFn: async () => {
       if (!modelUrl.trim()) throw new Error('Enter a model server base URL.');
-      if (!modelId.trim()) throw new Error('Enter or select a model ID.');
+      if (!effectiveModelId.trim()) throw new Error('Enter or select a model ID.');
 
       await desktopRequest<UpdateSettingsResult>(endpoint, '/settings', {
         body: JSON.stringify({
           modelApiKey: modelApiKey.trim() || 'not-needed',
-          modelId: modelId.trim(),
+          modelId: effectiveModelId.trim(),
           modelUrl: modelUrl.trim(),
         }),
         method: 'PATCH',
@@ -324,7 +391,7 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
         </SettingsRow>
 
         <div className="space-y-4">
-          <SettingsRow label="Local model provider" description={selectedProvider.guidance}>
+          <SettingsRow label="Local model provider">
             <ButtonsGroup spacing="default" aria-label="Local model provider" className="flex-wrap justify-end">
               {Object.values(LOCAL_MODEL_PRESETS).map(provider => (
                 <Button
@@ -332,15 +399,7 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
                   type="button"
                   variant={provider.id === providerId ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => {
-                    setProviderId(provider.id);
-                    setProbe(undefined);
-                    if (provider.id !== 'custom') {
-                      setModelUrl(provider.modelUrl);
-                      setModelId(provider.modelId);
-                      setModelApiKey(provider.modelApiKey);
-                    }
-                  }}
+                  onClick={() => updateProvider(provider.id)}
                 >
                   {provider.name}
                 </Button>
@@ -356,21 +415,23 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
                 value={modelUrl}
                 placeholder="http://localhost:1234/v1"
                 size="sm"
-                onChange={event => {
-                  setModelUrl(event.currentTarget.value);
-                  setProviderId(providerForModelUrl(event.currentTarget.value));
-                  setProbe(undefined);
-                }}
+                onChange={event => updateModelUrl(event.currentTarget.value)}
               />
             </label>
             <label className="min-w-0 space-y-2 text-sm text-neutral4" htmlFor="desktop-model-id">
-              <span>Model ID</span>
-              <Input
-                id="desktop-model-id"
-                value={modelId}
-                placeholder="Loaded model ID"
-                size="sm"
-                onChange={event => setModelId(event.currentTarget.value)}
+              <span className="flex min-w-0 items-center justify-between gap-2">
+                <span>Model</span>
+                {probeLabel ? (
+                  <StatusBadge variant={probeVariant} size="sm" withDot={probeWithDot}>
+                    {probeLabel}
+                  </StatusBadge>
+                ) : null}
+              </span>
+              <ModelIdControl
+                isPending={isProbeFetching}
+                modelId={effectiveModelId}
+                onChange={updateModelId}
+                probe={probeData}
               />
             </label>
             <label className="min-w-0 space-y-2 text-sm text-neutral4" htmlFor="desktop-model-api-key">
@@ -385,11 +446,15 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
             </label>
           </div>
 
-          <ProbeResult modelId={modelId} probe={probe} onSelectModel={setModelId} />
-
           <ButtonsGroup spacing="default" className="justify-start">
-            <Button type="button" size="sm" variant="outline" onClick={() => probeModels.mutate()}>
-              {probeModels.isPending ? 'Probing...' : 'Probe models'}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={isRefreshDisabled}
+              onClick={() => void refreshModels()}
+            >
+              {isProbeFetching ? 'Refreshing...' : 'Refresh models'}
             </Button>
             <Button type="button" size="sm" onClick={() => applyModel.mutate()}>
               {applyModel.isPending ? 'Applying...' : isModelApplied ? 'Restart runtime' : 'Apply & restart'}
@@ -405,7 +470,12 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
 
 export function DesktopRuntimeSettingsSection() {
   const endpoint = desktopEndpoint();
-  const stateQuery = useQuery({
+  const {
+    data: desktopState,
+    error: stateError,
+    isError: isStateError,
+    isLoading: isStateLoading,
+  } = useQuery({
     enabled: Boolean(endpoint),
     queryFn: () => {
       if (!endpoint) throw new Error('Desktop endpoint is not configured.');
@@ -417,7 +487,7 @@ export function DesktopRuntimeSettingsSection() {
 
   if (!endpoint) return null;
 
-  if (stateQuery.isLoading) {
+  if (isStateLoading) {
     return (
       <SectionCard title="Desktop Runtime" description="Loading local desktop runtime settings.">
         <p className="text-sm text-neutral4">Loading...</p>
@@ -425,17 +495,15 @@ export function DesktopRuntimeSettingsSection() {
     );
   }
 
-  if (stateQuery.isError || !stateQuery.data) {
+  if (isStateError || !desktopState) {
     return (
       <SectionCard title="Desktop Runtime" description="The desktop runtime settings could not be loaded.">
         <p className="text-sm text-accent2">
-          {stateQuery.error instanceof Error ? stateQuery.error.message : 'Unable to load desktop runtime settings.'}
+          {stateError instanceof Error ? stateError.message : 'Unable to load desktop runtime settings.'}
         </p>
       </SectionCard>
     );
   }
 
-  return (
-    <DesktopRuntimeSettingsForm key={stateQuery.data.settings.modelUrl} endpoint={endpoint} state={stateQuery.data} />
-  );
+  return <DesktopRuntimeSettingsForm key={desktopState.settings.modelUrl} endpoint={endpoint} state={desktopState} />;
 }

@@ -41,15 +41,36 @@ describe('DesktopRuntimeSettingsSection', () => {
   describe('when the Studio is served by Mastra Studio Desktop', () => {
     it('renders the local runtime controls from the desktop state endpoint', async () => {
       window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
-      server.use(http.get('*/__desktop/state', () => HttpResponse.json(desktopRuntimeState)));
+      const probeRequests: unknown[] = [];
+      server.use(
+        http.get('*/__desktop/state', () => HttpResponse.json(desktopRuntimeState)),
+        http.post('*/__desktop/probe-models', async ({ request }) => {
+          probeRequests.push(await request.json());
+          return HttpResponse.json({
+            ok: true,
+            modelUrl: 'http://localhost:1234/v1',
+            models: ['loaded-local-model'],
+          });
+        }),
+      );
 
       renderDesktopRuntimeSettings();
 
       expect(await screen.findByText('Runtime running on http://127.0.0.1:4112')).not.toBeNull();
       expect(screen.getByText('Desktop Runtime')).not.toBeNull();
       expect(screen.getByText('LM Studio')).not.toBeNull();
+      expect((await screen.findAllByText('loaded-local-model')).length).toBeGreaterThan(0);
       expect(screen.getByText('Runtime environment')).not.toBeNull();
+      expect(screen.queryByText('Add provider keys for the bundled runtime.')).toBeNull();
       expect(screen.getByDisplayValue('OPENAI_API_KEY')).not.toBeNull();
+      expect(probeRequests).toEqual([
+        {
+          apiKey: 'not-needed',
+          modelUrl: 'http://localhost:1234/v1',
+          providerId: 'lmstudio',
+          providerName: 'LM Studio',
+        },
+      ]);
     });
   });
 

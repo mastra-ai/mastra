@@ -7,6 +7,10 @@ const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = findWorkspaceRoot(packageRoot);
 const cliEntry = workspaceRoot ? join(workspaceRoot, 'packages/cli/dist/index.js') : undefined;
 const editorEntry = workspaceRoot ? join(workspaceRoot, 'packages/editor/dist/index.js') : undefined;
+const mastraBuildEnv = {
+  ...process.env,
+  MASTRA_TELEMETRY_DISABLED: process.env.MASTRA_TELEMETRY_DISABLED ?? '1',
+};
 
 function findWorkspaceRoot(startDir) {
   let current = startDir;
@@ -49,14 +53,14 @@ if (workspaceRoot && cliEntry && !existsSync(cliEntry)) {
 if (cliEntry && existsSync(cliEntry)) {
   run(process.execPath, [cliEntry, 'build', '--dir', join(packageRoot, 'src/starter/mastra'), '--root', packageRoot], {
     cwd: packageRoot,
-    env: process.env,
+    env: mastraBuildEnv,
     stdio: 'inherit',
   });
 } else {
   const mastraBin = process.platform === 'win32' ? 'mastra.cmd' : 'mastra';
   run(mastraBin, ['build', '--dir', join(packageRoot, 'src/starter/mastra'), '--root', packageRoot], {
     cwd: packageRoot,
-    env: process.env,
+    env: mastraBuildEnv,
     stdio: 'inherit',
   });
 }

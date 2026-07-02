@@ -4,6 +4,7 @@ import type { IncomingMessage, OutgoingHttpHeaders, Server, ServerResponse } fro
 import { request as httpsRequest } from 'node:https';
 import { extname, join, resolve, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
+import type { LocalModelProviderId } from '../shared/model-presets';
 import type { DesktopSettings, DesktopState, ProbeModelsResult, UpdateSettingsResult } from '../shared/types';
 import { LOCALHOST } from './defaults';
 
@@ -12,11 +13,12 @@ const DESKTOP_API_BASE_PATH = '/__desktop';
 export interface StudioDesktopApi {
   getState: () => DesktopState;
   updateSettings: (updates: Partial<DesktopSettings>) => Promise<UpdateSettingsResult>;
-  probeOpenAICompatibleModels: (
-    modelUrl?: string,
-    providerName?: string,
-    apiKey?: string,
-  ) => Promise<ProbeModelsResult>;
+  probeModels: (input: {
+    apiKey?: string;
+    modelUrl?: string;
+    providerId?: LocalModelProviderId;
+    providerName?: string;
+  }) => Promise<ProbeModelsResult>;
   restartRuntime: () => Promise<DesktopState>;
 }
 
@@ -197,13 +199,10 @@ async function handleDesktopApiRequest(
       const body = (await readJsonBody(req)) as {
         apiKey?: string;
         modelUrl?: string;
+        providerId?: LocalModelProviderId;
         providerName?: string;
       };
-      sendJson(
-        res,
-        200,
-        await desktopApi.probeOpenAICompatibleModels(body.modelUrl, body.providerName, body.apiKey),
-      );
+      sendJson(res, 200, await desktopApi.probeModels(body));
       return;
     }
 

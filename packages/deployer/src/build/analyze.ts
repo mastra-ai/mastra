@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE, getConfiguredExternals } from './analyze/constants';
+import { DEPS_TO_IGNORE, OPTIONAL_TRY_CATCH_DEPENDENCIES, getConfiguredExternals } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import { getPackageMetadata } from './package-info';
@@ -359,7 +359,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...configuredExternals, ...DEPS_TO_IGNORE],
+      stubbedExternals: [...new Set([...configuredExternals, ...OPTIONAL_TRY_CATCH_DEPENDENCIES, ...DEPS_TO_IGNORE])],
     });
   }
 

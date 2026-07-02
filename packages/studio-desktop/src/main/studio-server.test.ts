@@ -136,7 +136,7 @@ describe('Studio shell server', () => {
       },
       state: desktopState,
     }));
-    const probeOpenAICompatibleModels = vi.fn(async () => ({
+    const probeModels = vi.fn(async () => ({
       ok: true,
       modelUrl: 'http://localhost:1234/v1',
       models: ['local-model'],
@@ -146,7 +146,7 @@ describe('Studio shell server', () => {
       builtStudioPath,
       desktopApi: {
         getState: () => desktopState,
-        probeOpenAICompatibleModels,
+        probeModels,
         restartRuntime,
         updateSettings,
       },
@@ -174,7 +174,7 @@ describe('Studio shell server', () => {
 
     await expect(
       fetch(`${studioUrl}/__desktop/probe-models`, {
-        body: JSON.stringify({ modelUrl: 'http://localhost:1234/v1' }),
+        body: JSON.stringify({ modelUrl: 'http://localhost:1234/v1', providerId: 'lmstudio' }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
       }).then(response => response.json()),
@@ -184,7 +184,7 @@ describe('Studio shell server', () => {
       fetch(`${studioUrl}/__desktop/restart-runtime`, { method: 'POST' }).then(response => response.json()),
     ).resolves.toMatchObject({ runtime: { state: 'running' } });
     expect(updateSettings).toHaveBeenCalledWith({ modelId: 'local-model' });
-    expect(probeOpenAICompatibleModels).toHaveBeenCalledWith('http://localhost:1234/v1', undefined, undefined);
+    expect(probeModels).toHaveBeenCalledWith({ modelUrl: 'http://localhost:1234/v1', providerId: 'lmstudio' });
     expect(restartRuntime).toHaveBeenCalledOnce();
     expect(runtime.requests).toEqual([]);
   });

@@ -18,12 +18,11 @@ declare global {
 const api = window.mastraDesktop;
 const tabStrip = document.querySelector<HTMLDivElement>('#tab-strip');
 const newTabButton = document.querySelector<HTMLButtonElement>('#new-tab-button');
-const settingsButton = document.querySelector<HTMLButtonElement>('#settings-button');
 const launcher = document.querySelector<HTMLElement>('#launcher');
 const webviews = document.querySelector<HTMLElement>('#webviews');
 const bootLoader = document.querySelector<HTMLElement>('#boot-loader');
 
-if (!tabStrip || !newTabButton || !settingsButton || !launcher || !webviews || !bootLoader) {
+if (!tabStrip || !newTabButton || !launcher || !webviews || !bootLoader) {
   throw new Error('Mastra Studio shell failed to mount');
 }
 
@@ -119,7 +118,9 @@ function launcherActions(): LauncherActions {
       }
     },
     onOpenDefaultLocal: () => {
-      void runAction('open-default-local', () => api.createDevTab({ serverUrl: state?.settings.devServerUrl || '4111' }));
+      void runAction('open-default-local', () =>
+        api.createDevTab({ serverUrl: state?.settings.devServerUrl || '4111' }),
+      );
     },
     onOpenManualLocal: () => {
       void runAction('open-manual-local', () => api.createDevTab({ serverUrl: manualServerUrl }));
@@ -153,7 +154,9 @@ function launcherActions(): LauncherActions {
     },
     onSavePlatformBase: () => {
       void runAction('save-platform-base', () =>
-        api.updateSettings({ platformBaseUrl: platformBaseUrl.trim() || state?.settings.platformBaseUrl }).then(result => result.state),
+        api
+          .updateSettings({ platformBaseUrl: platformBaseUrl.trim() || state?.settings.platformBaseUrl })
+          .then(result => result.state),
       );
     },
   };
@@ -207,10 +210,6 @@ tabStrip.addEventListener('click', event => {
 
 newTabButton.addEventListener('click', () => {
   void runAction('new-tab', () => api.createLauncherTab());
-});
-
-settingsButton.addEventListener('click', () => {
-  void runAction('open-settings', () => api.openSettingsTab());
 });
 
 void api.getState().then(initialState => {

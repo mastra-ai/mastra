@@ -79,7 +79,6 @@ input {
 
 .tab,
 .icon-button,
-.settings-button,
 .studio-source-row,
 .manual-server-row button,
 .source-header button,
@@ -217,29 +216,6 @@ input {
 }
 
 .icon-button:hover {
-  border-color: var(--line);
-  background: var(--chrome-hover);
-  color: var(--text);
-}
-
-.settings-button {
-  height: 30px;
-  margin-right: 8px;
-  padding: 0 11px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 620;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
-}
-
-.settings-button:hover,
-.settings-button:focus-visible {
   border-color: var(--line);
   background: var(--chrome-hover);
   color: var(--text);
@@ -581,5 +557,4 @@ input {
     text-align: left;
     white-space: normal;
   }
-
 }

@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { probeLmStudioModels, probeOpenAICompatibleModels } from './lmstudio';
+import { probeLmStudioModels, probeLocalModels, probeOllamaModels, probeOpenAICompatibleModels } from './lmstudio';
 
 let cleanupServer: (() => Promise<void>) | undefined;
 
@@ -130,5 +130,65 @@ describe('probeOpenAICompatibleModels', () => {
         models: [],
       });
     });
+  });
+});
+
+describe('probeOllamaModels', () => {
+  it('returns locally installed model names from /api/tags', async () => {
+    const requests: string[] = [];
+    const modelUrl = await withModelServer((req, res) => {
+      requests.push(req.url ?? '');
+      json(res, 200, { models: [{ name: 'llama3.2:latest' }, { model: 'mistral:7b' }] });
+    });
+
+    await expect(probeOllamaModels(modelUrl)).resolves.toEqual({
+      ok: true,
+      modelUrl,
+      models: ['llama3.2:latest', 'mistral:7b'],
+      error: undefined,
+    });
+    expect(requests).toEqual(['/api/tags']);
+  });
+
+  it('reports malformed Ollama tag responses', async () => {
+    const modelUrl = await withModelServer((_req, res) => {
+      json(res, 200, { data: [] });
+    });
+
+    await expect(probeOllamaModels(modelUrl)).resolves.toMatchObject({
+      ok: false,
+      models: [],
+      error: 'Ollama returned an invalid model list',
+    });
+  });
+});
+
+describe('probeLocalModels', () => {
+  it('uses the native Ollama model list for Ollama presets', async () => {
+    const requests: string[] = [];
+    const modelUrl = await withModelServer((req, res) => {
+      requests.push(req.url ?? '');
+      json(res, 200, { models: [{ name: 'llama3.2:latest' }] });
+    });
+
+    await expect(probeLocalModels({ modelUrl, providerId: 'ollama' })).resolves.toMatchObject({
+      ok: true,
+      models: ['llama3.2:latest'],
+    });
+    expect(requests).toEqual(['/api/tags']);
+  });
+
+  it('uses OpenAI-compatible model lists for LM Studio presets', async () => {
+    const requests: string[] = [];
+    const modelUrl = await withModelServer((req, res) => {
+      requests.push(req.url ?? '');
+      json(res, 200, { data: [{ id: 'loaded-model' }] });
+    });
+
+    await expect(probeLocalModels({ modelUrl, providerId: 'lmstudio' })).resolves.toMatchObject({
+      ok: true,
+      models: ['loaded-model'],
+    });
+    expect(requests).toEqual(['/v1/models']);
   });
 });

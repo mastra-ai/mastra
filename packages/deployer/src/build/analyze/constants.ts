@@ -15,6 +15,7 @@ export const GLOBAL_EXTERNALS = [
   'execa',
 ];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];
+export const OPTIONAL_TRY_CATCH_DEPENDENCIES = ['bufferutil', 'utf-8-validate', 'supports-color', 'source-map-support'];
 
 export function getConfiguredExternals({
   externals,

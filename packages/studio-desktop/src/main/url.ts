@@ -17,3 +17,10 @@ export function toModelsEndpoint(modelUrl: string) {
   const normalized = normalizeServerUrl(modelUrl);
   return `${normalized}/models`;
 }
+
+export function toOllamaTagsEndpoint(modelUrl: string) {
+  const normalized = new URL(normalizeServerUrl(modelUrl));
+  normalized.pathname = normalized.pathname.replace(/\/(?:v1|api)$/, '');
+  normalized.pathname = `${normalized.pathname.replace(/\/$/, '')}/api/tags`;
+  return normalized.toString();
+}

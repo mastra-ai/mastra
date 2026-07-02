@@ -497,6 +497,51 @@ describe('bundleExternals', () => {
     expect(result2.fileNameToDependencyMap.size).toBe(1);
   });
 
+  it('keeps known optional try-catch requires out of externals when externals are disabled', async () => {
+    const packageDir = join(testDir, 'node_modules', 'optional-source');
+    await ensureDir(packageDir);
+    await writeFile(
+      join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: 'optional-source',
+        version: '1.0.0',
+        main: 'index.js',
+      }),
+    );
+    await writeFile(
+      join(packageDir, 'index.js'),
+      `
+        let optional;
+        try {
+          optional = require('utf-8-validate');
+        } catch {}
+        exports.optional = optional;
+      `,
+    );
+
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      [
+        'optional-source',
+        {
+          exports: ['optional'],
+          rootPath: packageDir,
+          isWorkspace: false,
+        },
+      ],
+    ]);
+
+    const result = await bundleExternals(depsToOptimize, testDir, {
+      projectRoot: testDir,
+      bundlerOptions: {
+        externals: false,
+      },
+    });
+
+    const chunks = result.output.filter(output => output.type === 'chunk');
+    expect(chunks.flatMap(chunk => chunk.imports)).not.toContain('utf-8-validate');
+    expect(JSON.stringify(result.usedExternals)).not.toContain('utf-8-validate');
+  });
+
   it('should handle isDev: false explicitly and use standard bundling behavior', async () => {
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [

@@ -31,7 +31,7 @@ import {
   slash,
 } from '../utils';
 import type { BundlerPlatform } from '../utils';
-import { DEPS_TO_IGNORE, getConfiguredExternals } from './constants';
+import { DEPS_TO_IGNORE, OPTIONAL_TRY_CATCH_DEPENDENCIES, getConfiguredExternals } from './constants';
 
 type VirtualDependency = {
   name: string;
@@ -237,7 +237,8 @@ async function getInputPlugins(
     commonjs({
       strictRequires: 'strict',
       transformMixedEsModules: true,
-      ignoreTryCatch: false,
+      ignoreTryCatch: id =>
+        OPTIONAL_TRY_CATCH_DEPENDENCIES.some(optionalDependency => isDependencyPartOfPackage(id, optionalDependency)),
     }),
     bundlerOptions.noBundling ? null : nodeResolve(getNodeResolveOptions(platform)),
     bundlerOptions.noBundling ? esmShim() : null,

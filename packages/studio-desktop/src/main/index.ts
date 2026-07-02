@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell, WebContentsView } from 'electron';
 import type { CreateDevTabInput, DesktopSettings, DesktopState, DesktopTab, PlatformState } from '../shared/types';
 import { DEFAULT_RUNTIME_PORT, DEFAULT_STUDIO_PORT, LOCALHOST } from './defaults';
-import { probeLmStudioModels, probeOpenAICompatibleModels } from './lmstudio';
+import { probeLmStudioModels, probeLocalModels } from './lmstudio';
 import { probeMastraServer } from './local-dev';
 import { LogBuffer } from './log-buffer';
 import { resolveAppIconPath, resolveStarterOutputPath, resolveStudioDistPath } from './paths';
@@ -450,12 +450,13 @@ async function startStudioShellForServer(
               state: snapshotState(),
             };
           },
-          probeOpenAICompatibleModels: async (modelUrl, providerName, apiKey) => {
-            const result = await probeOpenAICompatibleModels(
-              modelUrl ?? currentSettings.modelUrl,
+          probeModels: async ({ modelUrl, providerName, apiKey, providerId }) => {
+            const result = await probeLocalModels({
+              apiKey: apiKey ?? currentSettings.modelApiKey,
+              modelUrl: modelUrl ?? currentSettings.modelUrl,
               providerName,
-              apiKey ?? currentSettings.modelApiKey,
-            );
+              providerId,
+            });
             if (!result.ok) {
               logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
             }
@@ -785,7 +786,10 @@ async function showMessage(options: Electron.MessageBoxOptions) {
 }
 
 async function checkLmStudioServer() {
-  const result = await probeLmStudioModels(currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl, currentSettings.modelApiKey);
+  const result = await probeLmStudioModels(
+    currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl,
+    currentSettings.modelApiKey,
+  );
   if (!result.ok) {
     logs.add(`LM Studio probe failed: ${result.error ?? 'unknown error'}`);
     emitState();
@@ -814,11 +818,11 @@ async function checkLmStudioServer() {
 }
 
 async function checkCurrentModelServer() {
-  const result = await probeOpenAICompatibleModels(
-    currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl,
-    undefined,
-    currentSettings.modelApiKey,
-  );
+  const result = await probeLocalModels({
+    apiKey: currentSettings.modelApiKey,
+    modelUrl: currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl,
+    providerId: currentSettings.modelUrl === OLLAMA_PRESET.modelUrl ? OLLAMA_PRESET.id : undefined,
+  });
   if (!result.ok) {
     logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
     emitState();
@@ -869,7 +873,12 @@ async function applyLmStudioPreset() {
 }
 
 async function applyOllamaPreset() {
-  const result = await probeOpenAICompatibleModels(OLLAMA_PRESET.modelUrl, OLLAMA_PRESET.name, OLLAMA_PRESET.modelApiKey);
+  const result = await probeLocalModels({
+    apiKey: OLLAMA_PRESET.modelApiKey,
+    modelUrl: OLLAMA_PRESET.modelUrl,
+    providerId: OLLAMA_PRESET.id,
+    providerName: OLLAMA_PRESET.name,
+  });
   const modelId = selectDetectedModelId(result, OLLAMA_PRESET.modelId);
   currentSettings = await writeSettings(
     settingsPath,
@@ -1094,7 +1103,10 @@ function installIpc() {
   ipcMain.handle('desktop:refresh-platform', () => refreshPlatform());
 
   ipcMain.handle('desktop:probe-lmstudio-models', async (_event, modelUrl?: string, apiKey?: string) => {
-    const result = await probeLmStudioModels(modelUrl ?? currentSettings.modelUrl, apiKey ?? currentSettings.modelApiKey);
+    const result = await probeLmStudioModels(
+      modelUrl ?? currentSettings.modelUrl,
+      apiKey ?? currentSettings.modelApiKey,
+    );
     if (!result.ok) {
       logs.add(`LM Studio probe failed: ${result.error ?? 'unknown error'}`);
     }
@@ -1102,14 +1114,22 @@ function installIpc() {
     return result;
   });
 
-  ipcMain.handle('desktop:probe-openai-compatible-models', async (_event, modelUrl?: string, providerName?: string, apiKey?: string) => {
-    const result = await probeOpenAICompatibleModels(modelUrl ?? currentSettings.modelUrl, providerName, apiKey ?? currentSettings.modelApiKey);
-    if (!result.ok) {
-      logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
-    }
-    emitState();
-    return result;
-  });
+  ipcMain.handle(
+    'desktop:probe-openai-compatible-models',
+    async (_event, modelUrl?: string, providerName?: string, apiKey?: string) => {
+      const result = await probeLocalModels({
+        apiKey: apiKey ?? currentSettings.modelApiKey,
+        modelUrl: modelUrl ?? currentSettings.modelUrl,
+        providerId: providerName === OLLAMA_PRESET.name ? OLLAMA_PRESET.id : undefined,
+        providerName,
+      });
+      if (!result.ok) {
+        logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
+      }
+      emitState();
+      return result;
+    },
+  );
 
   ipcMain.handle('desktop:restart-runtime', () => restartManagedRuntime());
   ipcMain.handle('desktop:get-logs', () => logs.all());
