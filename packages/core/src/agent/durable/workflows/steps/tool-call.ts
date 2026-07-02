@@ -539,6 +539,13 @@ export function createDurableToolCallStep() {
         // see the same actor as the non-durable Agent path.
         actor: agentOptions?.actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
+        // Provide outputWriter so context.writer.write() / context.writer.custom()
+        // emit chunks through pubsub (matching the regular agent's tool streaming).
+        outputWriter: pubsub
+          ? async (chunk: any) => {
+              await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+            }
+          : undefined,
 
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
