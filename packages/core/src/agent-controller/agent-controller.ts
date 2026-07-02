@@ -602,6 +602,15 @@ export class AgentController<TState = {}> {
    */
   __registerMastra(mastra: Mastra): void {
     this.#externalMastra = mastra;
+
+    // If `init()` already built an internal Mastra before we were wired to a
+    // parent, drop it: the parent now owns storage/agents/observability, but the
+    // orphaned internal instance still holds a global scorer hook that fires
+    // (and fails to resolve the scorer) on every scorer run. Release it.
+    if (this.#internalMastra) {
+      this.#internalMastra.__unregisterHooks();
+      this.#internalMastra = undefined;
+    }
   }
 
   /**

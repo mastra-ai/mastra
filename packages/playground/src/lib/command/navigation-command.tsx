@@ -596,6 +596,7 @@ export const NavigationCommand = () => {
 
   const filterNavItem = React.useCallback(
     (item: NavItem) => {
+      if (item.hidden) return false;
       if (item.url === '/prompts' && !isCmsAvailable && !isCmsLoading) return false;
       if (isMastraPlatform && !item.isOnMastraPlatform) return false;
 
