@@ -86,6 +86,41 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/adding-voice",
+      "destination": "/docs/voice/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/durable-agents",
+      "destination": "/docs/long-running-agents/durable-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/goals",
+      "destination": "/docs/long-running-agents/goals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/heartbeats",
+      "destination": "/docs/long-running-agents/heartbeats",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signal-providers",
+      "destination": "/docs/long-running-agents/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signals",
+      "destination": "/docs/long-running-agents/signals",
+      "permanent": true
+    },
+    {
       "source": "/examples/memory/working-memory-schema",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
       "permanent": true
@@ -918,6 +953,41 @@
     {
       "source": "/docs/logging/llms.txt",
       "destination": "/docs/observability/logging/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/adding-voice/llms.txt",
+      "destination": "/docs/voice/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/background-tasks/llms.txt",
+      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/durable-agents/llms.txt",
+      "destination": "/docs/long-running-agents/durable-agents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/goals/llms.txt",
+      "destination": "/docs/long-running-agents/goals/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/heartbeats/llms.txt",
+      "destination": "/docs/long-running-agents/heartbeats/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signal-providers/llms.txt",
+      "destination": "/docs/long-running-agents/signal-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signals/llms.txt",
+      "destination": "/docs/long-running-agents/signals/llms.txt",
       "permanent": true
     },
     {

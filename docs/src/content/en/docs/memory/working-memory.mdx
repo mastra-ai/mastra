@@ -420,7 +420,7 @@ const response = await agent.generate('What do you know about me?', {
 
 ## Opt in to state signals (experimental)
 
-By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/agents/signals) instead by setting `useStateSignals: true`:
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/long-running-agents/signals) instead by setting `useStateSignals: true`:
 
 ```typescript
 const memory = new Memory({

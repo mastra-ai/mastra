@@ -1,5 +1,5 @@
 ---
-title: "Background tasks | Agents"
+title: "Background tasks | Long-running agents"
 description: Learn how to dispatch long-running tool calls in the background, keep the stream open until they complete, and orchestrate subagents asynchronously.
 packages:
   - "@mastra/core"
@@ -135,7 +135,7 @@ If the agent has `backgroundTasks.disabled: true`, every tool call runs synchron
 
 ## Background tasks related stream chunks
 
-When a tool call dispatches as a background task, two streams may surface lifecycle events for it: the agent's own stream and the [`backgroundTaskManager.stream()`](/docs/agents/background-tasks#subscribe-to-all-task-events) SSE stream. Each stream covers a different set of chunk types:
+When a tool call dispatches as a background task, two streams may surface lifecycle events for it: the agent's own stream and the [`backgroundTaskManager.stream()`](/docs/long-running-agents/background-tasks#subscribe-to-all-task-events) SSE stream. Each stream covers a different set of chunk types:
 
 | Chunk type | When it fires | Emitted by |
 | - | - | - |

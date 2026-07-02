@@ -1,5 +1,5 @@
 ---
-title: "Durable agents | Agents"
+title: "Durable agents | Long-running agents"
 description: "Learn how to wrap agents with durable execution so streams survive disconnects, process restarts, and long-running turns."
 packages:
   - "@mastra/core"
@@ -219,7 +219,7 @@ await durableAgent.stream('Research topic', {
 
 :::note
 
-Visit [Background tasks](/docs/agents/background-tasks) for the full background task guide, including configuration, subagents, and suspend/resume.
+Visit [Background tasks](/docs/long-running-agents/background-tasks) for the full background task guide, including configuration, subagents, and suspend/resume.
 
 :::
 
@@ -250,6 +250,6 @@ await durableAgent.resume(runId, { approved: true })
 
 - [DurableAgent reference](/reference/agents/durable-agent)
 - [`createInngestAgent()` reference](/reference/agents/inngest-agent)
-- [Background tasks](/docs/agents/background-tasks)
+- [Background tasks](/docs/long-running-agents/background-tasks)
 - [Inngest deployment guide](/guides/deployment/inngest)
 - [Agent overview](/docs/agents/overview)
