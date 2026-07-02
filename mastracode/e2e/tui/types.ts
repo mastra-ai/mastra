@@ -199,7 +199,7 @@ export type McE2eScenario = {
   description: string;
   testName: string;
   skipReason?: string;
-  projectFixture?: 'long-branch';
+  projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;
