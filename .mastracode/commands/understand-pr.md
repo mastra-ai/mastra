@@ -14,10 +14,13 @@ Do not produce walls of text. Every response should be short, dense, and end wit
 
 **Shell note:** `gh` output often contains ANSI color codes that break `jq`. Use `gh`'s built-in `--jq` flag instead of piping to `jq`, or prefix commands with `NO_COLOR=1`.
 
-1. Verify the checked-out branch matches the PR head branch
-2. Run `gh pr view --json title,body,commits,files,labels,number,headRefName,author` to get PR metadata
-3. Run `gh pr diff` to get the full diff
-4. Identify the current user: `gh api user --jq .login`
+1. Parse the PR number and optional `--working-file <path>` from `$ARGUMENTS`.
+2. If `--working-file` is present, verify the file exists, read it first, use its context, follow its handoff instructions, update that same file, and create no separate artifact. If the file does not exist, tell the user and end.
+3. Verify the checked-out branch matches the PR head branch.
+4. Run `gh pr view --json title,body,commits,files,labels,number,headRefName,author` to get PR metadata.
+5. Run `gh pr diff` to get the full diff.
+6. Identify the current user: `gh api user --jq .login`.
+7. Never post comments without explicit approval.
 
 ### People
 
@@ -120,7 +123,9 @@ Examine the PR's test changes (or lack thereof) and the existing test patterns i
 
 Given the history and the PR's stated goal, does the approach make sense? Is it solving the problem the right way, or is it fighting the existing design? If a simpler or more consistent approach exists given the codebase's history, flag it.
 
-### Write `.pr-review/HISTORY.md`
+### Write the understanding artifact
+
+If a working file was provided, update that same file with what you learned and any requested outputs from its handoff instructions. Otherwise, write `.pr-review/HISTORY.md`.
 
 Capture what you learned:
 - Why does each changed file/module exist? What problem did it originally solve?

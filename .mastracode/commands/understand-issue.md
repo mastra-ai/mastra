@@ -16,7 +16,13 @@ Do not produce walls of text. Responses should be short, dense, and information-
 
 ## Phase 1: Identify the Issue
 
-Figure out what we're investigating. The user may provide:
+Figure out what we're investigating.
+
+1. Parse the issue input and optional `--working-file <path>` from `$ARGUMENTS`.
+2. If `--working-file` is present, verify the file exists, read it first, use its context, follow its handoff instructions, update that same file, and create no separate artifact. If the file does not exist, tell the user and end.
+3. Never post comments without explicit approval.
+
+The user may provide:
 
 - A GitHub issue number or URL → pull metadata with `gh issue view <number> --json title,body,labels,comments,assignees,state,author`
 - A description of a bug or unexpected behavior with no GitHub issue
@@ -196,7 +202,9 @@ Only move to the write-up after the user confirms they genuinely understand the 
 
 ## Phase 7: Understanding File
 
-Write `.issue-review/UNDERSTANDING.md` capturing the full investigation:
+If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions. Otherwise, write `.issue-review/UNDERSTANDING.md`.
+
+Capture:
 
 - **Issue**: what was reported (number, title, symptoms)
 - **Contributing areas**: each area investigated, with file paths and relevant history
