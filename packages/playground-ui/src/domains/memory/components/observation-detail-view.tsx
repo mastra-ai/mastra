@@ -95,14 +95,16 @@ function parseItem(line: string): ParsedItem | null {
   const match = trimmed.match(/^\*\s*(🔴|🟡|🟢|✅)?\s*(?:\((\d{1,2}:\d{2})\))?\s*(.+)$/);
   if (match) {
     const [, p, t, text] = match;
-    return { text: text.trim(), time: t ?? null, priority: getPriorityFromEmoji(p), children: [] };
+    if (text !== undefined) {
+      return { text: text.trim(), time: t ?? null, priority: getPriorityFromEmoji(p), children: [] };
+    }
   }
   return { text: trimmed, time: null, priority: null, children: [] };
 }
 
 function parseObservations(raw: string): ParsedSection[] {
   const obsMatch = raw.match(/<observations>\s*([\s\S]*?)\s*<\/observations>/);
-  const content = (obsMatch ? obsMatch[1] : raw).trim();
+  const content = (obsMatch?.[1] ?? raw).trim();
   if (!content) return [];
   const lines = content.split('\n');
   const sections: ParsedSection[] = [];
@@ -113,7 +115,7 @@ function parseObservations(raw: string): ParsedSection[] {
     if (!trimmed) continue;
     const dateMatch = trimmed.match(/^Date:\s*(.+?)(?:\s*\(([^)]+)\))?$/);
     if (dateMatch) {
-      current = { title: dateMatch[1].trim(), relativeTime: dateMatch[2]?.trim() ?? null, items: [] };
+      current = { title: dateMatch[1]?.trim() ?? '', relativeTime: dateMatch[2]?.trim() ?? null, items: [] };
       sections.push(current);
       lastRoot = null;
       continue;
@@ -122,7 +124,7 @@ function parseObservations(raw: string): ParsedSection[] {
       current = { title: 'Recent', relativeTime: null, items: [] };
       sections.push(current);
     }
-    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
     const isNested = indent >= 2 && (trimmed.startsWith('* ->') || trimmed.startsWith('->') || trimmed.startsWith('-'));
     const item = parseItem(line);
     if (!item) continue;
@@ -254,8 +256,9 @@ export function ObservationDetailView({
   const previousRecord = selectedIndex > 0 ? sorted[selectedIndex - 1] : null;
 
   useEffect(() => {
-    if (!selectedRecordId && sorted.length > 0) {
-      onSelectRecord(sorted[sorted.length - 1].id);
+    const last = sorted.at(-1);
+    if (!selectedRecordId && last) {
+      onSelectRecord(last.id);
     }
   }, [selectedRecordId, sorted, onSelectRecord]);
 
