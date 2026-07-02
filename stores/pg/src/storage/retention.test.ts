@@ -353,5 +353,33 @@ describe('PG retention', () => {
 
       expect(await retentionIndexes()).toContain(`${LAZY_SCHEMA}_mastra_experiments_retention_idx`);
     });
+
+    // Retention is an explicit opt-in, so its supporting anchor index is not
+    // part of the default index set — skipDefaultIndexes must not block it.
+    it('creates anchor indexes on prune even with skipDefaultIndexes', async () => {
+      const schema = `retskip_${Math.random().toString(36).slice(2, 8)}`;
+      const store = new PostgresStore({ ...TEST_CONFIG, schemaName: schema, skipDefaultIndexes: true } as any);
+      try {
+        await store.init();
+        const indexes = async () =>
+          (
+            await store.db.manyOrNone<{ indexname: string }>(
+              `SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND indexname LIKE '%_retention_idx'`,
+              [schema],
+            )
+          ).map(r => r.indexname);
+
+        expect(await indexes()).toEqual([]);
+        await store.stores.memory!.prune({ threads: { maxAge: '30d' } });
+        expect(await indexes()).toEqual([`${schema}_mastra_threads_retention_idx`]);
+      } finally {
+        try {
+          await store.db.none(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+        } catch {}
+        try {
+          await store.close();
+        } catch {}
+      }
+    });
   });
 });

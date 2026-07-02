@@ -106,9 +106,10 @@ export class ExperimentsPG extends ExperimentsStorage {
    * Called from the prune path (not init) so only deployments that configure
    * retention pay the index's write/disk overhead. Best-effort: failures are
    * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    if (this.#skipDefaultIndexes) return;
     const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
     for (const [key, entry] of Object.entries(ExperimentsPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
