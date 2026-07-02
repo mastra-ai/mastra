@@ -14,6 +14,7 @@ import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
+import { getPackageMetadata } from './package-info';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
 import {
   getPackageName,
@@ -29,6 +30,40 @@ type ErrorId =
   | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
   | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
   | 'DEPLOYER_ANALYZE_TYPE_ERROR';
+
+function preferDependencyInfo(
+  existing: ExternalDependencyInfo | undefined,
+  incoming: ExternalDependencyInfo,
+): ExternalDependencyInfo {
+  return {
+    version: incoming.version ?? existing?.version,
+    packageSpec: incoming.packageSpec ?? existing?.packageSpec,
+  };
+}
+
+async function resolveDependencyInfo(
+  dep: string,
+  existing: ExternalDependencyInfo | undefined,
+  parentPaths: string[],
+): Promise<ExternalDependencyInfo> {
+  if (existing?.version && existing.packageSpec) {
+    return existing;
+  }
+
+  const packageName = getPackageName(dep);
+  const packageNames = [...new Set([dep, packageName].filter(Boolean) as string[])];
+
+  for (const parentPath of parentPaths) {
+    for (const name of packageNames) {
+      const metadata = await getPackageMetadata(name, parentPath);
+      if (metadata.version || metadata.packageSpec) {
+        return preferDependencyInfo(existing, metadata);
+      }
+    }
+  }
+
+  return existing ?? {};
+}
 
 function throwExternalDependencyError({
   errorId,
@@ -251,6 +286,11 @@ async function validateOutput(
     workspaceMap,
   };
 
+  const externalMetadataParentPaths = [
+    projectRoot,
+    ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+  ];
+
   // store resolve map for validation
   // we should resolve the version of the deps
   for (const deps of Object.values(usedExternals)) {
@@ -261,9 +301,13 @@ async function validateOutput(
 
       const pkgName = getPackageName(dep);
       if (pkgName) {
-        // Use version info from analysis if available
-        const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName) || {};
-        result.externalDependencies.set(pkgName, versionInfo);
+        // Use version info from analysis if available, then resolve from project/workspace package locations.
+        const versionInfo = depsVersionInfo.get(dep) || depsVersionInfo.get(pkgName);
+        const dependencyInfo = await resolveDependencyInfo(dep, versionInfo, externalMetadataParentPaths);
+        result.externalDependencies.set(
+          pkgName,
+          preferDependencyInfo(result.externalDependencies.get(pkgName), dependencyInfo),
+        );
       }
     }
   }
@@ -392,10 +436,8 @@ export async function analyzeBundle(
       if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
         // Add all packages coming from src/mastra with their version info
         const pkgName = getPackageName(dep);
-        if (pkgName && !allUsedExternals.has(pkgName)) {
-          allUsedExternals.set(pkgName, {
-            version: metadata.version,
-          });
+        if (pkgName) {
+          allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), metadata));
         }
         continue;
       }
@@ -405,6 +447,8 @@ export async function analyzeBundle(
         const existingEntry = depsToOptimize.get(dep)!;
         depsToOptimize.set(dep, {
           ...existingEntry,
+          version: metadata.version ?? existingEntry.version,
+          packageSpec: metadata.packageSpec ?? existingEntry.packageSpec,
           exports: [...new Set([...existingEntry.exports, ...metadata.exports])],
         });
       } else {
@@ -451,16 +495,12 @@ export async function analyzeBundle(
   const depsVersionInfo = new Map<string, ExternalDependencyInfo>();
   for (const [dep, metadata] of depsToOptimize.entries()) {
     const pkgName = getPackageName(dep);
-    if (pkgName && metadata.version) {
-      depsVersionInfo.set(pkgName, {
-        version: metadata.version,
-      });
+    if (pkgName && (metadata.version || metadata.packageSpec)) {
+      depsVersionInfo.set(pkgName, preferDependencyInfo(depsVersionInfo.get(pkgName), metadata));
     }
     // Also store by full import path for subpath imports
-    if (metadata.version) {
-      depsVersionInfo.set(dep, {
-        version: metadata.version,
-      });
+    if (metadata.version || metadata.packageSpec) {
+      depsVersionInfo.set(dep, preferDependencyInfo(depsVersionInfo.get(dep), metadata));
     }
   }
 
@@ -490,10 +530,14 @@ export async function analyzeBundle(
 
       const pkgName = getPackageName(i);
 
-      if (pkgName && !allUsedExternals.has(pkgName)) {
-        // Try to get version info from our tracked dependencies
-        const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName) || {};
-        allUsedExternals.set(pkgName, versionInfo);
+      if (pkgName) {
+        // Try to get version info from our tracked dependencies, then resolve from project/workspace package locations.
+        const versionInfo = depsVersionInfo.get(i) || depsVersionInfo.get(pkgName);
+        const dependencyInfo = await resolveDependencyInfo(i, versionInfo, [
+          projectRoot,
+          ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+        ]);
+        allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));
       }
     }
   }
@@ -526,21 +570,23 @@ export async function analyzeBundle(
       continue;
     }
 
-    const existing = mergedExternalDeps.get(dep);
-    if (!existing || (!existing.version && info.version)) {
-      mergedExternalDeps.set(dep, info);
-    }
+    mergedExternalDeps.set(dep, preferDependencyInfo(mergedExternalDeps.get(dep), info));
   }
 
-  // Add pino transports and user dynamic packages (no version info needed)
+  const externalMetadataParentPaths = [
+    projectRoot,
+    ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+  ];
+
+  // Add pino transports and user dynamic packages
   for (const transport of detectedPinoTransports) {
     if (!mergedExternalDeps.has(transport)) {
-      mergedExternalDeps.set(transport, {});
+      mergedExternalDeps.set(transport, await resolveDependencyInfo(transport, undefined, externalMetadataParentPaths));
     }
   }
   for (const pkg of userDynamicPackages) {
     if (!mergedExternalDeps.has(pkg)) {
-      mergedExternalDeps.set(pkg, {});
+      mergedExternalDeps.set(pkg, await resolveDependencyInfo(pkg, undefined, externalMetadataParentPaths));
     }
   }
 
