@@ -23,6 +23,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -31,7 +32,19 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
+
+/**
+ * Merge tenancy read-scope conditions into a MongoDB filter document. Fields
+ * with `undefined` filter values are omitted (no predicate). Defined values
+ * become equality matches — matches the pattern already used by listDatasets.
+ */
+function applyTenancyFilter(filter: Record<string, any>, filters: DatasetTenancyFilters | undefined): void {
+  if (!filters) return;
+  if (filters.organizationId !== undefined) filter.organizationId = filters.organizationId;
+  if (filters.projectId !== undefined) filter.projectId = filters.projectId;
+}
 import type { Collection } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
@@ -256,10 +269,18 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
       const collection = await this.getCollection(TABLE_DATASETS);
-      const row = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const row = await collection.findOne(query);
       return row ? this.transformDatasetRow(row) : null;
     } catch (error) {
       throw new MastraError(
@@ -275,7 +296,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -317,8 +338,17 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
+      // Tenancy gate: silent no-op on mismatch or missing dataset. Never throws
+      // so we don't leak cross-tenant existence via error timing/text. Cascade
+      // deletes below are datasetId-scoped, so gating the parent is sufficient.
+      const datasetsCollectionForGate = await this.getCollection(TABLE_DATASETS);
+      const gateQuery: Record<string, any> = { id };
+      applyTenancyFilter(gateQuery, filters);
+      const gateHit = await datasetsCollectionForGate.findOne(gateQuery, { projection: { id: 1 } });
+      if (!gateHit) return;
+
       // Detach experiments — tolerate missing collections (NamespaceNotFound)
       // but rethrow real operational failures
       try {
@@ -666,7 +696,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       const existing = await this.getItemById({ id });
       if (!existing) return; // no-op if not found

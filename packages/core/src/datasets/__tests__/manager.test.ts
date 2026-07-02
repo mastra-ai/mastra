@@ -214,6 +214,108 @@ describe('DatasetsManager', () => {
     }
   });
 
+  // --- Tenancy scoping on manager.get / manager.delete (MASTRA-4438) ---
+  describe('tenancy scoping', () => {
+    it('get forwards organizationId + projectId to storage', async () => {
+      const created = await mgr.create({
+        name: 'ScopedGet',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const spy = vi.spyOn(datasetsStorage, 'getDatasetById');
+
+      const fetched = await mgr.get({ id: created.id, organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(fetched).toBeInstanceOf(Dataset);
+      expect(fetched.id).toBe(created.id);
+      expect(spy).toHaveBeenCalledWith({
+        id: created.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('get throws NOT_FOUND when the dataset belongs to a different organization', async () => {
+      const created = await mgr.create({
+        name: 'CrossTenant',
+        organizationId: 'org_a',
+      });
+
+      try {
+        await mgr.get({ id: created.id, organizationId: 'org_b' });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(MastraError);
+        expect((err as MastraError).id).toBe('DATASET_NOT_FOUND');
+      }
+    });
+
+    it('get returns a Dataset handle whose subsequent getDetails() re-forwards the scope', async () => {
+      const created = await mgr.create({
+        name: 'ScopedHandle',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      const handle = await mgr.get({
+        id: created.id,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+
+      // Spy AFTER get() so we capture the follow-up call from getDetails().
+      const spy = vi.spyOn(datasetsStorage, 'getDatasetById');
+      await handle.getDetails();
+      expect(spy).toHaveBeenCalledWith({
+        id: created.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('delete forwards organizationId + projectId to storage', async () => {
+      const created = await mgr.create({
+        name: 'ScopedDelete',
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      });
+      const spy = vi.spyOn(datasetsStorage, 'deleteDataset');
+
+      await mgr.delete({ id: created.id, organizationId: 'org_a', projectId: 'proj_1' });
+
+      expect(spy).toHaveBeenCalledWith({
+        id: created.id,
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
+    it('delete is a silent no-op on tenancy mismatch (dataset still exists)', async () => {
+      const created = await mgr.create({
+        name: 'SilentDelete',
+        organizationId: 'org_a',
+      });
+
+      // Mismatched delete must resolve without throwing.
+      await expect(mgr.delete({ id: created.id, organizationId: 'org_b' })).resolves.toBeUndefined();
+
+      // Dataset must still be fetchable with correct tenancy.
+      const stillThere = await mgr.get({ id: created.id, organizationId: 'org_a' });
+      expect(stillThere.id).toBe(created.id);
+    });
+
+    it('unscoped calls (no organizationId / projectId) forward no filters and preserve legacy behavior', async () => {
+      const created = await mgr.create({ name: 'Legacy' });
+      const spy = vi.spyOn(datasetsStorage, 'getDatasetById');
+
+      const fetched = await mgr.get({ id: created.id });
+      expect(fetched.id).toBe(created.id);
+
+      // filters should be `undefined` (or an empty scope), not include any org/project keys.
+      const call = spy.mock.calls.at(-1)?.[0];
+      expect(call?.id).toBe(created.id);
+      expect(call?.filters?.organizationId).toBeUndefined();
+      expect(call?.filters?.projectId).toBeUndefined();
+    });
+  });
+
   // 11. getExperiment — returns null for missing
   it('getExperiment returns null for nonexistent experiment', async () => {
     const result = await mgr.getExperiment({ experimentId: 'nonexistent' });

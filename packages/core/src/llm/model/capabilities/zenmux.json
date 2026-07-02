@@ -13,6 +13,8 @@
     "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
+    "anthropic/claude-sonnet-5",
+    "anthropic/claude-sonnet-5-free",
     "baidu/ernie-5.0-thinking-preview",
     "google/gemini-2.5-flash",
     "google/gemini-2.5-flash-lite",
