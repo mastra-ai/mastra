@@ -151,6 +151,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // `TypeError: Invalid state: Controller is already closed` from the
   // controller, which the outer try/catch logs but which floods the
   // console and (in test runs) causes timeouts as event handlers retry.
+  // Track the last error message seen in an 'error' chunk, so we can
+  // surface it in onError when the FINISH event arrives with reason 'error'.
+  let lastErrorMessage: string | undefined;
+
   const handleEvent = async (event: Event) => {
     if (!controller) return;
 
@@ -161,6 +165,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
+          // Track error chunks for onError callback
+          if ((chunk as any).type === 'error') {
+            const errPayload = (chunk as any).payload;
+            lastErrorMessage =
+              errPayload?.error?.message || errPayload?.message || 'LLM execution error';
+          }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
           break;
@@ -227,6 +237,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
+            }
+          }
+
+          // When the finish reason is 'error', also fire onError so
+          // consumers see it — the error was handled gracefully (bail
+          // response) rather than crashing the workflow, so the ERROR
+          // event never fires.
+          if (onError && data.stepResult?.reason === 'error') {
+            try {
+              await onError({ error: new Error(lastErrorMessage || 'LLM execution error') });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onError (from FINISH) callback error:`, callbackError);
             }
           }
 

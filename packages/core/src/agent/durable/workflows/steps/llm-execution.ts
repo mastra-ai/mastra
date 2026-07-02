@@ -236,6 +236,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       // 4. Execute with model fallback - try each model in the list with retries
       let lastError: Error | undefined;
+      let processorRetryCount = 0;
+      const maxProcessorRetries =
+        typedInput.options?.maxProcessorRetries ??
+        (globalRunRegistry.get(runId)?.errorProcessors?.length ? 10 : undefined);
 
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
@@ -1060,6 +1064,44 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
 
               lastError = errorObj;
+
+              // Try processAPIError before deciding retry/break
+              const registryEntryInner = globalRunRegistry.get(runId);
+              const canRetryErrorInner =
+                maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
+              if (registryEntryInner?.errorProcessors?.length && canRetryErrorInner) {
+                try {
+                  const runner = new ProcessorRunner({
+                    inputProcessors: registryEntryInner.inputProcessors ?? [],
+                    outputProcessors: registryEntryInner.outputProcessors ?? [],
+                    errorProcessors: registryEntryInner.errorProcessors,
+                    logger: logger as any,
+                    agentName: typedInput.agentName ?? typedInput.agentId,
+                    processorStates: registryEntryInner.processorStates,
+                  });
+                  const currentMessageList = new MessageList();
+                  currentMessageList.deserialize(typedInput.messageListState);
+                  const { retry } = await runner.runProcessAPIError({
+                    error: lastError,
+                    messages: currentMessageList.get.all.db(),
+                    messageList: currentMessageList,
+                    stepNumber: (inputData as any).stepIndex ?? 0,
+                    steps: (inputData as any).accumulatedSteps ?? [],
+                    retryCount: processorRetryCount,
+                    requestContext,
+                  });
+                  if (retry) {
+                    processorRetryCount++;
+                    // Error processor retry should NOT consume a model retry attempt.
+                    // Decrement attempt so the `for` loop increment restores it.
+                    attempt--;
+                    continue;
+                  }
+                } catch (processorError) {
+                  logger?.debug?.(`processAPIError handler failed: ${processorError}`, { runId });
+                }
+              }
+
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
             }
@@ -1359,9 +1401,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               attempt,
             });
 
-            // Try processAPIError if error processors are available
+            // Error processor retry for non-stream errors (e.g. provider
+            // rejections that throw before the stream opens). Stream-level
+            // errors are already handled in the inner catch above.
             const registryEntry = globalRunRegistry.get(runId);
-            if (registryEntry?.errorProcessors?.length) {
+            const canRetryError =
+              maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
+            if (registryEntry?.errorProcessors?.length && canRetryError) {
               try {
                 const runner = new ProcessorRunner({
                   inputProcessors: registryEntry.inputProcessors ?? [],
@@ -1378,11 +1424,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messages: currentMessageList.get.all.db(),
                   messageList: currentMessageList,
                   stepNumber: (inputData as any).stepIndex ?? 0,
-                  steps: [],
+                  steps: (inputData as any).accumulatedSteps ?? [],
+                  retryCount: processorRetryCount,
                   requestContext,
                 });
                 if (retry) {
-                  logger?.debug?.(`processAPIError requested retry for model ${modelId}`, { runId });
+                  processorRetryCount++;
+                  // Error processor retry should NOT consume a model retry attempt.
+                  attempt--;
                   continue;
                 }
               } catch (processorError) {
@@ -1402,7 +1451,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         } // end retry loop
       } // end model loop
 
-      // All models exhausted - throw the last error.
+      // All models exhausted - emit error + step-finish chunks and return a bail response.
+      // This mirrors the regular agent which sets stepResult.reason = 'error' and emits
+      // a deferred error chunk rather than crashing the loop.
       const fatalError =
         lastError ?? new Error('Exhausted all fallback models and reached the maximum number of retries.');
 
@@ -1410,7 +1461,46 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // whose fire-and-forget launch never sees the failure (so emitError never runs).
       endRunSpansWithError(runId, fatalError);
 
-      throw fatalError;
+      // Emit the deferred error chunk so consumers see it
+      if (pubsub) {
+        await emitChunkEvent(pubsub, runId, {
+          type: 'error',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { error: fatalError },
+        });
+
+        // Emit step-finish so MastraModelOutput resolves finishReason to 'error'
+        await emitChunkEvent(pubsub, runId, {
+          type: 'step-finish',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: {
+              reason: 'error',
+              isContinued: false,
+            },
+            output: {
+              usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } as any,
+            },
+            metadata: {},
+          },
+        });
+      }
+
+      const modelId = modelList[0]?.id ?? 'unknown';
+      return {
+        messageListState: messageList.serialize(),
+        text: '',
+        toolCalls: [],
+        stepResult: {
+          reason: 'error' as any,
+          warnings: [],
+          isContinued: false,
+        },
+        metadata: { modelId },
+        state: typedInput.state,
+      };
     },
   });
 }

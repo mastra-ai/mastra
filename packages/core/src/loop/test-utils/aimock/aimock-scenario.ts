@@ -114,6 +114,7 @@ async function buildScenarioAgent({
   pubsub,
   engine,
   inputProcessors,
+  outputProcessors,
   fsRouted,
 }: Pick<
   RunLoopScenarioOptions,
@@ -134,6 +135,7 @@ async function buildScenarioAgent({
   | 'pubsub'
   | 'engine'
   | 'inputProcessors'
+  | 'outputProcessors'
   | 'fsRouted'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
@@ -331,6 +333,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       pubsub,
       engine,
       inputProcessors,
+      outputProcessors,
       fsRouted,
     });
     agent = built.agent;

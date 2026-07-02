@@ -123,5 +123,4 @@ describeForAllEngines(
       expect(processorCallCount).toBe(1);
     });
   },
-  { skip: ['durable'] },
 );

@@ -43,5 +43,5 @@ describeForAllEngines(
       expect(await output.finishReason).toBe('error');
     });
   },
-  { skip: ['durable'] },
+  
 );
