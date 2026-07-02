@@ -1,16 +1,12 @@
 import type { PlanResume } from '@mastra/client-js';
-import {
-  Badge,
-  Button,
-  CodeBlock as DsCodeBlock,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  CopyButton,
-  Input,
-  Notice,
-  Txt,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';

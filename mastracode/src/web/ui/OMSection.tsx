@@ -1,5 +1,8 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
-import { Button, ButtonsGroup, Input, Txt } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import type { OMConfigInfo } from '../../shared/api/types';

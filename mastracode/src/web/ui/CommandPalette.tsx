@@ -1,4 +1,7 @@
-import { Dialog, DialogContent, Input, Kbd, Txt } from '@mastra/playground-ui';
+import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SLASH_COMMANDS } from './commands';

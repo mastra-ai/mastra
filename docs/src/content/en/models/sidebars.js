@@ -668,6 +668,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/trustedrouter',
+          label: 'TrustedRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/umans-ai',
           label: 'Umans AI',
         },
