@@ -1,7 +1,8 @@
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Txt } from '@mastra/playground-ui';
 import { Folder, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
+import { useKeyDown } from '../../../lib/hooks';
 import { useAddProjectMutation, useRemoveProjectMutation } from '../hooks/useProjects';
 import type { Project } from '../services/projects';
 import { DirectoryBrowser } from './DirectoryPicker';
@@ -35,16 +36,15 @@ export function ProjectsModal({ projects, activeProjectId, onSelectProject, onCl
 
   // Escape backs out of the add view to the list first (when projects exist);
   // the DS Dialog otherwise owns close-on-Escape for the list view.
-  useEffect(() => {
-    if (!(adding && !empty)) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      setAdding(false);
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [adding, empty]);
+  useKeyDown(
+    {
+      escape: e => {
+        e.stopPropagation();
+        setAdding(false);
+      },
+    },
+    { capture: true, enabled: adding && !empty },
+  );
 
   const handlePick = async (path: string, name: string) => {
     try {

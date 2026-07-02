@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
+import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon, FolderIcon, LogoMark, SearchIcon } from '../../../ui/icons';
 import { useGithubReposQuery } from '../hooks/useGithubRepos';
 import { useCreateGithubProjectMutation } from '../hooks/useProjects';
@@ -32,13 +33,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
   const error = reposQuery.error ?? createProject.error;
   const busyRepoId = createProject.isPending ? createProject.variables?.id : null;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useKeyDown({ escape: () => onClose() });
 
   const handlePick = async (repo: GithubRepo) => {
     try {

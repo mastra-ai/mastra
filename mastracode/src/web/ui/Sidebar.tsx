@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { WebAuthViewModel } from './AppLayout';
 import type { Project } from './domains/workspaces';
 import { WorkspacesSection } from './domains/workspaces';
+import { useKeyDown } from './lib/hooks';
 
 const MAX_THREADS = 5;
 
@@ -171,16 +172,13 @@ function ThreadList({
     const onDown = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuFor(null);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuFor(null);
-    };
     document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
     };
   }, [menuFor]);
+
+  useKeyDown({ escape: () => setMenuFor(null) }, { target: 'document', enabled: !!menuFor });
 
   const startRename = (thread: AgentControllerThreadInfo) => {
     setMenuFor(null);

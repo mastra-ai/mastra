@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useKeyDown } from '../../../lib/hooks';
 
 interface UseGlobalShortcutsArgs {
   busy: boolean;
@@ -27,54 +27,37 @@ export function useGlobalShortcuts({
   setSidebarOpen,
   abort,
 }: UseGlobalShortcutsArgs) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen(o => !o);
-        return;
-      }
+  useKeyDown({
+    'mod+k': e => {
+      e.preventDefault();
+      setPaletteOpen(o => !o);
+    },
+    '?': e => {
       const target = e.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
-      if (e.key === '?' && !typing && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        setShortcutsOpen(o => !o);
+      if (typing || e.metaKey || e.ctrlKey) return;
+      e.preventDefault();
+      setShortcutsOpen(o => !o);
+    },
+    escape: () => {
+      if (projectsOpen) return;
+      if (shortcutsOpen) {
+        setShortcutsOpen(false);
         return;
       }
-      if (e.key === 'Escape') {
-        if (projectsOpen) return;
-        if (shortcutsOpen) {
-          setShortcutsOpen(false);
-          return;
-        }
-        if (settingsOpen) {
-          setSettingsOpen(false);
-          return;
-        }
-        if (paletteOpen) {
-          setPaletteOpen(false);
-          return;
-        }
-        if (sidebarOpen) {
-          setSidebarOpen(false);
-          return;
-        }
-        if (busy) void abort();
+      if (settingsOpen) {
+        setSettingsOpen(false);
+        return;
       }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [
-    abort,
-    busy,
-    paletteOpen,
-    projectsOpen,
-    settingsOpen,
-    shortcutsOpen,
-    sidebarOpen,
-    setPaletteOpen,
-    setSettingsOpen,
-    setShortcutsOpen,
-    setSidebarOpen,
-  ]);
+      if (paletteOpen) {
+        setPaletteOpen(false);
+        return;
+      }
+      if (sidebarOpen) {
+        setSidebarOpen(false);
+        return;
+      }
+      if (busy) void abort();
+    },
+  });
 }
