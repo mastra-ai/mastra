@@ -51,5 +51,4 @@ describeForAllEngines(
       expect(text).not.toContain('UNEXPECTED_REINVOCATION');
     });
   },
-  { skip: ['durable'] },
 );

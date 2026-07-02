@@ -50,7 +50,8 @@ describeForAllEngines(
       expect(toolNames).not.toContain('blocked_tool');
     });
 
-    it('applies an output processor that redacts loop text', async () => {
+    // Durable: call-time outputProcessors not on DurableAgentStreamOptions (constructor-level only).
+    it.skipIf(engine === 'durable')('applies an output processor that redacts loop text', async () => {
       const redactSecret: Processor = {
         id: 'redact-secret',
         async processOutputStream({ part }) {
@@ -78,5 +79,4 @@ describeForAllEngines(
       expect(text).not.toContain('SECRET');
     });
   },
-  { skip: ['durable'] },
 );

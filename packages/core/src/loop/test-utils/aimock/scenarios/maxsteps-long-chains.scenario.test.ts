@@ -124,5 +124,4 @@ describeForAllEngines(
       expect(await output.text).toContain('Done after one tool call');
     });
   },
-  { skip: ['durable'] },
 );

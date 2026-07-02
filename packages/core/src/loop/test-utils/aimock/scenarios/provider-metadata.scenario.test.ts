@@ -83,5 +83,4 @@ describeForAllEngines(
       expect(await output.text).toBe('Response with metadata.');
     });
   },
-  { skip: ['durable'] },
 );

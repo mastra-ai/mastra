@@ -85,5 +85,4 @@ describeForAllEngines(
       expect(requests.length).toBeGreaterThanOrEqual(3);
     });
   },
-  { skip: ['durable'] },
 );

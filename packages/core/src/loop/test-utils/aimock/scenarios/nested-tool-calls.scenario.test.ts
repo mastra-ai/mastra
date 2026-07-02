@@ -264,5 +264,4 @@ describeForAllEngines(
       expect(turn4Serialized).toContain('===');
     });
   },
-  { skip: ['durable'] },
 );

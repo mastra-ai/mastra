@@ -97,5 +97,4 @@ describeForAllEngines(
       expect(text).toContain('Done');
     });
   },
-  { skip: ['durable'] },
 );

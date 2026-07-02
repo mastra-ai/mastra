@@ -180,5 +180,4 @@ describeForAllEngines(
       expect(serialized).toContain('FULL_RECALL_2');
     });
   },
-  { skip: ['durable'] },
 );

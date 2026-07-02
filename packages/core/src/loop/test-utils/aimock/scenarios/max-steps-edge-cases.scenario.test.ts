@@ -156,5 +156,4 @@ describeForAllEngines(
       expect(requests).toHaveLength(2);
     });
   },
-  { skip: ['durable'] },
 );

@@ -69,5 +69,4 @@ describeForAllEngines(
       expect(text).toContain('Revised final draft.');
     });
   },
-  { skip: ['durable'] },
 );

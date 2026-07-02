@@ -198,5 +198,4 @@ describeForAllEngines(
       expect(finalMessages).toContain('SEARCH_RESULTS_789012');
     });
   },
-  { skip: ['durable'] },
 );

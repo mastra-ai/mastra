@@ -148,5 +148,4 @@ describeForAllEngines(
       expect(subagentRequest).toBeDefined();
     });
   },
-  { skip: ['durable'] },
 );

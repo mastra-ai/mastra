@@ -183,5 +183,4 @@ describeForAllEngines(
       expect(finalChunk.payload.results).toHaveLength(2);
     });
   },
-  { skip: ['durable'] },
 );

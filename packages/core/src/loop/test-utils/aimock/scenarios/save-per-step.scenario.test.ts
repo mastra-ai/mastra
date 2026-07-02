@@ -90,5 +90,4 @@ describeForAllEngines(
       expect(savedMessages).toBeDefined();
     });
   },
-  { skip: ['durable'] },
 );
