@@ -489,12 +489,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             persistenceFailures++;
             itemResult.persistenceError = {
               message: persistError instanceof Error ? persistError.message : String(persistError),
-              ...(persistError instanceof Error && persistError.stack ? { stack: persistError.stack } : {}),
             };
+            // Log the raw error (including stack) internally, but do NOT attach the
+            // stack to the returned `persistenceError` — the summary can cross a
+            // trust boundary (e.g. UIs, API responses) and stacks leak internal paths.
             mastra
               .getLogger()
               ?.error(
                 `Failed to persist experiment result for item ${item.id} in experiment ${experimentId}: ${itemResult.persistenceError.message}`,
+                { error: persistError },
               );
           }
 

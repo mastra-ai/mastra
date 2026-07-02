@@ -149,8 +149,13 @@ export interface ItemResult {
    * `mastra_experiment_results`. Callers can use this to detect silent data
    * loss and decide whether to retry or alert. Absent or null on the happy
    * path; optional so external mocks / wrappers don't need to hand-construct it.
+   *
+   * Only the error `message` is exposed here — the raw stack is logged
+   * internally via the Mastra logger and intentionally omitted from the
+   * returned object to avoid leaking internal file paths across trust
+   * boundaries.
    */
-  persistenceError?: { message: string; stack?: string } | null;
+  persistenceError?: { message: string } | null;
   /** Diagnostic receipt for item-level tool mocks (agent targets only) */
   toolMockReport?: ToolMockReport;
 }
