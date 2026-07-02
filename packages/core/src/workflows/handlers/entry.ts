@@ -138,6 +138,32 @@ export interface PersistStepUpdateParams {
   phase?: string;
 }
 
+function pruneStepResultsForSnapshot(stepResults: Record<string, StepResult<any, any, any, any>>): Record<string, any> {
+  const pruned: Record<string, any> = {};
+  for (const [stepId, result] of Object.entries(stepResults)) {
+    // Only prune completed or non-resumable terminal states
+    if (result.status === 'success' || result.status === 'failed' || result.status === 'skipped') {
+      const prunedResult: any = {
+        ...result,
+        payload: undefined,
+        suspendPayload: undefined,
+      };
+      if (prunedResult.output && typeof prunedResult.output === 'object') {
+        const out = prunedResult.output as any;
+        prunedResult.output = {
+          ...out,
+          steps: undefined,
+          messages: undefined,
+        };
+      }
+      pruned[stepId] = prunedResult;
+    } else {
+      pruned[stepId] = result;
+    }
+  }
+  return pruned;
+}
+
 export async function persistStepUpdate(
   engine: DefaultExecutionEngine,
   params: PersistStepUpdateParams,
@@ -177,7 +203,7 @@ export async function persistStepUpdate(
         runId,
         status: workflowStatus,
         value: executionContext.state,
-        context: stepResults as any,
+        context: pruneStepResultsForSnapshot(stepResults) as any,
         activePaths: executionContext.executionPath,
         stepExecutionPath: executionContext.stepExecutionPath,
         activeStepsPath: executionContext.activeStepsPath,
