@@ -28,6 +28,7 @@ function createStudioFixture() {
       window.MASTRA_ORGANIZATION_ID = '%%MASTRA_ORGANIZATION_ID%%';
       window.MASTRA_PLATFORM_PROJECT_ID = '%%MASTRA_PLATFORM_PROJECT_ID%%';
       window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';
+      window.MASTRA_API_PREFIX = '%%MASTRA_API_PREFIX%%';
     </script>
   </head>
   <body>studio</body>
@@ -110,6 +111,25 @@ describe('studio base path support', () => {
 
       expect(htmlResponse.status).toBe(200);
       expect(htmlResponse.body).toContain("window.MASTRA_TEMPLATES = 'true'");
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
+  it('preserves explicit empty API prefix configuration', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    const studioDir = createStudioFixture();
+    const server = createServer(studioDir, { serverApiPrefix: '' }, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const htmlResponse = await request(`http://127.0.0.1:${port}/agents`);
+
+      expect(htmlResponse.status).toBe(200);
+      expect(htmlResponse.body).toContain("window.MASTRA_API_PREFIX = ''");
     } finally {
       await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
     }
