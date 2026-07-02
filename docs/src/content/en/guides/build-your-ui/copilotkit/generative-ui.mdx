@@ -1,0 +1,155 @@
+---
+title: "Generative UI with CopilotKit | Frameworks"
+description: "Render tool calls, act on the frontend, and pause for human input with CopilotKit and Mastra"
+---
+
+# Generative UI spectrum
+
+Chat is the starting point, not the ceiling. With CopilotKit and Mastra you can move along a spectrum: from rendering an agent's tool calls as rich components, to letting the agent act on your application, to pausing mid-run so a human can approve or edit what happens next.
+
+Every example below builds on the [Get started](/guides/build-your-ui/copilotkit/get-started) setup: a Mastra server exposing agents through `registerCopilotKit()`, and a `CopilotKit` provider on the frontend. Each example registers its own agent on the Mastra instance and selects it with the `agent` prop.
+
+:::tip
+
+Every pattern on this page runs in Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/). Browse the source under `src/pages/copilot-kit` for the complete, working versions.
+
+:::
+
+## Tool-based generative UI
+
+Render an agent's tool call as a React component instead of plain text. Define the agent and tool on the Mastra server as usual:
+
+```typescript title="src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
+
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: 'Use the weatherTool to fetch current weather data.',
+  model: 'openai/gpt-4o',
+  tools: { weatherTool },
+})
+```
+
+On the frontend, use `useCopilotAction` with `available: "disabled"` to render the tool without letting the frontend execute it. The `render` function receives the tool's `args`, `result`, and `status`:
+
+```tsx title="app/page.tsx"
+import { CopilotChat } from '@copilotkit/react-ui'
+import { CopilotKit, useCopilotAction } from '@copilotkit/react-core'
+import { Weather } from '@/components/weather'
+
+function Chat() {
+  useCopilotAction({
+    name: 'weatherTool',
+    available: 'disabled',
+    parameters: [{ name: 'location', type: 'string', required: true }],
+    render: ({ result, status }) => {
+      if (status !== 'complete') {
+        return <div>Retrieving weather...</div>
+      }
+      return <Weather {...result} />
+    },
+  })
+
+  return <CopilotChat labels={{ title: 'Weather Assistant' }} />
+}
+
+export default function Page() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="weatherAgent">
+      <Chat />
+    </CopilotKit>
+  )
+}
+```
+
+Because Mastra streams tool-call arguments incrementally, the `render` function is called repeatedly as the arguments arrive, so the UI can paint progressively while the agent works.
+
+## Frontend tools
+
+Give the agent the ability to act on your application. Register the tool on the frontend with `useFrontendTool`; the `handler` runs in the browser when the agent calls it:
+
+```tsx title="app/page.tsx"
+import { CopilotChat } from '@copilotkit/react-ui'
+import { CopilotKit, useFrontendTool } from '@copilotkit/react-core'
+
+function Chat() {
+  useFrontendTool({
+    name: 'colorChangeTool',
+    description: 'Changes the background color',
+    parameters: [
+      { name: 'color', type: 'string', description: 'The color to change to', required: true },
+    ],
+    handler: ({ color }) => {
+      document.body.style.setProperty('--background', color)
+    },
+  })
+
+  return <CopilotChat labels={{ title: 'Background Color Changer' }} />
+}
+
+export default function Page() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="bgColorAgent">
+      <Chat />
+    </CopilotKit>
+  )
+}
+```
+
+The matching Mastra agent is a normal agent instructed to call `colorChangeTool` with the requested color.
+
+## Human-in-the-loop
+
+Pause the agent mid-run and wait for the user to approve, edit, or reject before continuing. Use `useHumanInTheLoop`: its `render` function receives a `respond` callback, and the agent's run stays suspended until you call it.
+
+```tsx title="app/page.tsx"
+import { CopilotChat } from '@copilotkit/react-ui'
+import { CopilotKit, useHumanInTheLoop } from '@copilotkit/react-core'
+import { StepsFeedback } from '@/components/steps-feedback'
+
+function Chat() {
+  useHumanInTheLoop({
+    name: 'generate_task_steps',
+    description: 'Generates a list of steps for the user to perform',
+    parameters: [
+      {
+        name: 'steps',
+        type: 'object[]',
+        attributes: [
+          { name: 'description', type: 'string' },
+          { name: 'status', type: 'string', enum: ['enabled', 'disabled', 'executing'] },
+        ],
+      },
+    ],
+    available: 'enabled',
+    // `respond` resumes the agent with the user's edited selection.
+    render: ({ args, respond, status }) => (
+      <StepsFeedback args={args} respond={respond} status={status} />
+    ),
+  })
+
+  return <CopilotChat labels={{ title: 'Planning Agent' }} />
+}
+
+export default function Page() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="planningAgent">
+      <Chat />
+    </CopilotKit>
+  )
+}
+```
+
+Inside `StepsFeedback`, let the user toggle steps and then call `respond({ accepted: true, steps })` to resume the agent, or `respond({ accepted: false })` to reject. The agent reads the returned value and continues accordingly. See the full component in the [UI Dojo](https://ui-dojo.mastra.ai/).
+
+## Going further
+
+The `@ag-ui/mastra` bridge supports more of CopilotKit's feature set on top of these building blocks:
+
+- **Shared state**: read and write agent state from your UI with `useCoAgent`, kept in sync as the agent streams updates. See [CopilotKit's shared-state guide](https://docs.copilotkit.ai/).
+- **Reasoning**: stream and display the agent's intermediate thinking.
+- **Background activity**: surface long-running background tasks and observational-memory work as distinct activity cards.
+- **A2UI**: render structured, agent-driven UI from a shared component catalog.
+
+For the current status of each feature and end-to-end examples, see the [CopilotKit documentation](https://docs.copilotkit.ai/) and the [UI Dojo](https://ui-dojo.mastra.ai/).

@@ -105,9 +105,29 @@ const sidebars = {
           label: 'AI SDK UI',
         },
         {
-          type: 'doc',
-          id: 'build-your-ui/copilotkit',
+          type: 'category',
           label: 'CopilotKit',
+          link: {
+            type: 'doc',
+            id: 'build-your-ui/copilotkit/get-started',
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/get-started',
+              label: 'Get started',
+            },
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/generative-ui',
+              label: 'Generative UI spectrum',
+            },
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/bots',
+              label: 'Bots & channels',
+            },
+          ],
         },
         {
           type: 'doc',
