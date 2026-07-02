@@ -75,7 +75,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     this.jsonPromptInjection = options.jsonPromptInjection;
     this.providerOptions = options.providerOptions;
     this.logger = options.logger;
-    this.structuringInstructions = options.instructions || this.generateInstructions();
+    this.structuringInstructions = options.instructions ?? this.generateInstructions();
     // Create internal structuring agent as fallback (used when no explicit agent is set)
     this.structuringAgent = new Agent({
       id: 'structured-output-structurer',

@@ -938,6 +938,17 @@ describe('StructuredOutputProcessor', () => {
       // The custom instructions should be used instead of generated ones
       expect(await agent.getInstructions()).toBe(customInstructions);
     });
+
+    it('should preserve empty custom instructions', async () => {
+      const customProcessor = new StructuredOutputProcessor({
+        schema: testSchema,
+        model: mockModel,
+        instructions: '',
+      });
+
+      const agent = (customProcessor as unknown as { structuringAgent: Agent }).structuringAgent;
+      expect(await agent.getInstructions()).toBe('');
+    });
   });
 
   describe('integration scenarios', () => {
