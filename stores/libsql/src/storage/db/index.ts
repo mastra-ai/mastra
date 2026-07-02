@@ -90,6 +90,17 @@ export function resolveClient(config: LibSQLDomainConfig): Client {
   });
 }
 
+/**
+ * Guard prune batch limits: a non-positive limit deletes nothing while callers'
+ * drain checks (`affected < limit`) never fire, which turns the prune loop into
+ * an infinite spin. Fail loudly instead.
+ */
+function assertPositiveLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new Error(`prune limit must be a positive integer; received ${limit}`);
+  }
+}
+
 export class LibSQLDB extends MastraBase {
   private client: Client;
   maxRetries: number;
@@ -1138,6 +1149,7 @@ export class LibSQLDB extends MastraBase {
     cutoff: string | number;
     limit: number;
   }): Promise<number> {
+    assertPositiveLimit(limit);
     const parsedTable = parseSqlIdentifier(tableName, 'table name');
     const parsedColumn = parseSqlIdentifier(column, 'column name');
     const sql = `DELETE FROM "${parsedTable}" WHERE rowid IN (SELECT rowid FROM "${parsedTable}" WHERE "${parsedColumn}" < ? LIMIT ?)`;
@@ -1149,45 +1161,66 @@ export class LibSQLDB extends MastraBase {
   }
 
   /**
-   * Delete up to `limit` child rows whose foreign key points to a parent row
-   * whose `parentColumn` timestamp is strictly before `cutoff`. Used for
-   * whole-unit (parent-driven) pruning where children must die with their
-   * parent (e.g. experiment_results cascading with an aged experiment).
+   * Delete up to `limit` aged parent rows *and* their child rows together, in a
+   * single transaction. Used for whole-unit (parent-driven) pruning where
+   * children must die with their parent (e.g. an aged experiment and its
+   * experiment_results) — deleting per unit means a bound or abort between
+   * batches never leaves a parent hollow (kept, but with its children gone) or
+   * children orphaned.
    *
-   * Bounded by `rowid` + LIMIT like {@link pruneBatch}, so locks stay short.
+   * Both deletes target the same parent set via an identical deterministic
+   * subquery (`ORDER BY rowid LIMIT ?`); the batch runs as one write
+   * transaction, so the set cannot change between the two statements.
    */
-  async pruneChildByParentBatch({
-    childTable,
-    childForeignKey,
+  async pruneUnitsBatch({
     parentTable,
     parentKey,
     parentColumn,
+    childTable,
+    childForeignKey,
     cutoff,
     limit,
   }: {
-    childTable: TABLE_NAMES;
-    childForeignKey: string;
     parentTable: TABLE_NAMES;
     parentKey: string;
     parentColumn: string;
+    childTable: TABLE_NAMES;
+    childForeignKey: string;
     cutoff: string | number;
     limit: number;
-  }): Promise<number> {
+  }): Promise<{ parents: number; children: number }> {
+    assertPositiveLimit(limit);
     const parsedChild = parseSqlIdentifier(childTable, 'table name');
     const parsedChildFk = parseSqlIdentifier(childForeignKey, 'column name');
     const parsedParent = parseSqlIdentifier(parentTable, 'table name');
     const parsedParentKey = parseSqlIdentifier(parentKey, 'column name');
     const parsedParentColumn = parseSqlIdentifier(parentColumn, 'column name');
-    const sql =
-      `DELETE FROM "${parsedChild}" WHERE rowid IN (` +
-      `SELECT c.rowid FROM "${parsedChild}" c ` +
-      `JOIN "${parsedParent}" p ON p."${parsedParentKey}" = c."${parsedChildFk}" ` +
-      `WHERE p."${parsedParentColumn}" < ? LIMIT ?)`;
-    const result = await this.executeWriteOperationWithRetry(
-      () => withClientWriteLock(this.client, () => this.client.execute({ sql, args: [cutoff, limit] })),
-      `prune child ${childTable}`,
+    const agedParents =
+      `SELECT "${parsedParentKey}" FROM "${parsedParent}" ` +
+      `WHERE "${parsedParentColumn}" < ? ORDER BY rowid LIMIT ?`;
+    const results = await this.executeWriteOperationWithRetry(
+      () =>
+        withClientWriteLock(this.client, () =>
+          this.client.batch(
+            [
+              {
+                sql: `DELETE FROM "${parsedChild}" WHERE "${parsedChildFk}" IN (${agedParents})`,
+                args: [cutoff, limit],
+              },
+              {
+                sql: `DELETE FROM "${parsedParent}" WHERE "${parsedParentKey}" IN (${agedParents})`,
+                args: [cutoff, limit],
+              },
+            ],
+            'write',
+          ),
+        ),
+      `prune units ${parentTable}`,
     );
-    return Number(result.rowsAffected ?? 0);
+    return {
+      children: Number(results[0]?.rowsAffected ?? 0),
+      parents: Number(results[1]?.rowsAffected ?? 0),
+    };
   }
 
   /** Create an index if it does not already exist. */

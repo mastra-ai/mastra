@@ -22,7 +22,7 @@ export interface PruneTarget {
 }
 
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (ms <= 0) return;
+  if (ms <= 0 || signal?.aborted) return;
   await new Promise<void>(resolve => {
     const timer = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
@@ -61,6 +61,13 @@ export async function runBatchedDelete({
   batchSize: number;
   options?: PruneOptions;
 }): Promise<{ deleted: number; done: boolean }> {
+  // A non-positive batch size would make every batch delete 0 rows while never
+  // reaching the drained exit (`affected < limit` is false for 0 < 0) — an
+  // infinite loop. Reject it up front instead of spinning.
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+    throw new Error(`retention batchSize must be a positive integer; received ${batchSize}`);
+  }
+
   let deleted = 0;
   let batches = 0;
 

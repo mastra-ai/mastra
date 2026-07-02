@@ -127,6 +127,35 @@ describe('PG retention', () => {
       expect(results[0]).toMatchObject({ deleted: 0, done: false });
       expect((await threadIds(store)).length).toBe(3);
     });
+
+    it('sweeps orphaned semantic-recall vector rows when pruning messages', async () => {
+      // Minimal stand-in for the default PgVector `memory_messages` table.
+      await store.db.none(
+        `CREATE TABLE IF NOT EXISTS "${SCHEMA}"."memory_messages" ("id" TEXT PRIMARY KEY, "metadata" JSONB)`,
+      );
+      try {
+        const oldAt = new Date(Date.now() - 40 * DAY).toISOString();
+        const newAt = new Date().toISOString();
+        await store.db.none(
+          `INSERT INTO "${SCHEMA}"."mastra_messages" ("id", "thread_id", "content", "role", "type", "createdAt", "createdAtZ") VALUES ('msg-old', 't-1', '{}', 'user', 'v2', $1::timestamp, $1::timestamptz), ('msg-new', 't-1', '{}', 'user', 'v2', $2::timestamp, $2::timestamptz)`,
+          [oldAt, newAt],
+        );
+        await store.db.none(
+          `INSERT INTO "${SCHEMA}"."memory_messages" ("id", "metadata") VALUES ('vec-old', '{"message_id": "msg-old"}'), ('vec-new', '{"message_id": "msg-new"}'), ('vec-other', '{"foo": "bar"}')`,
+        );
+
+        await store.stores.memory!.prune({ messages: { maxAge: '30d' } });
+
+        const remaining = await store.db.manyOrNone<{ id: string }>(
+          `SELECT "id" FROM "${SCHEMA}"."memory_messages" ORDER BY "id"`,
+        );
+        // vec-old is orphaned by the prune and swept; the live message's
+        // embedding and rows without message_id metadata are untouched.
+        expect(remaining.map(r => r.id)).toEqual(['vec-new', 'vec-other']);
+      } finally {
+        await store.db.none(`DROP TABLE IF EXISTS "${SCHEMA}"."memory_messages"`);
+      }
+    });
   });
 
   describe('composite prune()', () => {
@@ -254,6 +283,29 @@ describe('PG retention', () => {
 
       // Both the parent and all its children are gone — no orphaned results.
       expect(await counts()).toEqual({ experiments: 0, results: 0 });
+    });
+
+    it('removes whole units per batch, so bounds never strip results off surviving runs', async () => {
+      await seedExperiment('old-a', 40, 3);
+      await seedExperiment('old-b', 41, 3);
+      await seedExperiment('old-c', 42, 3);
+
+      // batchSize 1 + maxBatches 2 => exactly two whole experiments removed.
+      const results = await store.stores.experiments!.prune(
+        { experiments: { maxAge: '30d', batchSize: 1 } },
+        { maxBatches: 2 },
+      );
+
+      const expRow = results.find(r => r.table === 'mastra_experiments')!;
+      expect(expRow.deleted).toBe(2);
+      expect(expRow.done).toBe(false);
+
+      // The surviving experiment kept its full result set — never hollow.
+      expect(await counts()).toEqual({ experiments: 1, results: 3 });
+      const orphans = await store.db.oneOrNone<{ c: string }>(
+        `SELECT COUNT(*) AS c FROM "${SCHEMA}"."mastra_experiment_results" r WHERE NOT EXISTS (SELECT 1 FROM "${SCHEMA}"."mastra_experiments" e WHERE e."id" = r."experimentId")`,
+      );
+      expect(Number(orphans!.c)).toBe(0);
     });
   });
 });

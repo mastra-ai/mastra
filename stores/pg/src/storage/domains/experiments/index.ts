@@ -106,30 +106,41 @@ export class ExperimentsPG extends ExperimentsStorage {
    * `prune()` deletes stay fast on large tables.
    */
   private async ensureRetentionIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
     const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
     for (const [key, entry] of Object.entries(ExperimentsPG.retentionTables)) {
       if (!entry.indexed) continue;
-      await this.#db.ensureIndex({
-        indexName: `${prefix}mastra_${key}_retention_idx`,
-        tableName: entry.table as TABLE_NAMES,
-        column: entry.column,
-      });
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
     }
   }
 
   /**
    * Delete experiments whose `completedAt` is older than the policy's `maxAge`.
    *
-   * Deletes each aged experiment as a unit: first its `experiment_results` rows
-   * (cascade), then the experiment row itself — mirroring `deleteExperiment`,
-   * so a run is never left hollow (parent kept, results gone). NULL `completedAt`
-   * (still running) is excluded by the `< cutoff` predicate. Batched, bounded,
-   * and cancellable via `options`.
+   * Each batch selects up to `batchSize` aged experiments and deletes their
+   * `experiment_results` rows and the experiment rows in one transaction —
+   * mirroring `deleteExperiment` — so hitting `maxBatches`/`maxRows` or the
+   * abort signal between batches never leaves a run hollow (parent kept,
+   * results gone). NULL `completedAt` (still running) is excluded by the
+   * `< cutoff` predicate. Bounds count whole experiments, not rows.
    */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     const policy = policies['experiments'];
     if (!policy || options?.signal?.aborted) {
-      return policy ? [{ domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false }] : [];
+      return policy
+        ? [
+            { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: 0, done: false },
+            { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
+          ]
+        : [];
     }
 
     // `completedAt` is a naive TIMESTAMP holding UTC ISO strings, so bind the
@@ -139,34 +150,27 @@ export class ExperimentsPG extends ExperimentsStorage {
     const cutoff = rawCutoff instanceof Date ? rawCutoff.toISOString() : rawCutoff;
     const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
 
-    // Children first: delete result rows whose parent experiment is aged out.
-    const child = await runBatchedDelete({
-      deleteBatch: limit =>
-        this.#db.pruneChildByParentBatch({
-          childTable: TABLE_EXPERIMENT_RESULTS,
-          childForeignKey: 'experimentId',
+    let childDeleted = 0;
+    const parent = await runBatchedDelete({
+      deleteBatch: async limit => {
+        const { parents, children } = await this.#db.pruneUnitsBatch({
           parentTable: TABLE_EXPERIMENTS,
           parentKey: 'id',
           parentColumn: 'completedAt',
+          childTable: TABLE_EXPERIMENT_RESULTS,
+          childForeignKey: 'experimentId',
           cutoff,
           limit,
-        }),
+        });
+        childDeleted += children;
+        return parents;
+      },
       batchSize,
       options,
     });
 
-    // Then the parent experiments themselves.
-    const parent = child.done
-      ? await runBatchedDelete({
-          deleteBatch: limit =>
-            this.#db.pruneBatch({ tableName: TABLE_EXPERIMENTS, column: 'completedAt', cutoff, limit }),
-          batchSize,
-          options,
-        })
-      : { deleted: 0, done: false };
-
     return [
-      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: child.deleted, done: child.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: childDeleted, done: parent.done },
       { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
     ];
   }

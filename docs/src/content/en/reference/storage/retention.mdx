@@ -42,16 +42,18 @@ const storage = new LibSQLStore({
 const results = await storage.prune()
 ```
 
-`retention` is fully typed. Keys must be real domain keys, and each table key must be one the domain declares as retention-eligible. Unknown domains or tables are compile errors:
+`retention` is fully typed. Keys must be real domain keys, and each table key must be one the domain declares as retention-eligible. Passing the object straight into a store config type-checks it; if you build it standalone, use `satisfies RetentionConfig` so unknown domains or tables are compile errors:
 
 ```typescript
+import type { RetentionConfig } from '@mastra/core/storage'
+
 const retention = {
   memory: {
     messages: { maxAge: '30d' }, // ok
     bogus: { maxAge: '30d' }, // Error: not a memory retention table
   },
   bogusDomain: {}, // Error: not a storage domain
-}
+} satisfies RetentionConfig
 ```
 
 ## Retention config

@@ -366,6 +366,17 @@ export interface PgDBInternalConfig {
 // This prevents race conditions when multiple domains try to create the same schema concurrently
 const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
 
+/**
+ * Guard prune batch limits: a non-positive limit deletes nothing while callers'
+ * drain checks (`affected < limit`) never fire, which turns the prune loop into
+ * an infinite spin. Fail loudly instead.
+ */
+function assertPositiveLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new Error(`prune limit must be a positive integer; received ${limit}`);
+  }
+}
+
 export class PgDB extends MastraBase {
   public client: DbClient;
   public schemaName?: string;
@@ -1652,6 +1663,7 @@ export class PgDB extends MastraBase {
     cutoff: Date | string | number;
     limit: number;
   }): Promise<number> {
+    assertPositiveLimit(limit);
     const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
     const parsedColumn = `"${parseSqlIdentifier(column, 'column name')}"`;
 
@@ -1669,29 +1681,31 @@ export class PgDB extends MastraBase {
   }
 
   /**
-   * Deletes a bounded batch of child rows whose parent row is aged out, so an
-   * aged-out parent's dependents are removed before the parent itself (used by
-   * whole-unit pruning such as experiments → experiment_results). Targets rows
-   * via `ctid` since PostgreSQL has no `DELETE ... LIMIT`. Returns the number of
-   * child rows deleted.
+   * Deletes up to `limit` aged parent rows *and* their child rows together, in
+   * a single transaction (used by whole-unit pruning such as experiments →
+   * experiment_results). The aged parent IDs are selected first and both
+   * deletes target that exact ID set, so a bound or abort between batches never
+   * leaves a parent hollow (kept, but with its children gone) or children
+   * orphaned.
    */
-  async pruneChildByParentBatch({
-    childTable,
-    childForeignKey,
+  async pruneUnitsBatch({
     parentTable,
     parentKey,
     parentColumn,
+    childTable,
+    childForeignKey,
     cutoff,
     limit,
   }: {
-    childTable: TABLE_NAMES;
-    childForeignKey: string;
     parentTable: TABLE_NAMES;
     parentKey: string;
     parentColumn: string;
+    childTable: TABLE_NAMES;
+    childForeignKey: string;
     cutoff: Date | string | number;
     limit: number;
-  }): Promise<number> {
+  }): Promise<{ parents: number; children: number }> {
+    assertPositiveLimit(limit);
     const schemaName = getSchemaName(this.schemaName);
     const fullChildTable = getTableName({ indexName: childTable, schemaName });
     const fullParentTable = getTableName({ indexName: parentTable, schemaName });
@@ -1699,18 +1713,21 @@ export class PgDB extends MastraBase {
     const parentPk = `"${parseSqlIdentifier(parentKey, 'column name')}"`;
     const parentCol = `"${parseSqlIdentifier(parentColumn, 'column name')}"`;
 
-    const sql = `
-      DELETE FROM ${fullChildTable}
-      WHERE ctid IN (
-        SELECT c.ctid FROM ${fullChildTable} c
-        JOIN ${fullParentTable} p ON c.${childFk} = p.${parentPk}
-        WHERE p.${parentCol} < $1
-        LIMIT $2
-      )
-    `;
+    return this.client.tx(async t => {
+      const rows = await t.manyOrNone<{ id: unknown }>(
+        `SELECT ${parentPk} AS id FROM ${fullParentTable} WHERE ${parentCol} < $1 LIMIT $2 FOR UPDATE SKIP LOCKED`,
+        [cutoff, limit],
+      );
+      const ids = rows.map(r => r.id);
+      if (ids.length === 0) return { parents: 0, children: 0 };
 
-    const result = await this.client.query(sql, [cutoff, limit]);
-    return result.rowCount ?? 0;
+      const childResult = await t.query(`DELETE FROM ${fullChildTable} WHERE ${childFk} = ANY($1)`, [ids]);
+      const parentResult = await t.query(`DELETE FROM ${fullParentTable} WHERE ${parentPk} = ANY($1)`, [ids]);
+      return {
+        parents: parentResult.rowCount ?? 0,
+        children: childResult.rowCount ?? 0,
+      };
+    });
   }
 
   /**

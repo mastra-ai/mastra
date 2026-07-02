@@ -138,14 +138,19 @@ export class SchedulesPG extends SchedulesStorage {
    * `schedule_id`, so a bare `actual_fire_at` range scan can't use it.
    */
   private async ensureRetentionIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
     const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
     for (const [key, entry] of Object.entries(SchedulesPG.retentionTables)) {
       if (!entry.indexed) continue;
-      await this.#db.ensureIndex({
-        indexName: `${prefix}mastra_${key}_retention_idx`,
-        tableName: entry.table as TABLE_NAMES,
-        column: entry.column,
-      });
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
     }
   }
 

@@ -105,7 +105,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { runPrune, resolveTargets } from '../../retention';
+import { runPrune, runBatchedDelete, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
 type MessageRowFromDB = {
@@ -239,14 +239,19 @@ export class MemoryPG extends MemoryStorage {
    * `prune()` deletes stay fast on large tables.
    */
   private async ensureRetentionIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
     const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
     for (const [key, entry] of Object.entries(MemoryPG.retentionTables)) {
       if (!entry.indexed) continue;
-      await this.#db.ensureIndex({
-        indexName: `${prefix}mastra_${key}_retention_idx`,
-        tableName: entry.table as TABLE_NAMES,
-        column: entry.column,
-      });
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
     }
   }
 
@@ -373,6 +378,11 @@ export class MemoryPG extends MemoryStorage {
    * batched, cancellable chunks. Tables are pruned children-first (messages and
    * resources before threads) since PostgreSQL has no FK cascade in this schema.
    * Unset tables are kept forever.
+   *
+   * When a `messages` policy is set, semantic-recall embeddings for pruned
+   * messages are also swept from same-schema `memory_messages*` vector tables
+   * (best-effort, mirroring `deleteThread`). Embeddings held in an external
+   * vector store are out of reach and must be pruned by the operator.
    */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     const targets = resolveTargets({
@@ -380,7 +390,59 @@ export class MemoryPG extends MemoryStorage {
       descriptor: MemoryPG.retentionTables,
       order: ['messages', 'resources', 'threads'],
     });
-    return runPrune({ db: this.#db, domain: 'memory', targets, options });
+    const results = await runPrune({ db: this.#db, domain: 'memory', targets, options });
+    if (policies['messages']) {
+      await this.pruneOrphanedVectorRows(policies['messages'], options);
+    }
+    return results;
+  }
+
+  /**
+   * Best-effort sweep of semantic-recall vector rows whose source message no
+   * longer exists (e.g. it was just pruned), so recall doesn't keep returning
+   * embeddings that resolve to nothing. Only same-schema default vector tables
+   * (`memory_messages*`) are covered — the same set `deleteThread` cleans up.
+   * Failures are logged, never thrown: vector cleanup must not fail the prune.
+   */
+  private async pruneOrphanedVectorRows(policy: TableRetentionPolicy, options?: PruneOptions): Promise<void> {
+    try {
+      const schemaName = this.#schema || 'public';
+      const vectorTables = await this.#db.client.manyOrNone<{ tablename: string }>(
+        `
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = $1
+        AND (tablename = 'memory_messages' OR tablename LIKE 'memory_messages_%')
+      `,
+        [schemaName],
+      );
+
+      const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+      for (const { tablename } of vectorTables) {
+        const vectorTableName = getTableName({ indexName: tablename, schemaName: getSchemaName(this.#schema) });
+        await runBatchedDelete({
+          deleteBatch: async limit => {
+            const result = await this.#db.client.query(
+              `
+              DELETE FROM ${vectorTableName}
+              WHERE ctid IN (
+                SELECT v.ctid FROM ${vectorTableName} v
+                WHERE v.metadata->>'message_id' IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM ${messagesTable} m WHERE m.id = v.metadata->>'message_id')
+                LIMIT $1
+              )
+            `,
+              [limit],
+            );
+            return result.rowCount ?? 0;
+          },
+          batchSize: policy.batchSize ?? 1000,
+          options,
+        });
+      }
+    } catch (error) {
+      this.logger?.warn?.('Failed to sweep orphaned semantic-recall vector rows after prune:', error);
+    }
   }
 
   /**

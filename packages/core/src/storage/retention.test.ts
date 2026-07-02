@@ -124,6 +124,36 @@ describe('MastraCompositeStore.prune()', () => {
     expect(memory.prune).not.toHaveBeenCalled();
   });
 
+  it('isolates a failing domain: logs, skips it, and keeps other domains results', async () => {
+    const memoryResult: PruneResult = {
+      domain: 'memory',
+      table: 'mastra_messages',
+      deleted: 5,
+      done: true,
+    };
+    const memory = makePruneDomain([memoryResult]);
+    const observability = {
+      prune: vi.fn(async () => {
+        throw new Error('transient db error');
+      }),
+    };
+
+    const composite = new TestComposite(
+      'c7',
+      { memory: memory as any, observability: observability as any },
+      {
+        // Object key order: observability fails first, memory still runs after.
+        observability: { spans: { maxAge: '7d' } },
+        memory: { messages: { maxAge: '30d' } },
+      },
+    );
+
+    const results = await composite.prune();
+
+    expect(observability.prune).toHaveBeenCalledTimes(1);
+    expect(results).toEqual([memoryResult]);
+  });
+
   it('forwards prune options through to the domain', async () => {
     const memory = makePruneDomain([]);
     const composite = new TestComposite(

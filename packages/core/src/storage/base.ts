@@ -446,6 +446,11 @@ export class MastraCompositeStore extends MastraBase {
    * `done: false` means eligible rows remain — call `prune()` again (e.g. on
    * the next cron tick) to continue.
    *
+   * Prune is meant to run unattended (a cron tick), so a failure in one
+   * domain is logged and skipped rather than rejecting the whole call — the
+   * results already gathered for other domains are still returned, and the
+   * failed domain is retried naturally on the next tick.
+   *
    * With no `retention` configured this is a no-op returning `[]`.
    */
   async prune(options?: PruneOptions): Promise<PruneResult[]> {
@@ -463,8 +468,12 @@ export class MastraCompositeStore extends MastraBase {
       const domain = this.stores?.[domainKey];
       if (!isPruneCapable(domain)) continue; // domain not configured / doesn't support retention
 
-      const domainResults = await domain.prune(tablePolicies, options);
-      results.push(...domainResults);
+      try {
+        const domainResults = await domain.prune(tablePolicies, options);
+        results.push(...domainResults);
+      } catch (error) {
+        this.logger?.error(`prune() failed for domain "${domainKey}"`, { error });
+      }
     }
     return results;
   }

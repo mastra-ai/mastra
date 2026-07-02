@@ -256,6 +256,31 @@ describe('LibSQL retention', () => {
       // Both the parent and all its children are gone — no orphaned results.
       expect(await counts()).toEqual({ experiments: 0, results: 0 });
     });
+
+    it('removes whole units per batch, so bounds never strip results off surviving runs', async () => {
+      await seedExperiment('old-a', 40, 3);
+      await seedExperiment('old-b', 41, 3);
+      await seedExperiment('old-c', 42, 3);
+
+      // batchSize 1 + maxBatches 2 => exactly two whole experiments removed.
+      const results = await fileStore.stores.experiments!.prune(
+        { experiments: { maxAge: '30d', batchSize: 1 } },
+        { maxBatches: 2 },
+      );
+
+      const expRow = results.find(r => r.table === 'mastra_experiments')!;
+      expect(expRow.deleted).toBe(2);
+      expect(expRow.done).toBe(false);
+
+      // The surviving experiment kept its full result set — never hollow.
+      expect(await counts()).toEqual({ experiments: 1, results: 3 });
+      const raw = createClient({ url });
+      const orphans = await raw.execute(
+        'SELECT COUNT(*) AS c FROM mastra_experiment_results r WHERE NOT EXISTS (SELECT 1 FROM mastra_experiments e WHERE e.id = r.experimentId)',
+      );
+      raw.close();
+      expect(Number(orphans.rows[0]!.c)).toBe(0);
+    });
   });
 });
 

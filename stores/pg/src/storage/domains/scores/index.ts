@@ -91,14 +91,19 @@ export class ScoresPG extends ScoresStorage {
    * `prune()` deletes stay fast on large tables.
    */
   private async ensureRetentionIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) return;
     const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
     for (const [key, entry] of Object.entries(ScoresPG.retentionTables)) {
       if (!entry.indexed) continue;
-      await this.#db.ensureIndex({
-        indexName: `${prefix}mastra_${key}_retention_idx`,
-        tableName: entry.table as TABLE_NAMES,
-        column: entry.column,
-      });
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
     }
   }
 
