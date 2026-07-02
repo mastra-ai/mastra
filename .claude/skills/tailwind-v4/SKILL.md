@@ -18,10 +18,12 @@ Tailwind v4 is configured in CSS, not JavaScript.
 | `@utility name { ... }` for custom utilities (works with variants)         | `@layer utilities { .name { ... } }`  |
 | `@custom-variant dark (&:is(.dark *))`                                     | JS `plugins` / `addVariant`           |
 | `@source "path"` / `@source inline("...")` for extra sources / safelisting | `content` array / `safelist` config   |
+| `@variant dark { ... }` to apply a Tailwind variant inside custom CSS      | duplicating media queries / selectors |
 | `@reference "app.css"` for `@apply` in scoped styles (Vue, CSS Modules)    | duplicating stylesheet imports        |
 | `var(--color-x)` in CSS, `getComputedStyle` in JS                          | `theme()` function, `resolveConfig`   |
+| `@config "…"` / `@plugin "…"` only for existing JS-config integrations     | adding new JS configs or plugins      |
 
-`@theme` variables are API: each one emits a native CSS variable AND generates utilities (`--color-*` → `bg-*`/`text-*`/`border-*`/..., `--text-*` → `text-*`, `--shadow-*` → `shadow-*`, `--animate-*` → `animate-*`, `--breakpoint-*` → responsive variants). A plain `:root { --x: ...; }` variable generates nothing — use it for runtime-only values.
+`@theme` variables are API: each one emits a native CSS variable AND generates utilities (`--color-*` → `bg-*`/`text-*`/`border-*`/..., `--text-*` → `text-*`, `--shadow-*` → `shadow-*`, `--animate-*` → `animate-*`, `--breakpoint-*` → responsive variants). A plain `:root { --x: ...; }` variable generates nothing — use it for runtime-only values. When a token's value references another variable (`--color-x: var(--y)`), declare it in `@theme inline` so the utility resolves the reference at the declaration site. In custom CSS, `--alpha(var(--color-x) / 50%)` and `--spacing(4)` replace v3 `theme()` math.
 
 ## v3 → v4 renames
 
@@ -53,12 +55,23 @@ The spacing scale is infinite — every number compiles via `calc(var(--spacing)
 | `mt-[68px]`                            | `mt-17`                                                                                 |
 | `grid-cols-[repeat(15,minmax(0,1fr))]` | `grid-cols-15`                                                                          |
 | `h-[100dvh]`, `w-[100dvw]`, `h-[1lh]`  | `h-dvh`, `w-dvw`, `h-lh`                                                                |
+| `max-w-[80rem]`                        | `max-w-7xl` (container scale)                                                           |
 | `data-[current]:opacity-100`           | `data-current:opacity-100` (values keep brackets: `data-[state=open]:`)                 |
 | `bg-[var(--row-bg)]`                   | `bg-(--row-bg)`; type hints when ambiguous: `text-(color:--fg)`, `text-(length:--size)` |
 
 Square brackets remain correct for true one-offs: `max-h-[calc(100dvh-3rem)]`, `grid-cols-[200px_minmax(0,1fr)]`, and arbitrary properties like `[mask-type:luminance]`.
 
 Class strings must stay complete and statically detectable: map props to full strings (`{ success: 'bg-positive1' }[tone]`), never build fragments like `` `bg-${tone}-500` ``.
+
+## New capabilities — reach for these before hacks or JS
+
+- `field-sizing-content` — auto-growing textarea without a JS resize listener.
+- `wrap-anywhere` / `wrap-break-word` — long-word breaking inside flex without the `min-w-0` hack.
+- `items-center-safe`, `justify-center-safe` — centering that falls back to `start` on overflow.
+- `pointer-coarse:` / `pointer-fine:` — adapt touch targets without user-agent sniffing.
+- `user-valid:` / `user-invalid:` — validation styling only after user interaction (unlike `:valid`).
+- `starting:` (+ `transition-discrete` for `display`/popover) — enter transitions without JS mount tricks.
+- `text-shadow-*`, `mask-t-from-*`/`mask-b-to-*` (fade-out edges), `scheme-dark` (native controls/scrollbars), 3D transforms (`rotate-x-*`, `perspective-*`).
 
 ## Behavior changes to remember
 

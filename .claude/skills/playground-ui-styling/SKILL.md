@@ -7,6 +7,12 @@ description: Design-system styling policy for Mastra Playground UI. This skill s
 
 Design-system policy for `packages/playground-ui` and `packages/playground`. For Tailwind v4 mechanics (renames, dynamic utilities, CSS-first APIs), read the `tailwind-v4` skill.
 
+## Wiring
+
+- `packages/playground-ui/src/index.css` imports Tailwind and `theme.css`, and declares the dark variant: `@custom-variant dark (&:is(.dark *))`.
+- The palette defaults to dark in `:root`; `html.light` flips the semantic variables. Theming is automatic through semantic tokens (`bg-surface4` adapts by itself) — never write `dark:` color overrides on semantic tokens; reserve `dark:` for rare structural differences.
+- Build conditional or merged class strings with `cn()` from `src/lib/utils.ts`. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-ui-md` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
+
 ## Decision ladder
 
 Pick the highest rung that fits; each step down needs a reason:
@@ -26,6 +32,7 @@ Pick the highest rung that fits; each step down needs a reason:
 ## Theme contract (CRITICAL)
 
 - `packages/playground-ui/theme.css` holds the palette in `:root` and the `@theme` mapping that turns it into utilities. Its variables are API: adding one generates utilities every consumer can use.
+- Browse the `@theme` block for the generated namespaces before assuming a value is missing: `--color-*` (semantic surfaces/neutrals/accents), `--spacing-*` (including `form-*` control heights), `--text-ui-*`/`--leading-ui-*`, `--radius-*`, `--shadow-*`, `--container-*`, `--breakpoint-*`.
 - Never modify `theme.css` or `packages/playground-ui/src/ds/tokens/*.ts` without explicit approval. To request a token: document the use case, explain why a local CSS custom property is not enough, and wait for the design team.
 - Runtime-only or single-component values get a plain CSS custom property (which generates no utility) consumed via `bg-(--var)` — not a new `@theme` token.
 - When JavaScript needs a theme value, read the CSS variable (`var(--color-surface4)`, `getComputedStyle`) — never `resolveConfig` or JS token imports for styling.
@@ -39,3 +46,5 @@ Pick the highest rung that fits; each step down needs a reason:
 - A new `--color-*` or `--animate-*` token added for one component's local state
 - `className` on a DS component that changes colors, typography, or spacing
 - Decorative animation without `motion-safe:`/`motion-reduce:`
+- `dark:` color overrides on semantic tokens — the palette already flips via `html.light`
+- `twMerge` imported from `tailwind-merge` or manual string concatenation instead of `cn()`
