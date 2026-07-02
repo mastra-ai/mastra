@@ -185,6 +185,9 @@ describe('Command', () => {
       expect(screen.queryByText('Weather Workflow')).toBeNull();
     });
 
-    expect(Boolean(beta?.compareDocumentPosition(alpha!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(beta).not.toBeNull();
+    expect(alpha).not.toBeNull();
+    if (!beta || !alpha) throw new Error('Expected filtered command items');
+    expect(Boolean(beta.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 });

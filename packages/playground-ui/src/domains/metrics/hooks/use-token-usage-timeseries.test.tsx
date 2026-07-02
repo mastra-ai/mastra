@@ -169,7 +169,10 @@ describe('useTokenUsageTimeSeries', () => {
       expect(onTimeseries).toHaveBeenCalledTimes(2);
     });
 
-    const [inputRequest] = onTimeseries.mock.calls[0]!;
+    const firstCall = onTimeseries.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) throw new Error('Expected first timeseries request');
+    const [inputRequest] = firstCall;
     expect(inputRequest.name).toEqual(['mastra_model_total_input_tokens']);
     expect(inputRequest.aggregation).toBe('sum');
     expect(inputRequest.filters?.timestamp?.start).toBeDefined();

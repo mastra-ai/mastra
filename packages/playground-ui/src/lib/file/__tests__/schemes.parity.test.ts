@@ -42,7 +42,8 @@ const readCoreSupportedProtocols = (): string[] => {
 
   const protocols = new Set<string>();
   for (const match of scanRegion.matchAll(/case '([a-z0-9]+):'/g)) {
-    protocols.add(match[1]!);
+    const [, protocol] = match;
+    if (protocol) protocols.add(protocol);
   }
   return [...protocols].sort();
 };

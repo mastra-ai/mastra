@@ -10,7 +10,12 @@ afterEach(() => {
 
 const VIEWPORT_MARKER = 'test-viewport-marker';
 
-const getViewport = () => document.querySelector<HTMLElement>(`.${VIEWPORT_MARKER}`)!;
+const getViewport = () => {
+  const viewport = document.querySelector<HTMLElement>(`.${VIEWPORT_MARKER}`);
+  expect(viewport).not.toBeNull();
+  if (!viewport) throw new Error('Expected scroll viewport');
+  return viewport;
+};
 const getContent = (viewport: HTMLElement) => viewport.firstElementChild as HTMLElement;
 
 const renderArea = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) =>

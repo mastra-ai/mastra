@@ -94,10 +94,17 @@ const fetchTracesFn = async ({
   filters,
   listMode = 'traces',
 }: FetchTracesFnArgs) => {
-  const params =
-    mode === 'delta'
-      ? { mode: 'delta' as const, after, limit, filters }
-      : { pagination: { page: page!, perPage: perPage! }, filters };
+  const params = (() => {
+    if (mode === 'delta') {
+      return { mode: 'delta' as const, after, limit, filters };
+    }
+
+    if (page == null || perPage == null) {
+      throw new Error('page and perPage are required for traces page mode');
+    }
+
+    return { pagination: { page, perPage }, filters };
+  })();
 
   if (listMode === 'branches') {
     return client.listBranches(params as ListBranchesArgs);

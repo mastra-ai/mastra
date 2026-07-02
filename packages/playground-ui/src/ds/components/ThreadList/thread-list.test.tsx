@@ -6,6 +6,12 @@ import { ThreadList, ThreadListItem } from './thread-list';
 
 afterEach(cleanup);
 
+function getParent(element: HTMLElement): HTMLElement {
+  expect(element.parentElement).not.toBeNull();
+  if (!element.parentElement) throw new Error('Expected parent element');
+  return element.parentElement;
+}
+
 describe('ThreadList', () => {
   it('renders standalone block chrome by default', () => {
     render(
@@ -18,7 +24,7 @@ describe('ThreadList', () => {
     expect(nav.className).toContain('bg-surface3');
     expect(nav.className).toContain('rounded-studio-panel');
     expect(nav.className).toContain('border-border1/50');
-    expect(nav.parentElement!.className).toContain('pl-2');
+    expect(getParent(nav).className).toContain('pl-2');
   });
 
   it('drops block chrome and inset when embedded', () => {
@@ -32,7 +38,7 @@ describe('ThreadList', () => {
     expect(nav.className).not.toContain('bg-surface3');
     expect(nav.className).not.toContain('rounded-studio-panel');
     expect(nav.className).not.toContain('border-border1/50');
-    expect(nav.parentElement!.className).not.toContain('pl-2');
+    expect(getParent(nav).className).not.toContain('pl-2');
     expect(nav.className).toContain('overflow-y-auto');
   });
 });
@@ -52,7 +58,8 @@ describe('ThreadListItem', () => {
 
     const contentBoundary = link.querySelector('span');
     expect(contentBoundary).not.toBeNull();
-    expect(contentBoundary!.className).toContain('min-w-0');
-    expect(contentBoundary!.className).toContain('flex-1');
+    if (!contentBoundary) throw new Error('Expected content boundary');
+    expect(contentBoundary.className).toContain('min-w-0');
+    expect(contentBoundary.className).toContain('flex-1');
   });
 });

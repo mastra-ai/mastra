@@ -53,11 +53,14 @@ describe('FlameGraph', () => {
     fireEvent.mouseUp(window);
 
     expect(onZoomRangeChange).toHaveBeenCalled();
-    const lastCall = onZoomRangeChange.mock.calls.at(-1)![0] as { left: number; right: number };
+    const lastCall = onZoomRangeChange.mock.calls.at(-1);
+    expect(lastCall).toBeDefined();
+    if (!lastCall) throw new Error('Expected zoom range change call');
+    const [lastRange] = lastCall as [{ left: number; right: number }];
     // Dragging the left handle to the middle of the track moves left toward the
     // midpoint of the domain, so it is now greater than the domain minimum.
-    expect(lastCall.left).toBeGreaterThan(tDomain.tMin);
-    expect(lastCall.right).toBe(tDomain.tMax);
+    expect(lastRange.left).toBeGreaterThan(tDomain.tMin);
+    expect(lastRange.right).toBe(tDomain.tMax);
   });
 
   it('fires onZoomRangeChange with the full domain when Reset zoom is clicked', () => {

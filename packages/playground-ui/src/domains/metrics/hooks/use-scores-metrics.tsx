@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
+import { getOrCreateMapValue } from '@/lib/map';
 
 export interface ScorerSummary {
   scorer: string;
@@ -92,14 +93,8 @@ export function useScoresMetrics() {
               minute: '2-digit',
               hour12: false,
             });
-            if (!hourBuckets.has(hourKey)) {
-              hourBuckets.set(hourKey, new Map());
-            }
-            const scorerMap = hourBuckets.get(hourKey)!;
-            if (!scorerMap.has(scorerId)) {
-              scorerMap.set(scorerId, { sum: 0, count: 0 });
-            }
-            const acc = scorerMap.get(scorerId)!;
+            const scorerMap = getOrCreateMapValue(hourBuckets, hourKey, () => new Map());
+            const acc = getOrCreateMapValue(scorerMap, scorerId, () => ({ sum: 0, count: 0 }));
             acc.sum += point.value;
             acc.count += 1;
           }

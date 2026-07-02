@@ -2,6 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { formatCompact } from '../components/metrics-utils';
 import { useMetricsFilters } from './use-metrics-filters';
+import { getOrCreateMapValue } from '@/lib/map';
 
 export interface ModelUsageRow {
   model: string;
@@ -51,10 +52,14 @@ export function useModelUsageCostMetrics() {
       const modelMap = new Map<string, ModelEntry>();
 
       const ensureModel = (model: string): ModelEntry => {
-        if (!modelMap.has(model)) {
-          modelMap.set(model, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: null, costUnit: null });
-        }
-        return modelMap.get(model)!;
+        return getOrCreateMapValue(modelMap, model, () => ({
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          cost: null,
+          costUnit: null,
+        }));
       };
 
       // total_input/total_output estimatedCost already rolls up cache + other detail

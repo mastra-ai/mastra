@@ -8,8 +8,19 @@ afterEach(() => {
   cleanup();
 });
 
-const getWrapper = () => document.querySelector<HTMLDivElement>('[data-slot="input-group"]')!;
-const getInput = () => document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]')!;
+const getWrapper = () => {
+  const wrapper = document.querySelector<HTMLDivElement>('[data-slot="input-group"]');
+  expect(wrapper).not.toBeNull();
+  if (!wrapper) throw new Error('Expected input group wrapper');
+  return wrapper;
+};
+
+const getInput = () => {
+  const input = document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]');
+  expect(input).not.toBeNull();
+  if (!input) throw new Error('Expected input group control');
+  return input;
+};
 
 const inputGroupVariants = ['default', 'filled', 'outline'] as const;
 

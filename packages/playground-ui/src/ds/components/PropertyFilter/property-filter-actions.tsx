@@ -26,13 +26,13 @@ export function PropertyFilterActions({
   onRemoveSaved,
 }: PropertyFilterActionsProps) {
   const hasMenuItems = !!(onRemoveAll || onSave || onRemoveSaved);
-  const showClear = !!onClear;
+  const showClear = onClear != null;
   if (!showClear && !hasMenuItems) return null;
 
   return (
     <div className="flex items-center gap-2">
-      {showClear && (
-        <Button disabled={disabled} size="md" onClick={() => onClear!()}>
+      {onClear && (
+        <Button disabled={disabled} size="md" onClick={onClear}>
           <XIcon />
           Clear
         </Button>

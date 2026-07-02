@@ -1,5 +1,5 @@
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 
 export const memoryThreadMessagesQueryKey = (threadId: string, page?: number) =>
   ['memory', 'thread', threadId, 'messages', page ?? 0] as const;
@@ -10,8 +10,7 @@ export function useMemoryThreadMessages(threadId: string | undefined, opts?: { p
   const perPage = opts?.perPage ?? 100;
 
   return useQuery({
-    queryKey: memoryThreadMessagesQueryKey(threadId!, page),
-    queryFn: () => client.getMemoryThread({ threadId: threadId! }).listMessages({ page, perPage }),
-    enabled: !!threadId,
+    queryKey: memoryThreadMessagesQueryKey(threadId ?? '', page),
+    queryFn: threadId ? () => client.getMemoryThread({ threadId }).listMessages({ page, perPage }) : skipToken,
   });
 }

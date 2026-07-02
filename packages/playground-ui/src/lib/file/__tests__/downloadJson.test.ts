@@ -27,7 +27,10 @@ describe('downloadJson', () => {
     downloadJson('trace-abc.json', data);
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
-    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const firstCall = createObjectURL.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) throw new Error('Expected createObjectURL call');
+    const [blob] = firstCall as [Blob];
     expect(blob.type).toBe('application/json');
     await expect(readBlobText(blob)).resolves.toBe(JSON.stringify(data, null, 2));
 

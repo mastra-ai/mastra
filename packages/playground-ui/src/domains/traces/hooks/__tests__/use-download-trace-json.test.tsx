@@ -98,7 +98,10 @@ describe('useDownloadTraceJson', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
-    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const firstCall = createObjectURL.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) throw new Error('Expected createObjectURL call');
+    const [blob] = firstCall as [Blob];
     await expect(readBlobText(blob)).resolves.toBe(JSON.stringify(traceFixture, null, 2));
     expect(clickedDownloadAttr).toBe(`trace-${TRACE_ID}.json`);
   });
