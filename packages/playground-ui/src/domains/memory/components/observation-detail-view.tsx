@@ -92,6 +92,9 @@ function parseItem(line: string): ParsedItem | null {
     const text = trimmed.replace(/^-\s*/, '').trim();
     return text ? { text, time: null, priority: null, children: [] } : null;
   }
+  // Extracts a root observation line of the form `* 🔴 (11:55) some text`,
+  // where the priority emoji and `(HH:MM)` timestamp are both optional:
+  // → { priority: high, time: '11:55', text: 'some text' }.
   // Parsed incrementally instead of with a single regex: adjacent `\s*` runs
   // around optional groups backtrack polynomially on adversarial input
   // (CodeQL js/polynomial-redos).
@@ -119,8 +122,10 @@ function parseItem(line: string): ParsedItem | null {
 }
 
 function parseObservations(raw: string): ParsedSection[] {
-  // indexOf instead of a lazy regex to avoid polynomial backtracking on
-  // adversarial input (CodeQL js/polynomial-redos).
+  // Extracts the text between `<observations>` and `</observations>` (falls
+  // back to the whole string when the tags are absent). indexOf instead of a
+  // lazy regex to avoid polynomial backtracking on adversarial input
+  // (CodeQL js/polynomial-redos).
   const openTag = '<observations>';
   const openIdx = raw.indexOf(openTag);
   const closeIdx = openIdx === -1 ? -1 : raw.indexOf('</observations>', openIdx + openTag.length);
@@ -133,6 +138,9 @@ function parseObservations(raw: string): ParsedSection[] {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+    // Extracts a section header of the form `Date: Jul 2, 2026 (today)`,
+    // where the parenthesized relative time is optional:
+    // → { title: 'Jul 2, 2026', relativeTime: 'today' }.
     // Parsed with string ops instead of a lazy regex with an optional trailing
     // group, which backtracks polynomially (CodeQL js/polynomial-redos).
     if (trimmed.startsWith('Date:')) {

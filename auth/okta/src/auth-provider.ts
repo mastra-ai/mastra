@@ -24,6 +24,16 @@ type HonoRequestLike = {
 
 type MastraAuthRequest = Request | HonoRequestLike;
 
+/**
+ * Trim trailing slashes. Index scan instead of regex to avoid backtracking
+ * (CodeQL js/polynomial-redos).
+ */
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
+}
+
 function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
   if (request instanceof Request) {
     return request.headers.get(name);
@@ -182,11 +192,7 @@ export class MastraAuthOkta
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     // Normalize trailing slashes so a stray `OKTA_ISSUER=https://domain/` doesn't produce `.../oauth2//v1/...`
-    // (index scan instead of regex to avoid backtracking — CodeQL js/polynomial-redos)
-    const rawIssuer = issuer ?? `https://${domain}/oauth2/default`;
-    let issuerEnd = rawIssuer.length;
-    while (issuerEnd > 0 && rawIssuer[issuerEnd - 1] === '/') issuerEnd--;
-    this.issuer = rawIssuer.slice(0, issuerEnd);
+    this.issuer = trimTrailingSlashes(issuer ?? `https://${domain}/oauth2/default`);
     // Org authorization servers use issuer `https://{domain}` but serve endpoints under `/oauth2/v1/*`.
     // Custom authorization servers use issuer `https://{domain}/oauth2/<name>` and serve endpoints under `<issuer>/v1/*`.
     // `issuer` is still used verbatim for JWT `iss`-claim validation on both server types.

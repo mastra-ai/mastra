@@ -1,12 +1,18 @@
+/**
+ * Trim leading and trailing slashes. Index scan instead of regex to avoid
+ * backtracking (CodeQL js/polynomial-redos).
+ */
+function trimSlashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === '/') start++;
+  while (end > start && value[end - 1] === '/') end--;
+  return value.slice(start, end);
+}
+
 export function welcomeHtml(apiPrefix: string = '/api') {
   // Normalize: ensure single leading slash, no trailing slash.
-  // Index scans instead of regex to avoid backtracking on adversarial
-  // inputs (CodeQL js/polynomial-redos).
-  let start = 0;
-  let end = apiPrefix.length;
-  while (start < end && apiPrefix[start] === '/') start++;
-  while (end > start && apiPrefix[end - 1] === '/') end--;
-  const prefix = '/' + apiPrefix.slice(start, end);
+  const prefix = '/' + trimSlashes(apiPrefix);
   const prefixNoSlash = prefix.slice(1);
   return `
 <!doctype html>
