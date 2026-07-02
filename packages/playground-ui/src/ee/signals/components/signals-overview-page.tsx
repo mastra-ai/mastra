@@ -5,13 +5,23 @@ import { Button } from '../../../ds/components/Button';
 import { EmptyState } from '../../../ds/components/EmptyState';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Spinner } from '../../../ds/components/Spinner';
-import { stringToColor } from '../../../lib/colors';
 import { TopicsLayout } from '../../topics';
 import { useEntities, useEntityTopics } from '../hooks';
 import type { EntityLearningEntitySummary, EntityLearningTopic } from '../services';
 import { getSignalCatalogEntry } from '../signals-data';
 import type { SelectedEntity, SignalCatalogEntry } from '../types';
 import { SignalsEntityFilter } from './signals-entity-filter';
+
+function clusterColorFromTopicId(topicId: string) {
+  let hash = 0;
+  for (let i = 0; i < topicId.length; i++) {
+    hash = topicId.charCodeAt(i) + ((hash << 5) - hash);
+    hash = hash & hash;
+  }
+  // Multiply by the golden-angle so close ids (e.g. "1","2","3") map to well-separated hues.
+  const hue = Math.abs(hash * 137.508) % 360;
+  return `hsl(${hue}, 70%, 55%)`;
+}
 
 interface SignalClusterCardProps {
   topic: EntityLearningTopic;
@@ -21,7 +31,7 @@ interface SignalClusterCardProps {
 export function SignalClusterCard({ topic, onSelect }: SignalClusterCardProps) {
   const coveragePct = Math.round(topic.coverage * 100);
   const itemLabel = topic.itemCount === 1 ? 'item' : 'items';
-  const clusterColor = stringToColor(topic.name);
+  const clusterColor = clusterColorFromTopicId(topic.topicId);
   const clusterStyle = { '--cluster-color': clusterColor } as CSSProperties;
 
   return (
