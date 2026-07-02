@@ -1,13 +1,13 @@
 # Claw — Autonomous Personal Assistant
 
-An autonomous assistant that operates a computer to finish multi-step tasks — read/write files, run shell commands in a sandboxed workspace, browse the web with Playwright (`@mastra/agent-browser`), search the web through the Mastra Gateway, and follow reusable skills checked into `workspace/skills/`.
+An autonomous assistant that operates a computer to finish multi-step tasks — read/write files, run shell commands in a sandboxed workspace, browse the web with Playwright (`@mastra/agent-browser`), search the web through the Gateway, and follow reusable skills checked into `workspace/skills/`.
 
 Claw has resource-scoped observational memory, so it remembers your preferences and context across threads.
 
 ## Prerequisites
 
 - Node.js `>= 22.13.0`
-- A Mastra Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
+- A Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
 - (Optional) A Turso database; for local dev, the default `file:./mastra.db` works.
 - Playwright's Chromium browser for local runs, or `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance in server deployments.
 
@@ -59,7 +59,7 @@ The agent will pick up new skills on the next request.
 
 | Variable                 | Purpose                                                               |
 | ------------------------ | --------------------------------------------------------------------- |
-| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and web search through the Mastra Gateway.      |
+| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and web search through the Gateway.      |
 | `TURSO_DATABASE_URL`     | libSQL/Turso URL. Defaults to `file:./mastra.db`.                     |
 | `TURSO_AUTH_TOKEN`       | Turso auth token (omit for local file DB).                            |
 | `CLAW_WORKSPACE_DIR`     | Override the workspace root directory.                                |

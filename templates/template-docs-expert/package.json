@@ -1,7 +1,7 @@
 {
   "name": "template-docs-expert",
   "version": "1.0.0",
-  "description": "A research assistant that answers questions with web-sourced citations using a Mastra web search tool routed through the Mastra Gateway. Stores observability and observational memory in Turso (libSQL).",
+  "description": "A research assistant that answers questions with web-sourced citations using a Mastra web search tool routed through the Gateway. Stores observability and observational memory in Turso (libSQL).",
   "main": "index.js",
   "scripts": {
     "dev": "mastra dev",
