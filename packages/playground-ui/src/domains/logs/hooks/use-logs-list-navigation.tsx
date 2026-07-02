@@ -57,10 +57,10 @@ export function useLogsListNavigation(
 
   const idToLog = useMemo(() => {
     const m = new Map<string, { log: LogRecord; idx: number }>();
-    logs.forEach((log, i) => {
+    for (const [i, log] of logs.entries()) {
       const id = logIdMap.get(log);
       if (id) m.set(id, { log, idx: i });
-    });
+    }
     return m;
   }, [logs, logIdMap]);
 
