@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
 import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
+import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
@@ -141,6 +142,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           params.workflowStatus === 'suspended'
         );
       },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
@@ -312,6 +316,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             params.workflowStatus === 'suspended'
           );
         },
+        // Agent-loop snapshots are pure resume artifacts — strip everything a
+        // resume never reads before persisting.
+        pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
