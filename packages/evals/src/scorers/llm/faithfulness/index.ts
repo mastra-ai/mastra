@@ -78,7 +78,7 @@ export function createFaithfulnessScorer({
         return 0;
       }
 
-      const score = (supportedClaims / totalClaims) * (options?.scale || 1);
+      const score = (supportedClaims / totalClaims) * (options?.scale ?? 1);
 
       return roundToTwoDecimals(score);
     })
@@ -90,7 +90,7 @@ export function createFaithfulnessScorer({
           output: getAssistantMessageFromRunOutput(run.output) ?? '',
           context: options?.context ?? getToolInvocationContext(run.output),
           score,
-          scale: options?.scale || 1,
+          scale: options?.scale ?? 1,
           verdicts: results.analyzeStepResult?.verdicts || [],
         });
         return prompt;

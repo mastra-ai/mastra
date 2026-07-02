@@ -282,5 +282,25 @@ describe(
 
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
     });
+
+    it('should preserve scale 0 when generating scores', () => {
+      const zeroScaleScorer = createFaithfulnessScorer({ model, options: { context: ['Supported fact'], scale: 0 } });
+      const generateScoreStep = zeroScaleScorer['steps'].find(step => step.name === 'generateScore');
+
+      const score = generateScoreStep?.definition?.({
+        results: {
+          analyzeStepResult: {
+            verdicts: [
+              {
+                verdict: 'yes',
+                reason: 'Supported by context',
+              },
+            ],
+          },
+        },
+      } as any);
+
+      expect(score).toBe(0);
+    });
   },
 );
