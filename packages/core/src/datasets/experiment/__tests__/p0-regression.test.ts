@@ -293,6 +293,34 @@ describe('P0 Regression', () => {
       }
     });
 
+    it('includes persistenceFailures on the abort-path partial summary', async () => {
+      await setupDataset(10);
+      const agent = createMockAgent({ delayMs: 200 });
+      setupMastra(agent);
+
+      // Fail every persist so any completed item will increment the counter,
+      // then abort mid-run so we exit via the catch/return-partial branch.
+      experimentsStorage.addExperimentResult = vi.fn().mockRejectedValue(new Error('DB down'));
+
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 300);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        maxConcurrency: 2,
+        signal: controller.signal,
+      });
+
+      // Aborted, so we hit the partial-summary return path.
+      expect(result.status).toBe('failed');
+      // Whatever landed as an item before the abort should also be counted as
+      // a persistence failure — the field must exist on the abort path too.
+      expect(result.persistenceFailures).toBe(result.results.length);
+      expect(result.persistenceFailures).toBeGreaterThan(0);
+    });
+
     it('surfaces a partial persistence failure without affecting persisted rows', async () => {
       await setupDataset(3);
       const agent = createMockAgent({ response: 'success' });
