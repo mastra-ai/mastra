@@ -81,6 +81,7 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "render-smoke:install": "node scripts/install-render-smoke-settings.mjs",
     "render-smoke:server": "node scripts/render-smoke-server.mjs",
+    "render-smoke:uninstall": "node scripts/uninstall-render-smoke-settings.mjs",
     "test": "vitest",
     "lint": "eslint .",
     "e2e:list": "tsx e2e-list.ts",

@@ -17,6 +17,18 @@ The installer is idempotent and nondestructive:
 - preserves the current active model pack and mode defaults
 - writes a timestamped backup before changing an existing settings file
 
+Uninstall the provider and model pack from global Mastra Code settings:
+
+```sh
+pnpm --filter mastracode render-smoke:uninstall
+```
+
+The uninstaller refuses to remove Render Smoke while it is selected in `models.activeModelPackId` or `models.modeDefaults`. Switch to another model pack first, or force removal and clear those references:
+
+```sh
+RENDER_SMOKE_UNINSTALL_FORCE=1 pnpm --filter mastracode render-smoke:uninstall
+```
+
 Start the mock server:
 
 ```sh
