@@ -18,6 +18,7 @@ vi.mock('posthog-node', () => ({
   }),
 }));
 
+import { PostHog } from 'posthog-node';
 import { PosthogAnalytics } from '../index.js';
 
 afterEach(() => {
@@ -85,6 +86,34 @@ describe('PosthogAnalytics distinct ids', () => {
       expect(config.distinctId).toBe(distinctId);
       expect(config.sessionId).toMatch(/^[0-9a-f-]{36}$/);
       expect((analytics as unknown as { sessionId: string }).sessionId).toBe(config.sessionId);
+    });
+  });
+});
+
+describe('PosthogAnalytics command tracking', () => {
+  it('includes zero duration command events', () => {
+    withTempAnalyticsConfig(() => {
+      const analytics = new PosthogAnalytics({
+        version: 'test-version',
+        apiKey: 'test-key',
+        host: 'https://posthog.test',
+      });
+      const client = vi.mocked(PostHog).mock.results.at(-1)?.value as { capture: ReturnType<typeof vi.fn> };
+
+      analytics.trackCommand({
+        command: 'test-command',
+        durationMs: 0,
+      });
+
+      expect(client.capture).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          event: 'cli_command',
+          properties: expect.objectContaining({
+            command: 'test-command',
+            durationMs: 0,
+          }),
+        }),
+      );
     });
   });
 });

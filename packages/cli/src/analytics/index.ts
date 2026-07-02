@@ -206,7 +206,7 @@ export class PosthogAnalytics {
         commandData.args = options.args;
       }
 
-      if (options.durationMs) {
+      if (options.durationMs !== undefined) {
         commandData.durationMs = options.durationMs;
       }
 
