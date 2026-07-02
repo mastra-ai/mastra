@@ -150,6 +150,20 @@ export interface ItemResult {
   completedAt: Date;
   /** Number of retry attempts */
   retryCount: number;
+  /**
+   * Structured error if persisting this result to storage failed.
+   * Present and non-null means the target run outcome (success or failure)
+   * is reflected on this in-memory item but the row was never written to
+   * `mastra_experiment_results`. Callers can use this to detect silent data
+   * loss and decide whether to retry or alert. Absent or null on the happy
+   * path; optional so external mocks / wrappers don't need to hand-construct it.
+   *
+   * Only the error `message` is exposed here — the raw stack is logged
+   * internally via the Mastra logger and intentionally omitted from the
+   * returned object to avoid leaking internal file paths across trust
+   * boundaries.
+   */
+  persistenceError?: { message: string } | null;
   /** Diagnostic receipt for item-level tool mocks (agent targets only) */
   toolMockReport?: ToolMockReport;
 }
@@ -209,6 +223,16 @@ export interface ExperimentSummary {
   failedCount: number;
   /** Number of items skipped (e.g. due to abort) */
   skippedCount: number;
+  /**
+   * Number of item results whose target run completed but which failed to
+   * persist to `mastra_experiment_results`. These items are still counted in
+   * `succeededCount` / `failedCount` because those reflect target-run
+   * outcomes, but their rows are missing from storage. Non-zero means the
+   * DB is out of sync with the returned summary — inspect each item's
+   * `persistenceError` to see which ones dropped. Optional so external
+   * mocks / wrappers don't need to hand-construct it; the runner always sets it.
+   */
+  persistenceFailures?: number;
   /** True if run completed but some items failed */
   completedWithErrors: boolean;
   /** When the experiment started */
