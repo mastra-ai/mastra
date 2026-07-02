@@ -155,6 +155,52 @@ describe('DatasetsManager', () => {
     expect(result.datasets.length).toBe(0);
   });
 
+  // 9a. list — filters by targetType
+  it('list filters by targetType', async () => {
+    await mgr.create({ name: 'agent-ds', targetType: 'agent' });
+    await mgr.create({ name: 'workflow-ds', targetType: 'workflow' });
+    await mgr.create({ name: 'untyped-ds' });
+
+    const result = await mgr.list({ filters: { targetType: 'agent' } });
+    expect(result.datasets.map(d => d.name).sort()).toEqual(['agent-ds']);
+  });
+
+  // 9b. list — filters by targetIds (overlap)
+  it('list filters by targetIds with overlap semantics', async () => {
+    await mgr.create({ name: 'ds-a', targetType: 'agent', targetIds: ['a1', 'a2'] });
+    await mgr.create({ name: 'ds-b', targetType: 'agent', targetIds: ['a2', 'a3'] });
+    await mgr.create({ name: 'ds-c', targetType: 'agent', targetIds: ['a4'] });
+
+    const matchA2 = await mgr.list({ filters: { targetIds: ['a2'] } });
+    expect(matchA2.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-b']);
+
+    const matchA1OrA4 = await mgr.list({ filters: { targetIds: ['a1', 'a4'] } });
+    expect(matchA1OrA4.datasets.map(d => d.name).sort()).toEqual(['ds-a', 'ds-c']);
+  });
+
+  // 9c. list — filters by name (case-insensitive substring)
+  it('list filters by name substring case-insensitively', async () => {
+    await mgr.create({ name: 'Production Tickets' });
+    await mgr.create({ name: 'production-logs' });
+    await mgr.create({ name: 'staging-tickets' });
+
+    const result = await mgr.list({ filters: { name: 'PROD' } });
+    expect(result.datasets.map(d => d.name).sort()).toEqual(['Production Tickets', 'production-logs']);
+  });
+
+  // 9d. list — combines all three filters
+  it('list combines targetType, targetIds, and name filters', async () => {
+    await mgr.create({ name: 'agent-prod-alpha', targetType: 'agent', targetIds: ['a1'] });
+    await mgr.create({ name: 'agent-prod-beta', targetType: 'agent', targetIds: ['a2'] });
+    await mgr.create({ name: 'workflow-prod-alpha', targetType: 'workflow', targetIds: ['a1'] });
+    await mgr.create({ name: 'agent-staging-alpha', targetType: 'agent', targetIds: ['a1'] });
+
+    const result = await mgr.list({
+      filters: { targetType: 'agent', targetIds: ['a1'], name: 'prod' },
+    });
+    expect(result.datasets.map(d => d.name)).toEqual(['agent-prod-alpha']);
+  });
+
   // 10. delete — delegates
   it('delete removes dataset so get throws', async () => {
     const created = await mgr.create({ name: 'ToDelete' });

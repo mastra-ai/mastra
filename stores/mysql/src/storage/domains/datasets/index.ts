@@ -32,6 +32,7 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  TargetType,
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
@@ -45,11 +46,14 @@ function parseJSON<T>(value: unknown): T | undefined {
     try {
       return JSON.parse(value) as T;
     } catch {
-      return undefined;
+      // mysql2 auto-parses JSON columns, so a non-JSON string here means the
+      // stored payload was a JSON string scalar (e.g. input: 'foo' was stored
+      // as `"foo"` and the driver already unwrapped it). Return it as-is.
+      return value as unknown as T;
     }
   }
   if (typeof value === 'object') return value as T;
-  return undefined;
+  return value as T;
 }
 
 function jsonArg(value: unknown): string | null {
@@ -157,7 +161,17 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.operations.alterTable({
       tableName: TABLE_DATASETS,
       schema: DATASETS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId', 'candidateKey', 'candidateId'],
+      ifNotExists: [
+        'organizationId',
+        'projectId',
+        'candidateKey',
+        'candidateId',
+        'requestContextSchema',
+        'tags',
+        'targetType',
+        'targetIds',
+        'scorerIds',
+      ],
     });
     await this.operations.alterTable({
       tableName: TABLE_DATASET_ITEMS as any,
@@ -184,6 +198,11 @@ export class DatasetsMySQL extends DatasetsStorage {
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
       inputSchema: parseJSON<Record<string, unknown>>(row.inputSchema),
       groundTruthSchema: parseJSON<Record<string, unknown>>(row.groundTruthSchema),
+      requestContextSchema: parseJSON<Record<string, unknown>>(row.requestContextSchema),
+      tags: parseJSON<string[]>(row.tags) ?? null,
+      targetType: (row.targetType as TargetType | null | undefined) ?? null,
+      targetIds: parseJSON<string[]>(row.targetIds) ?? null,
+      scorerIds: parseJSON<string[]>(row.scorerIds) ?? null,
       version: row.version as number,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
@@ -251,6 +270,10 @@ export class DatasetsMySQL extends DatasetsStorage {
           metadata: jsonArg(input.metadata),
           inputSchema: jsonArg(input.inputSchema),
           groundTruthSchema: jsonArg(input.groundTruthSchema),
+          requestContextSchema: jsonArg(input.requestContextSchema),
+          targetType: input.targetType ?? null,
+          targetIds: jsonArg(input.targetIds),
+          scorerIds: jsonArg(input.scorerIds),
           version: 0,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
@@ -268,6 +291,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         metadata: input.metadata,
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
+        requestContextSchema: input.requestContextSchema ?? undefined,
+        targetType: input.targetType ?? null,
+        targetIds: input.targetIds ?? null,
+        scorerIds: input.scorerIds ?? null,
         version: 0,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
@@ -328,6 +355,15 @@ export class DatasetsMySQL extends DatasetsStorage {
         data.inputSchema = args.inputSchema === null ? null : JSON.stringify(args.inputSchema);
       if (args.groundTruthSchema !== undefined)
         data.groundTruthSchema = args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema);
+      if (args.requestContextSchema !== undefined)
+        data.requestContextSchema =
+          args.requestContextSchema === null ? null : JSON.stringify(args.requestContextSchema);
+      if (args.tags !== undefined) data.tags = args.tags === null ? null : JSON.stringify(args.tags);
+      if (args.targetType !== undefined) data.targetType = args.targetType;
+      if (args.targetIds !== undefined)
+        data.targetIds = args.targetIds === null ? null : JSON.stringify(args.targetIds);
+      if (args.scorerIds !== undefined)
+        data.scorerIds = args.scorerIds === null ? null : JSON.stringify(args.scorerIds);
 
       await this.operations.update({
         tableName: TABLE_DATASETS,
@@ -343,6 +379,13 @@ export class DatasetsMySQL extends DatasetsStorage {
         inputSchema: (args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema) ?? undefined,
         groundTruthSchema:
           (args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema) ?? undefined,
+        requestContextSchema:
+          (args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema) ??
+          undefined,
+        tags: (args.tags !== undefined ? args.tags : existing.tags) ?? null,
+        targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
+        targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
+        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
         updatedAt: data.updatedAt,
       };
     } catch (error) {
@@ -427,6 +470,20 @@ export class DatasetsMySQL extends DatasetsStorage {
       if (args.filters?.candidateId !== undefined) {
         filterParts.push(`${quoteIdentifier('candidateId', 'column name')} = ?`);
         filterArgs.push(args.filters.candidateId);
+      }
+      if (args.filters?.targetType !== undefined) {
+        filterParts.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        filterArgs.push(args.filters.targetType);
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // JSON_OVERLAPS returns true if any value in JSON_ARRAY(?,?,...) is present in `targetIds`.
+        const placeholders = args.filters.targetIds.map(() => '?').join(',');
+        filterParts.push(`JSON_OVERLAPS(${quoteIdentifier('targetIds', 'column name')}, JSON_ARRAY(${placeholders}))`);
+        filterArgs.push(...args.filters.targetIds);
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        filterParts.push(`LOWER(${quoteIdentifier('name', 'column name')}) LIKE LOWER(?)`);
+        filterArgs.push(`%${args.filters.name}%`);
       }
       const whereClause = {
         sql: filterParts.length > 0 ? `WHERE ${filterParts.join(' AND ')}` : '',

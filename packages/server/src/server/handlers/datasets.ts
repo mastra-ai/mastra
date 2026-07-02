@@ -331,7 +331,8 @@ export const LIST_ITEMS_ROUTE = createRoute({
         version,
         search,
       });
-      // When version is specified, result is DatasetItem[] (flat). Otherwise paginated.
+      // Handler always passes `page` and `perPage`, so `listItems` always
+      // returns the paginated shape; the guard is defensive.
       if (Array.isArray(result)) {
         return { items: result, pagination: { total: result.length, page: 0, perPage: result.length, hasMore: false } };
       }

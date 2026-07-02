@@ -275,8 +275,8 @@ export class DatasetsPG extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
           candidateKey: input.candidateKey ?? null,
@@ -497,7 +497,7 @@ export class DatasetsPG extends DatasetsStorage {
       let paramIndex = 1;
 
       if (args.filters) {
-        const { organizationId, projectId, candidateKey, candidateId } = args.filters;
+        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
         if (organizationId !== undefined) {
           conditions.push(`"organizationId" = $${paramIndex++}`);
           queryParams.push(organizationId);
@@ -513,6 +513,19 @@ export class DatasetsPG extends DatasetsStorage {
         if (candidateId !== undefined) {
           conditions.push(`"candidateId" = $${paramIndex++}`);
           queryParams.push(candidateId);
+        }
+        if (targetType !== undefined) {
+          conditions.push(`"targetType" = $${paramIndex++}`);
+          queryParams.push(targetType);
+        }
+        if (targetIds !== undefined && targetIds.length > 0) {
+          // jsonb ?| text[] — true if any of the strings exists as a top-level element.
+          conditions.push(`"targetIds" ?| $${paramIndex++}::text[]`);
+          queryParams.push(targetIds);
+        }
+        if (name !== undefined && name.length > 0) {
+          conditions.push(`"name" ILIKE $${paramIndex++}`);
+          queryParams.push(`%${name}%`);
         }
       }
 
