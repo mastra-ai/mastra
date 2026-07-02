@@ -7,12 +7,34 @@ packages:
 
 # Mastra.getAgentById()
 
-The `.getAgentById()` method is used to retrieve an agent by its ID. The method accepts a single `string` parameter for the agent's ID.
+The `.getAgentById()` method retrieves a registered agent by its `id`. It first searches registered agents by `agent.id`. If no agent matches, it falls back to [`Mastra.getAgent()`](/reference/core/getAgent) and treats the provided value as the agent registry key.
+
+Use `mastra.getAgentById(id)` to retrieve the code-defined agent. Use `await mastra.getAgentById(id, version)` to retrieve a versioned agent.
 
 ## Usage example
 
-```typescript
-mastra.getAgentById('test-agent-123')
+The following example registers an agent, retrieves it by ID, and uses the returned agent.
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core/mastra'
+
+const supportAgent = new Agent({
+  id: 'support-agent-id',
+  name: 'Support Agent',
+  instructions: 'Answer support questions clearly and concisely.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+export const mastra = new Mastra({
+  agents: {
+    supportAgent,
+  },
+})
+
+const agent = mastra.getAgentById('support-agent-id')
+
+const response = await agent.generate('How can I reset my password?')
 ```
 
 ## Parameters
@@ -21,9 +43,34 @@ mastra.getAgentById('test-agent-123')
   content={[
   {
     name: 'id',
-    type: 'string',
+    type: "TAgents[TAgentName]['id']",
     description:
-      'The ID of the agent to retrieve. The method will first search for an agent with this ID, and if not found, will attempt to use it as a name to call getAgent().',
+      'The ID of the agent to retrieve. Mastra first searches registered agents by `agent.id`. If none match, it uses this value as the agent registry key and calls `getAgent()`.',
+  },
+  {
+    name: 'version',
+    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+    description:
+      'Optional version selector for retrieving a versioned agent. When provided, the method returns a promise.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'VersionSelector',
+        parameters: [
+          {
+            name: 'versionId',
+            type: 'string',
+            description: 'The ID of a specific agent version to retrieve.',
+          },
+          {
+            name: 'status',
+            type: "'draft' | 'published'",
+            description: 'Select the latest agent version with this publication status.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -34,12 +81,20 @@ mastra.getAgentById('test-agent-123')
   content={[
   {
     name: 'agent',
-    type: 'Agent',
-    description: 'The agent instance with the specified ID. Throws an error if the agent is not found.',
+    type: 'TAgents[TAgentName]',
+    description: 'The agent instance with the specified ID when `version` is omitted.',
+  },
+  {
+    name: 'agent',
+    type: 'Promise<TAgents[TAgentName]>',
+    description: 'A promise that resolves to the versioned agent instance when `version` is provided.',
   },
 ]}
 />
 
+Throws a `MastraError` when no agent is found by ID or registry key.
+
 ## Related
 
+- [Mastra.getAgent()](/reference/core/getAgent)
 - [Agents overview](/docs/agents/overview)
