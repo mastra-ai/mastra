@@ -10,8 +10,9 @@ import { RoutePermissionGuard } from './domains/auth/components/route-permission
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
-import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
-import { SignalCrumb } from './ee/signals/signal-crumb';
+import { SignalCrumb, SignalDetailsCrumb, SignalsRootCrumb } from './ee/signals/signal-crumb';
+import { SignalDetailsPage, SignalTraceIdPage } from './ee/signals/signal-details-page';
+import SignalsOverviewPage from './ee/signals/signals-overview-page';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -104,7 +105,7 @@ import { TraceCrumb } from '@/domains/traces/trace-crumb';
 import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
-import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
+import { findNavItem, navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
@@ -130,21 +131,23 @@ declare global {
     MASTRA_EXPERIMENTAL_UI?: string;
     MASTRA_AGENT_SIGNALS?: string;
     MASTRA_SIGNALS_UI?: string;
+    MASTRA_ORGANIZATION_ID?: string;
+    MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
   }
 }
 
 const agentThreadPath = (agentId: string, threadId: string, messageId?: string) => {
-  const base = `/agents/${encodeURIComponent(agentId)}/threads/${encodeURIComponent(threadId)}`;
+  const base = `/agents/${encodeURIComponent(agentId)}/chat/${encodeURIComponent(threadId)}`;
   return messageId ? `${base}?messageId=${encodeURIComponent(messageId)}` : base;
 };
 
 const agentVersionThreadPath = (agentId: string, versionId: string, threadId: string, messageId?: string) => {
-  const base = `/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/threads/${encodeURIComponent(threadId)}`;
+  const base = `/agents/${encodeURIComponent(agentId)}/versions/${encodeURIComponent(versionId)}/chat/${encodeURIComponent(threadId)}`;
   return messageId ? `${base}?messageId=${encodeURIComponent(messageId)}` : base;
 };
 
 const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${encodeURIComponent(agentId)}/threads/new`,
+  agentLink: (agentId: string) => `/agents/${encodeURIComponent(agentId)}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceId
@@ -224,9 +227,6 @@ const MinimalRootLayout = () => {
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
-
-// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
-const isSignalsEnabled = window.MASTRA_SIGNALS_UI === 'true';
 
 const agentCmsChildRoutes = [
   { index: true, element: <CmsAgentInformationPage /> },
@@ -389,42 +389,43 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      ...(isSignalsEnabled
-        ? [
+      {
+        path: '/signals',
+        handle: {
+          ...navHandle('/signals'),
+          crumbs: [
             {
-              path: '/signals',
-              handle: {
-                ...navHandle('/signals'),
-                crumbs: [navCrumb('/signals')],
-              },
-              children: [
-                { index: true, element: <SignalsOverviewPage /> },
+              id: 'nav:/signals',
+              Component: SignalsRootCrumb,
+              heading: 'Signals',
+              icon: findNavItem('/signals')?.Icon,
+            },
+          ],
+        },
+        children: [
+          { index: true, element: <SignalsOverviewPage /> },
+          {
+            path: ':signalId',
+            element: <SignalDetailsPage />,
+            handle: {
+              crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
+            } satisfies RouteHeaderHandle,
+          },
+          {
+            path: ':signalId/traces/:traceId',
+            element: <SignalTraceIdPage />,
+            handle: {
+              crumbs: [
                 {
-                  path: ':signalId',
-                  element: <SignalDetailsPage />,
-                  handle: {
-                    crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
-                  } satisfies RouteHeaderHandle,
-                },
-                {
-                  path: ':signalId/traces/:traceId',
-                  element: <SignalTraceIdPage />,
-                  handle: {
-                    crumbs: ({ params }) => [
-                      {
-                        id: 'signal',
-                        Component: SignalCrumb,
-                        heading: 'Signal',
-                        to: params.signalId ? `/signals/${encodeURIComponent(params.signalId)}` : '/signals',
-                      },
-                      { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
-                    ],
-                  } satisfies RouteHeaderHandle,
+                  id: 'signal',
+                  Component: SignalDetailsCrumb,
+                  heading: 'Signal',
                 },
               ],
-            },
-          ]
-        : []),
+            } satisfies RouteHeaderHandle,
+          },
+        ],
+      },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',
@@ -481,34 +482,16 @@ export const routes: RouteObject[] = [
         children: [
           {
             index: true,
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
           },
+          { path: 'chat', element: <Agent /> },
+          { path: 'chat/:threadId', element: <Agent /> },
           {
-            path: 'threads',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
-          },
-          { path: 'threads/:threadId', element: <Agent /> },
-          {
-            path: 'chat',
-            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/threads/new`),
-          },
-          {
-            path: 'chat/:threadId',
-            loader: ({ params, request }: LoaderFunctionArgs) =>
-              redirect(
-                agentThreadPath(
-                  params.agentId!,
-                  params.threadId!,
-                  new URL(request.url).searchParams.get('messageId') ?? undefined,
-                ),
-              ),
-          },
-          {
-            path: 'versions/:versionId/threads',
+            path: 'versions/:versionId/chat',
             loader: ({ params }: LoaderFunctionArgs) =>
-              redirect(`/agents/${params.agentId}/versions/${params.versionId}/threads/new`),
+              redirect(`/agents/${params.agentId}/versions/${params.versionId}/chat/new`),
           },
-          { path: 'versions/:versionId/threads/:threadId', element: <Agent /> },
+          { path: 'versions/:versionId/chat/:threadId', element: <Agent /> },
           { path: 'settings', element: <Agent view="settings" /> },
           ...(isExperimentalFeatures
             ? [

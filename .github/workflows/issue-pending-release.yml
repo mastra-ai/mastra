@@ -26,7 +26,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Generate GitHub App token
-        id: app_token
+        id: app-auth
         uses: ./.github/actions/app-auth
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
@@ -51,7 +51,7 @@ jobs:
         working-directory: scripts/release-issue-notification
         env:
           MODE: pending-release
-          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

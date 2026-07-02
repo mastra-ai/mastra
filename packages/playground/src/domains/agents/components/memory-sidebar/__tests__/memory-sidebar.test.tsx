@@ -94,14 +94,18 @@ const paths = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
+  agentVersionThreadLink: (agentId: string, versionId: string, threadId: string) =>
+    `/agents/${agentId}/versions/${versionId}/chat/${threadId}`,
+  agentVersionNewThreadLink: (agentId: string, versionId: string) =>
+    `/agents/${agentId}/versions/${versionId}/chat/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
   scheduleLink: (scheduleId: string) => `/schedules/${scheduleId}`,
   networkLink: (networkId: string) => `/networks/${networkId}`,
-  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/threads/new`,
+  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/chat/new`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
@@ -179,6 +183,10 @@ function TimelineProbe() {
 }
 
 function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
+  if (!hasMemory) {
+    server.use(http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: false })));
+  }
+
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -195,15 +203,7 @@ function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
                   <MemoryTimelineProvider>
                     <SignalProbe />
                     <TimelineProbe />
-                    <MemorySidebar
-                      agentId={AGENT_ID}
-                      threadId={THREAD_ID}
-                      threads={threads}
-                      isLoading={false}
-                      onDelete={vi.fn()}
-                      hasMemory={hasMemory}
-                      memoryType="local"
-                    />
+                    <MemorySidebar agentId={AGENT_ID} threadId={THREAD_ID} threads={threads} onDelete={vi.fn()} />
                   </MemoryTimelineProvider>
                 </ObservationalMemoryProvider>
               </WorkingMemoryProvider>
@@ -278,7 +278,7 @@ describe('MemorySidebar', () => {
       'https://mastra.ai/docs/editor/overview',
     );
     expect(screen.getByRole('link', { name: 'Memory: On' }).getAttribute('href')).toBe(
-      'https://mastra.ai/en/docs/agents/agent-memory',
+      'https://mastra.ai/docs/memory/overview',
     );
   });
 
@@ -294,7 +294,7 @@ describe('MemorySidebar', () => {
 
     // An outline CTA links to the Agent Memory docs.
     const cta = screen.getByRole('link', { name: /documentation/i });
-    expect(cta.getAttribute('href')).toBe('https://mastra.ai/en/docs/agents/agent-memory');
+    expect(cta.getAttribute('href')).toBe('https://mastra.ai/docs/memory/overview');
   });
 
   it('shows the version editor as the full sidebar view without leaving chat', async () => {

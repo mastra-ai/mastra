@@ -354,7 +354,7 @@ export function ExperimentResultsPanel({
   });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
 
-  const agentId = experiment.targetType === 'agent' ? experiment.targetId : '';
+  const agentId = experiment.targetType === 'agent' ? experiment.targetId : undefined;
   const { data: agentVersionsData } = useAgentVersions({ agentId });
   const agentVersions = agentVersionsData?.versions ?? [];
   const { navigate } = useLinkComponent();
@@ -411,9 +411,7 @@ export function ExperimentResultsPanel({
                     type="button"
                     className="underline hover:text-neutral5 transition-colors cursor-pointer"
                     onClick={() =>
-                      navigate(
-                        `/agents/${agentId}/versions/${encodeURIComponent(experiment.agentVersion!)}/threads/new`,
-                      )
+                      navigate(`/agents/${agentId}/versions/${encodeURIComponent(experiment.agentVersion!)}/chat/new`)
                     }
                   >
                     {label}

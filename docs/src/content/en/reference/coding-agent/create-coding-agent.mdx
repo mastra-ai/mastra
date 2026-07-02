@@ -1,0 +1,151 @@
+---
+title: "Reference: createCodingAgent() | Coding Agent"
+description: "API reference for createCodingAgent(), a factory that builds a coding agent with portable defaults for workspace, task signal, error retries, and goal judge."
+packages:
+  - "@mastra/core"
+---
+
+# createCodingAgent()
+
+`createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider, network-retry error processors, and the goal judge prompt. Supply only `model`, `instructions`, and `tools` to get a working agent, or override any default.
+
+The returned value is a standard `Agent`, so it works anywhere an `Agent` does — including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class).
+
+## Usage example
+
+Pass a model, instructions, and tools. The factory fills in the workspace, task signal, error processors, and goal prompt:
+
+```typescript title="src/mastra/coding-agent.ts"
+import { createCodingAgent } from '@mastra/core/coding-agent'
+
+const agent = createCodingAgent({
+  id: 'my-coding-agent',
+  name: 'My Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: 'You are a helpful coding assistant.',
+  tools: {},
+})
+```
+
+## Parameters
+
+`createCodingAgent()` accepts every field of [`AgentConfig`](/reference/agents/agent#constructor-parameters) plus the fields below. Fields you provide always take precedence over the factory defaults.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'MastraLanguageModel | DynamicArgument<MastraLanguageModel>',
+    description: 'The language model the agent uses. Passed straight through to Agent.',
+  },
+  {
+    name: 'instructions',
+    type: 'string | DynamicArgument<string>',
+    description: 'System instructions for the agent. Passed straight through to Agent.',
+  },
+  {
+    name: 'tools',
+    type: 'ToolsInput | DynamicArgument<ToolsInput>',
+    description: 'Tools available to the agent. Passed straight through to Agent.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'AnyWorkspace | undefined',
+    description:
+      'The workspace backing the agent. When the key is omitted, a default local workspace is built. When set explicitly to undefined, the factory builds no default — opt out when the workspace is wired elsewhere (for example at the AgentController level).',
+    isOptional: true,
+  },
+  {
+    name: 'basePath',
+    type: 'string',
+    description: 'Base path for the default workspace built when workspace is omitted.',
+    isOptional: true,
+    defaultValue: 'process.cwd()',
+  },
+  {
+    name: 'signals',
+    type: 'SignalProvider[]',
+    description: 'Signal providers for the agent. When omitted, defaults to a single TaskSignalProvider.',
+    isOptional: true,
+  },
+  {
+    name: 'errorProcessors',
+    type: 'Processor[]',
+    description:
+      'Error processors for the agent. When omitted, defaults to the ECONNRESET/bad-request retry stack plus PrefillErrorHandler and ProviderHistoryCompat.',
+    isOptional: true,
+  },
+  {
+    name: 'goal',
+    type: 'AgentGoalConfig',
+    description:
+      'Goal configuration. When provided without a prompt, the prompt defaults to DEFAULT_GOAL_JUDGE_PROMPT.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: 'Agent',
+    description: 'A coding agent with the resolved workspace, signals, error processors, and goal applied.',
+  },
+]}
+/>
+
+## Defaults
+
+The factory only fills a default when you do not provide the corresponding field. Caller-provided values always win.
+
+| Field | Default when omitted |
+| - | - |
+| `workspace` | A [`Workspace`](/reference/workspace/workspace-class) backed by `LocalFilesystem` and `LocalSandbox` rooted at the base path. |
+| `signals` | A single [`TaskSignalProvider`](/reference/signals/task-signal-provider). |
+| `errorProcessors` | ECONNRESET and bad-request retry processors plus `PrefillErrorHandler` and `ProviderHistoryCompat`. |
+| `goal.prompt` | `DEFAULT_GOAL_JUDGE_PROMPT` (only when a `goal` is configured). |
+
+### Workspace
+
+When the `workspace` key is omitted, the factory builds a local workspace rooted at `basePath` (default `process.cwd()`):
+
+```typescript
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+new Workspace({
+  filesystem: new LocalFilesystem({ basePath }),
+  sandbox: new LocalSandbox({ workingDirectory: basePath }),
+})
+```
+
+To opt out — for example when the workspace is injected at the [`AgentController`](/reference/agent-controller/agent-controller-class) level — pass `workspace: undefined` explicitly:
+
+```typescript
+const agent = createCodingAgent({
+  id: 'my-coding-agent',
+  name: 'My Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  instructions: 'You are a helpful coding assistant.',
+  tools: {},
+  workspace: undefined, // opt out of the default workspace
+})
+```
+
+### Error processors
+
+The default error processors apply a retry policy for transient failures:
+
+- Network resets (`ECONNRESET` / `socket hang up`) retry up to twice with exponential backoff (`1000ms * 2^retryCount`, capped at `30000ms`).
+- Bad-request errors retry once after `2000ms`.
+
+`PrefillErrorHandler` and `ProviderHistoryCompat` are also included for provider compatibility.
+
+## Related
+
+- [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt)
+- [`Agent`](/reference/agents/agent)
+- [`AgentController`](/reference/agent-controller/agent-controller-class)

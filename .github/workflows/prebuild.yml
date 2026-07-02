@@ -105,8 +105,8 @@ jobs:
             || true)
 
           if [ -z "$CHANGED" ]; then
-            echo "No src/ changes detected — running full suite."
-            echo "run_full=true" >> $GITHUB_OUTPUT
+            echo "No source file changes found — skipping unit and E2E test selection."
+            echo "run_full=false" >> $GITHUB_OUTPUT
             echo "test_files=" >> $GITHUB_OUTPUT
             echo "affected_store_tests=false" >> $GITHUB_OUTPUT
             echo "affected_workspace_tests=false" >> $GITHUB_OUTPUT

@@ -1,6 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
@@ -58,6 +59,8 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
+  /** Real agent instance when processors are running inside an agent execution. Processor-only workflow contexts may omit it. */
+  agent?: Agent<any, any, any, any>;
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.

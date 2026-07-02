@@ -9,26 +9,18 @@ export function AgentSidebar({
   routeThreadId,
   agentVersionId,
   threads,
-  isLoading,
-  memoryType,
-  hasMemory,
-  isMemoryLoading,
 }: {
   agentId: string;
   threadId: string;
   routeThreadId?: string;
   agentVersionId?: string;
-  threads?: StorageThreadType[];
-  isLoading: boolean;
-  memoryType?: 'local' | 'gateway';
-  hasMemory: boolean;
-  isMemoryLoading?: boolean;
+  threads: StorageThreadType[];
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
 
   const handleDelete = async (deleteId: string) => {
-    await mutateAsync({ threadId: deleteId!, agentId });
+    await mutateAsync({ threadId: deleteId, agentId });
     if (deleteId === threadId) {
       const nextPath =
         agentVersionId && paths.agentVersionNewThreadLink
@@ -45,11 +37,7 @@ export function AgentSidebar({
       routeThreadId={routeThreadId}
       agentVersionId={agentVersionId}
       threads={threads}
-      isLoading={isLoading}
       onDelete={handleDelete}
-      memoryType={memoryType}
-      hasMemory={hasMemory}
-      isMemoryLoading={isMemoryLoading}
     />
   );
 }

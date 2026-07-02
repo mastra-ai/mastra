@@ -9,8 +9,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { AnchorHTMLAttributes, ReactNode } from 'react';
-import { forwardRef } from 'react';
+import type { AnchorHTMLAttributes, ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentSidebarVersionHeader } from '../agent-sidebar-version-header';
@@ -44,33 +43,39 @@ const storedAgentResponse = {
   requestContextSchema: { type: 'object', properties: {} },
 } satisfies StoredAgentResponse;
 
-const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
-  ({ children, to, href, ...props }, ref) => (
+function StubLink({
+  children,
+  to,
+  href,
+  ref,
+  ...props
+}: AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string; ref?: Ref<HTMLAnchorElement> }) {
+  return (
     <a ref={ref} href={to ?? href} {...props}>
       {children}
     </a>
-  ),
-);
+  );
+}
 
 const navigateSpy = vi.fn();
 
 const paths = {
-  agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
+  agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentVersionThreadLink: (agentId: string, versionId: string, threadId: string) =>
-    `/agents/${agentId}/versions/${versionId}/threads/${threadId}`,
+    `/agents/${agentId}/versions/${versionId}/chat/${threadId}`,
   agentVersionNewThreadLink: (agentId: string, versionId: string) =>
-    `/agents/${agentId}/versions/${versionId}/threads/new`,
+    `/agents/${agentId}/versions/${versionId}/chat/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
   scheduleLink: (scheduleId: string) => `/schedules/${scheduleId}`,
   networkLink: (networkId: string) => `/networks/${networkId}`,
-  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/threads/new`,
+  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/chat/new`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
@@ -255,7 +260,7 @@ describe('AgentSidebarVersionHeader', () => {
     fireEvent.click(versionTwo, { detail: 1 });
 
     await waitFor(() => {
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/versions/version-2/threads/thread-1');
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/versions/version-2/chat/thread-1');
     });
   });
 
@@ -280,7 +285,7 @@ describe('AgentSidebarVersionHeader', () => {
     fireEvent.click(versionTwo, { detail: 1 });
 
     await waitFor(() => {
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/versions/version-2/threads/new');
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/versions/version-2/chat/new');
     });
   });
 
@@ -305,7 +310,7 @@ describe('AgentSidebarVersionHeader', () => {
     fireEvent.click(defaultAgent, { detail: 1 });
 
     await waitFor(() => {
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/thread-1');
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/chat/thread-1');
     });
   });
 
@@ -456,7 +461,7 @@ describe('AgentSidebarVersionHeader', () => {
     fireEvent.click(publishedVersion, { detail: 1 });
 
     await waitFor(() => {
-      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/versions/version-1/threads/thread-1');
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/versions/version-1/chat/thread-1');
     });
   });
 

@@ -2,13 +2,53 @@ import { z } from 'zod';
 
 export const scheduleStatusSchema = z.enum(['active', 'paused']);
 
-export const scheduleTargetSchema = z.object({
+const workflowScheduleTargetSchema = z.object({
   type: z.literal('workflow'),
   workflowId: z.string(),
   inputData: z.unknown().optional(),
   initialState: z.unknown().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });
+
+const signalAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+);
+
+const ifActiveSchema = z.object({
+  behavior: z.enum(['deliver', 'persist', 'discard']).optional(),
+  attributes: signalAttributesSchema.optional(),
+});
+
+const ifIdleSchema = z.object({
+  behavior: z.enum(['wake', 'persist', 'discard']).optional(),
+  attributes: signalAttributesSchema.optional(),
+  streamOptions: z
+    .object({
+      requestContext: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+});
+
+const heartbeatScheduleTargetSchema = z.object({
+  type: z.literal('heartbeat'),
+  agentId: z.string(),
+  prompt: z.string(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  signalType: z.string().optional(),
+  tagName: z.string().optional(),
+  attributes: signalAttributesSchema.optional(),
+  ifActive: ifActiveSchema.optional(),
+  ifIdle: ifIdleSchema.optional(),
+  providerOptions: z.record(z.string(), z.unknown()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const scheduleTargetSchema = z.discriminatedUnion('type', [
+  workflowScheduleTargetSchema,
+  heartbeatScheduleTargetSchema,
+]);
 
 export const workflowRunStatusSchema = z.enum([
   'running',
@@ -51,8 +91,17 @@ export const scheduleResponseSchema = z.object({
 
 export const scheduleTriggerOutcomeSchema = z.enum([
   'published',
-  'failed',
+  'succeeded',
+  'delivered',
+  'persisted',
+  'discarded',
   'skipped',
+  'aborted',
+  'failed',
+  // Legacy queue/notification outcomes — no longer written, but trigger rows
+  // persisted by older builds may still carry them. Kept readable so the
+  // response validator does not reject historical rows. Mirrors the core
+  // ScheduleTriggerOutcome union.
   'acked',
   'alerted',
   'deferred',
@@ -62,7 +111,7 @@ export const scheduleTriggerOutcomeSchema = z.enum([
   'dropped-busy',
 ]);
 
-export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain']);
+export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain', 'manual']);
 
 export const scheduleTriggerResponseSchema = z.object({
   id: z.string().optional(),

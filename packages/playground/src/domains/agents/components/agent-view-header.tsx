@@ -46,7 +46,7 @@ export function AgentViewHeader({ agentId, view, agentVersionId, threadId }: Age
     }
 
     const from = (location.state as { from?: string } | null)?.from;
-    const defaultChatPath = paths.agentNewThreadLink(agentId) || `/agents/${encodeURIComponent(agentId)}/threads/new`;
+    const defaultChatPath = paths.agentNewThreadLink(agentId) || `/agents/${encodeURIComponent(agentId)}/chat/new`;
     void navigate(from ?? defaultChatPath, { viewTransition: true });
   };
 

@@ -48,7 +48,7 @@ function DocsLink() {
       href="https://mastra.ai/docs/editor/overview"
       target="_blank"
       rel="noopener noreferrer"
-      className="text-inherit underline hover:text-white"
+      className="text-inherit underline hover:text-neutral6"
     >
       Editor docs
     </a>
@@ -342,14 +342,7 @@ export function AgentSidebarVersionHeader({
                   <ArrowLeft className="size-3.5" />
                 </Button>
               ) : null}
-              {/* No inner container: the header itself is the zone. The
-                  borderless combobox fills the row as the clickable trigger and
-                  the inline actions sit beside it, so nothing reads as a nested
-                  box. */}
               <div className="flex min-w-0 flex-1 items-center">
-                {/* Block wrapper grows to fill the row; the combobox root is a
-                    flex-col, so it only stretches the trigger to full width when
-                    its parent is a block box (not a flex item) that owns flex-1. */}
                 <div className="min-w-0 flex-1">
                   <Combobox
                     options={versionOptions}
@@ -394,11 +387,6 @@ export function AgentSidebarVersionHeader({
                         ? `Publishing v${selectedRouteVersion?.versionNumber}`
                         : `Publish v${selectedRouteVersion?.versionNumber}`
                     }
-                    tooltip={
-                      activateVersion.isPending
-                        ? `Publishing v${selectedRouteVersion?.versionNumber}`
-                        : `Publish v${selectedRouteVersion?.versionNumber}`
-                    }
                   >
                     <UploadCloud className="size-3.5" />
                   </Button>
@@ -411,7 +399,6 @@ export function AgentSidebarVersionHeader({
                     onClick={handleUnpublishVersion}
                     disabled={unpublishVersion.isPending}
                     aria-label={unpublishVersion.isPending ? 'Unpublishing version' : 'Unpublish version'}
-                    tooltip={unpublishVersion.isPending ? 'Unpublishing version' : 'Unpublish version'}
                   >
                     <CloudOff className="size-3.5" />
                   </Button>

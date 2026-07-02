@@ -103,7 +103,7 @@ export function AgentPageTabs({
   ) : undefined;
 
   const hrefMap: Record<AgentPageTab, string> = {
-    chat: `/agents/${agentId}/threads/new`,
+    chat: `/agents/${agentId}/chat/new`,
     evaluate: `/agents/${agentId}/evaluate`,
     review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,

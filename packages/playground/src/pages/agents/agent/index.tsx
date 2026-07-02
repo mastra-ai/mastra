@@ -7,7 +7,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatShell } from '@/domains/agents/components/agent-chat-shell';
-import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import {
+  AgentSidebarLoadingSkeleton,
+  AgentViewLoadingSkeleton,
+} from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
@@ -28,16 +31,12 @@ import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import type { ChatProps } from '@/types';
 
-// With View Transitions support the chat/settings switch is choreographed in
-// agent-view-transition.css; the in-DOM enter animation would replay inside the
-// captured snapshot and double the motion, so it only serves as a fallback.
 const supportsViewTransitions = typeof document !== 'undefined' && 'startViewTransition' in document;
 
 interface AgentChatRegionProps {
   agentId: string;
   agentName?: string;
   modelVersion?: string;
-  /** The version pinned in the URL (`/agents/:id/versions/:versionId/...`), if any. */
   urlVersionId?: string;
   supportsMemory?: boolean;
   threadId: string;
@@ -49,14 +48,6 @@ interface AgentChatRegionProps {
   requestContextSchema?: string;
 }
 
-/**
- * Renders the test chat, resolving the agent version it runs against.
- *
- * Lives inside `AgentSidebarViewProvider` so it can consume the editor's open
- * state: while the version editor panel is open, the chat previews the latest
- * saved draft (see {@link useEditorPreviewVersionId}) so a "Save" is immediately
- * testable without publishing. An explicit URL version always wins.
- */
 function AgentChatRegion({
   agentId,
   agentName,
@@ -95,18 +86,14 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const { agentId, threadId, versionId } = useParams();
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId!);
+  const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isSettingsView = view === 'settings';
   const isNewThread = threadId === 'new';
   const routeThreadId = threadId ?? 'new';
 
-  // Generate a stable thread ID for new threads. Regenerate when threadId
-  // changes (e.g., clicking "New Chat" navigates back to /threads/new).
-  const newThreadId = useMemo(() => {
-    void threadId;
-    return uuid();
-  }, [threadId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
+  const newThreadId = useMemo(() => uuid(), [threadId]);
 
   const hasMemory = Boolean(memory?.result);
 
@@ -129,20 +116,14 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   useEffect(() => {
     if (isSettingsView || threadId) return;
 
-    // Normalize /agents/:agentId to the default thread route.
-    const nextPath = versionId
-      ? `/agents/${agentId}/versions/${versionId}/threads/new`
-      : `/agents/${agentId}/threads/new`;
+    const nextPath = versionId ? `/agents/${agentId}/versions/${versionId}/chat/new` : `/agents/${agentId}/chat/new`;
     void navigate(nextPath);
   }, [isSettingsView, threadId, agentId, versionId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
-
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
-  const agentVersionId = versionId;
 
-  // 401 check - session expired, needs re-authentication
   if (error && is401UnauthorizedError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -151,7 +132,6 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
     );
   }
 
-  // 403 check - permission denied for agents
   if (error && is403ForbiddenError(error)) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -176,9 +156,9 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
     await refreshThreads();
 
     if (isNewThread) {
-      const nextPath = agentVersionId
-        ? `/agents/${agentId}/versions/${agentVersionId}/threads/${newThreadId}`
-        : `/agents/${agentId}/threads/${newThreadId}`;
+      const nextPath = versionId
+        ? `/agents/${agentId}/versions/${versionId}/chat/${newThreadId}`
+        : `/agents/${agentId}/chat/${newThreadId}`;
       void navigate(nextPath);
     }
   };
@@ -202,21 +182,21 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                         <AgentChatShell
                           agentId={agentId!}
                           view={view}
-                          agentVersionId={agentVersionId}
+                          agentVersionId={versionId}
                           threadId={routeThreadId}
                           leftDrawerLabel="Open threads and memory"
                           leftSlot={
-                            <AgentSidebar
-                              agentId={agentId!}
-                              threadId={actualThreadId!}
-                              routeThreadId={routeThreadId}
-                              agentVersionId={agentVersionId}
-                              threads={sidebarThreads}
-                              isLoading={isMemoryLoading || isThreadsLoading}
-                              memoryType={memory?.memoryType}
-                              hasMemory={hasMemory}
-                              isMemoryLoading={isMemoryLoading}
-                            />
+                            isThreadsLoading ? (
+                              <AgentSidebarLoadingSkeleton />
+                            ) : (
+                              <AgentSidebar
+                                agentId={agentId!}
+                                threadId={actualThreadId!}
+                                routeThreadId={routeThreadId}
+                                agentVersionId={versionId}
+                                threads={sidebarThreads}
+                              />
+                            )
                           }
                           browserOverlay={<BrowserViewPanel />}
                         >
@@ -236,7 +216,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                                 agentId={agentId!}
                                 agentName={agent?.name}
                                 modelVersion={agent?.modelVersion}
-                                urlVersionId={agentVersionId}
+                                urlVersionId={versionId}
                                 supportsMemory={agent?.supportsMemory}
                                 threadId={actualThreadId!}
                                 memory={hasMemory}

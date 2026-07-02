@@ -1,6 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
@@ -20,7 +21,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  */
 export default defineConfig({
   root: resolve(here, 'ui'),
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: {
     outDir: resolve(here, '../../dist/web/ui'),
     emptyOutDir: true,
@@ -29,6 +30,18 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
+        target: 'http://localhost:4111',
+        changeOrigin: true,
+      },
+      // Optional WorkOS auth routes live on the API server too; proxy them so
+      // the dev UI (:5173) can reach login/callback/logout/me on :4111.
+      //
+      // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
+      // A plain `'/auth'` key prefix-matches Vite module requests like
+      // `/auth.ts` (the client auth module) and wrongly proxies them to the
+      // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
+      // module imports on Vite while still forwarding real auth routes.
+      '^/auth/': {
         target: 'http://localhost:4111',
         changeOrigin: true,
       },

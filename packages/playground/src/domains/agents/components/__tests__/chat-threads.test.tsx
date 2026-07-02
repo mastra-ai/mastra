@@ -28,18 +28,18 @@ const paths = {
   agentsLink: () => '/agents',
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/threads/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/threads/new`,
+  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
+  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentVersionThreadLink: (agentId: string, versionId: string, threadId: string) =>
-    `/agents/${agentId}/versions/${versionId}/threads/${threadId}`,
+    `/agents/${agentId}/versions/${versionId}/chat/${threadId}`,
   agentVersionNewThreadLink: (agentId: string, versionId: string) =>
-    `/agents/${agentId}/versions/${versionId}/threads/new`,
+    `/agents/${agentId}/versions/${versionId}/chat/new`,
   workflowsLink: () => '/workflows',
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
   schedulesLink: () => '/schedules',
   scheduleLink: (scheduleId: string) => `/schedules/${scheduleId}`,
   networkLink: (networkId: string) => `/networks/${networkId}`,
-  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/threads/new`,
+  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/chat/new`,
   networkThreadLink: (networkId: string, threadId: string) => `/networks/${networkId}/chat/${threadId}`,
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
@@ -97,33 +97,6 @@ function thread(overrides: Partial<StorageThreadType>): StorageThreadType {
 }
 
 describe('ChatThreads', () => {
-  it('uses the embedded list chrome for loading rows when embedded in the memory sidebar', () => {
-    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(readOnlyAuthCapabilities)));
-
-    renderWithProviders(
-      <ChatThreads
-        threads={[]}
-        isLoading
-        threadId="real-thread"
-        onDelete={vi.fn()}
-        resourceId="chef-agent"
-        resourceType="agent"
-        embedded
-      />,
-    );
-
-    const nav = screen.getByRole('navigation', { name: 'Loading threads' });
-    expect(nav.className).not.toContain('rounded-studio-panel');
-    expect(nav.className).not.toContain('border-border1/50');
-    expect(screen.getByText('New Chat')).not.toBeNull();
-    expect(screen.getByTestId('chat-threads-skeleton')).not.toBeNull();
-
-    const titleSkeletons = screen.getAllByTestId('chat-thread-title-skeleton');
-    expect(titleSkeletons.length).toBeGreaterThan(0);
-    expect(titleSkeletons[0].className).toContain('h-3');
-    expect(titleSkeletons[0].className).not.toContain('h-9');
-  });
-
   it('renders real titles and default-title fallbacks with the same truncating title UI', async () => {
     const realTitle = 'ThisIsAReallyLongUnbrokenThreadTitle';
     const fallbackDate = new Date(2026, 4, 29, 16, 19, 44);
@@ -147,7 +120,6 @@ describe('ChatThreads', () => {
             updatedAt: fallbackDate,
           }),
         ]}
-        isLoading={false}
         threadId="real-thread"
         onDelete={vi.fn()}
         resourceId="chef-agent"
@@ -180,7 +152,6 @@ describe('ChatThreads', () => {
             },
           }),
         ]}
-        isLoading={false}
         threadId="version-thread"
         onDelete={vi.fn()}
         resourceId="chef-agent"
@@ -190,9 +161,9 @@ describe('ChatThreads', () => {
     );
 
     const newChat = await screen.findByRole('link', { name: /new chat/i });
-    expect(newChat.getAttribute('href')).toBe('/agents/chef-agent/versions/version-2/threads/new');
+    expect(newChat.getAttribute('href')).toBe('/agents/chef-agent/versions/version-2/chat/new');
 
     const versionThread = await screen.findByRole('link', { name: /saved version chat/i });
-    expect(versionThread.getAttribute('href')).toBe('/agents/chef-agent/versions/version-2/threads/version-thread');
+    expect(versionThread.getAttribute('href')).toBe('/agents/chef-agent/versions/version-2/chat/version-thread');
   });
 });

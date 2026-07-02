@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, use, useCallback, useMemo, useState } from 'react';
 
 export type AgentSidebarView = 'threads' | 'memory' | 'versions';
 
@@ -63,7 +63,7 @@ export function AgentSidebarViewProvider({ children }: { children: React.ReactNo
 }
 
 export function useAgentSidebarView() {
-  const context = useContext(AgentSidebarViewContext);
+  const context = use(AgentSidebarViewContext);
 
   if (!context) {
     throw new Error('useAgentSidebarView must be used within an AgentSidebarViewProvider');

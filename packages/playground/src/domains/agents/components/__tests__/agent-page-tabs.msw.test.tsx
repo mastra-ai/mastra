@@ -61,7 +61,7 @@ function ThreadInputRouteProbe() {
         value={threadInput}
         onChange={event => setThreadInput(event.currentTarget.value)}
       />
-      <button type="button" onClick={() => void navigate('/agents/agent-1/versions/version-1/threads/thread-1')}>
+      <button type="button" onClick={() => void navigate('/agents/agent-1/versions/version-1/chat/thread-1')}>
         Switch version
       </button>
     </div>
@@ -69,7 +69,7 @@ function ThreadInputRouteProbe() {
 }
 
 function renderLayout(
-  initialEntry = '/agents/agent-1/threads/new',
+  initialEntry = '/agents/agent-1/chat/new',
   child: React.ReactNode = <div data-testid="agent-child" />,
 ) {
   const queryClient = new QueryClient({
@@ -129,7 +129,7 @@ describe('AgentLayout tool tabs', () => {
   it('keeps version routes in chat without restoring a separate Editor tab', async () => {
     server.use(...commonHandlers(enabledPackages));
 
-    renderLayout('/agents/agent-1/versions/version-1/threads/thread-1');
+    renderLayout('/agents/agent-1/versions/version-1/chat/thread-1');
 
     expect(await screen.findByRole('tab', { name: /chat/i })).not.toBeNull();
     expect(screen.queryByRole('tab', { name: /editor/i })).toBeNull();
@@ -140,7 +140,7 @@ describe('AgentLayout tool tabs', () => {
   it('keeps composer input mounted when switching into the version route panel', async () => {
     server.use(...commonHandlers(enabledPackages));
 
-    renderLayout('/agents/agent-1/threads/thread-1', <ThreadInputRouteProbe />);
+    renderLayout('/agents/agent-1/chat/thread-1', <ThreadInputRouteProbe />);
 
     const composer = await screen.findByRole('textbox', { name: /composer probe/i });
     fireEvent.change(composer, { target: { value: 'keep this draft' } });

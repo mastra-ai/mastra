@@ -10,6 +10,11 @@ const sidebars = {
     'index',
     'embeddings',
     {
+      type: 'doc',
+      id: 'environment-variables',
+      label: 'Environment Variables',
+    },
+    {
       type: 'category',
       label: 'Gateways',
       collapsed: false,
@@ -578,6 +583,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/sakana',
+          label: 'Sakana AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/sarvam',
           label: 'Sarvam AI',
         },
@@ -655,6 +665,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/trustedrouter',
+          label: 'TrustedRouter',
         },
         {
           type: 'doc',

@@ -1,5 +1,11 @@
 # @mastra/voice-inworld
 
+## 0.4.1-alpha.0
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
 ## 0.4.0
 
 ### Minor Changes

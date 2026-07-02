@@ -2,15 +2,14 @@
  * Prompt system — exports the prompt builder and mode-specific prompts.
  */
 
-export { buildBasePrompt } from './base.js';
 export { buildModePrompt, buildModePromptFn } from './build.js';
 export { planModePrompt } from './plan.js';
 export { fastModePrompt } from './fast.js';
 
+import { buildBasePrompt } from '@mastra/core/coding-agent';
+import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { hasTavilyKey } from '../../tools/index.js';
 import { loadAgentInstructions, formatAgentInstructions } from './agent-instructions.js';
-import { buildBasePrompt } from './base.js';
-import type { PromptContext as BasePromptContext } from './base.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
 import { modelSpecificPrompts } from './model.js';

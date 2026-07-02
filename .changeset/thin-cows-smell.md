@@ -1,7 +1,6 @@
 ---
 '@internal/playground': patch
 '@mastra/playground-ui': patch
-'@mastra/react': patch
 '@mastra/server': patch
 ---
 

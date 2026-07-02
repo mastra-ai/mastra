@@ -172,6 +172,7 @@ const exporter = new LangfuseExporter()
 const prompt = await exporter.client.prompt.get('customer-support', { type: 'text' })
 
 const agent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   instructions: prompt.compile(),
   model: '__GATEWAY_OPENAI_MODEL__',
