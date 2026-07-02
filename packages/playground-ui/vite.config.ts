@@ -11,7 +11,7 @@ import { libInjectCss } from 'vite-plugin-lib-inject-css';
 // One library entry per design-system component folder, exposed publicly as
 // `@mastra/playground-ui/components/<Name>` (see the `./components/*` exports
 // wildcard in package.json). Deep imports let consumers skip the root barrel
-// so bundlers only pull the components they use.
+// entrypoint so bundlers only pull the components they use.
 const componentsDir = resolve(__dirname, 'src/ds/components');
 const componentEntries = Object.fromEntries(
   readdirSync(componentsDir, { withFileTypes: true })
@@ -156,8 +156,7 @@ const libConfig: UserConfig = {
   build: {
     lib: {
       entry: {
-        index: resolve(__dirname, 'src/index.ts'),
-        utils: resolve(__dirname, 'src/utils.ts'),
+        style: resolve(__dirname, 'src/style.ts'),
         tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
         // Slashed keys make Rollup emit nested output: dist/components/<Name>.<format>.js
         ...utilityEntries,
@@ -186,14 +185,6 @@ const libConfig: UserConfig = {
         // With ~300 entries, hoisted transitive imports would bloat every entry
         // chunk with empty side-effect imports of shared chunks.
         hoistTransitiveImports: false,
-        // Pin the global Tailwind stylesheet to a chunk named `index` so its
-        // compiled CSS keeps emitting as dist/index.css — the target of the
-        // public `./style.css` export. With many entries Rollup would
-        // otherwise attach it to an arbitrary shared chunk (and an arbitrary
-        // .css filename), breaking the export.
-        manualChunks(id) {
-          if (id === resolve(__dirname, 'src/index.css')) return 'index';
-        },
       },
     },
   },

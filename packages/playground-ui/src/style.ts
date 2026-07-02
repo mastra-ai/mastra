@@ -1,3 +1,1 @@
 import './index.css';
-
-export {};

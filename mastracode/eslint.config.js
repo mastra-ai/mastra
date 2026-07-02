@@ -6,7 +6,7 @@ const config = await createConfig();
 const restrictedPlaygroundUiBroadImports = [
   {
     name: '@mastra/playground-ui',
-    message: 'Import from an exact @mastra/playground-ui subpath instead of the root barrel.',
+    message: 'Import from an exact @mastra/playground-ui subpath instead of the root entrypoint.',
   },
   {
     name: '@mastra/playground-ui/components',

@@ -12,6 +12,7 @@ const restrictedPlaygroundUiBroadImportSources = [
   '@mastra/playground-ui',
   '@mastra/playground-ui/components',
   '@mastra/playground-ui/hooks',
+  '@mastra/playground-ui/utils',
 ];
 
 const restrictedPlaygroundUiBroadImportSelectors = restrictedPlaygroundUiBroadImportSources.flatMap(source => [
