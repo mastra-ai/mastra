@@ -181,7 +181,8 @@ After fixes and re-linting, append or produce a follow-up section:
 - Eval environment: `$ENVIRONMENT_SUMMARY`
 - Commands log: `$RUN_DIR/evals/$JOB_SLUG/commands.log`
 - Result file: `$RUN_DIR/evals/$JOB_SLUG/result.md`
-- Friction observed: `$FRICTION_OR_NONE`
+- Doc friction observed: `$DOC_FRICTION_OR_NONE`
+- Harness/environment friction observed: `$HARNESS_FRICTION_OR_NONE`
 ````
 
-If the eval finds doc-caused friction, create additional `PRAC-*`, `CODE-*`, or `API-*` findings and return to the fix-plan loop.
+If the eval finds doc-caused friction, create additional `PRAC-*`, `CODE-*`, or `API-*` findings and return to the fix-plan loop. Do not create follow-up doc findings for package-manager, temp-directory, missing local binary, credential, or other harness/environment friction unless the doc itself caused that friction.

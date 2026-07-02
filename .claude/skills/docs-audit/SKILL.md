@@ -65,7 +65,7 @@ Rules:
 
 ### 1. Scope the audit interactively
 
-Use `ask_user` to ask which doc page, topic, or category to audit. Accept:
+Use `ask_user` to ask which doc page, topic, or category to audit. For free-text prompts, omit `options` and omit `selectionMode`; only pass `selectionMode` when providing explicit options. Accept:
 
 - a repository-relative file path,
 - a docs URL/path,
@@ -134,6 +134,8 @@ Resolve package names to source directories:
 
 Do not guess package paths. Use `find_files`, `search_content`, and `lsp_inspect` to inspect real exports and types.
 
+Start source inspection from the narrowest likely files: package export files, the subdirectory matching the documented API, and type definition files. Avoid package-wide regex searches for common API names until narrow inspection fails. If a search returns excessive noise, stop and narrow the path or pattern before continuing.
+
 Source is the source of truth for code example accuracy and API/property completeness. Never trust the doc's code at face value.
 
 ### 4. Run deterministic checks
@@ -193,7 +195,7 @@ Format the report with `references/AUDIT-REPORT.md`.
 
 Required behavior:
 
-- Present the report to the user before proposing edits.
+- Present the report to the user before proposing edits. Prefer showing the complete saved report content. If terminal length makes that impractical, explicitly say the chat response is a summary and provide the full `audit-report.md` path.
 - Keep deterministic and judgment dimensions separate.
 - Include score table, findings summary, findings, and deterministic command output.
 - Include selected jobs-to-be-done.
@@ -211,6 +213,8 @@ The fix plan must include:
 - rationale,
 - verification commands,
 - the mandatory agent-build eval step for each selected job-to-be-done.
+
+Before submitting the plan, inspect the directly adjacent table rows, nested properties, headings, and examples around each finding. If adjacent stale details are part of the same documented API surface, include them explicitly in the plan instead of relying on discovery during implementation.
 
 Order fixes by impact:
 
@@ -260,14 +264,17 @@ Set up the eval project as follows:
    2. Else if the repo has a local Mastra smoke-test or create-mastra pattern, use that documented local pattern.
    3. Else create a minimal Node/TypeScript project with `package.json`, `tsconfig.json`, and only the files needed by the doc.
 6. Use this local package linking order so the eval tests the current branch:
-   1. If the scaffold supports local workspace linking, use it.
-   2. Else add `file:` dependencies in the eval project's `package.json` pointing to the resolved local workspace package directories.
-   3. Else run the package manager's link command from the local package into the eval project.
-   4. If a package cannot be linked locally, record the reason and install the published package only as a last resort.
+   1. If the doc or scaffold supports local workspace linking, use it.
+   2. Else add absolute `file:` dependencies in the eval project's `package.json` pointing to resolved local workspace package directories. Do not use relative `file:` paths from `/tmp` because macOS may resolve `/tmp` through `/private/tmp`.
+   3. If the linked package has `workspace:*` dependencies, create a temporary `pnpm-workspace.yaml` that includes the eval project and the relevant repository package globs, then run `pnpm install` without `--ignore-workspace`. Do not combine `--ignore-workspace` with workspace dependency resolution.
+   4. If install reports success, verify the expected executable exists, such as `node_modules/.bin/tsc`, before running checks.
+   5. If package-manager linking remains blocked but the job only needs typechecking, use explicit local symlinks for the package(s) plus the repository's installed TypeScript/tooling binary. Record this as harness/environment friction, not doc friction.
+   6. Else run the package manager's link command from the local package into the eval project.
+   7. If a package cannot be linked locally, record the reason and install the published package only as a last resort.
 7. Do not use credentials, external paid services, or production deploy targets unless the doc's selected job requires them and the user has explicitly provided safe test credentials. If credentials are missing, continue until the first credential boundary and report whether the docs got the eval to that boundary cleanly.
 8. Bound the eval to the selected job. Do not add extra features, refactors, or tests that the job does not require.
-9. Record every command and result in `<run-dir>/evals/<job-slug>/commands.log`.
-10. Write the eval outcome to `<run-dir>/evals/<job-slug>/result.md`.
+9. Record every command, failed attempt, workaround, and result in `<run-dir>/evals/<job-slug>/commands.log`.
+10. Write the eval outcome to `<run-dir>/evals/<job-slug>/result.md`. Separate `Doc friction` from `Harness/environment friction`. Only doc-caused friction becomes follow-up audit findings.
 
 For each selected job-to-be-done, spawn a focused build task using a subagent or fresh isolated turn. The eval agent receives only:
 
@@ -318,3 +325,4 @@ Final response must include:
 - Do not duplicate mastra-docs styleguides. Reference and apply them.
 - Source code is the source of truth for accuracy and completeness.
 - Prefer narrow, scoped docs checks over repo-wide commands when possible.
+- Separate doc friction from harness/environment friction in eval results and final summaries.
