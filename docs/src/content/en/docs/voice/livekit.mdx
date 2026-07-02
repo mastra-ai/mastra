@@ -5,101 +5,119 @@ packages:
   - '@mastra/livekit'
 ---
 
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
 # Using LiveKit with Mastra
 
-[LiveKit](https://livekit.io) is an open source WebRTC platform for realtime audio and video. The [`@mastra/livekit`](/reference/voice/livekit) package connects Mastra agents to the [LiveKit Agents framework](https://docs.livekit.io/agents/): LiveKit owns the audio loop — voice activity detection, streaming speech-to-text, semantic turn detection, barge-in, and text-to-speech — while your Mastra agent generates every reply with its own model, tools, and memory.
+[LiveKit](https://livekit.io) is an open source WebRTC platform for realtime audio and video. The [`@mastra/livekit`](/reference/voice/livekit) package connects Mastra agents to the [LiveKit Agents framework](https://docs.livekit.io/agents/): LiveKit owns the audio loop like voice activity detection, streaming speech-to-text, semantic turn detection, barge-in, and text-to-speech. Your Mastra agent generates every reply with its own model, tools, and memory.
 
 Use this integration when you need low-latency, interruptible voice conversations. For provider-based speech-to-speech without LiveKit, see [Speech to Speech](/docs/voice/speech-to-speech).
 
-## How it works
+## Quickstart
 
-A LiveKit voice session involves three pieces:
+These steps take you from an empty project to a voice agent you can talk to. A voice session has two moving parts you set up here: an API route on your Mastra server that hands out access tokens, and a separate worker process that runs the audio pipeline and calls your agent each turn.
 
-1. Your Mastra server mints a LiveKit access token and dispatches your agent into a room. The dispatch carries metadata such as the Mastra agent id, memory thread, and resource.
-1. A LiveKit agent worker — a separate long-running process — receives the job and runs the audio pipeline. Audio flows between the browser and the worker over WebRTC and never passes through your Mastra HTTP server.
-1. Each time the user finishes a turn, the worker calls the Mastra agent's `stream()` with the new input and speaks the streamed text. When the user interrupts, LiveKit cancels the stream and Mastra stops generating.
+<Steps>
+  <StepItem>
+    Install the integration package along with the LiveKit plugins for voice activity detection and turn detection:
 
-Conversation history lives in Mastra Memory, so voice sessions and text chat can share one thread.
+    ```bash npm2yarn
+    npm install @mastra/livekit @livekit/agents @livekit/agents-plugin-silero @livekit/agents-plugin-livekit
+    ```
+  </StepItem>
 
-## Getting started
+  <StepItem>
+    Set your LiveKit credentials inside an `.env` file. Create a free project on [LiveKit Cloud](https://cloud.livekit.io), or run a local server with [`livekit-server --dev`](https://docs.livekit.io/home/self-hosting/local/):
 
-Install the integration package along with the LiveKit plugins for voice activity detection and turn detection:
+    ```bash title=".env"
+    LIVEKIT_URL=wss://your-project.livekit.cloud
+    LIVEKIT_API_KEY=your-api-key
+    LIVEKIT_API_SECRET=your-api-secret
+    ```
+  </StepItem>
 
-```bash npm2yarn
-npm install @mastra/livekit @livekit/agents @livekit/agents-plugin-silero @livekit/agents-plugin-livekit
-```
+  <StepItem>
+    Add a voice agent to your Mastra instance and expose a connection route. The `liveKitConnectionRoute()` helper adds a `POST /voice/livekit/connection-details` endpoint that mints a LiveKit token and dispatches your agent into a room:
 
-Set your LiveKit credentials. Create a free project on [LiveKit Cloud](https://cloud.livekit.io), or run a local server with [`livekit-server --dev`](https://docs.livekit.io/home/self-hosting/local/):
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core/mastra'
+    import { Agent } from '@mastra/core/agent'
+    import { liveKitConnectionRoute } from '@mastra/livekit'
 
-```bash title=".env"
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_API_KEY=your-api-key
-LIVEKIT_API_SECRET=your-api-secret
-```
+    const supportAgent = new Agent({
+      id: 'support',
+      name: 'Support',
+      instructions: 'You are a friendly phone support agent. Keep replies short and conversational.',
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    })
 
-## Create a voice worker
+    export const mastra = new Mastra({
+      agents: { support: supportAgent },
+      server: {
+        apiRoutes: [liveKitConnectionRoute({ agentName: 'mastra-voice' })],
+      },
+    })
+    ```
+  </StepItem>
 
-The worker answers LiveKit sessions with your Mastra agents. The following example uses LiveKit Inference model strings for speech-to-text and text-to-speech, so no provider plugins are required:
+  <StepItem>
+    Create the worker. It runs as a separate process, answers LiveKit sessions, and calls your agent each turn. This example uses LiveKit Inference model strings for speech-to-text and text-to-speech, so no provider plugins are required:
 
-```typescript title="src/mastra/voice-worker.ts"
-import { fileURLToPath } from 'node:url'
-import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit'
-import { mastra } from './index'
+    ```typescript title="src/mastra/voice-worker.ts"
+    import { fileURLToPath } from 'node:url'
+    import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit'
+    import { mastra } from './index'
 
-export default createLiveKitWorker({
-  mastra,
-  agent: 'support',
-  stt: 'deepgram/nova-3',
-  tts: 'cartesia/sonic-3',
-  turnDetection: 'multilingual',
-  greeting: 'Hi! How can I help you today?',
-})
+    export default createLiveKitWorker({
+      mastra,
+      agent: 'support',
+      stt: 'deepgram/nova-3',
+      tts: 'cartesia/sonic-3',
+      turnDetection: 'multilingual',
+      greeting: 'Hi! How can I help you today?',
+    })
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' })
-}
-```
+    if (process.argv[1] === fileURLToPath(import.meta.url)) {
+      runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' })
+    }
+    ```
 
-The `agent` option selects which Mastra agent answers each session. Pass a fixed key as shown, or omit it to use the `agentId` from the dispatch metadata, which lets one worker serve every agent on your Mastra instance.
+    The `agent` option selects which Mastra agent answers each session. Pass a fixed key as shown, or omit it to use the `agentId` from the dispatch metadata, so one worker can serve every agent on your Mastra instance.
+  </StepItem>
 
-Download the turn detection and voice activity detection models once, then run the worker in development mode:
+  <StepItem>
+    Download the turn detection and voice activity detection models once. Then run the worker in one terminal and your Mastra server in another:
 
-```bash
-npx livekit-agents download-files
-npx tsx src/mastra/voice-worker.ts dev
-```
+    ```bash
+    npx livekit-agents download-files
+    npx tsx src/mastra/voice-worker.ts dev
+    ```
 
-The worker registers with your LiveKit server and waits for sessions. Run it alongside `mastra dev`.
+    ```bash npm2yarn
+    npm run dev
+    ```
 
-## Add a connection endpoint
+    The worker registers with your LiveKit server and waits for sessions, while `mastra dev` serves the connection route.
+  </StepItem>
 
-Frontends need a token to join a room. The `liveKitConnectionRoute()` helper returns an API route that mints the token and dispatches your voice agent into the room:
+  <StepItem>
+    Talk to your agent. Open the hosted [LiveKit Agents Playground](https://agents-playground.livekit.io) and connect it to your project to start a call without building a frontend.
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { liveKitConnectionRoute } from '@mastra/livekit'
-import { supportAgent } from './agents/support-agent'
+    To wire up your own app instead, call the connection route for a token. `POST /voice/livekit/connection-details` accepts optional `agentId`, `threadId`, and `resourceId` fields in the request body and returns:
 
-export const mastra = new Mastra({
-  agents: { support: supportAgent },
-  server: {
-    apiRoutes: [liveKitConnectionRoute({ agentName: 'mastra-voice' })],
-  },
-})
-```
+    ```json
+    {
+      "serverUrl": "wss://your-project.livekit.cloud",
+      "roomName": "mastra-voice-a1b2c3d4",
+      "participantName": "user-1",
+      "participantToken": "eyJhbGci..."
+    }
+    ```
 
-`POST /voice/livekit/connection-details` accepts optional `agentId`, `threadId`, and `resourceId` fields in the request body and returns:
-
-```json
-{
-  "serverUrl": "wss://your-project.livekit.cloud",
-  "roomName": "mastra-voice-a1b2c3d4",
-  "participantName": "user-1",
-  "participantToken": "eyJhbGci..."
-}
-```
-
-This response matches the contract used by LiveKit's frontend starters, so apps built from [agent-starter-react](https://github.com/livekit-examples/agent-starter-react) or the [LiveKit React components](https://docs.livekit.io/reference/components/react/) work without changes. You can also test the worker without a frontend using the hosted [LiveKit Agents Playground](https://agents-playground.livekit.io).
+    This response matches the contract used by LiveKit's frontend starters, so apps built from [agent-starter-react](https://github.com/livekit-examples/agent-starter-react) or the [LiveKit React components](https://docs.livekit.io/reference/components/react/) work without changes.
+  </StepItem>
+</Steps>
 
 ## Turn detection and interruptions
 
@@ -122,7 +140,7 @@ export default createLiveKitWorker({
 - `turnDetection: 'multilingual'`: Runs LiveKit's semantic end-of-turn model locally on CPU. It reads the live transcript to avoid cutting users off mid-thought. Use `'vad'` or `'stt'` for silence-based endpointing instead.
 - `endpointing`: Bounds how long the agent waits after the user stops speaking.
 - `interruption`: Controls barge-in. When the user speaks over the agent, LiveKit stops playback and cancels the in-flight Mastra stream, so token generation stops too.
-- `preemptiveGeneration`: Starts the Mastra agent's reply while the user is still finishing, hiding time-to-first-token. The worker disables it by default: each preemptive attempt runs the Mastra agent on an interim transcript, and every run persists the user message — duplicating messages in the thread. Re-enable it with `preemptiveGeneration: { enabled: true }` if latency matters more than exact thread history.
+- `preemptiveGeneration`: Starts the Mastra agent's reply while the user is still finishing, hiding time-to-first-token. The worker disables it by default: each preemptive attempt runs the Mastra agent on an interim transcript, and every run persists the user message, which duplicates messages in the thread. Re-enable it with `preemptiveGeneration: { enabled: true }` if latency matters more than exact thread history.
 
 See the [LiveKit turn detection docs](https://docs.livekit.io/agents/logic/turns/) for all options.
 
@@ -131,10 +149,10 @@ See the [LiveKit turn detection docs](https://docs.livekit.io/agents/logic/turns
 When the resolved Mastra agent has memory configured, each call becomes one memory thread:
 
 - `thread` defaults to the `threadId` from dispatch metadata, then to the room name.
-- `resource` defaults to the `resourceId` from dispatch metadata, then to the thread. Send your end user's id here so calls group under the right user — Mastra Studio sends the agent id, matching how its sidebar lists threads.
+- `resource` defaults to the `resourceId` from dispatch metadata, then to the thread. Send your end user's id here so calls group under the right user. Mastra Studio sends the agent id, matching how its sidebar lists threads.
 - When the thread doesn't exist yet, the worker creates it titled "Voice call" with metadata `{ source: 'livekit' }`, and the spoken greeting is saved as the first assistant message so the thread reads as a full call transcript (disable with `persistGreeting: false`).
 
-Each turn sends only the new user input; Mastra Memory supplies history, semantic recall, and working memory. Pin a session to an existing thread by passing `threadId` in the connection request body — useful for continuing a text conversation by voice. In Studio, starting a call from an open chat binds the call to that thread, and the transcript fills into the chat after each exchange.
+Each turn sends only the new user input; Mastra Memory supplies history, semantic recall, and working memory. Pin a session to an existing thread by passing `threadId` in the connection request body, which is useful for continuing a text conversation by voice. In Studio, starting a call from an open chat binds the call to that thread, and the transcript fills into the chat after each exchange.
 
 One caveat: when a user interrupts the agent, Mastra Memory stores the full generated reply even though the user only heard part of it. LiveKit's own transcript is truncated to what was spoken.
 
@@ -157,7 +175,7 @@ The phrase is spoken as part of the reply and appears in the transcript.
 
 ## Generate replies with a workflow
 
-By default the worker generates each reply with a Mastra agent. To run multi-step logic per turn — for example classify intent, route, call tools in sequence, then compose a reply — generate replies with a Mastra [workflow](/docs/workflows/overview) instead. Set `workflow` in place of `agent`.
+By default the worker generates each reply with a Mastra agent. To run multi-step logic per turn (for example classify intent, route, call tools in sequence, then compose a reply), generate replies with a Mastra [workflow](/docs/workflows/overview) instead. Set `workflow` in place of `agent`.
 
 LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn. There is no suspend or resume, and no conversation state is carried between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
 
@@ -193,7 +211,7 @@ const generateResponse = createStep({
 - `replyStep`: Restricts spoken output to one step. Omit it to speak every step that writes to its `writer`.
 - `resultText`: A fallback that derives the reply from the final run result when no step streams text. Streaming through `writer` gives lower time-to-first-token, so prefer it.
 - `abortSignal`: Forward the step's `abortSignal` into `agent.stream()` so barge-in stops generation promptly. When the user interrupts, the worker cancels the run.
-- `generate`: For full control, pass a `generate` function instead — any reply generator that turns a turn into a text stream.
+- `generate`: For full control, pass a `generate` function instead. It can be any reply generator that turns a turn into a text stream.
 
 With a workflow, the worker doesn't persist turns automatically the way an agent's `stream()` does. Persist conversation history inside the workflow, or keep the LiveKit transcript as the source of truth and pass it in each turn.
 
@@ -217,7 +235,7 @@ When the Mastra instance has [observability](/docs/observability/overview) confi
 
 - Every turn's Mastra agent run, with model generation, tool calls, and memory operations, exactly as a text chat records them.
 - A child span for each LiveKit pipeline metric: speech-to-text, text-to-speech, end-of-utterance (turn detection), voice activity detection, and the model's time-to-first-token. These carry the latency and audio measurements that text traces can't show.
-- A per-model usage roll-up — token, character, and audio totals for the whole call — written to the span when the session ends.
+- A per-model usage roll-up (token, character, and audio totals for the whole call) written to the span when the session ends.
 
 The worker is a separate process, so point storage at a backend that accepts concurrent writes from both the server and the worker. SQLite-backed [LibSQL](/reference/storage/libsql) works; single-writer stores do not. Traces, memory, and threads can share one store:
 
@@ -250,6 +268,16 @@ node dist/voice-worker.js start
 ```
 
 LiveKit's guidance on sizing, graceful shutdown, and hosting applies unchanged; see [Deploying agents](https://docs.livekit.io/agents/ops/deployment/). Workers connect outbound to LiveKit, so they don't need inbound ports.
+
+## How it works
+
+A LiveKit voice session involves three pieces:
+
+1. Your Mastra server mints a LiveKit access token and dispatches your agent into a room. The dispatch carries metadata such as the Mastra agent id, memory thread, and resource.
+1. A LiveKit agent worker (a separate long-running process) receives the job and runs the audio pipeline. Audio flows between the browser and the worker over WebRTC and never passes through your Mastra HTTP server.
+1. Each time the user finishes a turn, the worker calls the Mastra agent's `stream()` with the new input and speaks the streamed text. When the user interrupts, LiveKit cancels the stream and Mastra stops generating.
+
+Conversation history lives in Mastra Memory, so voice sessions and text chat can share one thread.
 
 ## Related
 
