@@ -358,7 +358,7 @@ export function SignalDetailsPage({
     isError: topicsError,
   } = useEntityTopics(resolvedEntity?.entityId, signalId);
   const topics: EntityLearningTopic[] = useMemo(() => topicsData?.topics ?? [], [topicsData]);
-  const runId = topicsData?.run.runId;
+  const runId = topicsData?.run?.runId;
 
   const topicSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}:${initialTopicId ?? ''}`;
   const chartSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}`;

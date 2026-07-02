@@ -315,6 +315,22 @@ describe('SignalDetailsPage', () => {
     });
   });
 
+  describe('when the signal has no completed learning run', () => {
+    it('shows the not-found fallback instead of crashing on the missing run', async () => {
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        // Matches the platform contract: no run for the signal → `{ topics: [] }`
+        // without a `run` field. Examples/points must stay disabled (any request
+        // to them would trip onUnhandledRequest: 'error').
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json({ topics: [] })),
+      );
+
+      renderSignalDetailsPage({ signalId: 'behavior' });
+
+      expect(await screen.findByText('Signal not found')).not.toBeNull();
+    });
+  });
+
   describe('when a trace row is clicked', () => {
     it('calls onTraceSelect with the signal id and the example trace id', async () => {
       useLiveDataHandlers();
