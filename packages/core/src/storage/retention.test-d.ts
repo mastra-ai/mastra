@@ -16,11 +16,20 @@ import type { RetentionConfig, RetentionTableKey } from './retention';
 describe('RetentionConfig typing', () => {
   it('resolves per-domain table keys from the domain descriptor', () => {
     expectTypeOf<RetentionTableKey<'memory'>>().toEqualTypeOf<'threads' | 'messages' | 'resources'>();
-    expectTypeOf<RetentionTableKey<'observability'>>().toEqualTypeOf<'spans'>();
+    expectTypeOf<RetentionTableKey<'observability'>>().toEqualTypeOf<'spans' | 'traces'>();
+    expectTypeOf<RetentionTableKey<'threadState'>>().toEqualTypeOf<'threadState'>();
+    expectTypeOf<RetentionTableKey<'workflows'>>().toEqualTypeOf<'workflowSnapshot'>();
+    expectTypeOf<RetentionTableKey<'backgroundTasks'>>().toEqualTypeOf<'backgroundTasks'>();
+    expectTypeOf<RetentionTableKey<'experiments'>>().toEqualTypeOf<'experiments'>();
+    expectTypeOf<RetentionTableKey<'schedules'>>().toEqualTypeOf<'triggers'>();
   });
 
-  it('resolves to never for domains that declare no retention tables', () => {
-    expectTypeOf<RetentionTableKey<'workflows'>>().toEqualTypeOf<never>();
+  it('resolves to never for authored/config domains (not growth tables)', () => {
+    // Authored artifacts and config are excluded from retention by design.
+    expectTypeOf<RetentionTableKey<'agents'>>().toEqualTypeOf<never>();
+    expectTypeOf<RetentionTableKey<'skills'>>().toEqualTypeOf<never>();
+    expectTypeOf<RetentionTableKey<'datasets'>>().toEqualTypeOf<never>();
+    expectTypeOf<RetentionTableKey<'channels'>>().toEqualTypeOf<never>();
   });
 
   it('is exposed on MastraCompositeStoreConfig as optional retention', () => {
@@ -57,14 +66,7 @@ describe('RetentionConfig typing', () => {
         observationalMemory: { maxAge: '30d' },
       },
     };
-    const badObservability: RetentionConfig = {
-      observability: {
-        // @ts-expect-error traces are derived from spans; only `spans` is a physical, prunable table
-        traces: { maxAge: '30d' },
-      },
-    };
     void badMemory;
-    void badObservability;
   });
 
   it('rejects unknown domain keys', () => {
@@ -76,9 +78,10 @@ describe('RetentionConfig typing', () => {
   });
 
   it('types a domain with no retention tables as an empty policy map', () => {
-    // Domains absent from DomainRetentionTables resolve to Partial<Record<never, ...>> = {}.
-    // A bare `{}` is accepted (nothing to prune), which is the intended "keep forever" default.
-    const empty: RetentionConfig = { workflows: {} };
+    // Authored/config domains absent from DomainRetentionTables resolve to
+    // Partial<Record<never, ...>> = {}. A bare `{}` is accepted (nothing to
+    // prune), which is the intended "keep forever" default.
+    const empty: RetentionConfig = { agents: {} };
     void empty;
   });
 });

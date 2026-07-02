@@ -11,11 +11,17 @@ import type {
   NotificationSignalAttributes,
   NotificationStatus,
   UpdateNotificationInput,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 import { getSchemaName, getTableName, parseJsonResilient } from '../utils';
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
@@ -113,6 +119,14 @@ export class NotificationsPG extends NotificationsStorage {
 
   static readonly MANAGED_TABLES = [TABLE_NOTIFICATIONS] as const;
 
+  /**
+   * Notifications are an append-only event feed that grows unbounded. Single
+   * table, anchored on the timezone-aware `createdAtZ` mirror column.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    notifications: { table: TABLE_NOTIFICATIONS, column: 'createdAtZ', indexed: true },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
     const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
@@ -129,6 +143,33 @@ export class NotificationsPG extends NotificationsStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.ensureRetentionIndexes();
+  }
+
+  /**
+   * Ensures a btree index exists on each retention anchor column so age-based
+   * `prune()` deletes stay fast on large tables.
+   */
+  private async ensureRetentionIndexes(): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(NotificationsPG.retentionTables)) {
+      if (!entry.indexed) continue;
+      await this.#db.ensureIndex({
+        indexName: `${prefix}mastra_${key}_retention_idx`,
+        tableName: entry.table as TABLE_NAMES,
+        column: entry.column,
+      });
+    }
+  }
+
+  /** Delete notifications older than the `notifications` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: NotificationsPG.retentionTables,
+      order: ['notifications'],
+    });
+    return runPrune({ db: this.#db, domain: 'notifications', targets, options });
   }
 
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {

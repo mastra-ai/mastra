@@ -89,6 +89,11 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import {
@@ -100,6 +105,7 @@ import {
   getTableName as dbGetTableName,
 } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 
 // Database row type that includes timezone-aware columns
 type MessageRowFromDB = {
@@ -153,6 +159,19 @@ function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
 
 export class MemoryPG extends MemoryStorage {
   readonly supportsObservationalMemory = true;
+
+  /**
+   * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
+   * on the timezone-aware `createdAtZ` mirror column (kept in sync by triggers),
+   * and are indexed for fast batched deletes. Cascade order is enforced in
+   * `prune()` (children before threads), not here. Observational memory has no
+   * timestamp anchor and is deliberately excluded.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    messages: { table: TABLE_MESSAGES, column: 'createdAtZ', indexed: true },
+    resources: { table: TABLE_RESOURCES, column: 'createdAtZ', indexed: true },
+    threads: { table: TABLE_THREADS, column: 'createdAtZ', indexed: true },
+  };
 
   #db: PgDB;
   #schema: string;
@@ -212,6 +231,23 @@ export class MemoryPG extends MemoryStorage {
     }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.ensureRetentionIndexes();
+  }
+
+  /**
+   * Ensures a btree index exists on each retention anchor column so age-based
+   * `prune()` deletes stay fast on large tables.
+   */
+  private async ensureRetentionIndexes(): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(MemoryPG.retentionTables)) {
+      if (!entry.indexed) continue;
+      await this.#db.ensureIndex({
+        indexName: `${prefix}mastra_${key}_retention_idx`,
+        tableName: entry.table as TABLE_NAMES,
+        column: entry.column,
+      });
+    }
   }
 
   /**
@@ -330,6 +366,21 @@ export class MemoryPG extends MemoryStorage {
     await this.#db.clearTable({ tableName: TABLE_MESSAGES });
     await this.#db.clearTable({ tableName: TABLE_THREADS });
     await this.#db.clearTable({ tableName: TABLE_RESOURCES });
+  }
+
+  /**
+   * Deletes rows older than the configured `maxAge` per table, in bounded,
+   * batched, cancellable chunks. Tables are pruned children-first (messages and
+   * resources before threads) since PostgreSQL has no FK cascade in this schema.
+   * Unset tables are kept forever.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: MemoryPG.retentionTables,
+      order: ['messages', 'resources', 'threads'],
+    });
+    return runPrune({ db: this.#db, domain: 'memory', targets, options });
   }
 
   /**

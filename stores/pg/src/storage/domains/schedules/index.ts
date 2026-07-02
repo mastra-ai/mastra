@@ -7,12 +7,18 @@ import type {
   ScheduleTriggerListOptions,
   ScheduleUpdate,
   CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { DbClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -92,6 +98,16 @@ export class SchedulesPG extends SchedulesStorage {
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS] as const;
 
+  /**
+   * The fire/run history (`schedule_triggers`, one row per fire) is the growth
+   * table; schedule definitions are config and excluded. Anchored on
+   * `actual_fire_at`, a bigint epoch-ms column (numeric comparison, not
+   * timestamptz).
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    triggers: { table: TABLE_SCHEDULE_TRIGGERS, column: 'actual_fire_at', indexed: true, anchorType: 'epoch-ms' },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
     const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
@@ -113,6 +129,37 @@ export class SchedulesPG extends SchedulesStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.ensureRetentionIndexes();
+  }
+
+  /**
+   * Ensures a btree index exists on each retention anchor column so age-based
+   * `prune()` deletes stay fast. The default composite index leads with
+   * `schedule_id`, so a bare `actual_fire_at` range scan can't use it.
+   */
+  private async ensureRetentionIndexes(): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(SchedulesPG.retentionTables)) {
+      if (!entry.indexed) continue;
+      await this.#db.ensureIndex({
+        indexName: `${prefix}mastra_${key}_retention_idx`,
+        tableName: entry.table as TABLE_NAMES,
+        column: entry.column,
+      });
+    }
+  }
+
+  /**
+   * Delete trigger (fire history) rows whose `actual_fire_at` is older than the
+   * `triggers` policy's `maxAge`, batched. Schedule definitions are never pruned.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: SchedulesPG.retentionTables,
+      order: ['triggers'],
+    });
+    return runPrune({ db: this.#db, domain: 'schedules', targets, options });
   }
 
   /**

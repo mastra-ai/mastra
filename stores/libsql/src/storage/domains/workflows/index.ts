@@ -5,6 +5,10 @@ import type {
   WorkflowRuns,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -19,8 +23,17 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { createExecuteWriteOperationWithRetry, safeStringify } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
+import { runPrune, resolveTargets } from '../../retention';
 
 export class WorkflowsLibSQL extends WorkflowsStorage {
+  /**
+   * Workflow run snapshots accumulate as runs execute. Anchored on `updatedAt`
+   * (last activity) so suspended/long-running runs are not pruned by start age.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
   private readonly executeWithRetry: <T>(operationFn: () => Promise<T>, operationDescription: string) => Promise<T>;
@@ -78,10 +91,26 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       schema,
       ifNotExists: ['resourceId'],
     });
+    // Anchor index for age-based retention (prune on updatedAt).
+    await this.#db.ensureIndex({
+      indexName: 'idx_workflow_snapshot_updated_at',
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      column: 'updatedAt',
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  /** Delete workflow snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: WorkflowsLibSQL.retentionTables,
+      order: ['workflowSnapshot'],
+    });
+    return runPrune({ db: this.#db, domain: 'workflows', targets, options });
   }
 
   private async setupPragmaSettings() {

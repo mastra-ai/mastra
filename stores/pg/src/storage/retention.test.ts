@@ -1,26 +1,21 @@
-import fs from 'node:fs';
-import os from 'node:os';
 import { createSampleThreadWithParams } from '@internal/storage-test-utils';
-import { createClient } from '@libsql/client';
 import type { StorageThreadType } from '@mastra/core/memory';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { LibSQLStore } from './index';
+import { TEST_CONFIG } from './test-utils';
+import { PostgresStore } from '.';
 
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-
-/**
- * Fresh, isolated in-memory DB per test. A bare `:memory:` url gives each
- * `LibSQLStore` its own private in-memory database (no shared cache), so seeded
- * rows never leak across cases.
- */
-function newStore(id: string) {
-  return new LibSQLStore({ id, url: ':memory:' });
-}
+// A dedicated schema keeps these rows isolated from other PG suites that use
+// the default `public` schema against the same test database.
+const SCHEMA = `retention_${Math.random().toString(36).slice(2, 8)}`;
 
 const DAY = 24 * 60 * 60 * 1000;
 
-async function seedThread(store: LibSQLStore, id: string, ageDays: number): Promise<StorageThreadType> {
+function newStore(retention?: PostgresStore['retention']) {
+  return new PostgresStore({ ...TEST_CONFIG, schemaName: SCHEMA, retention } as any);
+}
+
+async function seedThread(store: PostgresStore, id: string, ageDays: number): Promise<StorageThreadType> {
   const at = new Date(Date.now() - ageDays * DAY);
   const memory = store.stores.memory!;
   const thread = createSampleThreadWithParams(id, `resource-${id}`, at, at) as StorageThreadType;
@@ -28,18 +23,32 @@ async function seedThread(store: LibSQLStore, id: string, ageDays: number): Prom
   return thread;
 }
 
-async function threadIds(store: LibSQLStore): Promise<string[]> {
+async function threadIds(store: PostgresStore): Promise<string[]> {
   const memory = store.stores.memory!;
   const { threads } = await memory.listThreads({ perPage: false });
   return threads.map(t => t.id).sort();
 }
 
-describe('LibSQL retention', () => {
-  let store: LibSQLStore;
+describe('PG retention', () => {
+  let store: PostgresStore;
+
+  beforeAll(async () => {
+    store = newStore();
+    await store.init();
+  });
+
+  afterAll(async () => {
+    try {
+      await store.db.none(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
+    } catch {}
+    try {
+      await store.close();
+    } catch {}
+  });
 
   beforeEach(async () => {
-    store = newStore(`retention-${Math.random().toString(36).slice(2)}`);
-    await store.init();
+    // Fresh state per test — clear the memory tables in cascade-safe order.
+    await store.stores.memory!.dangerouslyClearAll();
   });
 
   describe('prune()', () => {
@@ -56,9 +65,7 @@ describe('LibSQL retention', () => {
       expect(await threadIds(store)).toEqual(['new-1']);
     });
 
-    it('keeps a row exactly at the cutoff and deletes one just past it (strict <)', async () => {
-      // Seeded ages are relative to Date.now(); a 30d-old row sits ~at the cutoff.
-      // Use a clearly-older and a clearly-newer row to avoid millisecond flakiness.
+    it('keeps a row at the cutoff and deletes one past it (strict <)', async () => {
       await seedThread(store, 'boundary-older', 31);
       await seedThread(store, 'boundary-newer', 29);
 
@@ -70,7 +77,6 @@ describe('LibSQL retention', () => {
     it('leaves unset tables untouched (unset = keep forever)', async () => {
       await seedThread(store, 'old-1', 90);
 
-      // No policy for threads => nothing deleted.
       const results = await store.stores.memory!.prune({});
       expect(results).toEqual([]);
       expect(await threadIds(store)).toEqual(['old-1']);
@@ -125,19 +131,20 @@ describe('LibSQL retention', () => {
 
   describe('composite prune()', () => {
     it('routes per-table policies to the memory domain via retention config', async () => {
-      const configured = new LibSQLStore({
-        id: `retention-cfg-${Math.random().toString(36).slice(2)}`,
-        url: ':memory:',
-        retention: { memory: { threads: { maxAge: '30d' } } },
-      });
+      const configured = newStore({ memory: { threads: { maxAge: '30d' } } });
       await configured.init();
-      await seedThread(configured, 'old-1', 40);
-      await seedThread(configured, 'new-1', 5);
+      try {
+        await configured.stores.memory!.dangerouslyClearAll();
+        await seedThread(configured, 'old-1', 40);
+        await seedThread(configured, 'new-1', 5);
 
-      const results = await configured.prune();
+        const results = await configured.prune();
 
-      expect(results.map(r => r.table)).toContain('mastra_threads');
-      expect(await threadIds(configured)).toEqual(['new-1']);
+        expect(results.map(r => r.table)).toContain('mastra_threads');
+        expect(await threadIds(configured)).toEqual(['new-1']);
+      } finally {
+        await configured.close().catch(() => {});
+      }
     });
 
     it('is a no-op returning [] when no retention is configured', async () => {
@@ -148,11 +155,15 @@ describe('LibSQL retention', () => {
   });
 
   // schedules.triggers is anchored on `actual_fire_at`, a bigint epoch-ms column,
-  // so the cutoff is compared numerically rather than as an ISO string.
+  // so the cutoff is compared numerically rather than as a timestamptz.
   describe('schedules (epoch-ms anchor)', () => {
-    async function seedTrigger(s: LibSQLStore, id: string, ageDays: number) {
+    beforeEach(async () => {
+      await store.stores.schedules!.dangerouslyClearAll();
+    });
+
+    async function seedTrigger(id: string, ageDays: number) {
       const fireAt = Date.now() - ageDays * DAY;
-      await s.stores.schedules!.recordTrigger({
+      await store.stores.schedules!.recordTrigger({
         id,
         scheduleId: 'sched-1',
         runId: `run-${id}`,
@@ -162,72 +173,60 @@ describe('LibSQL retention', () => {
       });
     }
 
-    async function triggerIds(s: LibSQLStore): Promise<string[]> {
-      const triggers = await s.stores.schedules!.listTriggers('sched-1');
+    async function triggerIds(): Promise<string[]> {
+      const triggers = await store.stores.schedules!.listTriggers('sched-1');
       return triggers.map(t => t.id!).sort();
     }
 
     it('deletes fire history older than maxAge using numeric epoch comparison', async () => {
-      await seedTrigger(store, 'old-1', 40);
-      await seedTrigger(store, 'old-2', 40);
-      await seedTrigger(store, 'new-1', 5);
+      await seedTrigger('old-1', 40);
+      await seedTrigger('old-2', 40);
+      await seedTrigger('new-1', 5);
 
       const results = await store.stores.schedules!.prune({ triggers: { maxAge: '30d' } });
 
       expect(results).toHaveLength(1);
       expect(results[0]).toMatchObject({ domain: 'schedules', table: 'mastra_schedule_triggers', done: true });
       expect(results[0]!.deleted).toBe(2);
-      expect(await triggerIds(store)).toEqual(['new-1']);
+      expect(await triggerIds()).toEqual(['new-1']);
     });
 
     it('leaves fire history untouched when the triggers policy is unset', async () => {
-      await seedTrigger(store, 'old-1', 90);
+      await seedTrigger('old-1', 90);
       expect(await store.stores.schedules!.prune({})).toEqual([]);
-      expect(await triggerIds(store)).toEqual(['old-1']);
+      expect(await triggerIds()).toEqual(['old-1']);
     });
   });
 
   // Experiments prune as whole units: an aged experiment's result rows are
   // deleted first (cascade), then the experiment, so a run is never left hollow.
-  // Uses a file-backed DB so tests can seed an old completed experiment directly.
+  // Seeds rows directly so `completedAt` can be backdated.
   describe('experiments (whole-unit cascade)', () => {
-    let fileStore: LibSQLStore;
-    let url: string;
-
     beforeEach(async () => {
-      url = `file:${tmpFile()}`;
-      fileStore = new LibSQLStore({ id: `exp-${Math.random().toString(36).slice(2)}`, url });
-      await fileStore.init();
+      await store.stores.experiments!.dangerouslyClearAll();
     });
 
-    afterEach(() => {
-      cleanupTmp(url);
-    });
-
-    /** Insert an experiment (+ N results) directly so completedAt can be backdated. */
     async function seedExperiment(id: string, completedAgeDays: number | null, resultCount: number) {
-      const raw = createClient({ url });
       const completedAt = completedAgeDays == null ? null : new Date(Date.now() - completedAgeDays * DAY).toISOString();
       const now = new Date().toISOString();
-      await raw.execute({
-        sql: `INSERT INTO mastra_experiments (id, targetType, targetId, status, totalItems, succeededCount, failedCount, skippedCount, startedAt, completedAt, createdAt, updatedAt) VALUES (?, 'agent', 'agent-1', 'completed', ?, 0, 0, 0, ?, ?, ?, ?)`,
-        args: [id, resultCount, now, completedAt, now, now],
-      });
+      await store.db.none(
+        `INSERT INTO "${SCHEMA}"."mastra_experiments" ("id", "targetType", "targetId", "status", "totalItems", "succeededCount", "failedCount", "skippedCount", "startedAt", "completedAt", "createdAt", "updatedAt") VALUES ($1, 'agent', 'agent-1', 'completed', $2, 0, 0, 0, $3, $4, $5, $6)`,
+        [id, resultCount, now, completedAt, now, now],
+      );
       for (let i = 0; i < resultCount; i++) {
-        await raw.execute({
-          sql: `INSERT INTO mastra_experiment_results (id, experimentId, itemId, input, startedAt, completedAt, retryCount, createdAt) VALUES (?, ?, ?, '{}', ?, ?, 0, ?)`,
-          args: [`${id}-r${i}`, id, `item-${i}`, now, now, now],
-        });
+        await store.db.none(
+          `INSERT INTO "${SCHEMA}"."mastra_experiment_results" ("id", "experimentId", "itemId", "input", "startedAt", "completedAt", "retryCount", "createdAt") VALUES ($1, $2, $3, '{}', $4, $5, 0, $6)`,
+          [`${id}-r${i}`, id, `item-${i}`, now, now, now],
+        );
       }
-      raw.close();
     }
 
     async function counts() {
-      const raw = createClient({ url });
-      const exp = await raw.execute('SELECT COUNT(*) AS c FROM mastra_experiments');
-      const res = await raw.execute('SELECT COUNT(*) AS c FROM mastra_experiment_results');
-      raw.close();
-      return { experiments: Number(exp.rows[0]!.c), results: Number(res.rows[0]!.c) };
+      const exp = await store.db.oneOrNone<{ c: string }>(`SELECT COUNT(*) AS c FROM "${SCHEMA}"."mastra_experiments"`);
+      const res = await store.db.oneOrNone<{ c: string }>(
+        `SELECT COUNT(*) AS c FROM "${SCHEMA}"."mastra_experiment_results"`,
+      );
+      return { experiments: Number(exp!.c), results: Number(res!.c) };
     }
 
     it('deletes an aged experiment and its results together, keeping running ones', async () => {
@@ -235,7 +234,7 @@ describe('LibSQL retention', () => {
       await seedExperiment('recent', 5, 2); // completed 5d ago
       await seedExperiment('running', null, 4); // still running (completedAt NULL)
 
-      const results = await fileStore.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
+      const results = await store.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
 
       const resultRow = results.find(r => r.table === 'mastra_experiment_results')!;
       const expRow = results.find(r => r.table === 'mastra_experiments')!;
@@ -251,27 +250,10 @@ describe('LibSQL retention', () => {
     it('never leaves an experiment hollow (results deleted only with their parent)', async () => {
       await seedExperiment('old', 40, 5);
 
-      await fileStore.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
+      await store.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
 
       // Both the parent and all its children are gone — no orphaned results.
       expect(await counts()).toEqual({ experiments: 0, results: 0 });
     });
   });
 });
-
-let tmpCounter = 0;
-function tmpFile(): string {
-  tmpCounter += 1;
-  return `${os.tmpdir()}/libsql-retention-${process.pid}-${Date.now()}-${tmpCounter}.db`;
-}
-
-function cleanupTmp(url: string) {
-  const path = url.replace(/^file:/, '');
-  for (const suffix of ['', '-wal', '-shm']) {
-    try {
-      fs.rmSync(`${path}${suffix}`);
-    } catch {
-      // best-effort cleanup
-    }
-  }
-}

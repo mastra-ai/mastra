@@ -1625,6 +1625,115 @@ export class PgDB extends MastraBase {
     return this.clearTable({ tableName });
   }
 
+  // ---------------------------------------------------------------------------
+  // Retention helpers (prune)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Deletes up to `limit` rows from `tableName` whose `column` value is strictly
+   * older than `cutoff`, in a single bounded statement. Returns the number of
+   * rows deleted so the caller's batch loop can decide whether the table is
+   * drained.
+   *
+   * PostgreSQL has no `DELETE ... LIMIT`, so this targets a bounded set of
+   * physical rows via the `ctid` system column (PG's row identity, analogous to
+   * SQLite's `rowid`). `cutoff` is bound as a parameter — a `Date`/ISO-8601
+   * string compared against a `timestamptz` anchor column, or a `number`
+   * compared against a `bigint` epoch-ms anchor column.
+   */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: Date | string | number;
+    limit: number;
+  }): Promise<number> {
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const parsedColumn = `"${parseSqlIdentifier(column, 'column name')}"`;
+
+    const sql = `
+      DELETE FROM ${fullTableName}
+      WHERE ctid IN (
+        SELECT ctid FROM ${fullTableName}
+        WHERE ${parsedColumn} < $1
+        LIMIT $2
+      )
+    `;
+
+    const result = await this.client.query(sql, [cutoff, limit]);
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * Deletes a bounded batch of child rows whose parent row is aged out, so an
+   * aged-out parent's dependents are removed before the parent itself (used by
+   * whole-unit pruning such as experiments → experiment_results). Targets rows
+   * via `ctid` since PostgreSQL has no `DELETE ... LIMIT`. Returns the number of
+   * child rows deleted.
+   */
+  async pruneChildByParentBatch({
+    childTable,
+    childForeignKey,
+    parentTable,
+    parentKey,
+    parentColumn,
+    cutoff,
+    limit,
+  }: {
+    childTable: TABLE_NAMES;
+    childForeignKey: string;
+    parentTable: TABLE_NAMES;
+    parentKey: string;
+    parentColumn: string;
+    cutoff: Date | string | number;
+    limit: number;
+  }): Promise<number> {
+    const schemaName = getSchemaName(this.schemaName);
+    const fullChildTable = getTableName({ indexName: childTable, schemaName });
+    const fullParentTable = getTableName({ indexName: parentTable, schemaName });
+    const childFk = `"${parseSqlIdentifier(childForeignKey, 'column name')}"`;
+    const parentPk = `"${parseSqlIdentifier(parentKey, 'column name')}"`;
+    const parentCol = `"${parseSqlIdentifier(parentColumn, 'column name')}"`;
+
+    const sql = `
+      DELETE FROM ${fullChildTable}
+      WHERE ctid IN (
+        SELECT c.ctid FROM ${fullChildTable} c
+        JOIN ${fullParentTable} p ON c.${childFk} = p.${parentPk}
+        WHERE p.${parentCol} < $1
+        LIMIT $2
+      )
+    `;
+
+    const result = await this.client.query(sql, [cutoff, limit]);
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * Creates a btree index on `column` for `tableName` if it does not already
+   * exist, so age-based prune deletes stay fast. Delegates to {@link createIndex}
+   * (which is a no-op when the index is present).
+   *
+   * The name is lowercased and truncated to Postgres' 63-byte identifier limit
+   * (schema-prefixed names can exceed it), mirroring {@link buildConstraintName}.
+   */
+  async ensureIndex({
+    indexName,
+    tableName,
+    column,
+  }: {
+    indexName: string;
+    tableName: TABLE_NAMES;
+    column: string;
+  }): Promise<void> {
+    const name = buildConstraintName({ baseName: indexName });
+    await this.createIndex({ name, table: tableName, columns: [column] });
+  }
+
   private async executeUpdate(
     client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
     {

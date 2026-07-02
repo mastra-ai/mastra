@@ -1,7 +1,15 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import type {
+  StoragePagination,
+  CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+} from '@mastra/core/storage';
 import {
   calculatePagination,
   createStorageErrorId,
@@ -14,6 +22,7 @@ import {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -46,6 +55,14 @@ export class ScoresPG extends ScoresStorage {
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_SCORERS] as const;
 
+  /**
+   * Scorer results accumulate as evals run. Single table, anchored on the
+   * timezone-aware `createdAtZ` mirror column (kept in sync by triggers).
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    scorers: { table: TABLE_SCORERS, column: 'createdAtZ', indexed: true },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
     const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
@@ -66,6 +83,23 @@ export class ScoresPG extends ScoresStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.ensureRetentionIndexes();
+  }
+
+  /**
+   * Ensures a btree index exists on each retention anchor column so age-based
+   * `prune()` deletes stay fast on large tables.
+   */
+  private async ensureRetentionIndexes(): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(ScoresPG.retentionTables)) {
+      if (!entry.indexed) continue;
+      await this.#db.ensureIndex({
+        indexName: `${prefix}mastra_${key}_retention_idx`,
+        tableName: entry.table as TABLE_NAMES,
+        column: entry.column,
+      });
+    }
   }
 
   /**
@@ -155,6 +189,16 @@ export class ScoresPG extends ScoresStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_SCORERS });
+  }
+
+  /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ScoresPG.retentionTables,
+      order: ['scorers'],
+    });
+    return runPrune({ db: this.#db, domain: 'scores', targets, options });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {

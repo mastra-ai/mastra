@@ -103,12 +103,41 @@ export interface PruneResult {
  * `retentionTables` descriptor and is validated against it at runtime by the
  * reference implementations.
  *
+ * Only **growth tables** are listed — tables that accumulate rows unbounded as
+ * a side effect of normal operation (conversation history, telemetry, job/run
+ * records, schedule fire history, event feeds, per-thread state). User-authored
+ * artifacts and config (agents, skills, workspaces, prompt blocks, scorer
+ * definitions, mcp configs, favorites, tool connections, datasets, channel
+ * config, channel installations, schedule definitions) are deliberately
+ * excluded: they grow with user intent and are edited/deleted explicitly, so
+ * age-based retention does not apply.
+ *
+ * Note: for the `schedules` domain the growth table is the fire/run history
+ * (`schedule_triggers`, one row appended per fire), not the schedule
+ * definitions (`schedules`, one stable row per schedule). Hence the single
+ * `'triggers'` key.
+ *
+ * Note: for the `experiments` domain, an experiment is pruned as a whole unit —
+ * the run and all of its `experiment_results` rows are deleted together (results
+ * cascade with their parent, matching `deleteExperiment`). Results have no
+ * independent lifespan, so they are not a separate retention key. The anchor is
+ * `experiments.completedAt`, so in-flight runs (NULL `completedAt`) are never
+ * pruned. Hence the single `'experiments'` key.
+ *
  * Domains not listed here fall back to `never`, so no table policies can be
  * set on them until they declare their retention tables.
  */
 export interface DomainRetentionTables {
   memory: 'threads' | 'messages' | 'resources';
-  observability: 'spans';
+  threadState: 'threadState';
+  observability: 'spans' | 'traces';
+  scores: 'scorers';
+  workflows: 'workflowSnapshot';
+  backgroundTasks: 'backgroundTasks';
+  experiments: 'experiments';
+  notifications: 'notifications';
+  harness: 'sessions';
+  schedules: 'triggers';
 }
 
 /**
@@ -159,11 +188,22 @@ export interface RetentionTableDescriptor {
   /** Physical table name (e.g. `mastra_messages`). */
   table: string;
 
-  /** Timestamp anchor column used for the age comparison (e.g. `createdAt`). */
+  /** Anchor column used for the age comparison (e.g. `createdAt`). */
   column: string;
 
   /** Whether `column` is indexed. Unindexed anchors make batched deletes slow. */
   indexed: boolean;
+
+  /**
+   * Storage type of the anchor column, which determines how the age cutoff is
+   * bound in the delete query:
+   * - `timestamp` (default): compared as an ISO-8601 string / `Date`.
+   * - `epoch-ms`: compared as a raw number of milliseconds since the Unix epoch
+   *   (e.g. `schedules.created_at`, stored as `bigint`).
+   *
+   * @default 'timestamp'
+   */
+  anchorType?: 'timestamp' | 'epoch-ms';
 }
 
 /**

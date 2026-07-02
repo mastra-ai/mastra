@@ -1148,6 +1148,48 @@ export class LibSQLDB extends MastraBase {
     return Number(result.rowsAffected ?? 0);
   }
 
+  /**
+   * Delete up to `limit` child rows whose foreign key points to a parent row
+   * whose `parentColumn` timestamp is strictly before `cutoff`. Used for
+   * whole-unit (parent-driven) pruning where children must die with their
+   * parent (e.g. experiment_results cascading with an aged experiment).
+   *
+   * Bounded by `rowid` + LIMIT like {@link pruneBatch}, so locks stay short.
+   */
+  async pruneChildByParentBatch({
+    childTable,
+    childForeignKey,
+    parentTable,
+    parentKey,
+    parentColumn,
+    cutoff,
+    limit,
+  }: {
+    childTable: TABLE_NAMES;
+    childForeignKey: string;
+    parentTable: TABLE_NAMES;
+    parentKey: string;
+    parentColumn: string;
+    cutoff: string | number;
+    limit: number;
+  }): Promise<number> {
+    const parsedChild = parseSqlIdentifier(childTable, 'table name');
+    const parsedChildFk = parseSqlIdentifier(childForeignKey, 'column name');
+    const parsedParent = parseSqlIdentifier(parentTable, 'table name');
+    const parsedParentKey = parseSqlIdentifier(parentKey, 'column name');
+    const parsedParentColumn = parseSqlIdentifier(parentColumn, 'column name');
+    const sql =
+      `DELETE FROM "${parsedChild}" WHERE rowid IN (` +
+      `SELECT c.rowid FROM "${parsedChild}" c ` +
+      `JOIN "${parsedParent}" p ON p."${parsedParentKey}" = c."${parsedChildFk}" ` +
+      `WHERE p."${parsedParentColumn}" < ? LIMIT ?)`;
+    const result = await this.executeWriteOperationWithRetry(
+      () => withClientWriteLock(this.client, () => this.client.execute({ sql, args: [cutoff, limit] })),
+      `prune child ${childTable}`,
+    );
+    return Number(result.rowsAffected ?? 0);
+  }
+
   /** Create an index if it does not already exist. */
   async ensureIndex({
     indexName,

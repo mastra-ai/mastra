@@ -25,10 +25,18 @@ import type {
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
   CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { cutoffFor, runBatchedDelete } from '../../retention';
 import { getTableName, getSchemaName } from '../utils';
+
+const DEFAULT_PRUNE_BATCH_SIZE = 1000;
 
 export class ExperimentsPG extends ExperimentsStorage {
   #db: PgDB;
@@ -37,6 +45,18 @@ export class ExperimentsPG extends ExperimentsStorage {
   #indexes?: CreateIndexOptions[];
 
   static readonly MANAGED_TABLES = [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS] as const;
+
+  /**
+   * Experiments prune as whole units: an aged experiment and its result rows go
+   * together, mirroring `deleteExperiment`. Anchored on `completedAt` (not the
+   * `completedAtZ` mirror, which carries a `DEFAULT NOW()` this domain never
+   * overrides — it holds insert time even for running rows). `completedAt` is
+   * written as a UTC ISO string and stays NULL while running, so
+   * `completedAt < cutoff` is false for in-flight experiments.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    experiments: { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+  };
 
   constructor(config: PgDomainConfig) {
     super();
@@ -78,6 +98,77 @@ export class ExperimentsPG extends ExperimentsStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+    await this.ensureRetentionIndexes();
+  }
+
+  /**
+   * Ensures a btree index exists on each retention anchor column so age-based
+   * `prune()` deletes stay fast on large tables.
+   */
+  private async ensureRetentionIndexes(): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(ExperimentsPG.retentionTables)) {
+      if (!entry.indexed) continue;
+      await this.#db.ensureIndex({
+        indexName: `${prefix}mastra_${key}_retention_idx`,
+        tableName: entry.table as TABLE_NAMES,
+        column: entry.column,
+      });
+    }
+  }
+
+  /**
+   * Delete experiments whose `completedAt` is older than the policy's `maxAge`.
+   *
+   * Deletes each aged experiment as a unit: first its `experiment_results` rows
+   * (cascade), then the experiment row itself — mirroring `deleteExperiment`,
+   * so a run is never left hollow (parent kept, results gone). NULL `completedAt`
+   * (still running) is excluded by the `< cutoff` predicate. Batched, bounded,
+   * and cancellable via `options`.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const policy = policies['experiments'];
+    if (!policy || options?.signal?.aborted) {
+      return policy ? [{ domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false }] : [];
+    }
+
+    // `completedAt` is a naive TIMESTAMP holding UTC ISO strings, so bind the
+    // cutoff as a UTC ISO string too — a Date would be serialized with the
+    // session's local offset and compared against the wrong wall time.
+    const rawCutoff = cutoffFor(policy, 'timestamp');
+    const cutoff = rawCutoff instanceof Date ? rawCutoff.toISOString() : rawCutoff;
+    const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
+
+    // Children first: delete result rows whose parent experiment is aged out.
+    const child = await runBatchedDelete({
+      deleteBatch: limit =>
+        this.#db.pruneChildByParentBatch({
+          childTable: TABLE_EXPERIMENT_RESULTS,
+          childForeignKey: 'experimentId',
+          parentTable: TABLE_EXPERIMENTS,
+          parentKey: 'id',
+          parentColumn: 'completedAt',
+          cutoff,
+          limit,
+        }),
+      batchSize,
+      options,
+    });
+
+    // Then the parent experiments themselves.
+    const parent = child.done
+      ? await runBatchedDelete({
+          deleteBatch: limit =>
+            this.#db.pruneBatch({ tableName: TABLE_EXPERIMENTS, column: 'completedAt', cutoff, limit }),
+          batchSize,
+          options,
+        })
+      : { deleted: 0, done: false };
+
+    return [
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: child.deleted, done: child.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
+    ];
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {

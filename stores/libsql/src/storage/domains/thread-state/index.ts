@@ -6,9 +6,11 @@ import {
   TABLE_THREAD_STATE,
   THREAD_STATE_SCHEMA,
 } from '@mastra/core/storage';
+import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 
 /**
  * LibSQL implementation of {@link ThreadStateStorage}.
@@ -18,6 +20,15 @@ import type { LibSQLDomainConfig } from '../../db';
  * payload (e.g. the task list for `type = 'task'`).
  */
 export class ThreadStateLibSQL extends ThreadStateStorage {
+  /**
+   * `thread_state` grows as a side effect of thread activity (one row per
+   * thread per state type). It anchors on `updatedAt` (last activity), so state
+   * for a thread that is still being appended to is not pruned by creation age.
+   */
+  static readonly retentionTables: RetentionTablesDescriptor = {
+    threadState: { table: TABLE_THREAD_STATE, column: 'updatedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
 
@@ -34,6 +45,22 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
       schema: THREAD_STATE_SCHEMA,
       compositePrimaryKey: ['threadId', 'type'],
     });
+    // Anchor index for age-based retention (prune on updatedAt).
+    await this.#db.ensureIndex({
+      indexName: 'idx_thread_state_updated_at',
+      tableName: TABLE_THREAD_STATE,
+      column: 'updatedAt',
+    });
+  }
+
+  /** Delete thread state older than the `threadState` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ThreadStateLibSQL.retentionTables,
+      order: ['threadState'],
+    });
+    return runPrune({ db: this.#db, domain: 'threadState', targets, options });
   }
 
   async dangerouslyClearAll(): Promise<void> {

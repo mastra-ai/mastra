@@ -1,6 +1,6 @@
 import { parseDuration } from '@mastra/core/storage';
 import type { TABLE_NAMES, PruneOptions, PruneResult, TableRetentionPolicy } from '@mastra/core/storage';
-import type { LibSQLDB } from './db';
+import type { PgDB } from './db';
 
 const DEFAULT_BATCH_SIZE = 1000;
 
@@ -8,12 +8,13 @@ const DEFAULT_BATCH_SIZE = 1000;
 export interface PruneTarget {
   /** Physical table name. */
   table: TABLE_NAMES;
-  /** Timestamp anchor column for the age comparison. */
+  /** Anchor column for the age comparison. */
   column: string;
   /**
    * How the anchor column stores time, which decides how the cutoff is bound:
-   * - `timestamp` (default): ISO-8601 string comparison.
-   * - `epoch-ms`: raw millisecond number comparison (e.g. `schedules.triggers`).
+   * - `timestamp` (default): a `Date` compared against a `timestamptz` column.
+   * - `epoch-ms`: a raw millisecond number compared against a `bigint` column
+   *   (e.g. `schedules.triggers.actual_fire_at`).
    */
   anchorType: 'timestamp' | 'epoch-ms';
   /** Retention policy (maxAge + optional batchSize). */
@@ -36,25 +37,13 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * Runs the bounded, batched, cancellable delete loop for a set of tables in the
- * given order (callers pass children before parents for cascade-safe pruning),
- * and returns one {@link PruneResult} per table.
- *
- * The loop:
- * - deletes in chunks of `batchSize` (default 1000), each its own statement;
- * - stops a table's loop when a batch deletes fewer rows than requested (drained),
- *   or when `maxBatches`/`maxRows` is hit, or the `signal` aborts — the latter
- *   three leave `done: false` so the caller can resume;
- * - pauses `pauseMs` between batches when set, to avoid starving live traffic.
- *
- * `prune()` only deletes rows; it never reclaims disk. Freed pages are reused
- * by future writes so the file stops growing. Handing disk back to the OS is
- * left to the underlying database and the operator to manage.
+ * Convert a policy's `maxAge` into a cutoff bound matching the anchor's storage
+ * type: a `Date` for `timestamptz` columns (pg compares timezone-aware), or a
+ * raw millisecond number for `bigint` epoch-ms columns.
  */
-/** Convert a policy's `maxAge` into a cutoff bound matching the anchor's storage type. */
 export function cutoffFor(policy: TableRetentionPolicy, anchorType: 'timestamp' | 'epoch-ms', now = Date.now()) {
   const cutoffMs = now - parseDuration(policy.maxAge);
-  return anchorType === 'epoch-ms' ? cutoffMs : new Date(cutoffMs).toISOString();
+  return anchorType === 'epoch-ms' ? cutoffMs : new Date(cutoffMs);
 }
 
 /**
@@ -100,13 +89,29 @@ export async function runBatchedDelete({
   }
 }
 
+/**
+ * Runs the bounded, batched, cancellable delete loop for a set of tables in the
+ * given order (callers pass children before parents for cascade-safe pruning),
+ * and returns one {@link PruneResult} per table.
+ *
+ * The loop:
+ * - deletes in chunks of `batchSize` (default 1000), each its own statement;
+ * - stops a table's loop when a batch deletes fewer rows than requested (drained),
+ *   or when `maxBatches`/`maxRows` is hit, or the `signal` aborts — the latter
+ *   three leave `done: false` so the caller can resume;
+ * - pauses `pauseMs` between batches when set, to avoid starving live traffic.
+ *
+ * `prune()` only deletes rows; it never reclaims disk. PostgreSQL reuses freed
+ * space (dead tuples) via autovacuum on subsequent writes, so tables stop
+ * growing. Returning disk to the OS (e.g. `VACUUM FULL`) is left to the operator.
+ */
 export async function runPrune({
   db,
   domain,
   targets,
   options,
 }: {
-  db: LibSQLDB;
+  db: PgDB;
   domain: string;
   targets: PruneTarget[];
   options?: PruneOptions;

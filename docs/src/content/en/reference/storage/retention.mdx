@@ -4,6 +4,7 @@ description: "API reference for retention policies and prune() on Mastra storage
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
+  - "@mastra/pg"
 ---
 
 # Storage retention
@@ -12,7 +13,9 @@ Storage grows without bound by default. Retention is an opt-in, age-based cleanu
 
 `prune()` deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable). It never reclaims disk — on SQLite/libSQL the freed pages are reused by future writes so the file stops growing, but handing disk back to the OS (for example a `VACUUM`) is left to the underlying database and the operator to manage.
 
-The reference implementation covers the `memory` and `observability` domains on [libSQL](/reference/storage/libsql). Other adapters keep rows forever until they implement retention.
+Retention covers **growth tables** only — tables that accumulate rows unbounded as a side effect of normal operation (conversation history, telemetry, job and run records, schedule fire history, event feeds). User-authored artifacts and config (agents, skills, workspaces, prompt blocks, datasets, schedule definitions, channel installations, and so on) grow with user intent and are edited or deleted explicitly, so they are not valid retention keys.
+
+The reference implementations are [libSQL](/reference/storage/libsql) and [PostgreSQL](/reference/storage/postgresql). Other adapters keep rows forever until they implement retention.
 
 ## Usage example
 
@@ -103,17 +106,31 @@ Set the `retention` field on the store config.
 
 ### Retention-eligible tables
 
-Each domain declares which of its tables can be age-pruned and which timestamp column anchors the comparison. A table is only eligible if it has a usable timestamp column.
+Each domain declares which of its tables can be age-pruned and which timestamp column anchors the comparison. The anchor is chosen so `maxAge` means what you'd expect for that data: creation time for append-only logs, last activity for live state, and completion time for jobs and runs (so in-flight work is never pruned).
 
-| Domain | Table key | Anchor column |
-| - | - | - |
-| `memory` | `threads` | `createdAt` |
-| `memory` | `messages` | `createdAt` |
-| `memory` | `resources` | `createdAt` |
-| `observability` | `spans` | `startedAt` |
+| Domain | Table key | Anchor column | `maxAge` measures |
+| - | - | - | - |
+| `memory` | `threads` | `createdAt` | Thread age |
+| `memory` | `messages` | `createdAt` | Message age |
+| `memory` | `resources` | `createdAt` | Resource age |
+| `threadState` | `threadState` | `updatedAt` | Inactivity — state for still-active threads survives |
+| `observability` | `spans` | `startedAt` | Span age |
+| `scores` | `scorers` | `createdAt` | Score record age |
+| `workflows` | `workflowSnapshot` | `updatedAt` | Inactivity — suspended or long-running workflows survive |
+| `backgroundTasks` | `backgroundTasks` | `completedAt` | Time since completion — in-flight tasks (`NULL`) are never pruned |
+| `experiments` | `experiments` | `completedAt` | Time since completion — running experiments are never pruned |
+| `notifications` | `notifications` | `createdAt` | Notification age |
+| `harness` | `sessions` | `createdAt` | Session record age |
+| `schedules` | `triggers` | `actual_fire_at` | Fire-history age (epoch-ms column) |
 
 :::note
-The memory `observational_memory` table has no timestamp anchor, so it can't be age-pruned and isn't a valid retention key. The observability domain stores a single physical spans table; traces are derived from spans, so there's no separate `traces` key.
+
+- The memory `observational_memory` table has no timestamp anchor, so it can't be age-pruned and isn't a valid retention key.
+- Experiments prune as whole units: an aged experiment's result rows are deleted together with it (results cascade with their parent), so a run is never left partially deleted. There is no separate `results` key.
+- For `schedules`, the growth table is the fire history (`schedule_triggers`, one row per fire) — schedule definitions are config and are not pruned.
+- On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
+- LibSQL supports all domains above; PostgreSQL supports all except `threadState` and `harness`, which have no PostgreSQL implementation.
+
 :::
 
 ## Methods
@@ -211,7 +228,7 @@ You can also cancel a long-running prune with an `AbortSignal` — the loop stop
 
 `prune()` deletes rows but does not shrink the database file. On SQLite/libSQL the freed pages go on a freelist and are reused by future writes, so the file stops growing — for most users this alone solves the unbounded-growth problem.
 
-Handing that free space back to the OS is a separate concern that Mastra does not manage. If you specifically need to shrink the file, run the underlying database's compaction (for example `VACUUM` on self-hosted libSQL) yourself, in a maintenance window — a full `VACUUM` locks the file and needs roughly twice the file size in free disk.
+Handing that free space back to the OS is a separate concern that Mastra does not manage. If you specifically need to shrink the file, run the underlying database's compaction (for example `VACUUM` on self-hosted libSQL) yourself, in a maintenance window — a full `VACUUM` locks the file and needs roughly twice the file size in free disk. On PostgreSQL, autovacuum reclaims dead tuples for reuse automatically; a manual `VACUUM FULL` is only needed if you must return disk to the OS.
 
 :::note[libSQL and Turso]
 [Turso Cloud](/reference/storage/libsql) manages storage compaction for you, so there's nothing to reclaim manually. This applies only to self-hosted libSQL files.
@@ -220,5 +237,6 @@ Handing that free space back to the OS is a separate concern that Mastra does no
 ## Related
 
 - [libSQL storage](/reference/storage/libsql)
+- [PostgreSQL storage](/reference/storage/postgresql)
 - [Composite storage](/reference/storage/composite)
 - [Storage overview](/reference/storage/overview)
