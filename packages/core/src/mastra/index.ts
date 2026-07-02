@@ -22,7 +22,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
-import { AvailableHooks, registerHook } from '../hooks';
+import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
@@ -619,6 +619,7 @@ export class Mastra<
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
+  #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -1555,7 +1556,12 @@ export class Mastra<
       agentController.__registerMastra(this);
     }
 
-    registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
+    // `registerHook` adds to a module-level emitter that never drops handlers on
+    // its own. Keep the reference so short-lived internal/ephemeral Mastras can
+    // release it on teardown (see `__unregisterHooks`); otherwise their handler
+    // fires on every scorer run for the lifetime of the process.
+    this.#onScorerHook = createOnScorerHook(this);
+    registerHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
 
     /*
       Initialize observability with Mastra context (after storage configured)
@@ -2142,6 +2148,14 @@ export class Mastra<
       // Set the Mastra instance on the durable agent for observability
       durableAgent.__setMastra?.(this);
 
+      // Propagate the definition source (e.g. 'fs') onto both the wrapper and
+      // the underlying agent. The durable branch returns early below, so it
+      // never reaches the shared `options?.source` handling.
+      if (options?.source) {
+        (durableAgent as unknown as Agent<any>).source = options.source;
+        underlyingAgent.source = options.source;
+      }
+
       // Initialize the underlying agent (needed for tools, memory, etc.)
       underlyingAgent.__setLogger(this.#logger);
       underlyingAgent.__registerMastra(this);
@@ -2272,6 +2286,39 @@ export class Mastra<
       agentChannelsInstance.initialize(this).catch(err => {
         this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
       });
+    }
+  }
+
+  /**
+   * Registers a map of file-system routed agents (discovered from
+   * `agents/<name>/` directories) into this Mastra instance.
+   *
+   * Code-registered agents win on name collisions: if an agent with the same
+   * key already exists, the file-system agent is skipped and a warning is
+   * logged. Otherwise each agent is added via {@link addAgent} with
+   * `source: 'fs'`.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsAgents(fsAgents: Record<string, Agent | ToolLoopAgentLike | DurableAgentLike>): void {
+    if (!fsAgents) {
+      return;
+    }
+
+    const agents = this.#agents as Record<string, Agent<any>>;
+    for (const [key, agent] of Object.entries(fsAgents)) {
+      if (agent == null) {
+        continue;
+      }
+      if (agents[key]) {
+        this.getLogger().warn(
+          `File-system routed agent "${key}" conflicts with a code-registered agent of the same name. Keeping the code-registered agent.`,
+        );
+        continue;
+      }
+      this.addAgent(agent, key, { source: 'fs' });
     }
   }
 
@@ -4864,6 +4911,21 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#workersStarted = false;
+  }
+
+  /**
+   * Release the module-level hooks this instance registered in its constructor.
+   * The scorer hook is added to a shared emitter that never drops handlers on
+   * its own, so short-lived internal/ephemeral Mastras must call this on teardown
+   * or their handler keeps firing (and failing to resolve the scorer) on every
+   * scorer run for the rest of the process. Idempotent.
+   * @internal
+   */
+  __unregisterHooks(): void {
+    if (this.#onScorerHook) {
+      deregisterHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
+      this.#onScorerHook = undefined;
+    }
   }
 
   /**

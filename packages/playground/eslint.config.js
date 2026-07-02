@@ -598,10 +598,6 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import RuleBuilder exports from @mastra/playground-ui/components/RuleBuilder.',
   },
   {
-    importNames: ['Searchbar', 'SearchbarWrapper', 'SearchbarProps'],
-    message: 'Import Searchbar exports from @mastra/playground-ui/components/Searchbar.',
-  },
-  {
     importNames: ['ScrollArea'],
     message: 'Import ScrollArea from @mastra/playground-ui/components/ScrollArea.',
   },

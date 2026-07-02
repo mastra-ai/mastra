@@ -1131,31 +1131,25 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
       toolCallId: approvalToolCallId,
     });
 
-    let toolDeclinedMessage = '';
-
     for await (const _chunk of resumeStream.fullStream) {
-      // consume
-      if (_chunk.type === 'tool-output') {
-        const output = _chunk.payload.output;
-        if (output.type === 'tool-result' && output.payload.toolName === 'find-user-tool-decline') {
-          toolDeclinedMessage = output.payload.result;
-        }
-      }
+      // consume — output-denied calls emit no tool-result chunk for the sub-agent's declined tool
     }
 
     const toolResults = await resumeStream.toolResults;
 
     // Verify tool was NOT executed
     expect(mockFindUser).not.toHaveBeenCalled();
-
-    // Verify we got tool results from the sub-agent delegation
+    // The supervisor still gets a tool-result for the agent delegation itself,
+    // even though the sub-agent's tool was output-denied.
     expect(toolResults.length).toBeGreaterThan(0);
 
-    // The supervisor's tool result for the agent delegation should contain the sub-agent's response
+    // The delegation result must still carry the sub-agent's declined outcome — not just exist.
+    // A regression that dropped the denied path would leave the sub-agent unable to report back,
+    // so assert the supervisor-facing result surfaces the decline.
     const subAgentResult = toolResults.find(tr => tr.payload?.toolName === 'agent-approvalDeclineSubAgent');
     expect(subAgentResult).toBeDefined();
     expect(subAgentResult?.payload?.result).toBeDefined();
-    expect(toolDeclinedMessage).toBe('Tool call was not approved by the user');
+    expect(JSON.stringify(subAgentResult?.payload?.result)).toMatch(/declin/i);
   });
 });
 

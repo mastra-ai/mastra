@@ -6,8 +6,9 @@ import fs from 'node:fs';
 
 import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
-import { hasHeadlessFlag, headlessMain } from './headless.js';
+import { hasHeadlessFlag, runMCCli } from './headless/index.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
+import { formatScaffoldSuccess, scaffoldPlugin } from './plugins/scaffold.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -79,7 +80,7 @@ async function tuiMain(pipedInput?: string | null) {
 
   // MCP connection is deferred to TUI.init() (after ui.start()) so that
   // status messages use showInfo() instead of console.info(), which would
-  // corrupt the terminal.  Headless mode still inits from headless.ts.
+  // corrupt the terminal.  Headless mode still inits from headless/cli.ts.
 
   setupDebugLogging();
 
@@ -123,6 +124,7 @@ async function tuiMain(pipedInput?: string | null) {
     analytics,
     authStorage,
     mcpManager,
+    pluginManager: result.pluginManager,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
@@ -150,7 +152,7 @@ const asyncCleanup = async () => {
   await Promise.allSettled([
     mcpManager?.disconnect(),
     controller?.getMastra()?.stopWorkers(),
-    controller?.stopHeartbeats(),
+    controller?.stopIntervals(),
     closeSignalsPubSub?.(),
     analytics?.shutdown(),
   ]);
@@ -178,6 +180,34 @@ function hasEconnrefused(err: unknown, depth = 0): boolean {
   // AggregateError has .errors array
   if (Array.isArray(e.errors)) return e.errors.some((inner: unknown) => hasEconnrefused(inner, depth + 1));
   return false;
+}
+
+function pluginMain(args: string[]): void {
+  if (args[0] !== 'scaffold') {
+    process.stderr.write('Usage: mastracode plugin scaffold <dir> [--id acme.foo] [--name "Foo Tools"]\n');
+    process.exit(1);
+  }
+
+  const dir = args[1];
+  if (!dir) {
+    process.stderr.write('Usage: mastracode plugin scaffold <dir> [--id acme.foo] [--name "Foo Tools"]\n');
+    process.exit(1);
+  }
+
+  const id = readFlag(args, '--id');
+  const name = readFlag(args, '--name');
+  const targetDir = scaffoldPlugin(dir, { ...(id ? { id } : {}), ...(name ? { name } : {}) });
+  process.stdout.write(`${formatScaffoldSuccess(targetDir)}\n`);
+}
+
+function readFlag(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`Missing value for ${flag}`);
+  }
+  return value;
 }
 
 function handleFatalError(error: unknown): never {
@@ -211,8 +241,12 @@ function handleFatalError(error: unknown): never {
 }
 
 async function main() {
+  if (process.argv[2] === 'plugin') {
+    return pluginMain(process.argv.slice(3));
+  }
+
   if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
-    return headlessMain();
+    return runMCCli();
   }
 
   if (process.argv.includes('--acp')) {
@@ -233,7 +267,7 @@ async function main() {
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
       process.stderr.write('No TTY available — falling back to headless mode.\n');
-      return headlessMain(pipedInput);
+      return runMCCli(pipedInput);
     }
   }
 

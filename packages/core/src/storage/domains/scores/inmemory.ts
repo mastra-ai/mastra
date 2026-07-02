@@ -57,6 +57,10 @@ export class ScoresInMemory extends ScoresStorage {
       return baseFilter;
     });
 
+    // Match the pg/libsql adapters (and the sibling listScoresBySpan), which
+    // return scores newest-first.
+    scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
     const { page, perPage: perPageInput } = pagination;
     const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);

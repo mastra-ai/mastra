@@ -172,96 +172,99 @@ export class CachingPubSub extends PubSub {
 
   /**
    * Subscribe to a topic with automatic replay of cached events.
-   *
-   * Order of operations:
-   * 1. Subscribe to live events FIRST (to avoid missing events during replay)
-   * 2. Fetch and replay cached history
-   * 3. Deduplicate events at the boundary using event IDs
-   *
-   * Each subscriber gets its own deduplication set to ensure
-   * multiple subscribers can independently receive all events.
+   * Delegates to {@link subscribeFromOffset} with offset 0.
    */
   async subscribeWithReplay(topic: string, cb: EventCallback): Promise<void> {
-    // Each subscriber gets its own seen set for deduplication
-    // This prevents the same event from being delivered twice to THIS subscriber
-    // (once via cache replay and once via live subscription)
-    let seen: Set<string> | null = new Set<string>();
-
-    // Wrap callback to deduplicate events during replay/live overlap.
-    // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
-    const wrappedCb: EventCallback = (event, ack) => {
-      if (seen) {
-        const key = this.dedupKey(event);
-        if (!seen.has(key)) {
-          seen.add(key);
-          cb(event, ack);
-        }
-      } else {
-        cb(event, ack);
-      }
-    };
-
-    // 1. Subscribe to live events FIRST to avoid race condition
-    this.callbackMap.set(cb, wrappedCb);
-    await this.inner.subscribe(topic, wrappedCb);
-
-    // 2. Fetch and replay cached history
-    const history = await this.getHistory(topic);
-    for (const event of history) {
-      const key = this.dedupKey(event);
-      if (!seen!.has(key)) {
-        seen!.add(key);
-        cb(event);
-      }
-    }
-
-    // Deduplication only needed during replay/live overlap — null out to free memory
-    // and skip unnecessary has/add for all subsequent live events
-    seen = null;
+    return this.subscribeFromOffset(topic, 0, cb);
   }
 
   /**
    * Subscribe to a topic with replay starting from a specific index.
    * More efficient than full replay when the client knows their last position.
    *
+   * Order of operations:
+   * 1. Subscribe to live events FIRST — buffer deliveries during bootstrap
+   * 2. Fetch and deliver cached history in order
+   * 3. Drain the buffer, skipping events already delivered via history
+   * 4. Switch to passthrough with an index watermark for steady-state dedup
+   *
    * @param topic - The topic to subscribe to
    * @param offset - Start replaying from this index (0-based)
    * @param cb - Callback invoked for each event
    */
   async subscribeFromOffset(topic: string, offset: number, cb: EventCallback): Promise<void> {
-    // Each subscriber gets its own seen set for deduplication
-    let seen: Set<string> | null = new Set<string>();
+    // --- Phase 1: subscribe live, buffer everything during bootstrap ---
+    let bootstrapping = true;
+    const buffer: Array<{
+      event: Event;
+      ack?: Parameters<EventCallback>[1];
+      nack?: Parameters<EventCallback>[2];
+    }> = [];
+    let lastDelivered = -1;
 
-    // Wrap callback to deduplicate events during replay/live overlap.
-    // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
-    const wrappedCb: EventCallback = (event, ack) => {
-      if (seen) {
-        const key = this.dedupKey(event);
-        if (!seen.has(key)) {
-          seen.add(key);
-          cb(event, ack);
-        }
-      } else {
-        cb(event, ack);
+    const wrappedCb: EventCallback = (event, ack, nack) => {
+      // Drop events strictly before the requested offset on the live path.
+      if (typeof event.index === 'number' && event.index < offset) {
+        return;
       }
+
+      if (bootstrapping) {
+        buffer.push({ event, ack, nack });
+        return;
+      }
+
+      // Steady-state: skip events we already delivered via history or buffer drain.
+      // Allow nack-redelivered messages through — they carry the same index but
+      // deliveryAttempt > 1, and the consumer must see them to retry processing.
+      const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
+      if (typeof event.index === 'number' && event.index <= lastDelivered && !isRetry) {
+        return;
+      }
+
+      if (typeof event.index === 'number' && event.index > lastDelivered) {
+        lastDelivered = event.index;
+      }
+      cb(event, ack, nack);
     };
 
-    // 1. Subscribe to live events FIRST to avoid race condition
     this.callbackMap.set(cb, wrappedCb);
     await this.inner.subscribe(topic, wrappedCb);
 
-    // 2. Fetch and replay cached history FROM the specified index
-    const history = await this.getHistory(topic, offset);
-    for (const event of history) {
-      const key = this.dedupKey(event);
-      if (!seen!.has(key)) {
-        seen!.add(key);
+    try {
+      // --- Phase 2: fetch and deliver cached history ---
+      const seen = new Set<string>();
+      const history = await this.getHistory(topic, offset);
+      for (const event of history) {
+        const key = this.dedupKey(event);
+        seen.add(key);
+        if (typeof event.index === 'number') {
+          lastDelivered = event.index;
+        }
         cb(event);
       }
-    }
 
-    // Deduplication only needed during replay/live overlap — null out to free memory
-    seen = null;
+      // --- Phase 3: drain buffer, suppressing duplicates history already covered ---
+      for (const { event, ack, nack } of buffer) {
+        const key = this.dedupKey(event);
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        if (typeof event.index === 'number') {
+          lastDelivered = event.index;
+        }
+        cb(event, ack, nack);
+      }
+
+      // --- Phase 4: flip to passthrough ---
+      bootstrapping = false;
+      buffer.length = 0;
+    } catch (error) {
+      // Rollback: unsubscribe wrappedCb so it doesn't strand in bootstrap mode
+      this.callbackMap.delete(cb);
+      await this.inner.unsubscribe(topic, wrappedCb).catch(() => {});
+      throw error;
+    }
   }
 
   /**

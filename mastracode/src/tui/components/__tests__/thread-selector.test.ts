@@ -78,6 +78,10 @@ vi.mock('@earendil-works/pi-tui', () => {
         return false;
       },
     }),
+    matchesKey: (data: string, keyId: string) => {
+      if (keyId === 'tab') return data === '\t' || data === 'TAB';
+      return false;
+    },
   };
 });
 

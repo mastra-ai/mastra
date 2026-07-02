@@ -1,0 +1,251 @@
+---
+title: "Reference: Storage retention (prune) | Storage"
+description: "API reference for retention policies and prune() on Mastra storage."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/pg"
+---
+
+# Storage retention
+
+Storage grows without bound by default. Retention is an opt-in, age-based cleanup system: you declare per-table `maxAge` policies in the `retention` config, then call `storage.prune()` to delete rows older than their configured age. Anything you don't configure is kept forever, so there is no behavior change until you opt in.
+
+`prune()` deletes rows. It caps growth and is safe to run against large tables (batched, bounded, resumable, cancellable). It never reclaims disk — on SQLite/libSQL the freed pages are reused by future writes so the file stops growing, but handing disk back to the OS (for example a `VACUUM`) is left to the underlying database and the operator to manage.
+
+Retention covers **growth tables** only — tables that accumulate rows unbounded as a side effect of normal operation (conversation history, telemetry, job and run records, schedule fire history, event feeds). User-authored artifacts and config (agents, skills, workspaces, prompt blocks, datasets, schedule definitions, channel installations, and so on) grow with user intent and are edited or deleted explicitly, so they are not valid retention keys.
+
+The reference implementations are [libSQL](/reference/storage/libsql) and [PostgreSQL](/reference/storage/postgresql). Other adapters keep rows forever until they implement retention.
+
+## Usage example
+
+Declare `retention` on any `MastraCompositeStore` (or an adapter that extends it, such as `LibSQLStore`), then call `prune()` from your own scheduler.
+
+```typescript title="src/mastra/index.ts"
+import { LibSQLStore } from '@mastra/libsql'
+
+const storage = new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+  retention: {
+    memory: {
+      messages: { maxAge: '30d' },
+      threads: { maxAge: '90d', batchSize: 500 },
+    },
+    observability: {
+      spans: { maxAge: '7d' },
+    },
+  },
+})
+
+// Wire this to your own cron/scheduler — Mastra never runs it for you.
+const results = await storage.prune()
+```
+
+`retention` is fully typed. Keys must be real domain keys, and each table key must be one the domain declares as retention-eligible. Passing the object straight into a store config type-checks it; if you build it standalone, use `satisfies RetentionConfig` so unknown domains or tables are compile errors:
+
+```typescript
+import type { RetentionConfig } from '@mastra/core/storage'
+
+const retention = {
+  memory: {
+    messages: { maxAge: '30d' }, // ok
+    bogus: { maxAge: '30d' }, // Error: not a memory retention table
+  },
+  bogusDomain: {}, // Error: not a storage domain
+} satisfies RetentionConfig
+```
+
+## Retention config
+
+Set the `retention` field on the store config.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'retention',
+    type: 'RetentionConfig',
+    isOptional: true,
+    description: 'Per-domain, per-table age policies. Unset domains and tables are kept forever.',
+    properties: [
+      {
+        type: 'RetentionConfig',
+        parameters: [
+          {
+            name: '[domain]',
+            type: 'Record<TableKey, TableRetentionPolicy>',
+            isOptional: true,
+            description:
+              "A real storage domain key (e.g. `memory`, `observability`). Maps that domain's retention-eligible table keys to their policies.",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### TableRetentionPolicy
+
+<PropertiesTable
+  content={[
+  {
+    name: 'maxAge',
+    type: 'Duration',
+    description:
+      "Maximum age to keep rows. Rows whose anchor timestamp is strictly older than `Date.now() - maxAge` are eligible for deletion. A number is milliseconds, or a string with a unit suffix: `ms`, `s`, `m`, `h`, `d`, `w` (e.g. `'30d'`, `'12h'`).",
+  },
+  {
+    name: 'batchSize',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      'Rows deleted per batch. Each batch is its own transaction, which bounds lock duration and WAL growth on large tables.',
+  },
+]}
+/>
+
+### Retention-eligible tables
+
+Each domain declares which of its tables can be age-pruned and which timestamp column anchors the comparison. The anchor is chosen so `maxAge` means what you'd expect for that data: creation time for append-only logs, last activity for live state, and completion time for jobs and runs (so in-flight work is never pruned).
+
+| Domain | Table key | Anchor column | `maxAge` measures |
+| - | - | - | - |
+| `memory` | `threads` | `createdAt` | Thread age |
+| `memory` | `messages` | `createdAt` | Message age |
+| `memory` | `resources` | `createdAt` | Resource age |
+| `threadState` | `threadState` | `updatedAt` | Inactivity — state for still-active threads survives |
+| `observability` | `spans` | `startedAt` | Span age |
+| `observability` | `metrics` | `timestamp` | Metric event age (v-next only) |
+| `observability` | `logs` | `timestamp` | Log event age (v-next only) |
+| `observability` | `scores` | `timestamp` | Score event age (v-next only) |
+| `observability` | `feedback` | `timestamp` | Feedback event age (v-next only) |
+| `scores` | `scorers` | `createdAt` | Score record age |
+| `workflows` | `workflowSnapshot` | `updatedAt` | Inactivity — suspended or long-running workflows survive |
+| `backgroundTasks` | `backgroundTasks` | `completedAt` | Time since completion — in-flight tasks (`NULL`) are never pruned |
+| `experiments` | `experiments` | `completedAt` | Time since completion — running experiments are never pruned |
+| `notifications` | `notifications` | `createdAt` | Notification age |
+| `harness` | `sessions` | `createdAt` | Session record age |
+| `schedules` | `triggers` | `actual_fire_at` | Fire-history age (epoch-ms column) |
+
+:::note
+
+- The memory `observational_memory` table has no timestamp anchor, so it can't be age-pruned and isn't a valid retention key.
+- Experiments prune as whole units: an aged experiment's result rows are deleted together with it (results cascade with their parent), so a run is never left partially deleted. There is no separate `results` key.
+- For `schedules`, the growth table is the fire history (`schedule_triggers`, one row per fire) — schedule definitions are config and are not pruned.
+- On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
+- LibSQL supports all domains above; PostgreSQL supports all except `threadState` and `harness`, which have no PostgreSQL implementation.
+- The v-next PostgreSQL observability domain stores signal events in day-partitioned tables (`spans`, `metrics`, `logs`, `scores`, `feedback`). For it, `prune()` drops whole day partitions (or TimescaleDB chunks) that are entirely older than the cutoff instead of deleting rows — effective granularity is one day, and a partition is only dropped once its entire day is past `maxAge`. `PruneResult.deleted` reports the number of rows in the dropped partitions.
+
+:::
+
+## Methods
+
+### Retention
+
+#### `prune(options?)`
+
+Deletes rows older than their configured `maxAge` across every domain that has a policy in `retention`. Returns one `PruneResult` per table touched. With no `retention` configured it's a no-op returning `[]`.
+
+`prune()` is designed to be safe on tables with millions of rows. It deletes in bounded, batched chunks — each batch is its own transaction — so it never takes a long lock or bloats the transaction log. It never runs a `VACUUM`.
+
+Anchor-column indexes are created lazily on the first `prune()` call for each table with a policy — never at `init()` — so deployments that don't configure retention pay no extra index write or disk overhead. The first prune of an existing large table pays a one-time index build; subsequent prunes reuse the index.
+
+```typescript
+const results = await storage.prune({
+  maxRows: 50_000, // cap work this call
+  pauseMs: 50, // breathe between batches
+})
+
+for (const r of results) {
+  console.log(`${r.domain}.${r.table}: deleted ${r.deleted}, done=${r.done}`)
+}
+```
+
+Returns: `Promise<PruneResult[]>`
+
+##### PruneOptions
+
+<PropertiesTable
+  content={[
+  {
+    name: 'maxBatches',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Maximum delete batches per table per call. When reached, that table's result is returned with `done: false`.",
+  },
+  {
+    name: 'maxRows',
+    type: 'number',
+    isOptional: true,
+    description:
+      "Maximum rows deleted per table per call. When reached, that table's result is returned with `done: false`.",
+  },
+  {
+    name: 'pauseMs',
+    type: 'number',
+    isOptional: true,
+    description: 'Delay in milliseconds between batches, to avoid starving live traffic.',
+  },
+  {
+    name: 'signal',
+    type: 'AbortSignal',
+    isOptional: true,
+    description:
+      'Cooperative cancellation. The batch loop checks it between batches and stops cleanly, returning partial results with `done: false`.',
+  },
+]}
+/>
+
+##### PruneResult
+
+Each result describes one table's progress:
+
+```typescript
+interface PruneResult {
+  domain: string // e.g. 'memory'
+  table: string // physical table name, e.g. 'mastra_messages'
+  deleted: number // rows deleted during this call
+  done: boolean // false => eligible rows remain; call prune() again
+}
+```
+
+## Running prune on a schedule
+
+`prune()` has no built-in scheduler — you decide when it runs. Because it is bounded, a single call may not delete everything. When any result has `done: false`, eligible rows remain and you call again on the next tick. This keeps each invocation short and lets a large backlog drain over several runs.
+
+```typescript
+// Runs on your own cron (node-cron, a workflow schedule, an external job, etc.).
+async function retentionTick() {
+  const results = await storage.prune({ maxRows: 100_000, pauseMs: 25 })
+  const incomplete = results.filter(r => !r.done)
+  if (incomplete.length) {
+    // Rows remain; the next scheduled tick will continue where this one stopped.
+    console.log(
+      'retention still draining:',
+      incomplete.map(r => `${r.domain}.${r.table}`),
+    )
+  }
+}
+```
+
+You can also cancel a long-running prune with an `AbortSignal` — the loop stops between batches and returns partial results with `done: false`, so the next run resumes cleanly.
+
+## Reclaiming disk
+
+`prune()` deletes rows but does not shrink the database file. On SQLite/libSQL the freed pages go on a freelist and are reused by future writes, so the file stops growing — for most users this alone solves the unbounded-growth problem.
+
+Handing that free space back to the OS is a separate concern that Mastra does not manage. If you specifically need to shrink the file, run the underlying database's compaction (for example `VACUUM` on self-hosted libSQL) yourself, in a maintenance window — a full `VACUUM` locks the file and needs roughly twice the file size in free disk. On PostgreSQL, autovacuum reclaims dead tuples for reuse automatically; a manual `VACUUM FULL` is only needed if you must return disk to the OS.
+
+:::note[libSQL and Turso]
+[Turso Cloud](/reference/storage/libsql) manages storage compaction for you, so there's nothing to reclaim manually. This applies only to self-hosted libSQL files.
+:::
+
+## Related
+
+- [libSQL storage](/reference/storage/libsql)
+- [PostgreSQL storage](/reference/storage/postgresql)
+- [Composite storage](/reference/storage/composite)
+- [Storage overview](/reference/storage/overview)
