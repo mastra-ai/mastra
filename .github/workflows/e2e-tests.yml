@@ -15,7 +15,51 @@ on:
 permissions: {}
 
 jobs:
+  publish-e2e-registry:
+    name: Publish E2E registry
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+      MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/mastra-e2e-registry
+      MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+      MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+      MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      MASTRA_E2E_REGISTRY_PORT: '4873'
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Install registry setup dependencies
+        working-directory: ./e2e-tests/_local-registry-setup
+        run: pnpm install --ignore-workspace --frozen-lockfile
+
+      - name: Publish packages to local registry storage
+        working-directory: ./e2e-tests/_local-registry-setup
+        run: pnpm publish-ci-registry
+
+      - name: Upload E2E registry artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+          retention-days: 1
+
   e2e-monorepo:
+    needs: publish-e2e-registry
     name: E2E monorepo
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -42,13 +86,24 @@ jobs:
         working-directory: ./e2e-tests/monorepo
         run: pnpm install
 
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
       - name: Test
         working-directory: ./e2e-tests/monorepo
         run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-no-bundling:
+    needs: publish-e2e-registry
     name: E2E no-bundling
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -75,13 +130,24 @@ jobs:
         working-directory: ./e2e-tests/no-bundling
         run: pnpm install
 
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
       - name: Test
         working-directory: ./e2e-tests/no-bundling
         run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-create-mastra:
+    needs: publish-e2e-registry
     name: E2E create-mastra
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -108,13 +174,24 @@ jobs:
         working-directory: ./e2e-tests/create-mastra
         run: pnpm install
 
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
       - name: Test
         working-directory: ./e2e-tests/create-mastra
         run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-commonjs:
+    needs: publish-e2e-registry
     name: E2E CommonJS
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 15
@@ -141,11 +218,23 @@ jobs:
         working-directory: ./e2e-tests/commonjs
         run: pnpm install
 
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
       - name: Test
         working-directory: ./e2e-tests/commonjs
         run: pnpm test
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-deployers:
+    needs: publish-e2e-registry
     name: E2E deployers
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 20
@@ -172,13 +261,24 @@ jobs:
         working-directory: ./e2e-tests/deployers
         run: pnpm install
 
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
       - name: Test
         working-directory: ./e2e-tests/deployers
         run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-type-check:
+    needs: publish-e2e-registry
     name: E2E Type check
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 20
@@ -205,9 +305,20 @@ jobs:
         working-directory: ./e2e-tests/type-check
         run: pnpm install
 
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
       - name: Test
         working-directory: ./e2e-tests/type-check
         run: pnpm test
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-kitchen-sink:
     name: E2E kitchen-sink (${{ matrix.shard }}/${{ strategy.job-total }})
