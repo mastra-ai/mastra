@@ -13,10 +13,15 @@ vi.mock('@earendil-works/pi-tui', () => {
     constructor(public terminal: MockProcessTerminal) {}
   }
 
+  class MockSpacer {
+    setLines() {}
+  }
+
   return {
     Container: MockContainer,
     ProcessTerminal: MockProcessTerminal,
     TUI: MockTUI,
+    Spacer: MockSpacer,
   };
 });
 
@@ -31,6 +36,15 @@ vi.mock('../components/custom-editor.js', () => ({
   },
 }));
 
+vi.mock('../../onboarding/settings.js', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    // Keep state initialization hermetic: don't read the host's real settings.
+    loadSettings: vi.fn(() => ({ voice: { enabled: false } })),
+  };
+});
+
 vi.mock('../../utils/project.js', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -41,25 +55,29 @@ vi.mock('../../utils/project.js', async importOriginal => {
 
 import { createTUIState } from '../state.js';
 
-function createHarness() {
+function createSession() {
   return {
-    session: {
-      mode: { resolve: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })) },
-    },
+    mode: { resolve: vi.fn(() => ({ id: 'build', metadata: { color: '#7c3aed' } })) },
   };
+}
+
+function createAgentController(session: ReturnType<typeof createSession>) {
+  return { session };
 }
 
 describe('createTUIState', () => {
   it('initializes the shared TUI runtime defaults used by chat handlers', () => {
-    const harness = createHarness();
+    const session = createSession();
+    const controller = createAgentController(session);
     const hookManager = {};
     const analytics = {};
-    const authStorage = {};
+    const authStorage = { getStoredApiKey: vi.fn(() => undefined) };
     const mcpManager = {};
     const workspace = {};
 
     const state = createTUIState({
-      harness: harness as never,
+      controller: controller as never,
+      session: session as never,
       hookManager: hookManager as never,
       analytics: analytics as never,
       authStorage: authStorage as never,
@@ -67,7 +85,7 @@ describe('createTUIState', () => {
       workspace: workspace as never,
     });
 
-    expect(state.harness).toBe(harness);
+    expect(state.controller).toBe(controller);
     expect(state.hookManager).toBe(hookManager);
     expect(state.analytics).toBe(analytics);
     expect(state.authStorage).toBe(authStorage);
@@ -129,6 +147,6 @@ describe('createTUIState', () => {
     expect(state.projectInfo).toEqual({ rootPath: '/tmp/mastra-code-project', gitBranch: 'main' });
 
     expect(state.editor.getModeColor?.()).toBe('#7c3aed');
-    expect(harness.session.mode.resolve).toHaveBeenCalled();
+    expect(controller.session.mode.resolve).toHaveBeenCalled();
   });
 });

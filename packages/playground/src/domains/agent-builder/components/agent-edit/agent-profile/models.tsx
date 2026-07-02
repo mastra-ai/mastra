@@ -1,9 +1,9 @@
-import { Txt } from '@mastra/playground-ui';
-import { LockIcon, TriangleAlertIcon } from 'lucide-react';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { LockIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
-import { AgentSearchbar } from '../agent-searchbar';
 import { AgentSelectableCard } from '../agent-selectable-card';
 import { FilterableList } from './filterable-list';
 import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
@@ -136,14 +136,18 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
         )}
 
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
-          <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
-            <AgentSearchbar
-              onSearch={setSearch}
-              label="Search models"
-              placeholder="Search models or providers..."
-              size="lg"
-              debounceMs={0}
-            />
+          <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch] rounded-full bg-surface3">
+            <InputGroup variant="outline" size="lg">
+              <InputGroupAddon align="inline-start">
+                <SearchIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                aria-label="Search models"
+                placeholder="Search models or providers..."
+                onChange={event => setSearch(event.target.value)}
+              />
+            </InputGroup>
           </div>
 
           {groups.length === 0 ? (

@@ -5,7 +5,7 @@ description: Documentation guidelines for Mastra. This skill should be used when
 
 # Mastra Documentation Guidelines
 
-Use this skill when you create or update Mastra docs. Keep the docs clear and consistent. Follow the most specific AGENTS.md for the area you change.
+Use this skill when you create or update Mastra docs. Keep the docs clear and consistent. Follow the most specific AGENTS.md for the area you change. After making your changes to the docs and sidebars, run the linters to check your work.
 
 ## Styleguides
 
@@ -29,6 +29,8 @@ Use these tools to keep docs consistent:
 
 Run these commands in docs/:
 
-- npm run format - Format files with Prettier
-- npm run lint:remark - Check markdown with Remark
-- npm run lint:vale:ai - Check prose with Vale using the error alert level
+- pnpm run format - Format files with Prettier
+- pnpm run lint:remark - Check markdown with Remark
+- pnpm run lint:vale:ai - Check prose with Vale using the error alert level
+- pnpm run validate - Check frontmatter values and if all sidebars are valid
+- pnpm run generate-vercel-redirects - Generate vercel.json redirects after editing vercel.redirects.json

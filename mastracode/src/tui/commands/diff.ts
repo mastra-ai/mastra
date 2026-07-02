@@ -38,8 +38,8 @@ export async function handleDiffCommand(ctx: SlashCommandContext, filePath?: str
   }
 
   // No path specified — show summary of all tracked modified files
-  // Read from Harness display state (canonical source for file modifications)
-  const modifiedFiles = state.harness.session.displayState.get().modifiedFiles;
+  // Read from AgentController display state (canonical source for file modifications)
+  const modifiedFiles = state.session.displayState.get().modifiedFiles;
   if (modifiedFiles.size === 0) {
     try {
       const { execa } = await import('execa');

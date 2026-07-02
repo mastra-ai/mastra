@@ -26,6 +26,7 @@ const voice = new OpenAIRealtimeVoice({
 
 // Create an agent with the voice provider
 const agent = new Agent({
+  id: 'customer-support-agent',
   name: 'Customer Support Agent',
   instructions: 'You are a helpful customer support agent for a software company.',
   model: '__GATEWAY_OPENAI_MODEL__',

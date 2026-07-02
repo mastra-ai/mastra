@@ -80,6 +80,15 @@ export interface ScorerJudgeConfig {
   defaultMemoryOptions?: AgentMemoryOption;
   /** Optional callback for observing the internal judge agent stream as soon as it starts. */
   onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+  /** Optional maximum number of agentic loop iterations for the internal judge agent. */
+  maxSteps?: number;
+  /**
+   * Optional request context forwarded to the judge agent execution. When the judge
+   * agent has memory with OM observers that read dynamic model config from controller
+   * state (e.g. mastracode's `getObserverModel`), this lets the OM system resolve the
+   * correct observer model and provider credentials.
+   */
+  requestContext?: RequestContext<any>;
 }
 
 export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
@@ -553,7 +562,7 @@ class MastraScorer<
         output: prepared.output,
         groundTruth: prepared.groundTruth,
         expectedTrajectory: prepared.expectedTrajectory,
-        requestContext: normalizedRequestContext,
+        requestContext: normalizedRequestContext?.serializeForSpan(),
       },
       attributes: {
         scorerId: this.id,
@@ -876,6 +885,7 @@ class MastraScorer<
     const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
     const stepMemoryOptions = originalStep.judge?.memory;
     const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
+    const maxSteps = originalStep.judge?.maxSteps ?? this.config.judge?.maxSteps;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -902,7 +912,11 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(modelConfig, undefined, this.#mastra);
+    const resolvedModel = await resolveModelConfig(
+      modelConfig,
+      this.config.judge?.requestContext ?? undefined,
+      this.#mastra,
+    );
     const judgeModel = resolvedModel.modelId;
 
     const judge = new Agent({
@@ -913,9 +927,14 @@ class MastraScorer<
       ...(tools ? { tools } : {}),
       ...(memory ? { memory } : {}),
     });
+    if (this.#mastra) {
+      judge.__registerMastra(this.#mastra);
+    }
     const judgeRunOptions = {
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
+      ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
     };
 
     // GenerateScore output must be a number

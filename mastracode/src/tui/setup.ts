@@ -2,21 +2,22 @@
  * TUI setup: keyboard shortcuts, layout building, autocomplete, key handlers.
  */
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
-import type { HarnessEventListener } from '@mastra/core/harness';
-
+import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
+import { SimpleProgressComponent } from './components/simple-progress.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
+import { askModalQuestion } from './modal-question.js';
+import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -48,13 +49,13 @@ export function setupKeyboardShortcuts(
     }
 
     if (state.pendingApprovalDismiss) {
-      // Dismiss active approval dialog and abort
+      // Dismiss active approval dialogs by declining the gated tool. Do not abort
+      // the run: the decline is delivered through the normal approval resume path.
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
-      state.userInitiatedAbort = true;
-      state.harness.abort();
+      return;
     } else if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
       // Clean up active inline components on abort. suspensions.hasPending() covers
       // the case where the run is parked in a tool suspend() (e.g. ask_user) —
@@ -65,7 +66,8 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
-      state.harness.abort();
+      state.hookManager?.runInterrupt('user_interrupt').catch(() => {});
+      state.session.abort();
     } else {
       const current = state.editor.getText();
       if (current.length > 0) {
@@ -138,7 +140,7 @@ export function setupKeyboardShortcuts(
     state.ui.requestRender();
   });
 
-  // Shift+Tab - cycle harness modes
+  // Shift+Tab - cycle controller modes
   state.editor.onAction('cycleMode', async () => {
     // Block mode switching while the agent is active or plan approval is pending
     if (state.session.run.isRunning()) {
@@ -150,7 +152,7 @@ export function setupKeyboardShortcuts(
       return;
     }
 
-    const modes = state.harness.listModes();
+    const modes = state.controller.listModes();
     if (modes.length <= 1) return;
     const currentId = state.session.mode.get();
     const currentIndex = modes.findIndex(m => m.id === currentId);
@@ -213,13 +215,14 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   if (!activeGoalJudge) return false;
 
   state.userInitiatedAbort = true;
+  state.hookManager?.runInterrupt('goal_judge_interrupt').catch(() => {});
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
   // Esc during an in-loop goal evaluation pauses the goal so it does not
-  // continue on the next iteration. Abort the active harness run too: the core
+  // continue on the next iteration. Abort the active controller run too: the core
   // scorer owns the judge stream, so the TUI-local controller alone only changes
   // the visual component and lets the judge continue in the background.
-  state.harness.abort();
+  state.session.abort();
   // Persist the paused state immediately so a thread switch or exit before the
   // next save does not reload the old active objective and effectively undo the
   // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
@@ -256,7 +259,7 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
 
   const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
-  if (state.harness.listModes().length > 1) {
+  if (state.controller.listModes().length > 1) {
     hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
   hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
@@ -357,6 +360,10 @@ export function setupAutocomplete(state: TUIState): void {
       name: 'yolo',
       description: 'Toggle YOLO mode (auto-approve all tools)',
     },
+    {
+      name: 'voice',
+      description: 'Manage push-to-talk voice input (engine, provider, model)',
+    },
     { name: 'review', description: 'Review a GitHub pull request' },
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
@@ -364,6 +371,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'plugins', description: 'Manage Mastra Code plugins' },
     { name: 'observability', description: 'Configure cloud observability' },
     {
       name: 'github',
@@ -393,7 +401,7 @@ export function setupAutocomplete(state: TUIState): void {
   ];
 
   // Only show /mode if there's more than one mode
-  const modes = state.harness.listModes();
+  const modes = state.controller.listModes();
   if (modes.length > 1) {
     slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
   }
@@ -438,10 +446,11 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    const configDir = (state.session.state.get() as { configDir?: string } | undefined)?.configDir;
+    const sessionState = state.session.state.get() as { configDir?: string; pluginCommandPaths?: string[] } | undefined;
+    const configDir = sessionState?.configDir;
     // Load from all sources (global and local)
     const globalCommands = await loadCustomCommands(undefined, configDir);
-    const localCommands = await loadCustomCommands(process.cwd(), configDir);
+    const localCommands = await loadCustomCommands(process.cwd(), configDir, sessionState?.pluginCommandPaths ?? []);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();
@@ -470,9 +479,9 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
  */
 export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
-    let workspace = state.harness.getWorkspace() ?? state.workspace;
-    if (!workspace && state.harness.hasWorkspace()) {
-      workspace = await state.harness.resolveWorkspace();
+    let workspace = state.controller.getWorkspace() ?? state.workspace;
+    if (!workspace && state.controller.hasWorkspace()) {
+      workspace = await state.controller.resolveWorkspace({ session: state.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];
@@ -518,13 +527,21 @@ export function setupKeyHandlers(
     }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      return;
     }
-    state.activeInlinePlanApproval = undefined;
-    state.activeInlineQuestion = undefined;
-    state.pendingInlineQuestions.length = 0;
-    state.pendingAskUserComponents?.clear();
-    state.userInitiatedAbort = true;
-    state.harness.abort();
+
+    if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('process_sigint').catch(() => {});
+      state.session.abort();
+    }
   };
   process.on('SIGINT', sigintHandler);
 
@@ -540,22 +557,26 @@ export function setupKeyHandlers(
 }
 
 // =============================================================================
-// Harness Subscription
+// AgentController Subscription
 // =============================================================================
 
-export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
-  const listener: HarnessEventListener = async event => {
-    try {
-      await handleEvent(event);
-    } catch (err) {
-      // Log but don't crash — individual event errors shouldn't kill the process
-      const msg = err instanceof Error ? err.message : String(err);
-      const stack = err instanceof Error ? err.stack : undefined;
-      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-      if (stack) process.stderr.write(stack + '\n');
-    }
+export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
+  let eventQueue = Promise.resolve();
+  const listener: AgentControllerEventListener = event => {
+    eventQueue = eventQueue.then(async () => {
+      try {
+        await handleEvent(event);
+      } catch (err) {
+        // Log but don't crash — individual event errors shouldn't kill the process
+        const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+        if (stack) process.stderr.write(stack + '\n');
+      }
+    });
+    return eventQueue;
   };
-  state.unsubscribe = state.harness.subscribe(listener);
+  state.unsubscribe = state.session.subscribe(listener);
 }
 
 // =============================================================================
@@ -573,25 +594,77 @@ export function updateTerminalTitle(state: TUIState): void {
 // =============================================================================
 
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
-  const allThreads = await state.session.thread.list();
-
-  // Filter to threads matching the current working directory.
   const currentPath = state.projectInfo.rootPath;
-  let dirCreatedAt: Date | undefined;
-  try {
-    const stat = fs.statSync(currentPath);
-    dirCreatedAt = stat.birthtime;
-  } catch {
-    // fall through – treat all untagged threads as candidates
-  }
-  const threads = allThreads.filter(t => {
+  const currentResourceId = state.session.identity.getResourceId();
+
+  const allThreads = await state.session.thread.list();
+  const activeThreadId = state.session.thread.getId();
+
+  // Filter to threads explicitly tagged for the current working directory.
+  const taggedThreads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
-    if (threadPath) return threadPath === currentPath;
-    if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
-    return true;
+    return !!threadPath && threadPath === currentPath;
   });
+  const threads: typeof taggedThreads = [];
+  for (const thread of taggedThreads) {
+    const isActiveBlankThread = thread.id === activeThreadId && !thread.title;
+    if (isActiveBlankThread) {
+      const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
+      if (messages.length === 0) continue;
+    }
+    threads.push(thread);
+  }
 
   if (threads.length === 0) {
+    const driftCandidates = (
+      await state.session.thread.list({
+        allResources: true,
+        metadata: { projectPath: currentPath },
+      })
+    ).filter(t => t.resourceId !== currentResourceId);
+    const [thread] = [...driftCandidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+    if (thread) {
+      const answer = await askModalQuestion(state.ui, {
+        question: [
+          'This directory is tagged on a different resource.',
+          '',
+          `Project: ${currentPath}`,
+          `Thread: ${thread.title || thread.id}`,
+          `Old resource: ${thread.resourceId}`,
+          `Current resource: ${currentResourceId}`,
+          '',
+          'Clone this thread into the current resource and resume the clone?',
+        ].join('\n'),
+        options: [{ label: 'Clone and resume' }, { label: 'Start fresh' }],
+        selectedOptionLabel: 'Clone and resume',
+        allowCustomResponse: false,
+        overlay: { widthPercent: 80, maxHeight: '70%' },
+      });
+
+      if (answer === 'Clone and resume') {
+        const progress = new SimpleProgressComponent({ showElapsed: false, showPercentage: false });
+        progress.start('Cloning thread into the current resource...');
+        showModalOverlay(state.ui, progress, { widthPercent: 70, maxHeight: '40%', minHeightPercent: 0.35 });
+        state.ui.requestRender();
+
+        try {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          progress.updateStatus('Loading cloned thread...');
+          state.ui.requestRender();
+          await state.session.thread.cloneToCurrentResource({
+            threadId: thread.id,
+            expectedResourceId: thread.resourceId,
+            expectedProjectPath: currentPath,
+          });
+        } finally {
+          state.ui.hideOverlay();
+          state.ui.requestRender();
+        }
+        return;
+      }
+    }
+
     // No existing threads for this path - defer creation until first message
     state.pendingNewThread = true;
     return;
@@ -600,31 +673,10 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Sort by most recent
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
-  // If there's only one thread, auto-resume it directly
-  if (sortedThreads.length === 1) {
-    const thread = sortedThreads[0]!;
-    try {
-      await state.harness.switchThread({ threadId: thread.id });
-      if (!thread.metadata?.projectPath) {
-        await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
-      }
-      return;
-    } catch (error) {
-      if (error instanceof ThreadLockError) {
-        // Thread is locked by another process — silently start a new thread.
-        // The lock prompt only appears when the user intentionally picks a
-        // locked thread from the /threads selector.
-        state.pendingNewThread = true;
-        return;
-      }
-      throw error;
-    }
-  }
-
-  // Multiple threads — try each in order until one is unlocked
+  // Try each in order until one is unlocked
   for (const thread of sortedThreads) {
     try {
-      await state.harness.switchThread({ threadId: thread.id });
+      await state.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -647,7 +699,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const tasks = state.harness.session.displayState.get().tasks;
+    const tasks = state.session.displayState.get().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

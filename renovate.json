@@ -38,12 +38,23 @@
     "explorations/**",
     ".github/scripts",
     "templates/**",
-    "**/examples/**",
     "**/_examples/**",
     ".claude/skills/**/assets/**/package.json",
     "e2e-tests/**/template/package.json"
   ],
   "packageRules": [
+    {
+      "description": "Disable all dependency updates in examples (Renovate previously ignored these via ignorePaths)",
+      "matchFileNames": ["examples/**/package.json"],
+      "enabled": false
+    },
+    {
+      "description": "Allow zod updates in examples (kept in sync with the catalog to prevent version collision with workspace-linked @mastra packages that caused TS2589/OOM)",
+      "matchFileNames": ["examples/**/package.json"],
+      "matchPackageNames": ["zod"],
+      "enabled": true,
+      "groupName": "Schema"
+    },
     {
       "matchDepTypes": ["engines"],
       "enabled": false
@@ -170,9 +181,10 @@
     },
     {
       "groupName": "AI SDK Examples",
-      "description": "Leave example apps eligible for all AI SDK update types",
+      "description": "Allow all AI SDK update types in examples",
       "matchFileNames": ["examples/**/package.json"],
-      "matchSourceUrls": ["https://github.com/vercel/ai"]
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "enabled": true
     },
     {
       "groupName": "Assistant UI",

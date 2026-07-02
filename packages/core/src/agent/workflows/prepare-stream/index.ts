@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
@@ -18,7 +19,6 @@ import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
-import type { PrepareStreamRunScope } from './run-scope';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
@@ -88,9 +88,19 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   skipBgTaskWait,
   drainPendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
-  // Per-run scope shared between steps. Class instances (MessageList, Tools),
-  // Maps, and closures live here instead of step outputs — see ./run-scope.ts.
-  const runScope: PrepareStreamRunScope<OUTPUT> = {};
+  // Per-run scope shared between prepare-stream steps. Class instances
+  // (MessageList, Tools), Maps, and closures live here instead of step
+  // outputs — see ./run-scope.ts.
+  //
+  // This scope is a closure local to this workflow factory and is NOT
+  // registered with `Mastra.__createRunScope`. The agentic-loop workflow uses
+  // a separate runId-keyed scope on the Mastra instance (created via
+  // `__registerInternalWorkflow`); the bridge between them is
+  // `hydrateRunScopeFromInternal` in `loop/workflows/stream.ts`, which copies
+  // bootstrap state from `_internal` into the Mastra scope after the loop
+  // workflow registers. Prepare-stream and the agentic loop deliberately do
+  // not share runtime state — each owns its own per-run scratch space.
+  const runScope = createRunScope();
 
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -165,7 +175,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
 
   // Internal toggle: the default is direct (in-process) execution which avoids
   // the requestContext serialisation cycle (toJSON → reconstruct) that drops
-  // non-serialisable values (functions, circular-ref objects like the harness
+  // non-serialisable values (functions, circular-ref objects like the controller
   // context). Set MASTRA_EVENTED_EXECUTION=true to opt in to the evented
   // workflow engine for cross-process coordination via pubsub.
   const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';

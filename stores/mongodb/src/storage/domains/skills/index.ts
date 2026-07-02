@@ -184,32 +184,29 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         updatedAt: now,
       };
 
-      await collection.insertOne(this.serializeSkill(newSkill));
-
       // Extract snapshot config from flat input
       const snapshotConfig: Record<string, any> = {};
       for (const field of SNAPSHOT_FIELDS) {
-        if ((skill as any)[field] !== undefined) {
-          snapshotConfig[field] = (skill as any)[field];
-        }
+        if ((skill as any)[field] !== undefined) snapshotConfig[field] = (skill as any)[field];
+      }
+      const versionId = randomUUID();
+      const versionDoc: Record<string, any> = {
+        id: versionId,
+        skillId: id,
+        versionNumber: 1,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+        createdAt: new Date(),
+      };
+      for (const field of SNAPSHOT_FIELDS) {
+        if (snapshotConfig[field] !== undefined) versionDoc[field] = snapshotConfig[field];
       }
 
-      // Create version 1
-      const versionId = randomUUID();
-      try {
-        await this.createVersion({
-          id: versionId,
-          skillId: id,
-          versionNumber: 1,
-          ...snapshotConfig,
-          changedFields: Object.keys(snapshotConfig),
-          changeMessage: 'Initial version',
-        } as CreateSkillVersionInput);
-      } catch (versionError) {
-        // Clean up the orphaned skill record
-        await collection.deleteOne({ id });
-        throw versionError;
-      }
+      await this.#connector.withTransaction(async session => {
+        await collection.insertOne(this.serializeSkill(newSkill), { session });
+        const versionsCol = await this.getCollection(TABLE_SKILL_VERSIONS);
+        await versionsCol.insertOne(versionDoc, { session });
+      });
 
       return newSkill;
     } catch (error) {
@@ -264,6 +261,22 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         }
       }
 
+      // Handle metadata-level updates
+      if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
+      if (metadataFields.visibility !== undefined) updateDoc.visibility = metadataFields.visibility;
+      if (metadataFields.activeVersionId !== undefined) {
+        updateDoc.activeVersionId = metadataFields.activeVersionId;
+        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
+        if (metadataFields.status === undefined) {
+          updateDoc.status = 'published';
+        }
+      }
+      if (metadataFields.status !== undefined) {
+        updateDoc.status = metadataFields.status;
+      }
+
+      // Build new version doc if config fields changed
+      let newVersionDoc: Record<string, any> | null = null;
       if (Object.keys(configFields).length > 0) {
         const latestVersion = await this.getLatestVersion(id);
 
@@ -287,33 +300,29 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         );
 
         if (changedFields.length > 0) {
-          await this.createVersion({
+          const mergedSnapshot = { ...existingSnapshot, ...configFields };
+          newVersionDoc = {
             id: randomUUID(),
             skillId: id,
             versionNumber: latestVersion.versionNumber + 1,
-            ...existingSnapshot,
-            ...configFields,
             changedFields,
             changeMessage: `Updated: ${changedFields.join(', ')}`,
-          } as CreateSkillVersionInput);
+            createdAt: new Date(),
+          };
+          for (const field of SNAPSHOT_FIELDS) {
+            if ((mergedSnapshot as any)[field] !== undefined) newVersionDoc[field] = (mergedSnapshot as any)[field];
+          }
         }
       }
 
-      // Handle metadata-level updates
-      if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
-      if (metadataFields.visibility !== undefined) updateDoc.visibility = metadataFields.visibility;
-      if (metadataFields.activeVersionId !== undefined) {
-        updateDoc.activeVersionId = metadataFields.activeVersionId;
-        // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
-        if (metadataFields.status === undefined) {
-          updateDoc.status = 'published';
+      await this.#connector.withTransaction(async session => {
+        if (newVersionDoc) {
+          const versionsCol = await this.getCollection(TABLE_SKILL_VERSIONS);
+          await versionsCol.insertOne(newVersionDoc, { session });
         }
-      }
-      if (metadataFields.status !== undefined) {
-        updateDoc.status = metadataFields.status;
-      }
-
-      await collection.updateOne({ id }, { $set: updateDoc });
+        const col = await this.getCollection(TABLE_SKILLS);
+        await col.updateOne({ id }, { $set: updateDoc }, { session });
+      });
 
       const updatedSkill = await collection.findOne<any>({ id });
       if (!updatedSkill) {
@@ -344,12 +353,12 @@ export class MongoDBSkillsStorage extends SkillsStorage {
 
   async delete(id: string): Promise<void> {
     try {
-      // Delete all versions first
-      await this.deleteVersionsByParentId(id);
-
-      // Then delete the skill
-      const collection = await this.getCollection(TABLE_SKILLS);
-      await collection.deleteOne({ id });
+      await this.#connector.withTransaction(async session => {
+        const versionsCol = await this.getCollection(TABLE_SKILL_VERSIONS);
+        await versionsCol.deleteMany({ skillId: id }, { session });
+        const col = await this.getCollection(TABLE_SKILLS);
+        await col.deleteOne({ id }, { session });
+      });
     } catch (error) {
       throw new MastraError(
         {

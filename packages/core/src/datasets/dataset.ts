@@ -7,10 +7,16 @@ import type { ExperimentsStorage } from '../storage/domains/experiments/base.js'
 import type {
   DatasetRecord,
   DatasetItem,
+  DatasetItemPayload,
   DatasetItemRow,
-  DatasetItemSource,
   DatasetVersion,
+  ExperimentResultStatus,
+  ExperimentStatus,
+  ExperimentTenancyFilters,
+  ListExperimentResultsOutput,
+  ListExperimentsOutput,
   TargetType,
+  UpdateDatasetInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
@@ -114,20 +120,19 @@ export class Dataset {
 
   /**
    * Update dataset metadata and/or schemas.
-   * Zod schemas are automatically converted to JSON Schema.
+   *
+   * Accepts Zod schemas for `inputSchema` / `groundTruthSchema` (widened to
+   * `unknown`); they are normalized to JSON Schema before being forwarded to
+   * the storage-canonical {@link UpdateDatasetInput} shape. All other fields
+   * mirror {@link UpdateDatasetInput} exactly (minus `id`, which is supplied
+   * from `this.id`).
    */
-  async update(input: {
-    name?: string;
-    description?: string;
-    metadata?: Record<string, unknown>;
-    inputSchema?: unknown;
-    groundTruthSchema?: unknown;
-    requestContextSchema?: Record<string, unknown> | null;
-    tags?: string[] | null;
-    targetType?: TargetType | null;
-    targetIds?: string[] | null;
-    scorerIds?: string[] | null;
-  }): Promise<DatasetRecord> {
+  async update(
+    input: Omit<UpdateDatasetInput, 'id' | 'inputSchema' | 'groundTruthSchema'> & {
+      inputSchema?: unknown;
+      groundTruthSchema?: unknown;
+    },
+  ): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
     let { inputSchema, groundTruthSchema, ...rest } = input;
@@ -154,39 +159,15 @@ export class Dataset {
   /**
    * Add a single item to the dataset.
    */
-  async addItem(input: {
-    input: unknown;
-    groundTruth?: unknown;
-    expectedTrajectory?: unknown;
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-    source?: DatasetItemSource;
-  }): Promise<DatasetItem> {
+  async addItem(input: DatasetItemPayload): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
-    return store.addItem({
-      datasetId: this.id,
-      input: input.input,
-      groundTruth: input.groundTruth,
-      expectedTrajectory: input.expectedTrajectory,
-      requestContext: input.requestContext,
-      metadata: input.metadata,
-      source: input.source,
-    });
+    return store.addItem({ datasetId: this.id, ...input });
   }
 
   /**
    * Add multiple items to the dataset in bulk.
    */
-  async addItems(input: {
-    items: Array<{
-      input: unknown;
-      groundTruth?: unknown;
-      expectedTrajectory?: unknown;
-      requestContext?: Record<string, unknown>;
-      metadata?: Record<string, unknown>;
-      source?: DatasetItemSource;
-    }>;
-  }): Promise<DatasetItem[]> {
+  async addItems(input: { items: DatasetItemPayload[] }): Promise<DatasetItem[]> {
     const store = await this.#getDatasetsStore();
     return store.batchInsertItems({
       datasetId: this.id,
@@ -226,26 +207,13 @@ export class Dataset {
   }
 
   /**
-   * Update an existing item in the dataset.
+   * Update an existing item in the dataset. Only the provided payload fields
+   * are patched.
    */
-  async updateItem(input: {
-    itemId: string;
-    input?: unknown;
-    groundTruth?: unknown;
-    expectedTrajectory?: unknown;
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-  }): Promise<DatasetItem> {
+  async updateItem(input: { itemId: string } & Partial<DatasetItemPayload>): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
-    return store.updateItem({
-      id: input.itemId,
-      datasetId: this.id,
-      input: input.input,
-      groundTruth: input.groundTruth,
-      expectedTrajectory: input.expectedTrajectory,
-      requestContext: input.requestContext,
-      metadata: input.metadata,
-    });
+    const { itemId, ...rest } = input;
+    return store.updateItem({ id: itemId, datasetId: this.id, ...rest });
   }
 
   /**
@@ -348,6 +316,8 @@ export class Dataset {
       description: config.description,
       metadata: config.metadata,
       agentVersion: config.agentVersion,
+      organizationId: dataset.organizationId ?? null,
+      projectId: dataset.projectId ?? null,
     });
 
     const experimentId = run.id;
@@ -373,12 +343,35 @@ export class Dataset {
   }
 
   /**
-   * List all experiments (runs) for this dataset.
+   * List experiments (runs) for this dataset, with optional filters and
+   * pagination. All filters are pushed to the storage layer.
+   *
+   * @param args.targetType   Restrict to a specific target type (e.g. `agent`).
+   * @param args.targetId     Restrict to a specific target ID.
+   * @param args.agentVersion Restrict to a specific agent version — useful for
+   *                          baseline vs variant read patterns.
+   * @param args.status       Restrict to a specific experiment status.
+   * @param args.filters      Multi-tenant scoping filters (organization/project).
+   * @param args.page         Page number. Defaults to `0`.
+   * @param args.perPage      Page size. Defaults to `20`.
    */
-  async listExperiments(args?: { page?: number; perPage?: number }) {
+  async listExperiments(args?: {
+    targetType?: TargetType;
+    targetId?: string;
+    agentVersion?: string;
+    status?: ExperimentStatus;
+    filters?: ExperimentTenancyFilters;
+    page?: number;
+    perPage?: number;
+  }): Promise<ListExperimentsOutput> {
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.listExperiments({
       datasetId: this.id,
+      ...(args?.targetType !== undefined ? { targetType: args.targetType } : {}),
+      ...(args?.targetId !== undefined ? { targetId: args.targetId } : {}),
+      ...(args?.agentVersion !== undefined ? { agentVersion: args.agentVersion } : {}),
+      ...(args?.status !== undefined ? { status: args.status } : {}),
+      ...(args?.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }
@@ -392,12 +385,30 @@ export class Dataset {
   }
 
   /**
-   * List results for a specific experiment.
+   * List results for a specific experiment, with optional filters and
+   * pagination. All filters are pushed to the storage layer.
+   *
+   * @param args.experimentId The experiment whose results to list.
+   * @param args.traceId      Restrict to results linked to a specific trace.
+   * @param args.status       Restrict to a specific per-result review status.
+   * @param args.filters      Multi-tenant scoping filters (organization/project).
+   * @param args.page         Page number. Defaults to `0`.
+   * @param args.perPage      Page size. Defaults to `20`.
    */
-  async listExperimentResults(args: { experimentId: string; page?: number; perPage?: number }) {
+  async listExperimentResults(args: {
+    experimentId: string;
+    traceId?: string;
+    status?: ExperimentResultStatus;
+    filters?: ExperimentTenancyFilters;
+    page?: number;
+    perPage?: number;
+  }): Promise<ListExperimentResultsOutput> {
     const experimentsStore = await this.#getExperimentsStore();
     return experimentsStore.listExperimentResults({
       experimentId: args.experimentId,
+      ...(args.traceId !== undefined ? { traceId: args.traceId } : {}),
+      ...(args.status !== undefined ? { status: args.status } : {}),
+      ...(args.filters !== undefined ? { filters: args.filters } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }

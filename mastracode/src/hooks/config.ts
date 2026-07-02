@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { HooksConfig, HookDefinition, HookEventName } from './types.js';
 
-const VALID_EVENTS: HookEventName[] = [
+export const VALID_EVENTS: HookEventName[] = [
   'PreToolUse',
   'PostToolUse',
   'Stop',
@@ -18,6 +18,13 @@ const VALID_EVENTS: HookEventName[] = [
   'SessionStart',
   'SessionEnd',
   'Notification',
+  'AgentStart',
+  'AgentEnd',
+  'PermissionRequest',
+  'PermissionResult',
+  'Interrupt',
+  'SubagentStart',
+  'SubagentEnd',
 ];
 
 export function loadHooksConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR, homeDir?: string): HooksConfig {

@@ -1,13 +1,12 @@
-// @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { VisibilitySelect } from '../visibility-select';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
@@ -52,6 +51,12 @@ const FormHarness = ({ defaultVisibility = 'private', children }: FormHarnessPro
 };
 
 describe('VisibilitySelect (skill)', () => {
+  beforeEach(() => {
+    // The visibility mutation reads auth capabilities to gate workspace writes;
+    // default to auth-disabled so permission checks pass without network noise.
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -146,9 +151,7 @@ describe('VisibilitySelect (skill)', () => {
     );
 
     fireEvent.click(screen.getByTestId('skill-builder-visibility-add'));
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('skill-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('skill-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(capturedBody).toMatchObject({ visibility: 'public' });
@@ -196,9 +199,7 @@ describe('VisibilitySelect (skill)', () => {
     );
 
     fireEvent.click(screen.getByTestId('skill-builder-visibility-add'));
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('skill-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('skill-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('skill-builder-visibility-confirm-dialog')).toBeNull();

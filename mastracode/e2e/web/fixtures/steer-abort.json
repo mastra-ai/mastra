@@ -1,0 +1,26 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Write a long essay about the history of computing",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "Computing began with Charles Babbage's Analytical Engine in the 1830s. This machine was designed to"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Focus on the internet era instead",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "The internet era began with ARPANET in 1969, evolving into the modern internet we know today."
+      }
+    }
+  ]
+}

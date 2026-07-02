@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleThreadCommand } from '../thread.js';
 import type { SlashCommandContext } from '../types.js';
 
-function createMockHarness() {
+function createMockAgentController() {
   let currentThreadId: string | null = null;
   let currentResourceId = 'test-resource';
 
@@ -39,15 +39,16 @@ function createMockHarness() {
   };
 }
 
-function createMockCtx(harness: ReturnType<typeof createMockHarness>) {
+function createMockCtx(controller: ReturnType<typeof createMockAgentController>) {
   const infoMessages: string[] = [];
 
   return {
     ctx: {
       state: {
         pendingNewThread: false,
+        session: (controller as any).session,
       },
-      harness: harness as any,
+      controller: controller as any,
       showInfo: vi.fn((msg: string) => infoMessages.push(msg)),
       showError: vi.fn(),
       updateStatusLine: vi.fn(),
@@ -63,13 +64,13 @@ function createMockCtx(harness: ReturnType<typeof createMockHarness>) {
 }
 
 describe('handleThreadCommand', () => {
-  let harness: ReturnType<typeof createMockHarness>;
+  let controller: ReturnType<typeof createMockAgentController>;
   let ctx: SlashCommandContext;
   let infoMessages: string[];
 
   beforeEach(() => {
-    harness = createMockHarness();
-    const mock = createMockCtx(harness);
+    controller = createMockAgentController();
+    const mock = createMockCtx(controller);
     ctx = mock.ctx;
     infoMessages = mock.infoMessages;
   });
@@ -87,14 +88,14 @@ describe('handleThreadCommand', () => {
   it('shows current thread details when a thread is active', async () => {
     const createdAt = new Date('2026-03-25T20:27:03.643Z');
     const updatedAt = new Date('2026-03-25T22:18:09.046Z');
-    harness._addThread({
+    controller._addThread({
       id: 'thread-123',
       resourceId: 'test-resource',
       title: 'Debug Thread',
       createdAt,
       updatedAt,
     });
-    harness._setCurrentThreadId('thread-123');
+    controller._setCurrentThreadId('thread-123');
 
     await handleThreadCommand(ctx);
 
@@ -115,7 +116,7 @@ describe('handleThreadCommand', () => {
     const updatedAt = new Date('2026-03-25T22:18:09.046Z');
     const clonedAt = new Date('2026-03-25T21:00:00.000Z');
 
-    harness._addThread({
+    controller._addThread({
       id: 'thread-456',
       resourceId: 'test-resource',
       title: 'Forked Thread',
@@ -128,7 +129,7 @@ describe('handleThreadCommand', () => {
         },
       },
     });
-    harness._setCurrentThreadId('thread-456');
+    controller._setCurrentThreadId('thread-456');
 
     await handleThreadCommand(ctx);
 
@@ -138,8 +139,8 @@ describe('handleThreadCommand', () => {
   });
 
   it('falls back to current resource when the active thread is not in the listed threads', async () => {
-    harness._setCurrentThreadId('missing-thread');
-    harness._setCurrentResourceId('runtime-resource');
+    controller._setCurrentThreadId('missing-thread');
+    controller._setCurrentResourceId('runtime-resource');
 
     await handleThreadCommand(ctx);
 

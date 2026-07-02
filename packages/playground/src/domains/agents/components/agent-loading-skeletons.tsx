@@ -1,4 +1,4 @@
-import { Skeleton } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
 import { AgentLayout } from './agent-layout';
 import { SidebarPanel } from './sidebar-panel';
@@ -33,7 +33,7 @@ function AgentViewHeaderLoadingSkeleton() {
   );
 }
 
-function AgentSidebarLoadingSkeleton() {
+export function AgentSidebarLoadingSkeleton() {
   return (
     <SidebarPanel>
       <div className="min-h-0 flex-1 p-1" data-testid="agent-route-sidebar-skeleton">

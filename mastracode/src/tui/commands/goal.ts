@@ -12,7 +12,7 @@
  */
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
@@ -85,7 +85,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     // a plain user message.
     const resumedGoal = goalManager.getGoal();
     try {
-      await state.harness.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
+      await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
       goalManager.pause();
       await goalManager.saveToThread(state);
@@ -112,7 +112,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
-      state.harness.abort();
+      state.session.abort();
     }
     ctx.updateStatusLine();
     ctx.showInfo('Goal cleared.');
@@ -253,7 +253,7 @@ function getJudgeDefaults(): JudgeDefaults | null {
 
 async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: string): Promise<JudgeDefaults | null> {
   const { state } = ctx;
-  const availableModels = await state.harness.listAvailableModels();
+  const availableModels = await state.controller.listAvailableModels();
 
   if (availableModels.length === 0) {
     ctx.showError('No models available. Cannot set goal judge defaults.');
@@ -328,7 +328,7 @@ async function startGoal(
   const goalManager = state.goalManager;
 
   if (state.pendingNewThread) {
-    await state.harness.createThread();
+    await state.session.thread.create();
     state.pendingNewThread = false;
   }
 
@@ -356,7 +356,7 @@ async function startGoal(
   }
 
   try {
-    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
+    await state.session.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
@@ -382,7 +382,7 @@ export function createGoalReminderMessage(
   objective: string,
   maxTurns: number,
   judgeModelId: string,
-): HarnessMessage {
+): AgentControllerMessage {
   return {
     id: `goal-${goalId}`,
     role: 'user',
@@ -396,7 +396,7 @@ export function createGoalReminderMessage(
         judgeModelId,
       },
     ],
-  } as unknown as HarnessMessage;
+  } as unknown as AgentControllerMessage;
 }
 
 export function createGoalReminderXml(message: string): string {

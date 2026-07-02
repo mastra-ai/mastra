@@ -11,14 +11,14 @@ function applyCurrentModeColorToRenderedTools(ctx: SlashCommandContext): void {
 }
 
 export async function handleModeCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const modes = ctx.harness.listModes();
+  const modes = ctx.controller.listModes();
   if (modes.length <= 1) {
     ctx.showInfo('Only one mode available');
     return;
   }
   if (args[0]) {
     try {
-      await ctx.harness.session.mode.switch({ modeId: args[0] });
+      await ctx.state.session.mode.switch({ modeId: args[0] });
       applyCurrentModeColorToRenderedTools(ctx);
     } catch (err) {
       ctx.showError(`Failed to switch mode: ${err instanceof Error ? err.message : String(err)}`);

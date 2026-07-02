@@ -1132,6 +1132,13 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
     isOptional: true,
   },
   {
+    name: 'providerMetadata',
+    type: 'ProviderMetadata',
+    description:
+      'Provider-specific metadata for the finishing step (e.g. AWS Bedrock guardrail trace). Present when the model step produced provider metadata, including on content-filter blocks where `steps` is empty.',
+    isOptional: true,
+  },
+  {
     name: 'toolCalls',
     type: 'ToolCallInfo[]',
     description: 'Tool calls made in this step (if any).',
@@ -1262,7 +1269,7 @@ Configure processors that implement `processAPIError` in `errorProcessors`:
 
 ```typescript
 const agent = new Agent({
-  // ...
+  id: 'agent',
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -1523,6 +1530,7 @@ import { Agent } from '@mastra/core/agent'
 import { PrefillErrorHandler } from '@mastra/core/processors'
 
 const agent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: '...',
@@ -1541,7 +1549,7 @@ Each array also accepts a function so processors can be built per-request from `
 
 ```typescript
 new Agent({
-  // ...
+  id: 'processor-interface-agent',
   inputProcessors: ({ requestContext }) => {
     const blockedWords = requestContext.get('blockedWords') ?? []
     return [new ContentFilter(blockedWords)]

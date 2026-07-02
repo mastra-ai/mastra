@@ -336,7 +336,7 @@ export class GoalManager {
 
   private getAgent(state: TUIState): Agent | undefined {
     try {
-      return state.harness.getCurrentAgent();
+      return state.controller.getCurrentAgent(state.session);
     } catch {
       return undefined;
     }

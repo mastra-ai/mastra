@@ -74,11 +74,23 @@ export interface ChromaConfig {
   whereDocument?: WhereDocument;
 }
 
+export interface MongoDBConfig {
+  /**
+   * Number of candidates the HNSW graph considers before selecting the top-K
+   * results. Higher values improve recall at the cost of query latency.
+   * Must be >= topK. Defaults to 20 * topK, capped at 10 000.
+   * This is efSearch in the HNSW paper.
+   * See: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/
+   */
+  numCandidates?: number;
+}
+
 // Union type for all database-specific configs
 export type DatabaseConfig = {
   pinecone?: PineconeConfig;
   pgvector?: PgVectorConfig;
   chroma?: ChromaConfig;
+  mongodb?: MongoDBConfig;
   // Add other database configs as needed
   [key: string]: any; // Allow for future database extensions
 };

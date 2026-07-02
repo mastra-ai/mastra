@@ -10,15 +10,15 @@ packages:
 
 **Added in:** `@mastra/core@1.42.0`
 
+:::experimental
+
+The Goals feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+
+:::
+
 A goal is a durable, thread-scoped objective: a standing instruction the agent keeps working toward across loop iterations until a judge model decides it is satisfied or a run budget is exhausted. The objective is persisted in thread state, so it survives reloads and is evaluated in-loop — even when a new message arrives in the middle of an already-running turn.
 
 Goals build on the same machinery as [`isTaskComplete`](/docs/agents/supervisor-agents): an LLM-as-judge scores the agent's output each iteration and gates the loop. The difference is that a goal is **durable** (stored in thread state, not passed per call) and is set and updated through `Agent` methods rather than per-`stream()` options.
-
-:::note
-
-Goals are experimental and may change in a future release.
-
-:::
 
 ## When to use goals
 
@@ -38,6 +38,7 @@ Goals require a configured [storage](/docs/memory/storage) backend and a memory-
 import { Agent } from '@mastra/core/agent'
 
 const worker = new Agent({
+  id: 'worker',
   name: 'worker',
   instructions: 'You complete software tasks end to end.',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -78,6 +79,7 @@ By default the step uses a built-in LLM-as-judge scorer that returns `1` when th
 
 ```typescript title="src/mastra/agents/worker.ts"
 const worker = new Agent({
+  id: 'worker',
   name: 'worker',
   instructions: 'You complete software tasks end to end.',
   model: '__GATEWAY_OPENAI_MODEL__',

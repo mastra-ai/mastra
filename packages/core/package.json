@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.45.0",
+  "version": "1.49.0-alpha.4",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -69,6 +69,16 @@
       "require": {
         "types": "./dist/agent/message-list/index.d.ts",
         "default": "./dist/agent/message-list/index.cjs"
+      }
+    },
+    "./agent-controller": {
+      "import": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.cjs"
       }
     },
     "./auth": {
@@ -149,6 +159,16 @@
       "require": {
         "types": "./dist/channels/index.d.ts",
         "default": "./dist/channels/index.cjs"
+      }
+    },
+    "./coding-agent": {
+      "import": {
+        "types": "./dist/coding-agent/index.d.ts",
+        "default": "./dist/coding-agent/index.js"
+      },
+      "require": {
+        "types": "./dist/coding-agent/index.d.ts",
+        "default": "./dist/coding-agent/index.cjs"
       }
     },
     "./datasets": {
@@ -399,6 +419,16 @@
       "require": {
         "types": "./dist/schema/index.d.ts",
         "default": "./dist/schema/index.cjs"
+      }
+    },
+    "./skills": {
+      "import": {
+        "types": "./dist/skills/index.d.ts",
+        "default": "./dist/skills/index.js"
+      },
+      "require": {
+        "types": "./dist/skills/index.d.ts",
+        "default": "./dist/skills/index.cjs"
       }
     },
     "./server": {
@@ -671,6 +701,16 @@
         "default": "./dist/zod-to-json.cjs"
       }
     },
+    "./utils/collect-tool-mocks": {
+      "import": {
+        "types": "./dist/utils/collect-tool-mocks.d.ts",
+        "default": "./dist/utils/collect-tool-mocks.js"
+      },
+      "require": {
+        "types": "./dist/utils/collect-tool-mocks.d.ts",
+        "default": "./dist/utils/collect-tool-mocks.cjs"
+      }
+    },
     "./loop/server": {
       "import": {
         "types": "./dist/loop/server.d.ts",
@@ -791,8 +831,11 @@
     "@a2a-js/sdk": "~0.3.13",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.25",
     "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.27",
+    "@ai-sdk/provider-utils-v7": "npm:@ai-sdk/provider-utils@5.0.0",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.3",
     "@ai-sdk/provider-v6": "npm:@ai-sdk/provider@3.0.10",
+    "@ai-sdk/provider-v7": "npm:@ai-sdk/provider@4.0.0",
+    "@ai-sdk/ui-utils-v5": "npm:@ai-sdk/ui-utils@1.2.11",
     "@isaacs/ttlcache": "^2.1.4",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
@@ -815,7 +858,7 @@
     "picomatch": "^4.0.3",
     "posthog-node": "^5.37.0",
     "tokenx": "^1.3.0",
-    "ws": "^8.20.0",
+    "ws": "^8.21.0",
     "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
@@ -825,12 +868,14 @@
     "@ai-sdk/alibaba-v6": "npm:@ai-sdk/alibaba@1.0.25",
     "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@2.0.81",
     "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@3.0.82",
+    "@ai-sdk/anthropic-v7": "npm:@ai-sdk/anthropic@4.0.0",
     "@ai-sdk/azure": "^2.0.108",
     "@ai-sdk/cerebras-v5": "npm:@ai-sdk/cerebras@1.0.44",
     "@ai-sdk/deepinfra-v5": "npm:@ai-sdk/deepinfra@1.0.42",
     "@ai-sdk/deepseek-v5": "npm:@ai-sdk/deepseek@1.0.40",
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@2.0.72",
     "@ai-sdk/google-v6": "npm:@ai-sdk/google@3.0.70",
+    "@ai-sdk/google-v7": "npm:@ai-sdk/google@4.0.0",
     "@ai-sdk/groq-v5": "npm:@ai-sdk/groq@2.0.40",
     "@ai-sdk/groq-v6": "npm:@ai-sdk/groq@3.0.39",
     "@ai-sdk/mistral-v5": "npm:@ai-sdk/mistral@2.0.33",
@@ -839,6 +884,7 @@
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.39",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.106",
     "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.63",
+    "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.0",
     "@ai-sdk/perplexity-v5": "npm:@ai-sdk/perplexity@2.0.30",
     "@ai-sdk/provider-utils-v4": "npm:@ai-sdk/provider-utils@2.2.8",
     "@ai-sdk/provider-v4": "npm:@ai-sdk/provider@1.1.3",
@@ -847,9 +893,12 @@
     "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.89",
     "@ast-grep/napi": "^0.40.5",
     "@babel/core": "^7.29.7",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
+    "@internal/ai-v7": "workspace:*",
+    "@internal/auth": "workspace:*",
     "@internal/core": "workspace:*",
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",

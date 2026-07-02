@@ -8,7 +8,6 @@ import { getCurrentGitBranchAsync } from '../../utils/project.js';
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
-import { showError } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
 
@@ -75,7 +74,7 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
 function drainQueuedAction(ctx: EventHandlerContext): boolean {
   const { state } = ctx;
 
-  // Drain queued follow-up actions once all harness-level follow-ups are done.
+  // Drain queued follow-up actions once all controller-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
   if (state.session.followUps.count() > 0) {
@@ -143,18 +142,22 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // Update streaming message to show it was interrupted
-  if (state.streamingComponent && state.streamingMessage) {
+  // User-initiated aborts and plan "Request Changes" aborts are intentional.
+  // The timing line already says "canceled after x", so don't also render a
+  // redundant "Error: Interrupted" message in the transcript.
+  if (state.planRejectionAbort || state.userInitiatedAbort) {
+    state.streamingComponent = undefined;
+    state.streamingMessage = undefined;
+  } else if (state.streamingComponent && state.streamingMessage) {
+    // Update unexpected aborted streams to show they were interrupted.
     state.streamingMessage.stopReason = 'aborted';
     state.streamingMessage.errorMessage = 'Interrupted';
     state.streamingComponent.updateContent(state.streamingMessage);
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
-  } else if (state.userInitiatedAbort) {
-    // Show standalone "Interrupted" if user pressed Ctrl+C but no streaming component
-    showError(state, 'Interrupted');
   }
   state.userInitiatedAbort = false;
+  state.planRejectionAbort = false;
   if (state.activeGoalJudge) {
     removeJudgeComponent(state, state.activeGoalJudge.component);
     state.activeGoalJudge = undefined;
@@ -217,7 +220,7 @@ function removeJudgeComponent(state: EventHandlerContext['state'], component: Ju
 
 /**
  * Render an in-loop goal evaluation surfaced by the core goal step as a `goal`
- * stream chunk (bridged to a `goal_evaluation` harness event). The core loop
+ * stream chunk (bridged to a `goal_evaluation` controller event). The core loop
  * owns continuation — this handler only mirrors the judge's decision into the
  * UI, syncs the adapter's progress, and runs the plan-mode auto-switch when a
  * plan-started goal completes.
@@ -286,7 +289,7 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
     if (goal && goal.id === state.planStartedGoalId) {
       const goalId = state.planStartedGoalId;
       state.planStartedGoalId = undefined;
-      state.harness.session.mode.switch({ modeId: 'plan' }).catch(error => {
+      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
         ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
         state.planStartedGoalId = goalId;
       });
