@@ -3,6 +3,7 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { describe, it, expect } from 'vitest';
 import {
   getTracesNextPageParam,
+  isDeltaCompatibleOrderBy,
   mergeDeltaIntoPage0,
   refreshPage0Rows,
   selectUniqueTraces,
@@ -413,5 +414,18 @@ describe('shouldResetAfterIdle', () => {
   it('returns true when past the threshold', () => {
     const now = 1_000_000_000;
     expect(shouldResetAfterIdle(now - threshold - 1, now, threshold)).toBe(true);
+  });
+});
+
+describe('isDeltaCompatibleOrderBy', () => {
+  it('only treats startedAt DESC as delta-compatible', () => {
+    expect([
+      isDeltaCompatibleOrderBy(),
+      isDeltaCompatibleOrderBy({}),
+      isDeltaCompatibleOrderBy({ field: 'startedAt' }),
+      isDeltaCompatibleOrderBy({ field: 'startedAt', direction: 'DESC' }),
+      isDeltaCompatibleOrderBy({ field: 'durationMs', direction: 'DESC' }),
+      isDeltaCompatibleOrderBy({ field: 'startedAt', direction: 'ASC' }),
+    ]).toEqual([true, true, true, true, false, false]);
   });
 });

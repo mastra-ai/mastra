@@ -319,6 +319,13 @@ export function buildFeedbackFilterConditions(filters: FeedbackFilter | undefine
 }
 
 export function buildTraceOrderByClause(orderBy: TracesOrderBy, tableAlias?: string): string {
+  if (orderBy?.field === 'durationMs') {
+    const direction = orderBy.direction === 'ASC' ? 'ASC' : 'DESC';
+    const startedAt = tableAlias ? `${tableAlias}.startedAt` : 'startedAt';
+    const endedAt = tableAlias ? `${tableAlias}.endedAt` : 'endedAt';
+    return `CASE WHEN ${endedAt} IS NULL THEN 1 ELSE 0 END, greatest(0, dateDiff('millisecond', ${startedAt}, ifNull(${endedAt}, ${startedAt}))) ${direction}`;
+  }
+
   return buildOrderByClause(['startedAt', 'endedAt'] as const, orderBy, tableAlias, 'startedAt');
 }
 

@@ -128,6 +128,9 @@ export function buildOrderByClause(orderBy?: { field: string; direction: string 
   if (dir !== 'ASC' && dir !== 'DESC') {
     throw new Error(`Invalid sort direction: ${orderBy.direction}`);
   }
+  if (orderBy.field === 'durationMs') {
+    return `ORDER BY CASE WHEN endedAt IS NULL THEN 1 ELSE 0 END, greatest(0, date_diff('millisecond', startedAt, endedAt)) ${dir}, traceId ${dir}, spanId ${dir}`;
+  }
   const field = parseFieldKey(orderBy.field);
   return `ORDER BY ${field} ${dir}`;
 }

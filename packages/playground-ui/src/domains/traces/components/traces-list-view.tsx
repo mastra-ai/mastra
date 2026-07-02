@@ -1,7 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useEffect, useRef } from 'react';
+import { ArrowDownIcon, ArrowUpIcon, ArrowUpDownIcon } from 'lucide-react';
+import { useCallback, useEffect, useRef } from 'react';
 import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
+import { TracesDataListDurationCell } from '@/ds/components/DataList/TracesDataList/traces-data-list-cells';
 import { cn } from '@/lib/utils';
 
 /** Span attributes fields the list view reads directly. Extra unknown keys are allowed so callers
@@ -26,11 +28,14 @@ export type TracesListViewTrace = {
   attributes?: TraceAttributes | null;
   input?: unknown;
   startedAt?: Date | string | null;
+  endedAt?: Date | string | null;
   createdAt: Date | string;
 };
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
+const COLUMNS = '6rem 9rem 14rem minmax(8rem,1fr) 14rem 7rem 6rem';
+
+export type DurationSort = 'none' | 'desc' | 'asc';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -58,6 +63,12 @@ export type TracesListViewProps = {
   recentlyAddedKeys?: Set<string>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
+  /** When true and `onDurationSortChange` is provided, the Total Time column header is interactive. */
+  sortableByDuration?: boolean;
+  /** Current server-side Total Time sort state. */
+  durationSort?: DurationSort;
+  /** Called to request a new server-side Total Time sort state. */
+  onDurationSortChange?: (sort: DurationSort) => void;
 };
 
 /**
@@ -76,8 +87,15 @@ export function TracesListView({
   isBranchesMode,
   recentlyAddedKeys,
   onTraceClick,
+  sortableByDuration = true,
+  durationSort = 'none',
+  onDurationSortChange,
 }: TracesListViewProps) {
+  const cycleDurationSort = useCallback(() => {
+    onDurationSortChange?.(durationSort === 'none' ? 'desc' : durationSort === 'desc' ? 'asc' : 'none');
+  }, [durationSort, onDurationSortChange]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isDurationSortable = sortableByDuration && !!onDurationSortChange;
 
   const virtualizer = useVirtualizer({
     count: traces.length,
@@ -122,6 +140,25 @@ export function TracesListView({
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
         <TracesDataList.TopCell>Input</TracesDataList.TopCell>
         <TracesDataList.TopCell>Entity</TracesDataList.TopCell>
+        {isDurationSortable ? (
+          <TracesDataList.TopCell
+            as="button"
+            onClick={cycleDurationSort}
+            className="cursor-pointer select-none gap-1"
+            aria-label={`Sort by total time${durationSort === 'desc' ? ' (descending)' : durationSort === 'asc' ? ' (ascending)' : ''}`}
+          >
+            Total Time
+            {durationSort === 'desc' ? (
+              <ArrowDownIcon className="size-3" />
+            ) : durationSort === 'asc' ? (
+              <ArrowUpIcon className="size-3" />
+            ) : (
+              <ArrowUpDownIcon className="size-3 text-neutral2" />
+            )}
+          </TracesDataList.TopCell>
+        ) : (
+          <TracesDataList.TopCell>Total Time</TracesDataList.TopCell>
+        )}
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
       </TracesDataList.Top>
 
@@ -162,6 +199,7 @@ export function TracesListView({
                 />
                 <TracesDataList.InputCell input={getInputPreview(trace.input)} />
                 <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
+                <TracesDataListDurationCell startedAt={trace.startedAt} endedAt={trace.endedAt} />
                 <TracesDataList.StatusCell status={trace.attributes?.status} />
               </TracesDataList.RowButton>
             );

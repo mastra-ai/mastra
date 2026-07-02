@@ -12,6 +12,7 @@ import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/compone
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/traces-layout';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
+import type { DurationSort } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { TracesToolbar } from '@mastra/playground-ui/domains/traces/components/traces-toolbar';
 import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
 import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
@@ -54,6 +55,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const isScoped = !!scopedEntityId;
   const [searchParams, setSearchParams] = useSearchParams();
   const url = useTraceUrlState(searchParams, setSearchParams);
+  const [durationSort, setDurationSort] = useState<DurationSort>('none');
 
   useEffect(() => {
     if (!scopedEntityId) return;
@@ -181,6 +183,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       }),
     [url.filterTokens, url.selectedDateFrom, url.selectedDateTo, url.selectedEntityOption, url.selectedStatus],
   );
+  const traceOrderBy = useMemo(() => {
+    if (durationSort === 'none') return undefined;
+    return {
+      field: 'durationMs' as const,
+      direction: durationSort === 'desc' ? ('DESC' as const) : ('ASC' as const),
+    };
+  }, [durationSort]);
 
   const {
     data: tracesData,
@@ -193,7 +202,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     autoRefetch: autoRefetchTraces,
     setAutoRefetch: setAutoRefetchTraces,
     recentlyAddedKeys: recentlyAddedTraceKeys,
-  } = useTraces({ filters: traceFilters, listMode: url.listMode });
+  } = useTraces({ filters: traceFilters, listMode: url.listMode, orderBy: traceOrderBy });
 
   const traces = useMemo(() => tracesData?.spans ?? [], [tracesData?.spans]);
 
@@ -400,7 +409,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             // the previous mode's row count, and `isLoading` doesn't flash when switching with
             // cached data (so the existing scroll-reset effect in TracesListView wouldn't fire).
             // A fresh mount gives the virtualizer a clean count from the current `traces` array.
-            key={url.listMode}
+            key={`${url.listMode}:${durationSort}`}
             traces={traces}
             isLoading={isTracesLoading}
             isFetchingNextPage={isFetchingNextPage}
@@ -413,6 +422,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
             featuredSpanId={url.listMode === 'branches' ? url.anchorSpanIdParam : null}
             isBranchesMode={url.listMode === 'branches'}
             recentlyAddedKeys={recentlyAddedTraceKeys}
+            durationSort={durationSort}
+            onDurationSortChange={setDurationSort}
             onTraceClick={trace => {
               const isBranches = url.listMode === 'branches';
               const isSameRow = isBranches

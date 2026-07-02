@@ -3,7 +3,7 @@ import { EntityType } from '@mastra/core/observability';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { TracesDataListEntityCell } from '../traces-data-list-cells';
+import { TracesDataListDurationCell, TracesDataListEntityCell } from '../traces-data-list-cells';
 
 afterEach(cleanup);
 
@@ -28,5 +28,17 @@ describe('TracesDataListEntityCell entity icon', () => {
 
   it('renders no icon for entity types that are neither agent nor workflow', () => {
     expect(renderCell('memory').container.querySelector('svg')).toBeNull();
+  });
+});
+
+describe('TracesDataListDurationCell', () => {
+  it('does not round sub-minute durations up to one minute', () => {
+    const startedAt = new Date('2026-01-01T00:00:00.000Z');
+    const endedAt = new Date('2026-01-01T00:00:59.999Z');
+
+    const { getByText, queryByText } = render(<TracesDataListDurationCell startedAt={startedAt} endedAt={endedAt} />);
+
+    expect(getByText('59.99s')).not.toBeNull();
+    expect(queryByText('60.00s')).toBeNull();
   });
 });

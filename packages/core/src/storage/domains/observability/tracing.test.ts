@@ -1,6 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { SpanType } from '../../../observability/types';
-import { extractBranchSpans, lightSpanRecordSchema, getTraceLightResponseSchema } from './tracing';
+import {
+  extractBranchSpans,
+  lightSpanRecordSchema,
+  getTraceLightResponseSchema,
+  listBranchesArgsSchema,
+  listTracesArgsSchema,
+} from './tracing';
+
+describe('durationMs orderBy schemas', () => {
+  it('allows traces and branches to be ordered by durationMs', () => {
+    const traceArgs = listTracesArgsSchema.parse({
+      orderBy: { field: 'durationMs', direction: 'DESC' },
+    });
+    const branchArgs = listBranchesArgsSchema.parse({
+      orderBy: { field: 'durationMs', direction: 'ASC' },
+    });
+
+    expect(traceArgs.orderBy.field).toBe('durationMs');
+    expect(branchArgs.orderBy.field).toBe('durationMs');
+  });
+});
 
 describe('lightSpanRecordSchema', () => {
   const validLightSpan = {

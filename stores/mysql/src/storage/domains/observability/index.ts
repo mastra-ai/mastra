@@ -550,16 +550,23 @@ export class ObservabilityMySQL extends ObservabilityStorage {
       //   - ASC: NULLs first (natural)
       //   - DESC: NULLs last (natural)
       // We need CASE WHEN workarounds for endedAt to get desired ordering
-      const sortField = quoteIdentifier(orderBy.field, 'column name');
       const sortDirection = orderBy.direction;
+      const traceIdField = quoteIdentifier('traceId', 'column name');
+      const spanIdField = quoteIdentifier('spanId', 'column name');
       let orderByClause: string;
-      if (orderBy.field === 'endedAt') {
+      if (orderBy.field === 'durationMs') {
+        const startedAtField = quoteIdentifier('startedAt', 'column name');
+        const endedAtField = quoteIdentifier('endedAt', 'column name');
+        orderByClause = `CASE WHEN ${endedAtField} IS NULL THEN 1 ELSE 0 END, GREATEST(0, TIMESTAMPDIFF(MICROSECOND, ${startedAtField}, ${endedAtField}) / 1000) ${sortDirection}, ${traceIdField} ${sortDirection}, ${spanIdField} ${sortDirection}`;
+      } else if (orderBy.field === 'endedAt') {
+        const sortField = quoteIdentifier(orderBy.field, 'column name');
         orderByClause =
           sortDirection === 'DESC'
-            ? `CASE WHEN ${sortField} IS NULL THEN 0 ELSE 1 END, ${sortField} DESC`
-            : `CASE WHEN ${sortField} IS NULL THEN 1 ELSE 0 END, ${sortField} ASC`;
+            ? `CASE WHEN ${sortField} IS NULL THEN 0 ELSE 1 END, ${sortField} DESC, ${traceIdField} DESC, ${spanIdField} DESC`
+            : `CASE WHEN ${sortField} IS NULL THEN 1 ELSE 0 END, ${sortField} ASC, ${traceIdField} ASC, ${spanIdField} ASC`;
       } else {
-        orderByClause = `${sortField} ${sortDirection}`;
+        const sortField = quoteIdentifier(orderBy.field, 'column name');
+        orderByClause = `${sortField} ${sortDirection}, ${traceIdField} ${sortDirection}, ${spanIdField} ${sortDirection}`;
       }
 
       // Get total count

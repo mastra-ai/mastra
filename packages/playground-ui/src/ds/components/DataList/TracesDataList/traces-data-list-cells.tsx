@@ -92,6 +92,55 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 }
 
 // ---------------------------------------------------------------------------
+// DurationCell
+// ---------------------------------------------------------------------------
+
+/** Formats a duration in milliseconds to a compact human-readable string.
+ *  Examples: "0ms", "123ms", "1.23s", "2m 5s", "1h 12m" */
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(Math.floor(ms / 10) / 100).toFixed(2)}s`;
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+export interface TracesDataListDurationCellProps {
+  startedAt?: Date | string | null;
+  endedAt?: Date | string | null;
+}
+
+export function TracesDataListDurationCell({ startedAt, endedAt }: TracesDataListDurationCellProps) {
+  if (!startedAt || !endedAt) {
+    return (
+      <DataListCell height="compact" className="text-ui-smd font-mono text-neutral2">
+        -
+      </DataListCell>
+    );
+  }
+  const start = startedAt instanceof Date ? startedAt : new Date(startedAt);
+  const end = endedAt instanceof Date ? endedAt : new Date(endedAt);
+  const durationMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(durationMs)) {
+    return (
+      <DataListCell height="compact" className="text-ui-smd font-mono text-neutral2">
+        -
+      </DataListCell>
+    );
+  }
+
+  return (
+    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
+      {formatDurationMs(Math.max(0, durationMs))}
+    </DataListCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // StatusCell
 // ---------------------------------------------------------------------------
 

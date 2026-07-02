@@ -13447,8 +13447,8 @@ export type GetObservabilityTraces_QueryParams = {
   name?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
-  /** Field to order by: 'startedAt' | 'endedAt' */
-  field?: ('startedAt' | 'endedAt') | undefined;
+  /** Field to order by: 'startedAt' | 'endedAt' | 'durationMs' */
+  field?: ('startedAt' | 'endedAt' | 'durationMs') | undefined;
   /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
@@ -13828,7 +13828,7 @@ export type GetObservabilityTracesLight_QueryParams = {
   /** Number of items per page */
   perPage?: (number | undefined) | undefined;
   /** Field to order by */
-  field?: ('startedAt' | 'endedAt') | undefined;
+  field?: ('startedAt' | 'endedAt' | 'durationMs') | undefined;
   /** Sort direction */
   direction?: ('ASC' | 'DESC') | undefined;
   dateRange?:
@@ -14143,8 +14143,8 @@ export type GetObservabilityBranches_QueryParams = {
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
-  /** Field to order by: 'startedAt' | 'endedAt' */
-  field?: ('startedAt' | 'endedAt') | undefined;
+  /** Field to order by: 'startedAt' | 'endedAt' | 'durationMs' */
+  field?: ('startedAt' | 'endedAt' | 'durationMs') | undefined;
   /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
