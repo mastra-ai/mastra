@@ -126,6 +126,40 @@ describe('MastraCode message rendering', () => {
     expect(within(card).getByText('Done')).toBeInTheDocument();
   });
 
+  it('composes consecutive tool cards into a single bordered container', async () => {
+    seedProject();
+    useAgentControllerHandlers({
+      messages: [
+        {
+          id: 'assistant-tools',
+          role: 'assistant',
+          content: [
+            { type: 'tool_call', id: 'tool-a', name: 'view', args: { path: 'a.ts' } },
+            { type: 'tool_result', id: 'tool-a', name: 'view', result: 'a' },
+            { type: 'tool_call', id: 'tool-b', name: 'search', args: { pattern: 'x' } },
+            { type: 'tool_result', id: 'tool-b', name: 'search', result: 'b' },
+          ],
+        },
+      ],
+    });
+
+    renderWithProviders(<App />);
+
+    const first = await findToolCard('view');
+    const last = await findToolCard('search');
+
+    // First card rounds only its top; last card rounds only its bottom, so the
+    // pair reads as one container. The shared inner edge becomes a divider
+    // (the last card's top border) rather than two abutting rounded borders.
+    expect(first.className).toContain('rounded-t-xl');
+    expect(first.className).not.toContain('rounded-b-xl');
+    expect(last.className).toContain('rounded-b-xl');
+    expect(last.className).not.toContain('rounded-t-xl');
+    // border-y gives the last card a top edge (the divider from the first card)
+    // plus the closing bottom border.
+    expect(last.className).toContain('border-y');
+  });
+
   it('renders assistant text when SSE message updates arrive after subscription', async () => {
     seedProject();
     const stream = delayedSse({

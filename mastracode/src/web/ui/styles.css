@@ -195,7 +195,7 @@ body::before {
   padding: 24px 20px 8px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 32px;
   scroll-behavior: smooth;
 }
 

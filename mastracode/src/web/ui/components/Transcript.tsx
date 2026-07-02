@@ -13,7 +13,7 @@ import {
 } from '@mastra/playground-ui';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
-import { Bell, ChevronRight, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
+import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { memo, useEffect, useMemo, useState } from 'react';
 
@@ -164,7 +164,38 @@ function editArgs(toolName: string, args: unknown): EditArgs | undefined {
   return isReplace || isWrite ? edit : undefined;
 }
 
-function ToolCard({ tool, forceExpanded }: { tool: ToolCall; forceExpanded?: boolean }) {
+/**
+ * Position of a tool card within a run of consecutive tool cards.
+ * Consecutive cards compose into a single bordered, rounded container: the
+ * container border/rounding lives on the outer edges and inner boundaries
+ * become dividers. `single` is a lone card (fully rounded + bordered).
+ */
+type ToolGroupPosition = 'single' | 'first' | 'middle' | 'last';
+
+function toolGroupClasses(position: ToolGroupPosition): string {
+  const base = 'border-x border-border1';
+  switch (position) {
+    case 'single':
+      return `${base} border-y rounded-xl`;
+    case 'first':
+      return `${base} border-t rounded-t-xl`;
+    case 'middle':
+      // Divider between rows is the top border; no rounding.
+      return `${base} border-t`;
+    case 'last':
+      return `${base} border-y rounded-b-xl`;
+  }
+}
+
+function ToolCard({
+  tool,
+  forceExpanded,
+  groupPosition = 'single',
+}: {
+  tool: ToolCall;
+  forceExpanded?: boolean;
+  groupPosition?: ToolGroupPosition;
+}) {
   const [expanded, setExpanded] = useState(false);
   // When the parent toggles "expand/collapse all", follow that signal.
   useEffect(() => {
@@ -179,32 +210,40 @@ function ToolCard({ tool, forceExpanded }: { tool: ToolCall; forceExpanded?: boo
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="rounded-xl border border-border1 bg-surface3"
+      className={`overflow-hidden bg-surface3 ${toolGroupClasses(groupPosition)}`}
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
-      <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-1.5 text-left">
-        <ToolIcon name={tool.toolName} />
-        <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">
-          {tool.toolName}
-        </Txt>
-        {edit?.path && !expanded && (
-          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
-            {edit.path}
+      {/*
+        Wrap the trigger content in a span so no icon is a *direct* child of
+        CollapsibleTrigger. The DS trigger rotates every direct-child <svg> via
+        `[&>svg]:rotate-90` on open — which would spin the tool icon (e.g. the
+        eye). Nesting keeps only the chevron animating, controlled here.
+      */}
+      <CollapsibleTrigger className="w-full text-left">
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <ChevronDown
+            size={13}
+            className={`shrink-0 text-icon3 transition-transform duration-150 ${expanded ? 'rotate-0' : '-rotate-90'}`}
+          />
+          <ToolIcon name={tool.toolName} className="shrink-0 text-icon3" />
+          <Txt as="span" variant="ui-sm" font="mono" className="text-icon5">
+            {tool.toolName}
           </Txt>
-        )}
-        {!edit && argsPreview && !expanded && (
-          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
-            {truncate(argsPreview, 72)}
-          </Txt>
-        )}
-        <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
-          {STATUS_LABEL[tool.status]}
-        </Badge>
-        <ChevronRight
-          size={13}
-          className={`shrink-0 text-icon3 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
-        />
+          {edit?.path && !expanded && (
+            <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
+              {edit.path}
+            </Txt>
+          )}
+          {!edit && argsPreview && !expanded && (
+            <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
+              {truncate(argsPreview, 72)}
+            </Txt>
+          )}
+          <Badge variant={STATUS_VARIANT[tool.status]} size="xs" className="ml-auto">
+            {STATUS_LABEL[tool.status]}
+          </Badge>
+        </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2 px-2 pb-2">
         {edit ? (
@@ -569,6 +608,27 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
     return undefined;
   })();
 
+  // Map each tool-invocation to its position within a run of consecutive tool
+  // parts, so consecutive cards compose into one bordered container.
+  const toolGroupPositions = useMemo(() => {
+    const positions = new Map<string, ToolGroupPosition>();
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (part.type !== 'tool-invocation') continue;
+      const prevIsTool = i > 0 && parts[i - 1].type === 'tool-invocation';
+      const nextIsTool = i + 1 < parts.length && parts[i + 1].type === 'tool-invocation';
+      const position: ToolGroupPosition = prevIsTool
+        ? nextIsTool
+          ? 'middle'
+          : 'last'
+        : nextIsTool
+          ? 'first'
+          : 'single';
+      positions.set(part.toolInvocation.toolCallId, position);
+    }
+    return positions;
+  }, [parts]);
+
   const roles = useMemo<MessageRoleRenderers>(
     () => ({
       User: ({ children }) => (
@@ -626,11 +686,12 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       ToolInvocation: (part: ToolInvocationPart) => {
         const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
         const tool = toolFromInvocationPart(part, runtime);
-        return <ToolCard tool={tool} forceExpanded={allExpanded} />;
+        const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
+        return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
       },
       File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
     }),
-    [allExpanded, entry.message.role, entry.runtimeTools, entry.streaming, lastTextPart],
+    [allExpanded, entry.message.role, entry.runtimeTools, entry.streaming, lastTextPart, toolGroupPositions],
   );
 
   const status = statusMetadata(entry);
