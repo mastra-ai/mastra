@@ -104,6 +104,79 @@ describe('external dependency versions', () => {
       process.chdir(originalCwd);
     }
   }, 15000);
+
+  it('resolves an external dependency version from a dynamic import in a bundled workspace package', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-dynamic-importer-version-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
+    const externalPackageDir = join(workspacePackageDir, 'node_modules', 'typescript');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(externalPackageDir, { recursive: true });
+    await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(workspacePackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/workspace-package',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: {
+          typescript: '5.9.3',
+        },
+      }),
+    );
+    await writeFile(
+      join(externalPackageDir, 'package.json'),
+      JSON.stringify({ name: 'typescript', version: '5.9.3', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(externalPackageDir, 'index.js'), `export const version = '5.9.3';`);
+    await writeFile(
+      join(workspacePackageDir, 'src', 'index.js'),
+      `export async function loadTypescript() { return import('typescript'); }`,
+    );
+    await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
+    await writeFile(
+      entryFile,
+      `import { loadTypescript } from '@internal/workspace-package';\nexport const value = loadTypescript;`,
+    );
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: appDir,
+          platform: 'node',
+          isDev: true,
+          bundlerOptions: {
+            externals: ['typescript'],
+            enableSourcemap: false,
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result.externalDependencies.get('typescript')).toEqual({
+        version: '5.9.3',
+        packageSpec: undefined,
+      });
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15000);
 });
 
 describe('protocol imports', () => {

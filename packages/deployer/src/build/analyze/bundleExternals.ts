@@ -417,7 +417,7 @@ async function buildExternalDependencies(
 function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
   const capturedFiles = new Set();
 
-  for (const id of module.imports) {
+  for (const id of [...module.imports, ...module.dynamicImports]) {
     if (isDependencyPartOfPackage(id, external)) {
       return module;
     } else {
