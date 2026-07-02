@@ -13,6 +13,9 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -349,7 +352,15 @@ export class DatasetsMySQL extends DatasetsStorage {
           projectId: filters?.projectId,
         },
       });
-      return row ? this.mapDataset(row) : null;
+      if (row) return this.mapDataset(row);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -461,6 +472,13 @@ export class DatasetsMySQL extends DatasetsStorage {
       );
       if (!Array.isArray(rows) || rows.length === 0) {
         await connection.commit();
+        if (isTenancyScoped(filters)) {
+          logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
+            id,
+            organizationId: filters?.organizationId,
+            projectId: filters?.projectId,
+          });
+        }
         return;
       }
 

@@ -9,6 +9,9 @@ import {
   ExperimentsStorage,
   calculatePagination,
   normalizePerPage,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -366,7 +369,15 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           projectId: args.filters?.projectId,
         },
       });
-      return row ? this.mapExperiment(row) : null;
+      if (row) return this.mapExperiment(row);
+      if (isTenancyScoped(args.filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -489,6 +500,13 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         );
         if (!Array.isArray(gateRows) || gateRows.length === 0) {
           await connection.commit();
+          if (isTenancyScoped(args.filters)) {
+            logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
+              id: args.id,
+              organizationId: args.filters?.organizationId,
+              projectId: args.filters?.projectId,
+            });
+          }
           return;
         }
         await connection.execute(
@@ -615,7 +633,15 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           projectId: args.filters?.projectId,
         },
       });
-      return row ? this.mapExperimentResult(row) : null;
+      if (row) return this.mapExperimentResult(row);
+      if (isTenancyScoped(args.filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -800,10 +826,20 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           tenancyParams.push(args.filters.projectId);
         }
         const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
-        await this.pool.execute(
+        const [result] = await this.pool.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
           [args.experimentId, ...tenancyParams],
         );
+        // affectedRows === 0 means either "no results existed" or "parent not
+        // in this tenant." Debug log covers both — grep-friendly for operators.
+        const affected = (result as { affectedRows?: number })?.affectedRows ?? 0;
+        if (affected === 0) {
+          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
+            id: args.experimentId,
+            organizationId: args.filters?.organizationId,
+            projectId: args.filters?.projectId,
+          });
+        }
         return;
       }
       await this.pool.execute(

@@ -13,6 +13,9 @@ import {
   calculatePagination,
   safelyParseJSON,
   ensureDate,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -272,7 +275,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const query: Record<string, any> = { id };
       applyTenancyFilter(query, filters);
       const row = await collection.findOne(query);
-      return row ? this.transformDatasetRow(row) : null;
+      if (row) return this.transformDatasetRow(row);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -339,7 +350,16 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
       const gateHit = await datasetsCollectionForGate.findOne(gateQuery, { projection: { id: 1 } });
-      if (!gateHit) return;
+      if (!gateHit) {
+        if (isTenancyScoped(filters)) {
+          logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
+            id,
+            organizationId: filters?.organizationId,
+            projectId: filters?.projectId,
+          });
+        }
+        return;
+      }
 
       // Detach experiments — tolerate missing collections (NamespaceNotFound)
       // but rethrow real operational failures

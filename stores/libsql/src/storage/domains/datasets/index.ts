@@ -15,6 +15,9 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -298,7 +301,15 @@ export class DatasetsLibSQL extends DatasetsStorage {
         sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE ${whereSql}`,
         args: [id, ...params],
       });
-      return result.rows?.[0] ? this.transformDatasetRow(result.rows[0]) : null;
+      if (result.rows?.[0]) return this.transformDatasetRow(result.rows[0]);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -418,7 +429,16 @@ export class DatasetsLibSQL extends DatasetsStorage {
         sql: `SELECT id FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`,
         args: [id, ...params],
       });
-      if (!exists.rows?.[0]) return;
+      if (!exists.rows?.[0]) {
+        if (isTenancyScoped(filters)) {
+          logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
+            id,
+            organizationId: filters?.organizationId,
+            projectId: filters?.projectId,
+          });
+        }
+        return;
+      }
 
       // Detach experiments (SET NULL) + delete their results for FK safety.
       // Probe sqlite_master rather than swallowing "no such table" errors.

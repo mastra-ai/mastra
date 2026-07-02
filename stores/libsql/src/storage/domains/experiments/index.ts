@@ -11,6 +11,9 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   Experiment,
@@ -377,7 +380,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE ${scoped.sql}`,
         args: scoped.args,
       });
-      return result.rows?.[0] ? this.transformExperimentRow(result.rows[0] as Record<string, unknown>) : null;
+      if (result.rows?.[0]) {
+        return this.transformExperimentRow(result.rows[0] as Record<string, unknown>);
+      }
+      if (isTenancyScoped(args.filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -488,13 +501,21 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         : `experimentId = ?`;
       const cascadeArgs = conditions.length ? [args.id, ...params] : [args.id];
 
-      await this.#client.batch(
+      const batchResults = await this.#client.batch(
         [
           { sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${cascadeWhere}`, args: cascadeArgs },
           { sql: `DELETE FROM ${TABLE_EXPERIMENTS} WHERE ${parentScoped.sql}`, args: parentScoped.args },
         ],
         'write',
       );
+      const parentRowsAffected = Number(batchResults[1]?.rowsAffected ?? 0);
+      if (parentRowsAffected === 0 && isTenancyScoped(args.filters)) {
+        logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -650,7 +671,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${scoped.sql}`,
         args: scoped.args,
       });
-      return result.rows?.[0] ? this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>) : null;
+      if (result.rows?.[0]) {
+        return this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>);
+      }
+      if (isTenancyScoped(args.filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -744,10 +775,19 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       // Silent no-op on mismatch.
       const { conditions, params } = tenancyWhere(args.filters);
       if (conditions.length) {
-        await this.#client.execute({
+        const result = await this.#client.execute({
           sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')})`,
           args: [args.experimentId, ...params],
         });
+        // If the scoped cascade deleted nothing, it's either a legit 404 or a
+        // cross-tenant no-op. Debug log so operators can grep either way.
+        if (Number(result.rowsAffected ?? 0) === 0 && isTenancyScoped(args.filters)) {
+          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
+            id: args.experimentId,
+            organizationId: args.filters?.organizationId,
+            projectId: args.filters?.projectId,
+          });
+        }
         return;
       }
 

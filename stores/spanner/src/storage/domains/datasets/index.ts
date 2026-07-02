@@ -5,6 +5,9 @@ import {
   calculatePagination,
   createStorageErrorId,
   DatasetsStorage,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
   normalizePerPage,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
@@ -307,7 +310,15 @@ export class DatasetsSpanner extends DatasetsStorage {
         json: true,
       });
       const row = (rows as Array<Record<string, any>>)[0];
-      return row ? rowToDataset(row) : null;
+      if (row) return rowToDataset(row);
+      if (isTenancyScoped(args.filters)) {
+        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -390,6 +401,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       // existence up front avoids running detach DMLs against missing tables.
       const experimentTablesExist = await this.experimentTablesExist();
 
+      let gateHit = false;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
@@ -402,6 +414,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               await tx.commit();
               return;
             }
+            gateHit = true;
 
             if (experimentTablesExist) {
               await tx.runUpdate({
@@ -437,6 +450,13 @@ export class DatasetsSpanner extends DatasetsStorage {
           }
         }),
       );
+      if (!gateHit && isTenancyScoped(args.filters)) {
+        logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
     } catch (error) {
       throw new MastraError(
         {

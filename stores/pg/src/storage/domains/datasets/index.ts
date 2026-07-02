@@ -16,6 +16,9 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -332,7 +335,15 @@ export class DatasetsPG extends DatasetsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
-      return result ? this.transformDatasetRow(result) : null;
+      if (result) return this.transformDatasetRow(result);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -467,12 +478,12 @@ export class DatasetsPG extends DatasetsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const scopedWhere = ['"id" = $1', ...conditions].join(' AND ');
 
-      await this.#db.client.tx(async t => {
+      const deleted = await this.#db.client.tx(async t => {
         const locked = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE ${scopedWhere} FOR UPDATE`, [
           id,
           ...params,
         ]);
-        if (!locked) return;
+        if (!locked) return false;
 
         // Detach experiments only if their tables exist. We probe with
         // to_regclass instead of try/catch inside the transaction, because a
@@ -497,7 +508,15 @@ export class DatasetsPG extends DatasetsStorage {
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
+        return true;
       });
+      if (!deleted && isTenancyScoped(filters)) {
+        logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

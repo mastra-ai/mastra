@@ -14,7 +14,11 @@ import type {
   ListExperimentResultsOutput,
 } from '../../types';
 import type { InMemoryDB } from '../inmemory-db';
+import { logTenancyDeleteNoOp, logTenancyReadMiss } from '../tenancy';
 import { ExperimentsStorage } from './base';
+
+const TABLE_EXPERIMENTS = 'mastra_experiments';
+const TABLE_EXPERIMENT_RESULTS = 'mastra_experiment_results';
 
 export class ExperimentsInMemory extends ExperimentsStorage {
   private db: InMemoryDB;
@@ -84,10 +88,15 @@ export class ExperimentsInMemory extends ExperimentsStorage {
   async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     const row = this.db.experiments.get(args.id);
     if (!row) return null;
-    if (args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId) {
-      return null;
-    }
-    if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
+    const orgMismatch =
+      args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId;
+    const projMismatch = args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId;
+    if (orgMismatch || projMismatch) {
+      logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
+        id: args.id,
+        organizationId: args.filters?.organizationId,
+        projectId: args.filters?.projectId,
+      });
       return null;
     }
     return row;
@@ -141,13 +150,16 @@ export class ExperimentsInMemory extends ExperimentsStorage {
   async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     const existing = this.db.experiments.get(args.id);
     if (!existing) return;
-    if (
-      args.filters?.organizationId !== undefined &&
-      (existing.organizationId ?? null) !== args.filters.organizationId
-    ) {
-      return;
-    }
-    if (args.filters?.projectId !== undefined && (existing.projectId ?? null) !== args.filters.projectId) {
+    const orgMismatch =
+      args.filters?.organizationId !== undefined && (existing.organizationId ?? null) !== args.filters.organizationId;
+    const projMismatch =
+      args.filters?.projectId !== undefined && (existing.projectId ?? null) !== args.filters.projectId;
+    if (orgMismatch || projMismatch) {
+      logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
+        id: args.id,
+        organizationId: args.filters?.organizationId,
+        projectId: args.filters?.projectId,
+      });
       return;
     }
     this.db.experiments.delete(args.id);
@@ -209,10 +221,15 @@ export class ExperimentsInMemory extends ExperimentsStorage {
   }): Promise<ExperimentResult | null> {
     const row = this.db.experimentResults.get(args.id);
     if (!row) return null;
-    if (args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId) {
-      return null;
-    }
-    if (args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId) {
+    const orgMismatch =
+      args.filters?.organizationId !== undefined && (row.organizationId ?? null) !== args.filters.organizationId;
+    const projMismatch = args.filters?.projectId !== undefined && (row.projectId ?? null) !== args.filters.projectId;
+    if (orgMismatch || projMismatch) {
+      logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
+        id: args.id,
+        organizationId: args.filters?.organizationId,
+        projectId: args.filters?.projectId,
+      });
       return null;
     }
     return row;
@@ -261,13 +278,16 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
       const parent = this.db.experiments.get(args.experimentId);
       if (!parent) return;
-      if (
-        args.filters?.organizationId !== undefined &&
-        (parent.organizationId ?? null) !== args.filters.organizationId
-      ) {
-        return;
-      }
-      if (args.filters?.projectId !== undefined && (parent.projectId ?? null) !== args.filters.projectId) {
+      const orgMismatch =
+        args.filters?.organizationId !== undefined && (parent.organizationId ?? null) !== args.filters.organizationId;
+      const projMismatch =
+        args.filters?.projectId !== undefined && (parent.projectId ?? null) !== args.filters.projectId;
+      if (orgMismatch || projMismatch) {
+        logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENT_RESULTS, {
+          id: args.experimentId,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
         return;
       }
     }

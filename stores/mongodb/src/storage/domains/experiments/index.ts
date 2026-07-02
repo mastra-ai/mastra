@@ -9,6 +9,9 @@ import {
   normalizePerPage,
   calculatePagination,
   safelyParseJSON,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   Experiment,
@@ -375,8 +378,15 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const query: Record<string, any> = { id };
       applyTenancyFilter(query, filters);
       const doc = await collection.findOne(query);
-      if (!doc) return null;
-      return transformExperimentRow(doc as unknown as Record<string, unknown>);
+      if (doc) return transformExperimentRow(doc as unknown as Record<string, unknown>);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -473,7 +483,16 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
       const existing = await experimentsCollection.findOne(gateQuery);
-      if (!existing) return;
+      if (!existing) {
+        if (isTenancyScoped(filters)) {
+          logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
+            id,
+            organizationId: filters?.organizationId,
+            projectId: filters?.projectId,
+          });
+        }
+        return;
+      }
 
       // Delete results first (FK semantics). Scope on the results collection too
       // — result rows carry organizationId/projectId of the owning experiment.
@@ -629,8 +648,15 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const query: Record<string, any> = { id };
       applyTenancyFilter(query, filters);
       const doc = await collection.findOne(query);
-      if (!doc) return null;
-      return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
+      if (doc) return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -722,7 +748,14 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         const gateQuery: Record<string, any> = { id: experimentId };
         applyTenancyFilter(gateQuery, filters);
         const parent = await experimentsCollection.findOne(gateQuery);
-        if (!parent) return;
+        if (!parent) {
+          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
+            id: experimentId,
+            organizationId: filters?.organizationId,
+            projectId: filters?.projectId,
+          });
+          return;
+        }
       }
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
       const deleteQuery: Record<string, any> = { experimentId };

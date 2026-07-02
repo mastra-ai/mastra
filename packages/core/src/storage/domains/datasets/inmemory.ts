@@ -30,7 +30,10 @@ function matchesTenancy(
   return true;
 }
 import type { InMemoryDB } from '../inmemory-db';
+import { logTenancyDeleteNoOp, logTenancyReadMiss } from '../tenancy';
 import { DatasetsStorage } from './base';
+
+const TABLE_DATASETS = 'mastra_datasets';
 
 /** Convert a storage row to the public DatasetItem type (strips validTo/isDeleted) */
 function toDatasetItem(row: DatasetItemRow): DatasetItem {
@@ -119,7 +122,14 @@ export class DatasetsInMemory extends DatasetsStorage {
   }): Promise<DatasetRecord | null> {
     const record = this.db.datasets.get(id);
     if (!record) return null;
-    if (!matchesTenancy(record, filters)) return null;
+    if (!matchesTenancy(record, filters)) {
+      logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
+        id,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      });
+      return null;
+    }
     return toDatasetRecord(record);
   }
 
@@ -152,7 +162,14 @@ export class DatasetsInMemory extends DatasetsStorage {
   async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     const existing = this.db.datasets.get(id);
     if (!existing) return;
-    if (!matchesTenancy(existing, filters)) return;
+    if (!matchesTenancy(existing, filters)) {
+      logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
+        id,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      });
+      return;
+    }
 
     // Cascade: delete items and versions
     for (const [itemId, rows] of this.db.datasetItems) {

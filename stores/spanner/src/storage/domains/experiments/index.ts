@@ -5,6 +5,9 @@ import {
   calculatePagination,
   createStorageErrorId,
   ExperimentsStorage,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
   normalizePerPage,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
@@ -313,7 +316,15 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         json: true,
       });
       const row = (rows as Array<Record<string, any>>)[0];
-      return row ? rowToExperiment(row) : null;
+      if (row) return rowToExperiment(row);
+      if (isTenancyScoped(args.filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -424,6 +435,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       }
       const gateWhere = [`${quoteIdent('id', 'column name')} = @id`, ...tenancyConditions].join(' AND ');
 
+      let gateHit = false;
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
@@ -437,6 +449,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
               await tx.commit();
               return;
             }
+            gateHit = true;
             const cascadeWhere = [
               `${quoteIdent('experimentId', 'column name')} = @id`,
               // Result rows carry the same organizationId/projectId as their parent,
@@ -458,6 +471,13 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           }
         }),
       );
+      if (!gateHit && isTenancyScoped(args.filters)) {
+        logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -637,7 +657,15 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         json: true,
       });
       const row = (rows as Array<Record<string, any>>)[0];
-      return row ? rowToExperimentResult(row) : null;
+      if (row) return rowToExperimentResult(row);
+      if (isTenancyScoped(args.filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -740,6 +768,31 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} WHERE ${conditions.join(' AND ')}`,
           params,
         });
+        // Observability: log when the scoped parent doesn't exist under this
+        // tenancy — indicates a cross-tenant probe / stale id under an
+        // authenticated caller.
+        const parentConds: string[] = [`${quoteIdent('id', 'column name')} = @experimentId`];
+        const parentParams: Record<string, any> = { experimentId: args.experimentId };
+        if (args.filters?.organizationId !== undefined) {
+          parentConds.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+          parentParams.organizationId = args.filters.organizationId;
+        }
+        if (args.filters?.projectId !== undefined) {
+          parentConds.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+          parentParams.projectId = args.filters.projectId;
+        }
+        const [parentRows] = await this.database.run({
+          sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')} WHERE ${parentConds.join(' AND ')} LIMIT 1`,
+          params: parentParams,
+          json: true,
+        });
+        if (!Array.isArray(parentRows) || parentRows.length === 0) {
+          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
+            id: args.experimentId,
+            organizationId: args.filters?.organizationId,
+            projectId: args.filters?.projectId,
+          });
+        }
         return;
       }
       await this.db.runDml({

@@ -1,6 +1,20 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import type { IMastraLogger } from '@internal/core/logger';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryDB } from '../../inmemory-db';
 import { ExperimentsInMemory } from '../inmemory';
+
+function makeSpyLogger(): IMastraLogger {
+  return {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trackException: vi.fn(),
+    getTransports: vi.fn(),
+    getLogs: vi.fn(),
+    getLogsByRunId: vi.fn(),
+  } as unknown as IMastraLogger;
+}
 
 describe('ExperimentsInMemory', () => {
   let storage: ExperimentsInMemory;
@@ -483,6 +497,149 @@ describe('ExperimentsInMemory', () => {
         pagination: { page: 0, perPage: 10 },
       });
       expect(result.results).toHaveLength(0);
+    });
+  });
+
+  describe('tenancy-miss observability', () => {
+    let logger: IMastraLogger;
+
+    beforeEach(() => {
+      logger = makeSpyLogger();
+      storage.__setLogger(logger);
+    });
+
+    it('logs a scoped read miss when getExperimentById returns null under mismatched tenancy', async () => {
+      const created = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        organizationId: 'org-a',
+        projectId: 'proj-a',
+      });
+
+      const miss = await storage.getExperimentById({
+        id: created.id,
+        filters: { organizationId: 'org-b', projectId: 'proj-a' },
+      });
+
+      expect(miss).toBeNull();
+      expect(logger.debug).toHaveBeenCalledWith(
+        'tenancy: scoped read miss',
+        expect.objectContaining({ op: 'getExperimentById', table: 'mastra_experiments' }),
+      );
+    });
+
+    it('does not log when getExperimentById returns null on an unscoped call', async () => {
+      const miss = await storage.getExperimentById({ id: 'does-not-exist' });
+      expect(miss).toBeNull();
+      expect(logger.debug).not.toHaveBeenCalled();
+    });
+
+    it('logs a scoped delete no-op when deleteExperiment does not match', async () => {
+      const created = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        organizationId: 'org-a',
+        projectId: 'proj-a',
+      });
+
+      await storage.deleteExperiment({
+        id: created.id,
+        filters: { organizationId: 'org-b', projectId: 'proj-a' },
+      });
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        'tenancy: scoped delete no-op',
+        expect.objectContaining({ op: 'deleteExperiment', table: 'mastra_experiments' }),
+      );
+
+      // Row must still exist under its owner's tenancy.
+      const stillThere = await storage.getExperimentById({
+        id: created.id,
+        filters: { organizationId: 'org-a', projectId: 'proj-a' },
+      });
+      expect(stillThere).not.toBeNull();
+    });
+
+    it('does not log when the scoped delete actually matches', async () => {
+      const created = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        organizationId: 'org-a',
+        projectId: 'proj-a',
+      });
+
+      await storage.deleteExperiment({
+        id: created.id,
+        filters: { organizationId: 'org-a', projectId: 'proj-a' },
+      });
+
+      expect(logger.debug).not.toHaveBeenCalledWith('tenancy: scoped delete no-op', expect.anything());
+    });
+
+    it('logs a scoped read miss when getExperimentResultById returns null under mismatched tenancy', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        organizationId: 'org-a',
+        projectId: 'proj-a',
+      });
+      const result = await storage.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'a',
+        output: 'b',
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+
+      const miss = await storage.getExperimentResultById({
+        id: result.id,
+        filters: { organizationId: 'org-b' },
+      });
+
+      expect(miss).toBeNull();
+      expect(logger.debug).toHaveBeenCalledWith(
+        'tenancy: scoped read miss',
+        expect.objectContaining({ op: 'getExperimentResultById', table: 'mastra_experiment_results' }),
+      );
+    });
+
+    it('logs a scoped delete no-op when deleteExperimentResults does not match the parent tenancy', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+        organizationId: 'org-a',
+        projectId: 'proj-a',
+      });
+
+      await storage.deleteExperimentResults({
+        experimentId: experiment.id,
+        filters: { organizationId: 'org-b', projectId: 'proj-a' },
+      });
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        'tenancy: scoped delete no-op',
+        expect.objectContaining({ op: 'deleteExperimentResults' }),
+      );
     });
   });
 });

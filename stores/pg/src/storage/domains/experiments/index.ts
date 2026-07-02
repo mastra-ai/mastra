@@ -11,6 +11,9 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  isTenancyScoped,
+  logTenancyDeleteNoOp,
+  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   Experiment,
@@ -438,7 +441,15 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
-      return result ? this.transformExperimentRow(result) : null;
+      if (result) return this.transformExperimentRow(result);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -550,12 +561,20 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
 
-      await this.#db.client.tx(async t => {
+      const deleted = await this.#db.client.tx(async t => {
         const parent = await t.oneOrNone(gateSql, [id, ...params]);
-        if (!parent) return;
+        if (!parent) return false;
         await t.none(`DELETE FROM ${resultsTable} WHERE "experimentId" = $1`, [id]);
         await t.none(`DELETE FROM ${experimentsTable} WHERE "id" = $1`, [id]);
+        return true;
       });
+      if (!deleted && isTenancyScoped(filters)) {
+        logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -708,7 +727,15 @@ export class ExperimentsPG extends ExperimentsStorage {
       const { conditions, params } = tenancyWhere(filters, 2);
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
-      return result ? this.transformExperimentResultRow(result) : null;
+      if (result) return this.transformExperimentResultRow(result);
+      if (isTenancyScoped(filters)) {
+        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        });
+      }
+      return null;
     } catch (error) {
       throw new MastraError(
         {
@@ -809,11 +836,19 @@ export class ExperimentsPG extends ExperimentsStorage {
         const { conditions, params } = tenancyWhere(filters, 2);
         const gateSql = `SELECT "id" FROM ${experimentsTable} WHERE ${['"id" = $1', ...conditions].join(' AND ')} FOR UPDATE`;
 
-        await this.#db.client.tx(async t => {
+        const scoped = await this.#db.client.tx(async t => {
           const parent = await t.oneOrNone(gateSql, [experimentId, ...params]);
-          if (!parent) return;
+          if (!parent) return false;
           await t.none(`DELETE FROM ${tableName} WHERE "experimentId" = $1`, [experimentId]);
+          return true;
         });
+        if (!scoped) {
+          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
+            id: experimentId,
+            organizationId: filters?.organizationId,
+            projectId: filters?.projectId,
+          });
+        }
         return;
       }
 

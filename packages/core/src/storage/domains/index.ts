@@ -1,4 +1,5 @@
 export * from './base';
+export * from './tenancy';
 export * from './versioned';
 export * from './agents';
 export * from './channels';
