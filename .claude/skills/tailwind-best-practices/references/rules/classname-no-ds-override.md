@@ -7,7 +7,7 @@ tags: classname, ds-components, override, styling, forbidden
 
 ## No className Override on DS Components
 
-Never pass `className` props to DS components to override their styles, except for `height` and `width` on `DialogContent` and `Popover` components.
+Never pass `className` props to DS components to override their visual styles. Layout-only sizing is allowed for components that intentionally expose it, such as `DialogContent` and `PopoverContent`.
 
 **Why this matters:**
 
@@ -54,12 +54,12 @@ Never pass `className` props to DS components to override their styles, except f
 <Badge variant="success">Active</Badge>
 <Badge variant="error">Failed</Badge>
 
-// EXCEPTION: Height/width on DialogContent and Popover
+// EXCEPTION: Layout sizing on DialogContent
 <DialogContent className="h-[500px] w-[600px]">
   Content
 </DialogContent>
 
-// EXCEPTION: Width on PopoverContent
+// EXCEPTION: Layout sizing on PopoverContent
 <PopoverContent className="w-[400px]">
   Content
 </PopoverContent>
@@ -67,8 +67,9 @@ Never pass `className` props to DS components to override their styles, except f
 
 **Allowed exceptions:**
 
-- `DialogContent` - `h-[value]`, `w-[value]` allowed
-- `PopoverContent` - `h-[value]`, `w-[value]` allowed
+- `DialogContent` - layout sizing such as `h-*`, `w-*`, `max-h-*`, and `max-w-*`
+- `PopoverContent` - layout sizing such as `h-*`, `w-*`, `max-h-*`, and `max-w-*`
+- Other DS components only when their local API or existing stories clearly document `className` as an intentional extension point
 
 **If you need different styles:**
 

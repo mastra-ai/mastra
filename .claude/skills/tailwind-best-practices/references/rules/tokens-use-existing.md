@@ -1,21 +1,19 @@
 ---
-title: Use Existing Tokens from tailwind.config.ts
+title: Use Existing Tokens from theme.css
 impact: CRITICAL
 impactDescription: Ensures visual consistency, enables global updates
 tags: tokens, design-tokens, tailwind, colors, spacing, consistency
 ---
 
-## Use Existing Tokens from tailwind.config.ts
+## Use Existing Tokens from theme.css
 
-Only use color, spacing, and other values that are defined in the `tailwind.config.ts` file from `@playground-ui`. All tokens are sourced from `packages/playground-ui/src/ds/tokens/`.
+Only use shared design values defined in `packages/playground-ui/theme.css`. Tailwind v4 reads the `@theme` block in that file and turns theme variables into utility APIs such as `bg-surface4`, `text-neutral6`, `p-3`, and `rounded-md`.
 
-**Token categories available:**
+**Theme-token decision tree:**
 
-- **Colors**: `surface1-5`, `accent1-6`, `neutral1-6`, `border1-2`, `error`, `overlay`
-- **Spacings**: `0`, `px`, `0.5`, `1`, `1.5`, `2`, `2.5`, `3`, `4`, `5`, `6`, `8`, `10`, `12`, etc.
-- **Font sizes**: `ui-xs`, `ui-sm`, `ui-md`, `ui-lg`, `ui-xl`
-- **Border radius**: `xs`, `sm`, `md`, `lg`, `xl`, `2xl`, `full`
-- **Shadows**: `sm`, `md`, `lg`, `inner`, `card`, `elevated`, `dialog`, `glow-accent1`, `glow-accent2`
+1. Prefer a generated utility from `theme.css` (`bg-surface4`, `text-neutral6`, `h-form-md`, `shadow-dialog`).
+2. If a runtime-only value is local to one component, use a regular CSS custom property and Tailwind v4 shorthand (`bg-(--local-color)`) instead of adding a global theme token.
+3. If a value should become a shared utility, update `theme.css` only when the task explicitly includes a design-system token change.
 
 **Incorrect (using non-token values):**
 
@@ -28,6 +26,12 @@ Only use color, spacing, and other values that are defined in the `tailwind.conf
 
 // DON'T: Using arbitrary font sizes
 <span className="text-[15px]">Text</span>
+
+// DON'T: Adding a global @theme value for one component's local state
+// packages/playground-ui/theme.css
+@theme {
+  --color-one-off-tooltip-bg: oklch(20% 0 0);
+}
 ```
 
 **Correct (using design tokens):**
@@ -41,11 +45,18 @@ Only use color, spacing, and other values that are defined in the `tailwind.conf
 
 // DO: Use token-based font sizes
 <span className="text-ui-md">Text</span>
+
+// DO: Use a local CSS variable when the value should not become a global utility
+<div className="bg-(--data-list-sticky-header-background)">Content</div>
 ```
 
 **Token reference locations:**
 
-- Colors: `packages/playground-ui/src/ds/tokens/colors.ts`
-- Spacings: `packages/playground-ui/src/ds/tokens/spacings.ts`
-- Font sizes: `packages/playground-ui/src/ds/tokens/fonts.ts`
-- Shadows: `packages/playground-ui/src/ds/tokens/shadows.ts`
+- Tailwind v4 theme tokens: `packages/playground-ui/theme.css`
+- Token exports used by the package: `packages/playground-ui/src/ds/tokens/*.ts`
+
+**Review smells:**
+
+- Adding a new `--color-*`, `--spacing-*`, `--radius-*`, `--shadow-*`, or `--animate-*` token for a single component state
+- Using raw `var(--surface4)` in JSX where the generated `bg-surface4` utility exists
+- Reading Tailwind tokens through JavaScript config or `resolveConfig`; use CSS variables or `getComputedStyle` when JavaScript needs a resolved value

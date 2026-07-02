@@ -7,7 +7,7 @@ tags: components, ds, design-system, playground-ui, reuse
 
 ## Use Existing Components from @playground-ui
 
-Always check for existing components in `@playground-ui/ds/components/` before creating new ones. Never create new components in the `ds/` folder.
+Always check for existing components in `@playground-ui/ds/components/` before creating new ones. Do not add a new component to the `ds/` folder unless the task explicitly asks for a reusable design-system addition.
 
 **Why this matters:**
 
@@ -41,10 +41,6 @@ function MyFeature() {
 }
 ```
 
-**Available DS components include:**
+**When checking availability:**
 
-- `Button`, `Badge`, `Avatar`, `Alert`, `AlertDialog`
-- `Card`, `Checkbox`, `Collapsible`, `Combobox`
-- `Dialog`, `Dropdown`, `Input`, `Popover`
-- `Select`, `Table`, `Tabs`, `Tooltip`
-- And many more in `packages/playground-ui/src/ds/components/`
+Inspect the current files and exports in `packages/playground-ui/src/ds/components/`. Avoid relying on a hard-coded component list in this skill because the design system changes over time.
