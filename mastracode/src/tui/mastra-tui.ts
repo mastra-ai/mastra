@@ -28,8 +28,9 @@ import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
+  locateOwnInstall,
+  resolveUpdateOutcome,
   runUpdate,
 } from '../utils/update-check.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
@@ -1599,14 +1600,22 @@ export class MastraTUI {
 
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
-      const ok = await runUpdate(pm, latestVersion);
-      if (ok) {
-        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+      const result = await runUpdate(pm, latestVersion);
+      // Exit code 0 doesn't prove the running binary was updated — verify on disk.
+      const install = locateOwnInstall();
+      const outcome = resolveUpdateOutcome({
+        pm,
+        targetVersion: latestVersion,
+        result,
+        installedVersion: install?.version ?? null,
+        installedPackageDir: install?.dir ?? null,
+      });
+      if (outcome.status === 'updated') {
+        showInfo(this.state, outcome.message);
         this.stop();
         process.exit(0);
       } else {
-        const cmd = getInstallCommand(pm, latestVersion);
-        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+        showError(this.state, outcome.message);
       }
     } else {
       // User declined — save the dismissed version

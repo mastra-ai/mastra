@@ -6,7 +6,8 @@ const {
   detectPackageManagerMock,
   isNewerVersionMock,
   runUpdateMock,
-  getInstallCommandMock,
+  locateOwnInstallMock,
+  resolveUpdateOutcomeMock,
   loadSettingsMock,
   saveSettingsMock,
 } = vi.hoisted(() => ({
@@ -15,7 +16,8 @@ const {
   detectPackageManagerMock: vi.fn(),
   isNewerVersionMock: vi.fn(),
   runUpdateMock: vi.fn(),
-  getInstallCommandMock: vi.fn(),
+  locateOwnInstallMock: vi.fn(),
+  resolveUpdateOutcomeMock: vi.fn(),
   loadSettingsMock: vi.fn(),
   saveSettingsMock: vi.fn(),
 }));
@@ -26,7 +28,8 @@ vi.mock('../../../utils/update-check.js', () => ({
   detectPackageManager: detectPackageManagerMock,
   isNewerVersion: isNewerVersionMock,
   runUpdate: runUpdateMock,
-  getInstallCommand: getInstallCommandMock,
+  locateOwnInstall: locateOwnInstallMock,
+  resolveUpdateOutcome: resolveUpdateOutcomeMock,
 }));
 
 vi.mock('../../../onboarding/settings.js', () => ({
@@ -73,8 +76,12 @@ describe('handleUpdateCommand', () => {
     fetchChangelogMock.mockResolvedValue('  • New thing');
     detectPackageManagerMock.mockResolvedValue('pnpm');
     isNewerVersionMock.mockReturnValue(true);
-    runUpdateMock.mockResolvedValue(false);
-    getInstallCommandMock.mockReturnValue('pnpm add -g mastracode@0.2.0');
+    runUpdateMock.mockResolvedValue({ ok: true });
+    locateOwnInstallMock.mockReturnValue({ dir: '/usr/local/lib/node_modules/mastracode', version: '0.2.0' });
+    resolveUpdateOutcomeMock.mockReturnValue({
+      status: 'failed',
+      message: 'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.',
+    });
     loadSettingsMock.mockReturnValue({ updateDismissedVersion: null });
   });
 
@@ -132,7 +139,12 @@ describe('handleUpdateCommand', () => {
     expect(ctx.state.activeInlineQuestion).toBeUndefined();
   });
 
-  it('shows the manual install command when the selected update fails', async () => {
+  it('surfaces the resolved failure message (with captured stderr) when the update fails', async () => {
+    runUpdateMock.mockResolvedValue({ ok: false, stderr: 'npm ERR! code EACCES\nnpm ERR! permission denied' });
+    resolveUpdateOutcomeMock.mockReturnValue({
+      status: 'failed',
+      message: 'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.\n\nnpm ERR! permission denied',
+    });
     const ctx = createCtx('0.1.0');
 
     const command = handleUpdateCommand(ctx);
@@ -141,8 +153,60 @@ describe('handleUpdateCommand', () => {
     await command;
 
     expect(runUpdateMock).toHaveBeenCalledWith('pnpm', '0.2.0');
-    expect(getInstallCommandMock).toHaveBeenCalledWith('pnpm', '0.2.0');
-    expect(ctx.showError).toHaveBeenCalledWith('Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.');
+    expect(resolveUpdateOutcomeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pm: 'pnpm',
+        targetVersion: '0.2.0',
+        result: { ok: false, stderr: 'npm ERR! code EACCES\nnpm ERR! permission denied' },
+      }),
+    );
+    expect(ctx.showError).toHaveBeenCalledWith(
+      'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.\n\nnpm ERR! permission denied',
+    );
     expect(ctx.stop).not.toHaveBeenCalled();
+  });
+
+  it('shows an honest message (no restart) when exit 0 but the running binary is unchanged', async () => {
+    runUpdateMock.mockResolvedValue({ ok: true });
+    locateOwnInstallMock.mockReturnValue({ dir: '/opt/vite-plus/mastracode', version: '0.1.0' });
+    resolveUpdateOutcomeMock.mockReturnValue({
+      status: 'unchanged',
+      message: 'The package manager reported success, but the Mastra Code you are running is still v0.1.0.',
+    });
+    const ctx = createCtx('0.1.0');
+
+    const command = handleUpdateCommand(ctx);
+    await flushPromises();
+    ctx.state.activeInlineQuestion.config.onSubmit('Yes');
+    await command;
+
+    expect(resolveUpdateOutcomeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ installedVersion: '0.1.0', installedPackageDir: '/opt/vite-plus/mastracode' }),
+    );
+    expect(ctx.showError).toHaveBeenCalledWith(
+      'The package manager reported success, but the Mastra Code you are running is still v0.1.0.',
+    );
+    expect(ctx.stop).not.toHaveBeenCalled();
+  });
+
+  it('confirms success and restarts when the update is verified on disk', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    runUpdateMock.mockResolvedValue({ ok: true });
+    locateOwnInstallMock.mockReturnValue({ dir: '/usr/local/lib/node_modules/mastracode', version: '0.2.0' });
+    resolveUpdateOutcomeMock.mockReturnValue({
+      status: 'updated',
+      message: 'Updated to v0.2.0. Please restart Mastra Code.',
+    });
+    const ctx = createCtx('0.1.0');
+
+    const command = handleUpdateCommand(ctx);
+    await flushPromises();
+    ctx.state.activeInlineQuestion.config.onSubmit('Yes');
+    await command;
+
+    expect(ctx.showInfo).toHaveBeenCalledWith('Updated to v0.2.0. Please restart Mastra Code.');
+    expect(ctx.stop).toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    exitSpy.mockRestore();
   });
 });

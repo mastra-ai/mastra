@@ -3,8 +3,9 @@ import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
+  locateOwnInstall,
+  resolveUpdateOutcome,
   runUpdate,
 } from '../../utils/update-check.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -75,14 +76,22 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
 
   if (answer === 'Yes') {
     ctx.showInfo(`Updating to v${latestVersion}…`);
-    const ok = await runUpdate(pm, latestVersion);
-    if (ok) {
-      ctx.showInfo(`Updated to v${latestVersion}. Please restart Mastra Code.`);
+    const result = await runUpdate(pm, latestVersion);
+    // Exit code 0 doesn't prove the running binary was updated — verify on disk.
+    const install = locateOwnInstall();
+    const outcome = resolveUpdateOutcome({
+      pm,
+      targetVersion: latestVersion,
+      result,
+      installedVersion: install?.version ?? null,
+      installedPackageDir: install?.dir ?? null,
+    });
+    if (outcome.status === 'updated') {
+      ctx.showInfo(outcome.message);
       ctx.stop();
       process.exit(0);
     } else {
-      const cmd = getInstallCommand(pm, latestVersion);
-      ctx.showError(`Auto-update failed. Run \`${cmd}\` manually.`);
+      ctx.showError(outcome.message);
     }
   } else if (answer === 'No') {
     const s = loadSettings();

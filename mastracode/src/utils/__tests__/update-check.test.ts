@@ -1,6 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchChangelog, parseChangelog } from '../update-check.js';
+const { execFileMock, readFileSyncMock, realpathSyncMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
+  readFileSyncMock: vi.fn(),
+  realpathSyncMock: vi.fn(),
+}));
+
+vi.mock('node:child_process', () => ({ execFile: execFileMock }));
+vi.mock('node:fs', () => ({ readFileSync: readFileSyncMock, realpathSync: realpathSyncMock }));
+
+import {
+  fetchChangelog,
+  formatUpdaterError,
+  getOwnInstalledVersion,
+  locateOwnInstall,
+  parseChangelog,
+  resolveUpdateOutcome,
+  runUpdate,
+} from '../update-check.js';
 
 describe('parseChangelog', () => {
   const SAMPLE_CHANGELOG = [
@@ -130,4 +147,191 @@ describe('fetchChangelog (integration)', () => {
     const result = await fetchChangelog('0.0.0-does-not-exist');
     expect(result).toBeNull();
   }, 10_000);
+});
+
+describe('runUpdate', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('resolves ok and omits stderr when the package manager exits cleanly', async () => {
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: any) => cb(null, '', ''));
+    await expect(runUpdate('npm', '1.2.3')).resolves.toEqual({ ok: true });
+  });
+
+  it('captures stderr even on success (e.g. deprecation warnings)', async () => {
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: any) =>
+      cb(null, '', 'npm warn deprecated foo@1.0.0\n'),
+    );
+    await expect(runUpdate('npm', '1.2.3')).resolves.toEqual({ ok: true, stderr: 'npm warn deprecated foo@1.0.0' });
+  });
+
+  it('returns ok:false with the captured stderr on failure', async () => {
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: any) =>
+      cb(new Error('Command failed'), '', 'npm ERR! code EACCES\nnpm ERR! permission denied\n'),
+    );
+    const result = await runUpdate('npm', '1.2.3');
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toBe('npm ERR! code EACCES\nnpm ERR! permission denied');
+  });
+
+  it('falls back to the error message when the package manager produced no stderr', async () => {
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: any) =>
+      cb(new Error('spawn pnpm ENOENT'), '', ''),
+    );
+    await expect(runUpdate('pnpm', '1.2.3')).resolves.toEqual({ ok: false, stderr: 'spawn pnpm ENOENT' });
+  });
+
+  it('invokes the package manager with the right global install args', async () => {
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: any) => cb(null, '', ''));
+    await runUpdate('pnpm', '1.2.3');
+    expect(execFileMock).toHaveBeenLastCalledWith(
+      'pnpm',
+      ['add', '-g', 'mastracode@1.2.3'],
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+});
+
+describe('formatUpdaterError', () => {
+  it('returns null for undefined or blank stderr', () => {
+    expect(formatUpdaterError(undefined)).toBeNull();
+    expect(formatUpdaterError('   \n \n  ')).toBeNull();
+  });
+
+  it('returns the last non-empty lines, capped at five', () => {
+    const stderr = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join('\n');
+    expect(formatUpdaterError(stderr)).toBe(['line 6', 'line 7', 'line 8', 'line 9', 'line 10'].join('\n'));
+  });
+
+  it('drops blank lines between content', () => {
+    expect(formatUpdaterError('first\n\n\nsecond')).toBe('first\nsecond');
+  });
+});
+
+describe('locateOwnInstall / getOwnInstalledVersion', () => {
+  const originalArgv1 = process.argv[1];
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    process.argv[1] = originalArgv1;
+  });
+
+  it('walks up from the running binary to the mastracode manifest and reads the version fresh', () => {
+    process.argv[1] = '/opt/tool/mastracode/dist/cli.js';
+    realpathSyncMock.mockReturnValue('/opt/tool/mastracode/dist/cli.js');
+    readFileSyncMock.mockImplementation((p: string) => {
+      if (p === '/opt/tool/mastracode/package.json') return JSON.stringify({ name: 'mastracode', version: '9.9.9' });
+      throw new Error('ENOENT');
+    });
+
+    expect(locateOwnInstall()).toEqual({ dir: '/opt/tool/mastracode', version: '9.9.9' });
+    expect(getOwnInstalledVersion()).toBe('9.9.9');
+  });
+
+  it('skips unrelated package.json files while walking up', () => {
+    process.argv[1] = '/a/b/c/cli.js';
+    realpathSyncMock.mockReturnValue('/a/b/c/cli.js');
+    readFileSyncMock.mockImplementation((p: string) => {
+      if (p === '/a/b/c/package.json') return JSON.stringify({ name: 'some-other-pkg', version: '1.0.0' });
+      if (p === '/a/b/package.json') return JSON.stringify({ name: 'mastracode', version: '2.0.0' });
+      throw new Error('ENOENT');
+    });
+
+    expect(getOwnInstalledVersion()).toBe('2.0.0');
+  });
+
+  it('returns null when no mastracode manifest is found (e.g. running from source)', () => {
+    process.argv[1] = '/a/b/cli.js';
+    realpathSyncMock.mockReturnValue('/a/b/cli.js');
+    readFileSyncMock.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    expect(locateOwnInstall()).toBeNull();
+    expect(getOwnInstalledVersion()).toBeNull();
+  });
+
+  it('returns null when the binary path cannot be resolved', () => {
+    process.argv[1] = '/broken';
+    realpathSyncMock.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    expect(getOwnInstalledVersion()).toBeNull();
+  });
+
+  it('returns a null version when the manifest has no version field', () => {
+    process.argv[1] = '/pkg/dist/cli.js';
+    realpathSyncMock.mockReturnValue('/pkg/dist/cli.js');
+    readFileSyncMock.mockImplementation((p: string) => {
+      if (p === '/pkg/package.json') return JSON.stringify({ name: 'mastracode' });
+      throw new Error('ENOENT');
+    });
+
+    expect(locateOwnInstall()).toEqual({ dir: '/pkg', version: null });
+    expect(getOwnInstalledVersion()).toBeNull();
+  });
+});
+
+describe('resolveUpdateOutcome', () => {
+  const base = { pm: 'npm' as const, targetVersion: '2.0.0' };
+
+  it('reports failure with the manual command and formatted stderr', () => {
+    const outcome = resolveUpdateOutcome({
+      ...base,
+      result: { ok: false, stderr: 'npm ERR! code EACCES\nnpm ERR! permission denied' },
+      installedVersion: '1.0.0',
+    });
+    expect(outcome.status).toBe('failed');
+    expect(outcome.message).toContain('npm install -g mastracode@2.0.0');
+    expect(outcome.message).toContain('npm ERR! permission denied');
+  });
+
+  it('reports failure without a details block when there is no stderr', () => {
+    const outcome = resolveUpdateOutcome({ ...base, result: { ok: false }, installedVersion: '1.0.0' });
+    expect(outcome).toEqual({
+      status: 'failed',
+      message: 'Auto-update failed. Run `npm install -g mastracode@2.0.0` manually.',
+    });
+  });
+
+  it('reports success when the installed version matches the target', () => {
+    const outcome = resolveUpdateOutcome({
+      ...base,
+      result: { ok: true },
+      installedVersion: '2.0.0',
+      installedPackageDir: '/usr/local/lib/node_modules/mastracode',
+    });
+    expect(outcome).toEqual({ status: 'updated', message: 'Updated to v2.0.0. Please restart Mastra Code.' });
+  });
+
+  it('reports success when the installed version is indeterminable (null)', () => {
+    const outcome = resolveUpdateOutcome({ ...base, result: { ok: true }, installedVersion: null });
+    expect(outcome.status).toBe('updated');
+  });
+
+  it('reports an honest unchanged message (with location) when exit 0 but the binary is still old', () => {
+    const outcome = resolveUpdateOutcome({
+      ...base,
+      result: { ok: true },
+      installedVersion: '1.0.0',
+      installedPackageDir: '/opt/vite-plus/mastracode',
+    });
+    expect(outcome.status).toBe('unchanged');
+    expect(outcome.message).toContain('still v1.0.0');
+    expect(outcome.message).toContain('/opt/vite-plus/mastracode');
+    expect(outcome.message).not.toContain('Updated to v');
+    expect(outcome.message).toContain('npm install -g mastracode@2.0.0');
+  });
+
+  it('omits the location when the package directory is unknown', () => {
+    const outcome = resolveUpdateOutcome({ ...base, result: { ok: true }, installedVersion: '1.0.0' });
+    expect(outcome.status).toBe('unchanged');
+    expect(outcome.message).not.toContain(' (at ');
+  });
 });
