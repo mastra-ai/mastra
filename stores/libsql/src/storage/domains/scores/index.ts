@@ -11,12 +11,26 @@ import {
   normalizePerPage,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { StoragePagination } from '@mastra/core/storage';
+import type {
+  StoragePagination,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+} from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
 export class ScoresLibSQL extends ScoresStorage {
+  /**
+   * Scorer results accumulate as evals run. Single table, anchored on `createdAt`.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    scorers: { table: TABLE_SCORERS, column: 'createdAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
 
@@ -39,6 +53,16 @@ export class ScoresLibSQL extends ScoresStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_SCORERS });
+  }
+
+  /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ScoresLibSQL.retentionTables,
+      order: ['scorers'],
+    });
+    return runPrune({ db: this.#db, domain: 'scores', targets, options, logger: this.logger });
   }
 
   async listScoresByRunId({

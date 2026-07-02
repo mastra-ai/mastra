@@ -170,6 +170,10 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
 
       return part;
     } catch (error) {
+      // Re-throw tripwire errors, but fail open for other errors
+      if (error instanceof TripWire) {
+        throw error;
+      }
       // Fail open - allow content through if detection fails
       console.warn('[SystemPromptScrubber] Detection failed, allowing content:', error);
       return part;
