@@ -409,13 +409,21 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     // Skip consumption — test will manually drain the stream after publishing events.
   } else if (collectChunks) {
     chunks = [];
-    for await (const chunk of fullStream as AsyncIterable<ChunkType>) {
-      chunks.push(chunk);
+    try {
+      for await (const chunk of fullStream as AsyncIterable<ChunkType>) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Stream may error (e.g. provider errors) — we still want the chunks collected so far
     }
   } else if (isDurable) {
     // Durable: drain via fullStream iteration
-    for await (const _chunk of fullStream as AsyncIterable<ChunkType>) {
-      // just drain
+    try {
+      for await (const _chunk of fullStream as AsyncIterable<ChunkType>) {
+        // drain
+      }
+    } catch {
+      // Stream may error on provider failures — swallow so runLoopScenario still returns
     }
   } else {
     await output.consumeStream();

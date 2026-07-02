@@ -51,7 +51,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Callback when execution finishes */
   onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
   /** Callback on error */
-  onError?: (error: Error) => void | Promise<void>;
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal */
@@ -206,16 +206,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Close stream with error first, then call callback. Wrapped in
-          // try/catch because `controller.error` throws if the controller
-          // has already been closed/errored by an earlier event.
+          // Enqueue an error chunk and close the stream normally (mirrors the
+          // regular agent's deferred-error-chunk pattern). Using
+          // controller.error() would error the base ReadableStream, which
+          // MastraModelOutput.consumeStream swallows — leaving fullStream
+          // hanging because no 'finish' event fires on the internal emitter.
+          safeEnqueue(controller, {
+            type: 'error',
+            payload: { error },
+          } as ChunkType<OUTPUT>);
+          safeClose(controller);
           try {
-            controller.error(error);
-          } catch {
-            // Stream already closed/errored — drop silently.
-          }
-          try {
-            await onError?.(error);
+            await onError?.({ error });
           } catch (callbackError) {
             logError(`[DurableAgentStream] onError callback error:`, callbackError);
           }

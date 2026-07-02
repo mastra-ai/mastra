@@ -90,7 +90,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Callback when execution finishes */
   onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
   /** Callback on error */
-  onError?: (error: Error) => void | Promise<void>;
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal */
@@ -814,7 +814,7 @@ export class DurableAgent<
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-      onError?: (error: Error) => void | Promise<void>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
       /**
        * Optional abort signal scoped to the resumed segment. Forwarded onto a
@@ -1302,7 +1302,7 @@ export class DurableAgent<
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
       onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-      onError?: (error: Error) => void | Promise<void>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {

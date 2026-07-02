@@ -918,7 +918,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 }
 
                 // Forward every chunk to the client ('finish' was rewritten to 'step-finish' above).
-                if (pubsub) {
+                // Skip 'error' chunks — they are handled internally by the retry/fallback
+                // logic and must not be emitted to the client stream. When all models are
+                // exhausted the fatal error is propagated via emitError (mirrors the regular
+                // agent's deferredErrorChunk pattern).
+                if (pubsub && rawChunk.type !== 'error') {
                   await emitChunkEvent(pubsub, runId, clientChunk);
                 }
 
