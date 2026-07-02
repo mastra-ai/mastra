@@ -1,5 +1,4 @@
 import http from 'node:http';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
@@ -30,16 +29,6 @@ import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
 import type { MastraPrompt, MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
-
-const require = createRequire(import.meta.url);
-const TSX_CLI_PATH = require.resolve('tsx/cli');
-
-function tsxFixtureServer(fixturePath: string): { command: string; args: string[] } {
-  return {
-    command: process.execPath,
-    args: [TSX_CLI_PATH, fixturePath],
-  };
-}
 
 // Bind `server` to a free port found via the `get-port` package (the same approach the
 // mastra CLI uses for port allocation) and resolve to the assigned port.
@@ -1060,7 +1049,8 @@ describe('MCPServer', () => {
       const existingConfig = new MCPClient({
         servers: {
           weather: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__', 'server-weather.ts')),
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__', 'server-weather.ts')],
             env: {
               FAKE_CREDS: 'test',
             },

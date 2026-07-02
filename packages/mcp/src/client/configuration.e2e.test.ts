@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { getLLMTestMode } from '@internal/llm-recorder';
@@ -23,19 +22,6 @@ type WeatherFixtureServer = {
 };
 
 const WEATHER_FIXTURE_HOST = '127.0.0.1';
-const require = createRequire(import.meta.url);
-const TSX_CLI_PATH = require.resolve('tsx/cli');
-
-function tsxFixtureArgs(fixturePath: string): string[] {
-  return [TSX_CLI_PATH, fixturePath];
-}
-
-function tsxFixtureServer(fixturePath: string): { command: string; args: string[] } {
-  return {
-    command: process.execPath,
-    args: tsxFixtureArgs(fixturePath),
-  };
-}
 
 async function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -64,7 +50,7 @@ async function getAvailablePort(): Promise<number> {
 
 async function startWeatherFixtureServer(): Promise<WeatherFixtureServer> {
   const port = await getAvailablePort();
-  const childProcess = spawn(process.execPath, tsxFixtureArgs(path.join(__dirname, '..', '__fixtures__/weather.ts')), {
+  const childProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
     env: { ...process.env, WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST, WEATHER_SERVER_PORT: String(port) },
   });
 
@@ -130,7 +116,8 @@ describe('MCPClient', () => {
       id: testId,
       servers: {
         stockPrice: {
-          ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+          command: 'npx',
+          args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
           env: {
             FAKE_CREDS: 'test',
           },
@@ -160,7 +147,8 @@ describe('MCPClient', () => {
     it('should initialize with server configurations', () => {
       expect(mcp['serverConfigs']).toEqual({
         stockPrice: {
-          ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+          command: 'npx',
+          args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
           env: {
             FAKE_CREDS: 'test',
           },
@@ -464,7 +452,8 @@ describe('MCPClient', () => {
         id: 'custom-id',
         servers: {
           stockPrice: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -482,7 +471,8 @@ describe('MCPClient', () => {
       const config2 = new MCPClient({
         servers: {
           stockPrice: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -501,7 +491,8 @@ describe('MCPClient', () => {
       const existingConfig = new MCPClient({
         servers: {
           stockPrice: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -514,7 +505,8 @@ describe('MCPClient', () => {
           new MCPClient({
             servers: {
               stockPrice: {
-                ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+                command: 'npx',
+                args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
                 env: {
                   FAKE_CREDS: 'test',
                 },
@@ -663,7 +655,8 @@ describe('MCPClient', () => {
         id: 'complex-schema-test-client-log-handler-firecrawl',
         servers: {
           'firecrawl-mcp': {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/fire-crawl-complex-schema.ts')),
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/fire-crawl-complex-schema.ts')],
             logger: mockLogHandler,
           },
         },
@@ -708,7 +701,8 @@ describe('MCPClient', () => {
       const clientForTest = new MCPClient({
         servers: {
           stockPrice: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -757,7 +751,8 @@ describe('MCPClient', () => {
           id: 'mcp-for-agent-test-suite',
           servers: {
             stockPriceServer: {
-              ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+              command: 'npx',
+              args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
               env: { FAKE_CREDS: 'test' },
               logger: loggerFn,
             },
@@ -802,7 +797,8 @@ describe('MCPClient', () => {
         id: 'mcp-sequential-context-test',
         servers: {
           stockPriceServer: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')),
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -855,12 +851,14 @@ describe('MCPClient', () => {
         id: 'mcp-multi-server-context-isolation',
         servers: {
           serverX: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')), // Re-use fixture, tool name will differ by server
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture, tool name will differ by server
             logger: sharedLoggerFn,
             env: { FAKE_CREDS: 'serverX-creds' }, // Make env slightly different for clarity if needed
           },
           serverY: {
-            ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__/stock-price.ts')), // Re-use fixture
+            command: 'npx',
+            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture
             logger: sharedLoggerFn,
             env: { FAKE_CREDS: 'serverY-creds' },
           },
