@@ -1,3 +1,4 @@
+import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +13,6 @@ import {
   isNonFetchableRemoteUrl,
   isRemoteUrl,
 } from '../schemes';
-import { assertDefined } from '@/test-utils/assert';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -43,7 +43,9 @@ const readCoreSupportedProtocols = (): string[] => {
 
   const protocols = new Set<string>();
   for (const match of scanRegion.matchAll(/case '([a-z0-9]+):'/g)) {
-    protocols.add(assertDefined(match[1], 'Expected a protocol capture group in the core switch case'));
+    const protocol = match[1];
+    assert(protocol !== undefined, 'Expected a protocol capture group in the core switch case');
+    protocols.add(protocol);
   }
   return [...protocols].sort();
 };

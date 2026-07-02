@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import assert from 'node:assert';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { downloadJson } from '../downloadJson';
-import { assertDefined } from '@/test-utils/assert';
 
 // jsdom's Blob exposes no `.text()`, and the global `Response` doesn't recognize it.
 // Read it the way the rest of this package does — via FileReader.
@@ -28,7 +29,9 @@ describe('downloadJson', () => {
     downloadJson('trace-abc.json', data);
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
-    const [blob] = assertDefined(createObjectURL.mock.calls[0], 'Expected createObjectURL call') as [Blob];
+    const firstCall = createObjectURL.mock.calls[0];
+    assert(firstCall, 'Expected createObjectURL call');
+    const [blob] = firstCall as [Blob];
     expect(blob.type).toBe('application/json');
     await expect(readBlobText(blob)).resolves.toBe(JSON.stringify(data, null, 2));
 

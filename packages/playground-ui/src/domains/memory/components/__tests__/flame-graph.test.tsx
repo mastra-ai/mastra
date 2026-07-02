@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
+import assert from 'node:assert';
+
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { timestampsToTDomain } from '../../lib/timeline';
 import { FlameGraph } from '../flame-graph';
 import { memoryMessages, omHistoryRecords } from './fixtures/memory-studio';
-import { assertDefined } from '@/test-utils/assert';
 
 const tDomain = timestampsToTDomain(memoryMessages.map(m => new Date(m.createdAt).toISOString()));
 const markers: never[] = [];
@@ -54,9 +55,9 @@ describe('FlameGraph', () => {
     fireEvent.mouseUp(window);
 
     expect(onZoomRangeChange).toHaveBeenCalled();
-    const [lastRange] = assertDefined(onZoomRangeChange.mock.calls.at(-1), 'Expected zoom range change call') as [
-      { left: number; right: number },
-    ];
+    const lastCall = onZoomRangeChange.mock.calls.at(-1);
+    assert(lastCall, 'Expected zoom range change call');
+    const [lastRange] = lastCall as [{ left: number; right: number }];
     // Dragging the left handle to the middle of the track moves left toward the
     // midpoint of the domain, so it is now greater than the domain minimum.
     expect(lastRange.left).toBeGreaterThan(tDomain.tMin);

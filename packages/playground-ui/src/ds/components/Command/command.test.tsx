@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import assert from 'node:assert';
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './command';
-import { assertDefined } from '@/test-utils/assert';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverPolyfill {
@@ -186,8 +187,10 @@ describe('Command', () => {
       expect(screen.queryByText('Weather Workflow')).toBeNull();
     });
 
-    const betaItem = assertDefined(beta, 'Expected filtered command items');
-    const alphaItem = assertDefined(alpha, 'Expected filtered command items');
+    assert(beta, 'Expected filtered command items');
+    assert(alpha, 'Expected filtered command items');
+    const betaItem = beta;
+    const alphaItem = alpha;
     expect(Boolean(betaItem.compareDocumentPosition(alphaItem) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 });

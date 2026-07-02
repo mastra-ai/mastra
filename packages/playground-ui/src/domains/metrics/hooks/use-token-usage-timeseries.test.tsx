@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import assert from 'node:assert';
+
 import { EntityType } from '@mastra/core/observability';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -13,7 +15,6 @@ import { MetricsProvider } from './use-metrics';
 import type { DatePreset, DateRange } from './use-metrics';
 import { useTokenUsageTimeSeries } from './use-token-usage-timeseries';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
-import { assertDefined } from '@/test-utils/assert';
 
 const BASE_URL = 'http://localhost:4111';
 const server = setupServer();
@@ -170,7 +171,9 @@ describe('useTokenUsageTimeSeries', () => {
       expect(onTimeseries).toHaveBeenCalledTimes(2);
     });
 
-    const [inputRequest] = assertDefined(onTimeseries.mock.calls[0], 'Expected first timeseries request');
+    const firstCall = onTimeseries.mock.calls[0];
+    assert(firstCall, 'Expected first timeseries request');
+    const [inputRequest] = firstCall;
     expect(inputRequest.name).toEqual(['mastra_model_total_input_tokens']);
     expect(inputRequest.aggregation).toBe('sum');
     expect(inputRequest.filters?.timestamp?.start).toBeDefined();

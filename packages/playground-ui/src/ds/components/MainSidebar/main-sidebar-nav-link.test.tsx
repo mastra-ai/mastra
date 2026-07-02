@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import assert from 'node:assert';
+
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -6,10 +8,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MainSidebarProvider } from './main-sidebar-context';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
-import { assertDefined } from '@/test-utils/assert';
 
-const getTooltipPopup = () =>
-  assertDefined(document.querySelector<HTMLElement>('.bg-surface3'), 'Expected tooltip popup');
+const getTooltipPopup = () => {
+  const popup = document.querySelector<HTMLElement>('.bg-surface3');
+  assert(popup, 'Expected tooltip popup');
+  return popup;
+};
 
 // MainSidebarProvider reads matchMedia at mount to decide mobile vs desktop.
 // jsdom does not implement it, so polyfill before any render.
