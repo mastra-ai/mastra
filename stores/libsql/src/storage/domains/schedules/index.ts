@@ -117,12 +117,6 @@ export class SchedulesLibSQL extends SchedulesStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_schedule_triggers_schedule_fire ON "${TABLE_SCHEDULE_TRIGGERS}" ("schedule_id", "actual_fire_at")`,
           args: [],
         },
-        // Anchor index for age-based retention. The composite index above leads
-        // with schedule_id, so a bare actual_fire_at range can't use it.
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_schedule_triggers_actual_fire_at ON "${TABLE_SCHEDULE_TRIGGERS}" ("actual_fire_at")`,
-          args: [],
-        },
       ],
       'write',
     );
@@ -140,7 +134,7 @@ export class SchedulesLibSQL extends SchedulesStorage {
       descriptor: SchedulesLibSQL.retentionTables,
       order: ['triggers'],
     });
-    return runPrune({ db: this.#db, domain: 'schedules', targets, options });
+    return runPrune({ db: this.#db, domain: 'schedules', targets, options, logger: this.logger });
   }
 
   async createSchedule(schedule: Schedule): Promise<Schedule> {

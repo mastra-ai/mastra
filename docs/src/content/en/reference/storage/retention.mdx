@@ -150,6 +150,8 @@ Deletes rows older than their configured `maxAge` across every domain that has a
 
 `prune()` is designed to be safe on tables with millions of rows. It deletes in bounded, batched chunks — each batch is its own transaction — so it never takes a long lock or bloats the transaction log. It never runs a `VACUUM`.
 
+Anchor-column indexes are created lazily on the first `prune()` call for each table with a policy — never at `init()` — so deployments that don't configure retention pay no extra index write or disk overhead. The first prune of an existing large table pays a one-time index build; subsequent prunes reuse the index.
+
 ```typescript
 const results = await storage.prune({
   maxRows: 50_000, // cap work this call

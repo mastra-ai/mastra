@@ -112,18 +112,20 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
-    await this.ensureRetentionIndexes();
   }
 
   /**
-   * Ensures a btree index exists on each retention anchor column so age-based
-   * `prune()` deletes stay fast on large tables.
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
    */
-  private async ensureRetentionIndexes(): Promise<void> {
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
     if (this.#skipDefaultIndexes) return;
     const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
     for (const [key, entry] of Object.entries(BackgroundTasksPG.retentionTables)) {
-      if (!entry.indexed) continue;
+      if (!entry.indexed || !policies[key]) continue;
       try {
         await this.#db.ensureIndex({
           indexName: `${prefix}mastra_${key}_retention_idx`,
@@ -138,6 +140,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
 
   /** Delete completed tasks older than the `backgroundTasks` policy's `maxAge`, batched. */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
     const targets = resolveTargets({
       policies,
       descriptor: BackgroundTasksPG.retentionTables,

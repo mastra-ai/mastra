@@ -62,12 +62,6 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       schema: SPAN_SCHEMA,
       ifNotExists: ['requestContext'],
     });
-    // Anchor index for age-based retention (prune on startedAt).
-    await this.#db.ensureIndex({
-      indexName: 'idx_spans_started_at',
-      tableName: TABLE_SPANS,
-      column: 'startedAt',
-    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -81,7 +75,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       descriptor: ObservabilityLibSQL.retentionTables,
       order: ['spans'],
     });
-    return runPrune({ db: this.#db, domain: 'observability', targets, options });
+    return runPrune({ db: this.#db, domain: 'observability', targets, options, logger: this.logger });
   }
 
   /**

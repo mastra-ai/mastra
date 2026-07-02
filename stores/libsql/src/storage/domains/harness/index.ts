@@ -141,12 +141,6 @@ export class HarnessLibSQL extends HarnessStorage {
       tableName: TABLE_HARNESS_SESSIONS,
       schema: TABLE_SCHEMAS[TABLE_HARNESS_SESSIONS],
     });
-    // Anchor index for age-based retention (prune on createdAt).
-    await this.#db.ensureIndex({
-      indexName: 'idx_harness_sessions_created_at',
-      tableName: TABLE_HARNESS_SESSIONS,
-      column: 'createdAt',
-    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -160,7 +154,7 @@ export class HarnessLibSQL extends HarnessStorage {
       descriptor: HarnessLibSQL.retentionTables,
       order: ['sessions'],
     });
-    return runPrune({ db: this.#db, domain: 'harness', targets, options });
+    return runPrune({ db: this.#db, domain: 'harness', targets, options, logger: this.logger });
   }
 
   async loadSession(sessionId: string): Promise<SessionRecord | null> {

@@ -45,12 +45,6 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
       schema: THREAD_STATE_SCHEMA,
       compositePrimaryKey: ['threadId', 'type'],
     });
-    // Anchor index for age-based retention (prune on updatedAt).
-    await this.#db.ensureIndex({
-      indexName: 'idx_thread_state_updated_at',
-      tableName: TABLE_THREAD_STATE,
-      column: 'updatedAt',
-    });
   }
 
   /** Delete thread state older than the `threadState` policy's `maxAge`, batched. */
@@ -60,7 +54,7 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
       descriptor: ThreadStateLibSQL.retentionTables,
       order: ['threadState'],
     });
-    return runPrune({ db: this.#db, domain: 'threadState', targets, options });
+    return runPrune({ db: this.#db, domain: 'threadState', targets, options, logger: this.logger });
   }
 
   async dangerouslyClearAll(): Promise<void> {

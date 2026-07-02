@@ -139,20 +139,6 @@ export class MemoryLibSQL extends MemoryStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_resource_created_at ON ${TABLE_MESSAGES} (thread_id, "resourceId", "createdAt")`,
           args: [],
         },
-        // Anchor indexes for age-based retention (prune). The composite indexes
-        // above lead with thread_id, so a bare createdAt range can't use them.
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_messages_created_at ON ${TABLE_MESSAGES} ("createdAt")`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_threads_created_at ON ${TABLE_THREADS} ("createdAt")`,
-          args: [],
-        },
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_resources_created_at ON ${TABLE_RESOURCES} ("createdAt")`,
-          args: [],
-        },
       ],
       'write',
     );
@@ -190,7 +176,7 @@ export class MemoryLibSQL extends MemoryStorage {
       descriptor: MemoryLibSQL.retentionTables,
       order: ['messages', 'resources', 'threads'],
     });
-    return runPrune({ db: this.#db, domain: 'memory', targets, options });
+    return runPrune({ db: this.#db, domain: 'memory', targets, options, logger: this.logger });
   }
 
   private parseRow(row: any): MastraDBMessage {

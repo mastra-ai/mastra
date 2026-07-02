@@ -129,11 +129,6 @@ export class NotificationsLibSQL extends NotificationsStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_notifications_due ON "${TABLE_NOTIFICATIONS}" ("status", "deliverAt", "summaryAt")`,
           args: [],
         },
-        // Anchor index for age-based retention (prune on createdAt).
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON "${TABLE_NOTIFICATIONS}" ("createdAt")`,
-          args: [],
-        },
       ],
       'write',
     );
@@ -150,7 +145,7 @@ export class NotificationsLibSQL extends NotificationsStorage {
       descriptor: NotificationsLibSQL.retentionTables,
       order: ['notifications'],
     });
-    return runPrune({ db: this.#db, domain: 'notifications', targets, options });
+    return runPrune({ db: this.#db, domain: 'notifications', targets, options, logger: this.logger });
   }
 
   async createNotification(input: CreateNotificationInput): Promise<NotificationRecord> {

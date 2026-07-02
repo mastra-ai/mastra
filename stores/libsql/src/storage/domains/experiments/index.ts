@@ -100,11 +100,6 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           sql: `CREATE INDEX IF NOT EXISTS idx_experiment_results_org_project ON "${TABLE_EXPERIMENT_RESULTS}" ("organizationId", "projectId")`,
           args: [],
         },
-        // Anchor index for age-based retention (prune whole experiments on completedAt).
-        {
-          sql: `CREATE INDEX IF NOT EXISTS idx_experiments_completed_at ON "${TABLE_EXPERIMENTS}" ("completedAt")`,
-          args: [],
-        },
       ],
       'write',
     );
@@ -134,6 +129,18 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
             { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
           ]
         : [];
+    }
+
+    // Lazily create the anchor index on first prune (best-effort) so only
+    // deployments that configure retention pay its write/disk overhead.
+    try {
+      await this.#db.ensureIndex({
+        indexName: `idx_retention_${TABLE_EXPERIMENTS}_completedAt`,
+        tableName: TABLE_EXPERIMENTS,
+        column: 'completedAt',
+      });
+    } catch (error) {
+      this.logger?.warn?.(`Failed to ensure retention index on ${TABLE_EXPERIMENTS}(completedAt):`, error);
     }
 
     const cutoff = cutoffFor(policy, 'timestamp');

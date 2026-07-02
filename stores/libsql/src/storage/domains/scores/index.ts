@@ -49,12 +49,6 @@ export class ScoresLibSQL extends ScoresStorage {
       schema: SCORERS_SCHEMA,
       ifNotExists: ['spanId', 'requestContext'],
     });
-    // Anchor index for age-based retention (prune on createdAt).
-    await this.#db.ensureIndex({
-      indexName: 'idx_scorers_created_at',
-      tableName: TABLE_SCORERS,
-      column: 'createdAt',
-    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -68,7 +62,7 @@ export class ScoresLibSQL extends ScoresStorage {
       descriptor: ScoresLibSQL.retentionTables,
       order: ['scorers'],
     });
-    return runPrune({ db: this.#db, domain: 'scores', targets, options });
+    return runPrune({ db: this.#db, domain: 'scores', targets, options, logger: this.logger });
   }
 
   async listScoresByRunId({

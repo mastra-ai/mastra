@@ -85,12 +85,6 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
       ifNotExists: ['suspend_payload', 'suspendedAt'],
     });
-    // Anchor index for age-based retention (prune on completedAt).
-    await this.#db.ensureIndex({
-      indexName: 'idx_background_tasks_completed_at',
-      tableName: TABLE_BACKGROUND_TASKS,
-      column: 'completedAt',
-    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -104,7 +98,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       descriptor: BackgroundTasksLibSQL.retentionTables,
       order: ['backgroundTasks'],
     });
-    return runPrune({ db: this.#db, domain: 'backgroundTasks', targets, options });
+    return runPrune({ db: this.#db, domain: 'backgroundTasks', targets, options, logger: this.logger });
   }
 
   async createTask(task: BackgroundTask): Promise<void> {

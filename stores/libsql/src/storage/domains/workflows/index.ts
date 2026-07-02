@@ -91,12 +91,6 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       schema,
       ifNotExists: ['resourceId'],
     });
-    // Anchor index for age-based retention (prune on updatedAt).
-    await this.#db.ensureIndex({
-      indexName: 'idx_workflow_snapshot_updated_at',
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      column: 'updatedAt',
-    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -110,7 +104,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       descriptor: WorkflowsLibSQL.retentionTables,
       order: ['workflowSnapshot'],
     });
-    return runPrune({ db: this.#db, domain: 'workflows', targets, options });
+    return runPrune({ db: this.#db, domain: 'workflows', targets, options, logger: this.logger });
   }
 
   private async setupPragmaSettings() {

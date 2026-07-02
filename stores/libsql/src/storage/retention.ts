@@ -16,8 +16,33 @@ export interface PruneTarget {
    * - `epoch-ms`: raw millisecond number comparison (e.g. `schedules.triggers`).
    */
   anchorType: 'timestamp' | 'epoch-ms';
+  /** Whether the anchor column should get a supporting index before pruning. */
+  indexed: boolean;
   /** Retention policy (maxAge + optional batchSize). */
   policy: TableRetentionPolicy;
+}
+
+/**
+ * Lazily create the single-column anchor index a prune target relies on.
+ * Called from the prune path (not init) so only deployments that actually
+ * configure retention pay the index's write/disk overhead. Best-effort: a
+ * failure is logged and pruning proceeds (correct, just slower).
+ */
+async function ensureAnchorIndex(
+  db: LibSQLDB,
+  target: PruneTarget,
+  logger?: { warn?: (msg: string, err?: unknown) => void },
+): Promise<void> {
+  if (!target.indexed) return;
+  try {
+    await db.ensureIndex({
+      indexName: `idx_retention_${target.table}_${target.column}`,
+      tableName: target.table,
+      column: target.column,
+    });
+  } catch (error) {
+    logger?.warn?.(`Failed to ensure retention index on ${target.table}(${target.column}):`, error);
+  }
 }
 
 async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -112,11 +137,13 @@ export async function runPrune({
   domain,
   targets,
   options,
+  logger,
 }: {
   db: LibSQLDB;
   domain: string;
   targets: PruneTarget[];
   options?: PruneOptions;
+  logger?: { warn?: (msg: string, err?: unknown) => void };
 }): Promise<PruneResult[]> {
   const results: PruneResult[] = [];
   const now = Date.now();
@@ -126,6 +153,8 @@ export async function runPrune({
       results.push({ domain, table: target.table, deleted: 0, done: false });
       continue;
     }
+
+    await ensureAnchorIndex(db, target, logger);
 
     const cutoff = cutoffFor(target.policy, target.anchorType, now);
     const batchSize = target.policy.batchSize ?? DEFAULT_BATCH_SIZE;
@@ -154,7 +183,10 @@ export function resolveTargets({
   order,
 }: {
   policies: Record<string, TableRetentionPolicy>;
-  descriptor: Record<string, { table: string; column: string; anchorType?: 'timestamp' | 'epoch-ms' }>;
+  descriptor: Record<
+    string,
+    { table: string; column: string; anchorType?: 'timestamp' | 'epoch-ms'; indexed?: boolean }
+  >;
   order: string[];
 }): PruneTarget[] {
   const targets: PruneTarget[] = [];
@@ -166,6 +198,7 @@ export function resolveTargets({
       table: entry.table as TABLE_NAMES,
       column: entry.column,
       anchorType: entry.anchorType ?? 'timestamp',
+      indexed: entry.indexed ?? true,
       policy,
     });
   }

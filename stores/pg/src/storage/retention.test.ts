@@ -308,4 +308,50 @@ describe('PG retention', () => {
       expect(Number(orphans!.c)).toBe(0);
     });
   });
+
+  // Anchor indexes are created lazily on the first prune() call — never at
+  // init() — so deployments that don't configure retention pay no index
+  // write/disk overhead on their growth tables. Uses its own schema so the
+  // shared store's earlier prune calls can't leak indexes into the assertions.
+  describe('lazy anchor indexes', () => {
+    const LAZY_SCHEMA = `retlazy_${Math.random().toString(36).slice(2, 8)}`;
+    let lazyStore: PostgresStore;
+
+    beforeAll(async () => {
+      lazyStore = new PostgresStore({ ...TEST_CONFIG, schemaName: LAZY_SCHEMA } as any);
+      await lazyStore.init();
+    });
+
+    afterAll(async () => {
+      try {
+        await lazyStore.db.none(`DROP SCHEMA IF EXISTS ${LAZY_SCHEMA} CASCADE`);
+      } catch {}
+      try {
+        await lazyStore.close();
+      } catch {}
+    });
+
+    async function retentionIndexes(): Promise<string[]> {
+      const rows = await lazyStore.db.manyOrNone<{ indexname: string }>(
+        `SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND indexname LIKE '%_retention_idx' ORDER BY indexname`,
+        [LAZY_SCHEMA],
+      );
+      return rows.map(r => r.indexname);
+    }
+
+    it('creates no anchor indexes at init, only for pruned tables on first prune', async () => {
+      expect(await retentionIndexes()).toEqual([]);
+
+      await lazyStore.stores.memory!.prune({ threads: { maxAge: '30d' } });
+
+      // Only the table with a policy gets its anchor index; messages/resources don't.
+      expect(await retentionIndexes()).toEqual([`${LAZY_SCHEMA}_mastra_threads_retention_idx`]);
+    });
+
+    it('creates the experiments anchor index lazily via its whole-unit prune path', async () => {
+      await lazyStore.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
+
+      expect(await retentionIndexes()).toContain(`${LAZY_SCHEMA}_mastra_experiments_retention_idx`);
+    });
+  });
 });

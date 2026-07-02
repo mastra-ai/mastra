@@ -129,19 +129,20 @@ export class SchedulesPG extends SchedulesStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
-    await this.ensureRetentionIndexes();
   }
 
   /**
-   * Ensures a btree index exists on each retention anchor column so age-based
-   * `prune()` deletes stay fast. The default composite index leads with
-   * `schedule_id`, so a bare `actual_fire_at` range scan can't use it.
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast. The default
+   * composite index leads with `schedule_id`, so a bare `actual_fire_at` range
+   * scan can't use it. Called from the prune path (not init) so only
+   * deployments that configure retention pay the index's write/disk overhead.
    */
-  private async ensureRetentionIndexes(): Promise<void> {
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
     if (this.#skipDefaultIndexes) return;
     const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
     for (const [key, entry] of Object.entries(SchedulesPG.retentionTables)) {
-      if (!entry.indexed) continue;
+      if (!entry.indexed || !policies[key]) continue;
       try {
         await this.#db.ensureIndex({
           indexName: `${prefix}mastra_${key}_retention_idx`,
@@ -159,6 +160,7 @@ export class SchedulesPG extends SchedulesStorage {
    * `triggers` policy's `maxAge`, batched. Schedule definitions are never pruned.
    */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
     const targets = resolveTargets({
       policies,
       descriptor: SchedulesPG.retentionTables,

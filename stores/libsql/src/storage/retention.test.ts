@@ -282,6 +282,50 @@ describe('LibSQL retention', () => {
       expect(Number(orphans.rows[0]!.c)).toBe(0);
     });
   });
+
+  // Anchor indexes are created lazily on the first prune() call — never at
+  // init() — so deployments that don't configure retention pay no index
+  // write/disk overhead on their growth tables.
+  describe('lazy anchor indexes', () => {
+    let fileStore: LibSQLStore;
+    let url: string;
+
+    beforeEach(async () => {
+      url = `file:${tmpFile()}`;
+      fileStore = new LibSQLStore({ id: `lazy-${Math.random().toString(36).slice(2)}`, url });
+      await fileStore.init();
+    });
+
+    afterEach(() => {
+      cleanupTmp(url);
+    });
+
+    async function retentionIndexes(): Promise<string[]> {
+      const raw = createClient({ url });
+      const rows = await raw.execute(
+        `SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_retention_%' ORDER BY name`,
+      );
+      raw.close();
+      return rows.rows.map(r => String(r.name));
+    }
+
+    it('creates no anchor indexes at init, only for pruned tables on first prune', async () => {
+      expect(await retentionIndexes()).toEqual([]);
+
+      await fileStore.stores.memory!.prune({ threads: { maxAge: '30d' } });
+
+      // Only the table with a policy gets its anchor index; messages/resources don't.
+      expect(await retentionIndexes()).toEqual(['idx_retention_mastra_threads_createdAt']);
+    });
+
+    it('creates the experiments anchor index lazily via its whole-unit prune path', async () => {
+      expect(await retentionIndexes()).toEqual([]);
+
+      await fileStore.stores.experiments!.prune({ experiments: { maxAge: '30d' } });
+
+      expect(await retentionIndexes()).toEqual(['idx_retention_mastra_experiments_completedAt']);
+    });
+  });
 });
 
 let tmpCounter = 0;
