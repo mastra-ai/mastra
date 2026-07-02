@@ -9,6 +9,7 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDownloadTraceJson } from '../use-download-trace-json';
+import { assertDefined } from '@/test-utils/assert';
 
 // jsdom's Blob exposes no `.text()`, and the global `Response` doesn't recognize it.
 function readBlobText(blob: Blob): Promise<string> {
@@ -98,10 +99,7 @@ describe('useDownloadTraceJson', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
-    const firstCall = createObjectURL.mock.calls[0];
-    expect(firstCall).toBeDefined();
-    if (!firstCall) throw new Error('Expected createObjectURL call');
-    const [blob] = firstCall as [Blob];
+    const [blob] = assertDefined(createObjectURL.mock.calls[0], 'Expected createObjectURL call') as [Blob];
     await expect(readBlobText(blob)).resolves.toBe(JSON.stringify(traceFixture, null, 2));
     expect(clickedDownloadAttr).toBe(`trace-${TRACE_ID}.json`);
   });

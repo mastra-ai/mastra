@@ -1,20 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
+import { assertDefined } from '@/test-utils/assert';
 
 type Span = Parameters<typeof formatHierarchicalSpans>[0][number];
 type FormattedSpan = ReturnType<typeof formatHierarchicalSpans>[number];
 
 function getAt<T>(items: readonly T[], index: number): T {
-  const item = items[index];
-  expect(item).toBeDefined();
-  if (item === undefined) throw new Error(`Expected item at index ${index}`);
-  return item;
+  return assertDefined(items[index], `Expected item at index ${index}`);
 }
 
 function getChildren(span: FormattedSpan): FormattedSpan[] {
-  expect(span.spans).toBeDefined();
-  if (!span.spans) throw new Error(`Expected ${span.id} to have child spans`);
-  return span.spans;
+  return assertDefined(span.spans, `Expected ${span.id} to have child spans`);
 }
 
 function span(spanId: string, parentSpanId: string | null, overrides: Partial<Span> = {}): Span {

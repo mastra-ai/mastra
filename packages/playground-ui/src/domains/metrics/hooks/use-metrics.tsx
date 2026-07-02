@@ -15,17 +15,11 @@ const DATE_PRESETS = [
   { label: 'Last 30 days', value: '30d' },
 ] as const;
 
-type FixedDatePreset = (typeof DATE_PRESETS)[number]['value'];
-
-export type DatePreset = FixedDatePreset | 'custom';
+export type DatePreset = (typeof DATE_PRESETS)[number]['value'] | 'custom';
 
 export { DATE_PRESETS };
 
 const VALID_PRESETS = new Set<string>(DATE_PRESETS.map(p => p.value));
-const DATE_PRESET_LABELS = Object.fromEntries(DATE_PRESETS.map(preset => [preset.value, preset.label])) as Record<
-  FixedDatePreset,
-  string
->;
 
 export function isValidPreset(value: string | null | undefined): value is DatePreset {
   return typeof value === 'string' && (VALID_PRESETS.has(value) || value === 'custom');
@@ -74,7 +68,7 @@ export function useMetrics() {
 
 function getDateRangeLabel(preset: DatePreset, customRange: DateRange | undefined) {
   if (preset !== 'custom') {
-    return DATE_PRESET_LABELS[preset];
+    return DATE_PRESETS.find(p => p.value === preset)?.label ?? preset;
   }
   if (customRange?.from) {
     if (customRange.to) {

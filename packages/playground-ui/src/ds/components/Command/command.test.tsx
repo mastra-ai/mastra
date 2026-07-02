@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './command';
+import { assertDefined } from '@/test-utils/assert';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverPolyfill {
@@ -185,9 +186,8 @@ describe('Command', () => {
       expect(screen.queryByText('Weather Workflow')).toBeNull();
     });
 
-    expect(beta).not.toBeNull();
-    expect(alpha).not.toBeNull();
-    if (!beta || !alpha) throw new Error('Expected filtered command items');
-    expect(Boolean(beta.compareDocumentPosition(alpha) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    const betaItem = assertDefined(beta, 'Expected filtered command items');
+    const alphaItem = assertDefined(alpha, 'Expected filtered command items');
+    expect(Boolean(betaItem.compareDocumentPosition(alphaItem) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 });

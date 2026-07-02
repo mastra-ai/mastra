@@ -3,24 +3,20 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
+import { assertDefined } from '@/test-utils/assert';
 
 afterEach(() => {
   cleanup();
 });
 
-const getWrapper = () => {
-  const wrapper = document.querySelector<HTMLDivElement>('[data-slot="input-group"]');
-  expect(wrapper).not.toBeNull();
-  if (!wrapper) throw new Error('Expected input group wrapper');
-  return wrapper;
-};
+const getWrapper = () =>
+  assertDefined(document.querySelector<HTMLDivElement>('[data-slot="input-group"]'), 'Expected input group wrapper');
 
-const getInput = () => {
-  const input = document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]');
-  expect(input).not.toBeNull();
-  if (!input) throw new Error('Expected input group control');
-  return input;
-};
+const getInput = () =>
+  assertDefined(
+    document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]'),
+    'Expected input group control',
+  );
 
 const inputGroupVariants = ['default', 'filled', 'outline'] as const;
 

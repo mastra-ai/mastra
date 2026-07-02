@@ -3,13 +3,12 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ThreadList, ThreadListItem } from './thread-list';
+import { assertDefined } from '@/test-utils/assert';
 
 afterEach(cleanup);
 
 function getParent(element: HTMLElement): HTMLElement {
-  expect(element.parentElement).not.toBeNull();
-  if (!element.parentElement) throw new Error('Expected parent element');
-  return element.parentElement;
+  return assertDefined(element.parentElement, 'Expected parent element');
 }
 
 describe('ThreadList', () => {
@@ -56,9 +55,7 @@ describe('ThreadListItem', () => {
     expect(link.className).toContain('text-left');
     expect(link.className).toContain('pr-9');
 
-    const contentBoundary = link.querySelector('span');
-    expect(contentBoundary).not.toBeNull();
-    if (!contentBoundary) throw new Error('Expected content boundary');
+    const contentBoundary = assertDefined(link.querySelector('span'), 'Expected content boundary');
     expect(contentBoundary.className).toContain('min-w-0');
     expect(contentBoundary.className).toContain('flex-1');
   });

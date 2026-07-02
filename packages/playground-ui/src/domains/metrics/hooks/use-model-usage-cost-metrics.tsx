@@ -2,6 +2,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { formatCompact } from '../components/metrics-utils';
 import { useMetricsFilters } from './use-metrics-filters';
+import { getOrCreate } from '@/lib/map';
 
 export interface ModelUsageRow {
   model: string;
@@ -50,21 +51,15 @@ export function useModelUsageCostMetrics() {
 
       const modelMap = new Map<string, ModelEntry>();
 
-      const ensureModel = (model: string): ModelEntry => {
-        const existing = modelMap.get(model);
-        if (existing) return existing;
-
-        const entry = {
+      const ensureModel = (model: string): ModelEntry =>
+        getOrCreate(modelMap, model, () => ({
           input: 0,
           output: 0,
           cacheRead: 0,
           cacheWrite: 0,
           cost: null,
           costUnit: null,
-        };
-        modelMap.set(model, entry);
-        return entry;
-      };
+        }));
 
       // total_input/total_output estimatedCost already rolls up cache + other detail
       // costs. The cache breakdowns are kept for their token counts only.

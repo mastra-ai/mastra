@@ -26,8 +26,7 @@ export function PropertyFilterActions({
   onRemoveSaved,
 }: PropertyFilterActionsProps) {
   const hasMenuItems = !!(onRemoveAll || onSave || onRemoveSaved);
-  const showClear = onClear != null;
-  if (!showClear && !hasMenuItems) return null;
+  if (!onClear && !hasMenuItems) return null;
 
   return (
     <div className="flex items-center gap-2">

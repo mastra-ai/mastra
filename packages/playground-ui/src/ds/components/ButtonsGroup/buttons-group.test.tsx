@@ -7,24 +7,16 @@ import { DropdownMenu } from '../DropdownMenu';
 import { Input } from '../Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup } from './buttons-group';
+import { assertDefined } from '@/test-utils/assert';
 
 afterEach(() => {
   cleanup();
 });
 
-const getGroup = () => {
-  const group = document.querySelector<HTMLDivElement>('[data-slot="buttons-group"]');
-  expect(group).not.toBeNull();
-  if (!group) throw new Error('Expected buttons group');
-  return group;
-};
+const getGroup = () =>
+  assertDefined(document.querySelector<HTMLDivElement>('[data-slot="buttons-group"]'), 'Expected buttons group');
 
-const getButton = () => {
-  const button = document.querySelector('button');
-  expect(button).not.toBeNull();
-  if (!button) throw new Error('Expected button');
-  return button;
-};
+const getButton = () => assertDefined(document.querySelector('button'), 'Expected button');
 
 describe('ButtonsGroup', () => {
   it('close spacing keys the right-edge rounding off a visible next sibling (not :last-child)', () => {
@@ -156,9 +148,7 @@ describe('ButtonsGroup', () => {
       </ButtonsGroup>,
     );
     const group = getGroup();
-    const trigger = group.querySelector('[aria-label="More save options"]');
-    expect(trigger).not.toBeNull();
-    if (!trigger) throw new Error('Expected menu trigger');
+    const trigger = assertDefined(group.querySelector('[aria-label="More save options"]'), 'Expected menu trigger');
     // Closed: DropdownMenu renders no DOM of its own and the menu content is portaled out, so
     // the group has exactly the two button segments — the trigger is the last one (pill corner).
     expect(group.querySelectorAll(':scope > button').length).toBe(2);

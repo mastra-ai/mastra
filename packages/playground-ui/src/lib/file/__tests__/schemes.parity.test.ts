@@ -12,6 +12,7 @@ import {
   isNonFetchableRemoteUrl,
   isRemoteUrl,
 } from '../schemes';
+import { assertDefined } from '@/test-utils/assert';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -42,8 +43,7 @@ const readCoreSupportedProtocols = (): string[] => {
 
   const protocols = new Set<string>();
   for (const match of scanRegion.matchAll(/case '([a-z0-9]+):'/g)) {
-    const [, protocol] = match;
-    if (protocol) protocols.add(protocol);
+    protocols.add(assertDefined(match[1], 'Expected a protocol capture group in the core switch case'));
   }
   return [...protocols].sort();
 };

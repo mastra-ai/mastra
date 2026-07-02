@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ScrollArea } from './scroll-area';
+import { assertDefined } from '@/test-utils/assert';
 
 afterEach(() => {
   cleanup();
@@ -10,12 +11,8 @@ afterEach(() => {
 
 const VIEWPORT_MARKER = 'test-viewport-marker';
 
-const getViewport = () => {
-  const viewport = document.querySelector<HTMLElement>(`.${VIEWPORT_MARKER}`);
-  expect(viewport).not.toBeNull();
-  if (!viewport) throw new Error('Expected scroll viewport');
-  return viewport;
-};
+const getViewport = () =>
+  assertDefined(document.querySelector<HTMLElement>(`.${VIEWPORT_MARKER}`), 'Expected scroll viewport');
 const getContent = (viewport: HTMLElement) => viewport.firstElementChild as HTMLElement;
 
 const renderArea = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) =>

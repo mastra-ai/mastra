@@ -6,12 +6,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { MainSidebarProvider } from './main-sidebar-context';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
+import { assertDefined } from '@/test-utils/assert';
 
-const getTooltipPopup = () => {
-  const popup = document.querySelector<HTMLElement>('.bg-surface3');
-  if (!popup) throw new Error('Expected tooltip popup');
-  return popup;
-};
+const getTooltipPopup = () =>
+  assertDefined(document.querySelector<HTMLElement>('.bg-surface3'), 'Expected tooltip popup');
 
 // MainSidebarProvider reads matchMedia at mount to decide mobile vs desktop.
 // jsdom does not implement it, so polyfill before any render.

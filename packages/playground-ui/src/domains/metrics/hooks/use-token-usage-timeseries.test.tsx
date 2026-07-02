@@ -13,6 +13,7 @@ import { MetricsProvider } from './use-metrics';
 import type { DatePreset, DateRange } from './use-metrics';
 import { useTokenUsageTimeSeries } from './use-token-usage-timeseries';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { assertDefined } from '@/test-utils/assert';
 
 const BASE_URL = 'http://localhost:4111';
 const server = setupServer();
@@ -169,10 +170,7 @@ describe('useTokenUsageTimeSeries', () => {
       expect(onTimeseries).toHaveBeenCalledTimes(2);
     });
 
-    const firstCall = onTimeseries.mock.calls[0];
-    expect(firstCall).toBeDefined();
-    if (!firstCall) throw new Error('Expected first timeseries request');
-    const [inputRequest] = firstCall;
+    const [inputRequest] = assertDefined(onTimeseries.mock.calls[0], 'Expected first timeseries request');
     expect(inputRequest.name).toEqual(['mastra_model_total_input_tokens']);
     expect(inputRequest.aggregation).toBe('sum');
     expect(inputRequest.filters?.timestamp?.start).toBeDefined();

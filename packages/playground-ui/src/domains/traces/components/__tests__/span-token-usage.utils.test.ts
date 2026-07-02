@@ -1,13 +1,10 @@
 import type { UsageStats } from '@mastra/core/observability';
 import { describe, expect, it } from 'vitest';
 import { getTokenUsageView } from '../span-token-usage.utils';
+import { assertDefined } from '@/test-utils/assert';
 
-const getRequiredTokenUsageView = (usage: UsageStats) => {
-  const view = getTokenUsageView(usage);
-  expect(view).not.toBeNull();
-  if (!view) throw new Error('Expected token usage view');
-  return view;
-};
+const getRequiredTokenUsageView = (usage: UsageStats) =>
+  assertDefined(getTokenUsageView(usage), 'Expected token usage view');
 
 describe('getTokenUsageView', () => {
   it('returns null when usage is undefined', () => {

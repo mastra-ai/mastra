@@ -77,34 +77,14 @@ function isHttp501(error: unknown): boolean {
 
 type FetchTracesFnArgs = TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
-  mode?: 'page' | 'delta';
-  page?: number;
-  perPage?: number;
-  after?: string;
-  limit?: number;
-};
+} & ({ mode: 'delta'; after?: string; limit?: number } | { mode?: 'page'; page: number; perPage: number });
 
-const fetchTracesFn = async ({
-  client,
-  mode,
-  page,
-  perPage,
-  after,
-  limit,
-  filters,
-  listMode = 'traces',
-}: FetchTracesFnArgs) => {
-  const params = (() => {
-    if (mode === 'delta') {
-      return { mode: 'delta' as const, after, limit, filters };
-    }
-
-    if (page == null || perPage == null) {
-      throw new Error('page and perPage are required for traces page mode');
-    }
-
-    return { pagination: { page, perPage }, filters };
-  })();
+const fetchTracesFn = async (args: FetchTracesFnArgs) => {
+  const { client, filters, listMode = 'traces' } = args;
+  const params =
+    args.mode === 'delta'
+      ? { mode: 'delta' as const, after: args.after, limit: args.limit, filters }
+      : { pagination: { page: args.page, perPage: args.perPage }, filters };
 
   if (listMode === 'branches') {
     return client.listBranches(params as ListBranchesArgs);
