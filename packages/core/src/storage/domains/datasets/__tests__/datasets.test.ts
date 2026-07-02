@@ -1,20 +1,6 @@
-import type { IMastraLogger } from '@internal/core/logger';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { InMemoryDB } from '../../inmemory-db';
 import { DatasetsInMemory } from '../inmemory';
-
-function makeSpyLogger(): IMastraLogger {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    trackException: vi.fn(),
-    getTransports: vi.fn(),
-    getLogs: vi.fn(),
-    getLogsByRunId: vi.fn(),
-  } as unknown as IMastraLogger;
-}
 
 describe('DatasetsInMemory', () => {
   let storage: DatasetsInMemory;
@@ -922,70 +908,29 @@ describe('DatasetsInMemory', () => {
     });
   });
 
-  describe('tenancy-miss observability', () => {
-    let logger: IMastraLogger;
-
-    beforeEach(() => {
-      logger = makeSpyLogger();
-      storage.__setLogger(logger);
+  describe('deleteDataset boolean return', () => {
+    it('returns true when the row was deleted', async () => {
+      const created = await storage.createDataset({ name: 'd' });
+      const deleted = await storage.deleteDataset({ id: created.id });
+      expect(deleted).toBe(true);
     });
 
-    it('logs a scoped read miss when getDatasetById returns null under mismatched tenancy', async () => {
+    it('returns false when no row matched (missing id)', async () => {
+      const deleted = await storage.deleteDataset({ id: 'does-not-exist' });
+      expect(deleted).toBe(false);
+    });
+
+    it('returns false on tenancy mismatch and preserves the row', async () => {
       const created = await storage.createDataset({
         name: 'd',
         organizationId: 'org-a',
         projectId: 'proj-a',
       });
-
-      const miss = await storage.getDatasetById({
-        id: created.id,
-        filters: { organizationId: 'org-b', projectId: 'proj-a' },
-      });
-
-      expect(miss).toBeNull();
-      expect(logger.debug).toHaveBeenCalledWith(
-        'tenancy: scoped read miss',
-        expect.objectContaining({ op: 'getDatasetById', table: 'mastra_datasets' }),
-      );
-    });
-
-    it('does not log when getDatasetById returns null on an unscoped call', async () => {
-      const miss = await storage.getDatasetById({ id: 'does-not-exist' });
-      expect(miss).toBeNull();
-      expect(logger.debug).not.toHaveBeenCalled();
-    });
-
-    it('does not log when scoped getDatasetById matches', async () => {
-      const created = await storage.createDataset({
-        name: 'd',
-        organizationId: 'org-a',
-        projectId: 'proj-a',
-      });
-      const hit = await storage.getDatasetById({
-        id: created.id,
-        filters: { organizationId: 'org-a', projectId: 'proj-a' },
-      });
-      expect(hit).not.toBeNull();
-      expect(logger.debug).not.toHaveBeenCalledWith('tenancy: scoped read miss', expect.anything());
-    });
-
-    it('logs a scoped delete no-op when deleteDataset does not match', async () => {
-      const created = await storage.createDataset({
-        name: 'd',
-        organizationId: 'org-a',
-        projectId: 'proj-a',
-      });
-
-      await storage.deleteDataset({
+      const deleted = await storage.deleteDataset({
         id: created.id,
         filters: { organizationId: 'org-b' },
       });
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        'tenancy: scoped delete no-op',
-        expect.objectContaining({ op: 'deleteDataset', table: 'mastra_datasets' }),
-      );
-
+      expect(deleted).toBe(false);
       const stillThere = await storage.getDatasetById({
         id: created.id,
         filters: { organizationId: 'org-a', projectId: 'proj-a' },
@@ -993,19 +938,17 @@ describe('DatasetsInMemory', () => {
       expect(stillThere).not.toBeNull();
     });
 
-    it('does not log when the scoped delete actually matches', async () => {
+    it('returns true when scoped delete matches', async () => {
       const created = await storage.createDataset({
         name: 'd',
         organizationId: 'org-a',
         projectId: 'proj-a',
       });
-
-      await storage.deleteDataset({
+      const deleted = await storage.deleteDataset({
         id: created.id,
         filters: { organizationId: 'org-a', projectId: 'proj-a' },
       });
-
-      expect(logger.debug).not.toHaveBeenCalledWith('tenancy: scoped delete no-op', expect.anything());
+      expect(deleted).toBe(true);
     });
   });
 });

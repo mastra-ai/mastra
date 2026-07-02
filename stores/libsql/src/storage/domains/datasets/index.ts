@@ -15,9 +15,6 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -302,13 +299,6 @@ export class DatasetsLibSQL extends DatasetsStorage {
         args: [id, ...params],
       });
       if (result.rows?.[0]) return this.transformDatasetRow(result.rows[0]);
-      if (isTenancyScoped(filters)) {
-        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
-          id,
-          organizationId: filters?.organizationId,
-          projectId: filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -416,7 +406,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
     try {
       // Atomic gate via scoped existence check + tenancy folded into the parent
       // DELETE, so the destructive statement is itself tenant-scoped rather
@@ -429,16 +419,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         sql: `SELECT id FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`,
         args: [id, ...params],
       });
-      if (!exists.rows?.[0]) {
-        if (isTenancyScoped(filters)) {
-          logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
-            id,
-            organizationId: filters?.organizationId,
-            projectId: filters?.projectId,
-          });
-        }
-        return;
-      }
+      if (!exists.rows?.[0]) return false;
 
       // Detach experiments (SET NULL) + delete their results for FK safety.
       // Probe sqlite_master rather than swallowing "no such table" errors.
@@ -461,7 +442,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
       statements.push({ sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] });
       statements.push({ sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] });
       statements.push({ sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] });
-      await this.#client.batch(statements, 'write');
+      const batchResults = await this.#client.batch(statements, 'write');
+      const parentRowsAffected = Number(batchResults[batchResults.length - 1]?.rowsAffected ?? 0);
+      return parentRowsAffected > 0;
     } catch (error) {
       throw new MastraError(
         {

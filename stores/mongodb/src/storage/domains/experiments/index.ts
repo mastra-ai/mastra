@@ -9,9 +9,6 @@ import {
   normalizePerPage,
   calculatePagination,
   safelyParseJSON,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   Experiment,
@@ -379,13 +376,6 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       applyTenancyFilter(query, filters);
       const doc = await collection.findOne(query);
       if (doc) return transformExperimentRow(doc as unknown as Record<string, unknown>);
-      if (isTenancyScoped(filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
-          id,
-          organizationId: filters?.organizationId,
-          projectId: filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -475,7 +465,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
       // Tenancy predicate applied on every destructive query (not only the
       // pre-check). Silent no-op on mismatch.
@@ -483,16 +473,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
       const existing = await experimentsCollection.findOne(gateQuery);
-      if (!existing) {
-        if (isTenancyScoped(filters)) {
-          logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
-            id,
-            organizationId: filters?.organizationId,
-            projectId: filters?.projectId,
-          });
-        }
-        return;
-      }
+      if (!existing) return false;
 
       // Delete results first (FK semantics). Scope on the results collection too
       // — result rows carry organizationId/projectId of the owning experiment.
@@ -503,7 +484,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
       const parentDeleteQuery: Record<string, any> = { id };
       applyTenancyFilter(parentDeleteQuery, filters);
-      await experimentsCollection.deleteOne(parentDeleteQuery);
+      const result = await experimentsCollection.deleteOne(parentDeleteQuery);
+      return (result.deletedCount ?? 0) > 0;
     } catch (error) {
       throw new MastraError(
         {
@@ -649,13 +631,6 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       applyTenancyFilter(query, filters);
       const doc = await collection.findOne(query);
       if (doc) return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
-      if (isTenancyScoped(filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
-          id,
-          organizationId: filters?.organizationId,
-          projectId: filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -738,7 +713,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   }: {
     experimentId: string;
     filters?: ExperimentTenancyFilters;
-  }): Promise<void> {
+  }): Promise<boolean> {
     try {
       // Tenancy predicate applied on the destructive deleteMany itself. Result
       // rows carry organizationId/projectId of the owning experiment. Silent
@@ -748,19 +723,13 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         const gateQuery: Record<string, any> = { id: experimentId };
         applyTenancyFilter(gateQuery, filters);
         const parent = await experimentsCollection.findOne(gateQuery);
-        if (!parent) {
-          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
-            id: experimentId,
-            organizationId: filters?.organizationId,
-            projectId: filters?.projectId,
-          });
-          return;
-        }
+        if (!parent) return false;
       }
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
       const deleteQuery: Record<string, any> = { experimentId };
       applyTenancyFilter(deleteQuery, filters);
       await collection.deleteMany(deleteQuery);
+      return true;
     } catch (error) {
       throw new MastraError(
         {

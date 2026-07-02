@@ -245,14 +245,15 @@ describe('Datasets Handlers', () => {
 
       // Scoped delete on wrong tenant must NOT throw — silent no-op matches the
       // storage contract so cross-tenant existence is not leaked via error
-      // timing or status.
+      // timing or status. `success: false` is indistinguishable from a legit
+      // 404 to the client, so this does not add an existence signal.
       const result = (await DELETE_DATASET_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         datasetId: created.id,
         organizationId: 'org_b',
       } as any)) as any;
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
 
       // dataset survives untouched
       const survivor = await mastra.datasets.get({ id: created.id });
@@ -275,7 +276,7 @@ describe('Datasets Handlers', () => {
         projectId: 'proj_2',
       } as any)) as any;
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
 
       const survivor = await mastra.datasets.get({ id: created.id });
       const details = await survivor.getDetails();

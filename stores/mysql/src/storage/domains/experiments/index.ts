@@ -9,9 +9,6 @@ import {
   ExperimentsStorage,
   calculatePagination,
   normalizePerPage,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -370,13 +367,6 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         },
       });
       if (row) return this.mapExperiment(row);
-      if (isTenancyScoped(args.filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -475,7 +465,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
       // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
       // tenancy mismatch.
@@ -500,14 +490,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         );
         if (!Array.isArray(gateRows) || gateRows.length === 0) {
           await connection.commit();
-          if (isTenancyScoped(args.filters)) {
-            logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
-              id: args.id,
-              organizationId: args.filters?.organizationId,
-              projectId: args.filters?.projectId,
-            });
-          }
-          return;
+          return false;
         }
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
@@ -515,6 +498,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         );
         await connection.execute(`DELETE FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE id = ?`, [args.id]);
         await connection.commit();
+        return true;
       } catch (error) {
         try {
           await connection.rollback();
@@ -634,13 +618,6 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         },
       });
       if (row) return this.mapExperimentResult(row);
-      if (isTenancyScoped(args.filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -810,7 +787,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
       // Tenancy predicate folded into the DELETE via a scoped parent subquery.
       // Silent no-op on mismatch.
@@ -826,30 +803,26 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           tenancyParams.push(args.filters.projectId);
         }
         const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
-        await this.pool.execute(
-          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
-          [args.experimentId, ...tenancyParams],
-        );
-        // Log only when the parent doesn't exist under this tenancy. A parent
-        // that exists but legitimately has zero result rows must not emit a
-        // false-positive tenancy-miss log.
+        // Confirm the parent exists under this tenancy first; the DELETE that
+        // follows is a no-op if it doesn't.
         const [parentRows] = await this.pool.execute(
           `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere} LIMIT 1`,
           [args.experimentId, ...tenancyParams],
         );
         if (!Array.isArray(parentRows) || parentRows.length === 0) {
-          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
-            id: args.experimentId,
-            organizationId: args.filters?.organizationId,
-            projectId: args.filters?.projectId,
-          });
+          return false;
         }
-        return;
+        await this.pool.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
+          [args.experimentId, ...tenancyParams],
+        );
+        return true;
       }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
         [args.experimentId],
       );
+      return true;
     } catch (error) {
       throw new MastraError(
         {

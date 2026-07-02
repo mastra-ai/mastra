@@ -41,18 +41,19 @@ export abstract class ExperimentsStorage extends StorageDomain {
   abstract getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null>;
   abstract listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput>;
   /**
-   * Deletes an experiment and cascades to its results.
+   * Deletes an experiment and cascades to its results. Returns `true` if the
+   * experiment row was deleted, `false` otherwise (missing id or tenancy miss).
    *
-   * When `filters` is set, silent no-op on tenancy mismatch (never throws,
-   * so existence does not leak). A resolved Promise does not imply a row was
-   * deleted. Implementers must fold the tenancy predicate into the destructive
-   * DML itself — a pre-check followed by an unscoped DELETE is unsafe under
-   * concurrent id reuse across tenants.
+   * When `filters` is set, silent no-op on tenancy mismatch (never throws) —
+   * a `false` result does not distinguish "no such id" from "wrong tenant" so
+   * cross-tenant existence is not leaked. Implementers must fold the tenancy
+   * predicate into the destructive DML itself — a pre-check followed by an
+   * unscoped DELETE is unsafe under concurrent id reuse across tenants.
    *
    * When `filters` is omitted, implementations MAY skip the tenancy predicate
    * entirely (backward compat: callers explicitly opt out of scoping).
    */
-  abstract deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void>;
+  abstract deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean>;
 
   // Results (per-item)
   abstract addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult>;
@@ -67,7 +68,11 @@ export abstract class ExperimentsStorage extends StorageDomain {
   }): Promise<ExperimentResult | null>;
   abstract listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput>;
   /**
-   * Deletes all results for an experiment.
+   * Deletes all results for an experiment. Returns `true` if the parent
+   * experiment existed under the (optional) tenancy scope and its result set
+   * was cleared. Returns `false` on tenancy miss or when the parent does not
+   * exist — a `false` result does not distinguish those, matching the parent
+   * `deleteExperiment` contract.
    *
    * When `filters` is set, silent no-op on tenancy mismatch (never throws).
    * Result rows carry `organizationId`/`projectId` from their parent, so
@@ -80,7 +85,10 @@ export abstract class ExperimentsStorage extends StorageDomain {
    * why pg/mysql/spanner take an unscoped fast path here while mongodb/libsql
    * fold the (empty) filter unconditionally — both are correct.
    */
-  abstract deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void>;
+  abstract deleteExperimentResults(args: {
+    experimentId: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<boolean>;
 
   // Aggregation
   abstract getReviewSummary(): Promise<ExperimentReviewCounts[]>;

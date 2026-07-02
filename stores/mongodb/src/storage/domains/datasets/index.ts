@@ -13,9 +13,6 @@ import {
   calculatePagination,
   safelyParseJSON,
   ensureDate,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -276,13 +273,6 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       applyTenancyFilter(query, filters);
       const row = await collection.findOne(query);
       if (row) return this.transformDatasetRow(row);
-      if (isTenancyScoped(filters)) {
-        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
-          id,
-          organizationId: filters?.organizationId,
-          projectId: filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -340,7 +330,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
     try {
       // Tenancy predicate is applied on the destructive parent deleteOne (not
       // only the pre-check), so a concurrent delete/recreate under a different
@@ -350,16 +340,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
       const gateHit = await datasetsCollectionForGate.findOne(gateQuery, { projection: { id: 1 } });
-      if (!gateHit) {
-        if (isTenancyScoped(filters)) {
-          logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
-            id,
-            organizationId: filters?.organizationId,
-            projectId: filters?.projectId,
-          });
-        }
-        return;
-      }
+      if (!gateHit) return false;
 
       // Detach experiments — tolerate missing collections (NamespaceNotFound)
       // but rethrow real operational failures
@@ -396,7 +377,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       await itemsCollection.deleteMany({ datasetId: id });
       const parentDeleteQuery: Record<string, any> = { id };
       applyTenancyFilter(parentDeleteQuery, filters);
-      await datasetsCollection.deleteOne(parentDeleteQuery);
+      const result = await datasetsCollection.deleteOne(parentDeleteQuery);
+      return (result.deletedCount ?? 0) > 0;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

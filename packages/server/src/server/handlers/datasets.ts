@@ -310,8 +310,8 @@ export const DELETE_DATASET_ROUTE = createRoute({
       if (organizationId === undefined && projectId === undefined) {
         await mastra.datasets.get({ id: datasetId });
       }
-      await mastra.datasets.delete({ id: datasetId, organizationId, projectId });
-      return { success: true };
+      const deleted = await mastra.datasets.delete({ id: datasetId, organizationId, projectId });
+      return { success: deleted };
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });

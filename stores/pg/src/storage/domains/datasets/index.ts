@@ -16,9 +16,6 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -336,13 +333,6 @@ export class DatasetsPG extends DatasetsStorage {
       const whereSql = ['"id" = $1', ...conditions].join(' AND ');
       const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       if (result) return this.transformDatasetRow(result);
-      if (isTenancyScoped(filters)) {
-        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
-          id,
-          organizationId: filters?.organizationId,
-          projectId: filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -457,7 +447,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
     try {
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
@@ -510,13 +500,7 @@ export class DatasetsPG extends DatasetsStorage {
         await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
         return true;
       });
-      if (!deleted && isTenancyScoped(filters)) {
-        logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
-          id,
-          organizationId: filters?.organizationId,
-          projectId: filters?.projectId,
-        });
-      }
+      return deleted;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

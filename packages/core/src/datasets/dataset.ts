@@ -121,6 +121,12 @@ export class Dataset {
     const store = await this.#getDatasetsStore();
     const record = await store.getDatasetById({ id: this.id, filters: this.#scope });
     if (!record) {
+      this.#mastra.getLogger?.().debug?.('datasets: scoped ownership check returned no record', {
+        op: 'Dataset.#assertScope',
+        datasetId: this.id,
+        organizationId: this.#scope.organizationId,
+        projectId: this.#scope.projectId,
+      });
       throw new MastraError({
         id: 'DATASET_NOT_FOUND',
         text: `Dataset not found: ${this.id}`,
@@ -477,6 +483,15 @@ export class Dataset {
       filters: this.#scope,
     });
     if (!experiment || experiment.datasetId !== this.id) {
+      if (this.#scope) {
+        this.#mastra.getLogger?.().debug?.('experiments: scoped ownership check returned no record', {
+          op: 'Dataset.#assertExperimentOwnership',
+          datasetId: this.id,
+          experimentId,
+          organizationId: this.#scope.organizationId,
+          projectId: this.#scope.projectId,
+        });
+      }
       throw new MastraError({
         id: 'EXPERIMENT_NOT_FOUND',
         text: `Experiment not found: ${experimentId}`,
@@ -496,7 +511,18 @@ export class Dataset {
       id: args.experimentId,
       filters: this.#scope,
     });
-    if (!experiment || experiment.datasetId !== this.id) return null;
+    if (!experiment || experiment.datasetId !== this.id) {
+      if (this.#scope) {
+        this.#mastra.getLogger?.().debug?.('experiments: scoped get returned no record', {
+          op: 'Dataset.getExperiment',
+          datasetId: this.id,
+          experimentId: args.experimentId,
+          organizationId: this.#scope.organizationId,
+          projectId: this.#scope.projectId,
+        });
+      }
+      return null;
+    }
     return experiment;
   }
 

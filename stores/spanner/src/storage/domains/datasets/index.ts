@@ -5,9 +5,6 @@ import {
   calculatePagination,
   createStorageErrorId,
   DatasetsStorage,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
   normalizePerPage,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
@@ -311,13 +308,6 @@ export class DatasetsSpanner extends DatasetsStorage {
       });
       const row = (rows as Array<Record<string, any>>)[0];
       if (row) return rowToDataset(row);
-      if (isTenancyScoped(args.filters)) {
-        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -374,7 +364,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+  async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
     try {
       // Atomic gate + cascade inside a single read-write transaction. The
       // gate SELECT locks the parent row within the tx, and the tenancy
@@ -453,13 +443,7 @@ export class DatasetsSpanner extends DatasetsStorage {
           }
         }),
       );
-      if (!gateHit && isTenancyScoped(args.filters)) {
-        logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
+      return gateHit;
     } catch (error) {
       throw new MastraError(
         {

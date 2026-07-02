@@ -13,9 +13,6 @@ import {
   DatasetsStorage,
   calculatePagination,
   normalizePerPage,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
@@ -353,13 +350,6 @@ export class DatasetsMySQL extends DatasetsStorage {
         },
       });
       if (row) return this.mapDataset(row);
-      if (isTenancyScoped(filters)) {
-        logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
-          id,
-          organizationId: filters?.organizationId,
-          projectId: filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -440,7 +430,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
     // Atomic gate + cascade under SELECT ... FOR UPDATE, so a concurrent
     // delete/recreate under a different tenant cannot let a scoped delete hit
     // another tenant's row. Silent no-op on tenancy mismatch.
@@ -472,14 +462,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       );
       if (!Array.isArray(rows) || rows.length === 0) {
         await connection.commit();
-        if (isTenancyScoped(filters)) {
-          logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
-            id,
-            organizationId: filters?.organizationId,
-            projectId: filters?.projectId,
-          });
-        }
-        return;
+        return false;
       }
 
       if (experimentTablesExist) {
@@ -507,6 +490,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       ]);
 
       await connection.commit();
+      return true;
     } catch (error) {
       await connection.rollback();
       throw new MastraError(

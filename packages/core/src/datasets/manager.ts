@@ -162,6 +162,14 @@ export class DatasetsManager {
     const scope = scopeFromArgs(args);
     const record = await store.getDatasetById({ id: args.id, filters: scope });
     if (!record) {
+      if (scope) {
+        this.#mastra.getLogger?.().debug?.('datasets: scoped get returned no record', {
+          op: 'DatasetsManager.get',
+          id: args.id,
+          organizationId: args.organizationId,
+          projectId: args.projectId,
+        });
+      }
       throw new MastraError({
         id: 'DATASET_NOT_FOUND',
         text: 'Dataset not found',
@@ -210,9 +218,19 @@ export class DatasetsManager {
    * that tenancy: a dataset row in another tenant is a silent no-op (no error)
    * so cross-tenant existence is not leaked via error timing/text.
    */
-  async delete(args: { id: string; organizationId?: string; projectId?: string }) {
+  async delete(args: { id: string; organizationId?: string; projectId?: string }): Promise<boolean> {
     const store = await this.#getDatasetsStore();
-    return store.deleteDataset({ id: args.id, filters: scopeFromArgs(args) });
+    const scope = scopeFromArgs(args);
+    const deleted = await store.deleteDataset({ id: args.id, filters: scope });
+    if (!deleted && scope) {
+      this.#mastra.getLogger?.().debug?.('datasets: scoped delete matched no record', {
+        op: 'DatasetsManager.delete',
+        id: args.id,
+        organizationId: args.organizationId,
+        projectId: args.projectId,
+      });
+    }
+    return deleted;
   }
 
   // ---------------------------------------------------------------------------
@@ -229,10 +247,20 @@ export class DatasetsManager {
    */
   async getExperiment(args: { experimentId: string; organizationId?: string; projectId?: string }) {
     const experimentsStore = await this.#getExperimentsStore();
-    return experimentsStore.getExperimentById({
+    const scope = scopeFromArgs(args);
+    const record = await experimentsStore.getExperimentById({
       id: args.experimentId,
-      filters: scopeFromArgs(args),
+      filters: scope,
     });
+    if (!record && scope) {
+      this.#mastra.getLogger?.().debug?.('experiments: scoped get returned no record', {
+        op: 'DatasetsManager.getExperiment',
+        id: args.experimentId,
+        organizationId: args.organizationId,
+        projectId: args.projectId,
+      });
+    }
+    return record;
   }
 
   /**

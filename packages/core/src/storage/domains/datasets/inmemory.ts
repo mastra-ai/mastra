@@ -30,10 +30,7 @@ function matchesTenancy(
   return true;
 }
 import type { InMemoryDB } from '../inmemory-db';
-import { logTenancyDeleteNoOp, logTenancyReadMiss } from '../tenancy';
 import { DatasetsStorage } from './base';
-
-const TABLE_DATASETS = 'mastra_datasets';
 
 /** Convert a storage row to the public DatasetItem type (strips validTo/isDeleted) */
 function toDatasetItem(row: DatasetItemRow): DatasetItem {
@@ -122,14 +119,7 @@ export class DatasetsInMemory extends DatasetsStorage {
   }): Promise<DatasetRecord | null> {
     const record = this.db.datasets.get(id);
     if (!record) return null;
-    if (!matchesTenancy(record, filters)) {
-      logTenancyReadMiss(this.logger, 'getDatasetById', TABLE_DATASETS, {
-        id,
-        organizationId: filters?.organizationId,
-        projectId: filters?.projectId,
-      });
-      return null;
-    }
+    if (!matchesTenancy(record, filters)) return null;
     return toDatasetRecord(record);
   }
 
@@ -159,17 +149,10 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetRecord(updated);
   }
 
-  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean> {
     const existing = this.db.datasets.get(id);
-    if (!existing) return;
-    if (!matchesTenancy(existing, filters)) {
-      logTenancyDeleteNoOp(this.logger, 'deleteDataset', TABLE_DATASETS, {
-        id,
-        organizationId: filters?.organizationId,
-        projectId: filters?.projectId,
-      });
-      return;
-    }
+    if (!existing) return false;
+    if (!matchesTenancy(existing, filters)) return false;
 
     // Cascade: delete items and versions
     for (const [itemId, rows] of this.db.datasetItems) {
@@ -191,6 +174,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     }
 
     this.db.datasets.delete(id);
+    return true;
   }
 
   async listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput> {

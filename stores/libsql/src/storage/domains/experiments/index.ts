@@ -11,9 +11,6 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
 } from '@mastra/core/storage';
 import type {
   Experiment,
@@ -383,13 +380,6 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (result.rows?.[0]) {
         return this.transformExperimentRow(result.rows[0] as Record<string, unknown>);
       }
-      if (isTenancyScoped(args.filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -490,7 +480,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
       // Tenancy predicate folded into both DELETEs; batch runs as one transaction.
       // Silent no-op on mismatch.
@@ -509,13 +499,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         'write',
       );
       const parentRowsAffected = Number(batchResults[1]?.rowsAffected ?? 0);
-      if (parentRowsAffected === 0 && isTenancyScoped(args.filters)) {
-        logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
+      return parentRowsAffected > 0;
     } catch (error) {
       throw new MastraError(
         {
@@ -674,13 +658,6 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (result.rows?.[0]) {
         return this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>);
       }
-      if (isTenancyScoped(args.filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -769,40 +746,32 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
       // Tenancy predicate folded into the DELETE via a scoped parent subquery.
       // Silent no-op on mismatch.
       const { conditions, params } = tenancyWhere(args.filters);
       if (conditions.length) {
         const parentWhere = ['id = ?', ...conditions].join(' AND ');
+        // Probe parent to distinguish "parent absent / wrong tenant" (return false)
+        // from "parent exists and had zero results" (return true).
+        const parentExists = await this.#client.execute({
+          sql: `SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere}`,
+          args: [args.experimentId, ...params],
+        });
+        if (!parentExists.rows?.[0]) return false;
         await this.#client.execute({
           sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere})`,
           args: [args.experimentId, ...params],
         });
-        // Log only when the parent experiment doesn't exist under this tenancy —
-        // decoupled from cascade rowsAffected so we don't false-positive on a
-        // scoped delete of an experiment that legitimately has zero results.
-        if (isTenancyScoped(args.filters)) {
-          const parentExists = await this.#client.execute({
-            sql: `SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${parentWhere}`,
-            args: [args.experimentId, ...params],
-          });
-          if (!parentExists.rows?.[0]) {
-            logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
-              id: args.experimentId,
-              organizationId: args.filters?.organizationId,
-              projectId: args.filters?.projectId,
-            });
-          }
-        }
-        return;
+        return true;
       }
 
       await this.#client.execute({
         sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId = ?`,
         args: [args.experimentId],
       });
+      return true;
     } catch (error) {
       throw new MastraError(
         {

@@ -293,8 +293,8 @@ describe('DatasetsManager', () => {
         organizationId: 'org_a',
       });
 
-      // Mismatched delete must resolve without throwing.
-      await expect(mgr.delete({ id: created.id, organizationId: 'org_b' })).resolves.toBeUndefined();
+      // Mismatched delete must resolve without throwing and report no-op.
+      await expect(mgr.delete({ id: created.id, organizationId: 'org_b' })).resolves.toBe(false);
 
       // Dataset must still be fetchable with correct tenancy.
       const stillThere = await mgr.get({ id: created.id, organizationId: 'org_a' });

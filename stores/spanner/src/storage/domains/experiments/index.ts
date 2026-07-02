@@ -5,9 +5,6 @@ import {
   calculatePagination,
   createStorageErrorId,
   ExperimentsStorage,
-  isTenancyScoped,
-  logTenancyDeleteNoOp,
-  logTenancyReadMiss,
   normalizePerPage,
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
@@ -317,13 +314,6 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       });
       const row = (rows as Array<Record<string, any>>)[0];
       if (row) return rowToExperiment(row);
-      if (isTenancyScoped(args.filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentById', TABLE_EXPERIMENTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -419,7 +409,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
       // Atomic gate + cascade inside a single read-write transaction; tenancy
       // predicate folded into both DELETE DMLs. Silent no-op on mismatch.
@@ -474,13 +464,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           }
         }),
       );
-      if (!gateHit && isTenancyScoped(args.filters)) {
-        logTenancyDeleteNoOp(this.logger, 'deleteExperiment', TABLE_EXPERIMENTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
+      return gateHit;
     } catch (error) {
       throw new MastraError(
         {
@@ -661,13 +645,6 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       });
       const row = (rows as Array<Record<string, any>>)[0];
       if (row) return rowToExperimentResult(row);
-      if (isTenancyScoped(args.filters)) {
-        logTenancyReadMiss(this.logger, 'getExperimentResultById', TABLE_EXPERIMENT_RESULTS, {
-          id: args.id,
-          organizationId: args.filters?.organizationId,
-          projectId: args.filters?.projectId,
-        });
-      }
       return null;
     } catch (error) {
       throw new MastraError(
@@ -752,28 +729,13 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<boolean> {
     try {
       // Tenancy predicate folded directly into the DELETE DML. Silent no-op on
       // mismatch.
       if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
-        const conditions: string[] = [`${quoteIdent('experimentId', 'column name')} = @experimentId`];
-        const params: Record<string, any> = { experimentId: args.experimentId };
-        if (args.filters?.organizationId !== undefined) {
-          conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
-          params.organizationId = args.filters.organizationId;
-        }
-        if (args.filters?.projectId !== undefined) {
-          conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
-          params.projectId = args.filters.projectId;
-        }
-        await this.db.runDml({
-          sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} WHERE ${conditions.join(' AND ')}`,
-          params,
-        });
-        // Observability: log when the scoped parent doesn't exist under this
-        // tenancy — indicates a cross-tenant probe / stale id under an
-        // authenticated caller.
+        // Probe parent to distinguish "parent absent / wrong tenant" (return
+        // false) from "parent exists but has zero result rows" (return true).
         const parentConds: string[] = [`${quoteIdent('id', 'column name')} = @experimentId`];
         const parentParams: Record<string, any> = { experimentId: args.experimentId };
         if (args.filters?.organizationId !== undefined) {
@@ -789,20 +751,30 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           params: parentParams,
           json: true,
         });
-        if (!Array.isArray(parentRows) || parentRows.length === 0) {
-          logTenancyDeleteNoOp(this.logger, 'deleteExperimentResults', TABLE_EXPERIMENTS, {
-            id: args.experimentId,
-            organizationId: args.filters?.organizationId,
-            projectId: args.filters?.projectId,
-          });
+        if (!Array.isArray(parentRows) || parentRows.length === 0) return false;
+
+        const conditions: string[] = [`${quoteIdent('experimentId', 'column name')} = @experimentId`];
+        const params: Record<string, any> = { experimentId: args.experimentId };
+        if (args.filters?.organizationId !== undefined) {
+          conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+          params.organizationId = args.filters.organizationId;
         }
-        return;
+        if (args.filters?.projectId !== undefined) {
+          conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+          params.projectId = args.filters.projectId;
+        }
+        await this.db.runDml({
+          sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')} WHERE ${conditions.join(' AND ')}`,
+          params,
+        });
+        return true;
       }
       await this.db.runDml({
         sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
               WHERE ${quoteIdent('experimentId', 'column name')} = @experimentId`,
         params: { experimentId: args.experimentId },
       });
+      return true;
     } catch (error) {
       throw new MastraError(
         {

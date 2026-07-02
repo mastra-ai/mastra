@@ -863,17 +863,21 @@ export function createExperimentsTests({
           projectId: exp.projectId,
         });
 
-        // Wrong org — must not throw and must not delete
-        await experimentsStorage.deleteExperiment({
-          id: exp.id,
-          filters: { organizationId: 'org_b' },
-        });
+        // Wrong org — must not throw, must return false, must not delete
+        expect(
+          await experimentsStorage.deleteExperiment({
+            id: exp.id,
+            filters: { organizationId: 'org_b' },
+          }),
+        ).toBe(false);
 
-        // Wrong project (right org) — must not throw and must not delete
-        await experimentsStorage.deleteExperiment({
-          id: exp.id,
-          filters: { organizationId: 'org_a', projectId: 'proj_b' },
-        });
+        // Wrong project (right org) — must not throw, must return false, must not delete
+        expect(
+          await experimentsStorage.deleteExperiment({
+            id: exp.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_b' },
+          }),
+        ).toBe(false);
 
         const stillThere = await experimentsStorage.getExperimentById({ id: exp.id });
         expect(stillThere?.id).toBe(exp.id);
@@ -908,10 +912,11 @@ export function createExperimentsTests({
           projectId: exp.projectId,
         });
 
-        await experimentsStorage.deleteExperiment({
+        const deleted = await experimentsStorage.deleteExperiment({
           id: exp.id,
           filters: { organizationId: 'org_a', projectId: 'proj_a' },
         });
+        expect(deleted).toBe(true);
 
         const gone = await experimentsStorage.getExperimentById({ id: exp.id });
         expect(gone).toBeNull();
@@ -963,14 +968,18 @@ export function createExperimentsTests({
           projectId: exp.projectId,
         });
 
-        await experimentsStorage.deleteExperimentResults({
-          experimentId: exp.id,
-          filters: { organizationId: 'org_b' },
-        });
-        await experimentsStorage.deleteExperimentResults({
-          experimentId: exp.id,
-          filters: { organizationId: 'org_a', projectId: 'proj_b' },
-        });
+        expect(
+          await experimentsStorage.deleteExperimentResults({
+            experimentId: exp.id,
+            filters: { organizationId: 'org_b' },
+          }),
+        ).toBe(false);
+        expect(
+          await experimentsStorage.deleteExperimentResults({
+            experimentId: exp.id,
+            filters: { organizationId: 'org_a', projectId: 'proj_b' },
+          }),
+        ).toBe(false);
 
         const stillThere = await experimentsStorage.getExperimentResultById({ id: result.id });
         expect(stillThere?.id).toBe(result.id);
@@ -1003,10 +1012,11 @@ export function createExperimentsTests({
           projectId: exp.projectId,
         });
 
-        await experimentsStorage.deleteExperimentResults({
+        const deleted = await experimentsStorage.deleteExperimentResults({
           experimentId: exp.id,
           filters: { organizationId: 'org_a', projectId: 'proj_a' },
         });
+        expect(deleted).toBe(true);
 
         const gone = await experimentsStorage.getExperimentResultById({ id: result.id });
         expect(gone).toBeNull();

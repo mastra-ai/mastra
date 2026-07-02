@@ -50,10 +50,14 @@ export abstract class DatasetsStorage extends StorageDomain {
    */
   abstract getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null>;
   /**
-   * Delete a dataset. When `filters` is provided, the delete is a silent no-op
-   * if the row does not match the tenancy filters. Never throws on mismatch.
+   * Delete a dataset. Returns `true` if a row was deleted, `false` otherwise.
+   *
+   * When `filters` is provided, the delete is a silent no-op if the row does
+   * not match the tenancy filters (returns `false`). Never throws on mismatch,
+   * and a `false` result does not distinguish "no such id" from "wrong tenant"
+   * — both look the same to preserve the cross-tenant existence contract.
    */
-  abstract deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void>;
+  abstract deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<boolean>;
   abstract listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput>;
 
   /**
