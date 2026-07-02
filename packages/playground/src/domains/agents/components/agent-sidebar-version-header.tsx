@@ -112,7 +112,7 @@ function VersionSourceBadge({ badge, sourceHint }: { badge: VersionTriggerBadge;
   );
 }
 
-export function AgentSidebarVersionHeader({
+function useAgentSidebarVersionHeaderState({
   agentId,
   agentVersionId,
   selectedVersionId,
@@ -315,6 +315,62 @@ export function AgentSidebarVersionHeader({
       <VersionSourceBadge badge={triggerBadge} sourceHint={sourceHint} />
     </span>
   );
+
+  return {
+    activateVersion,
+    agentName,
+    canPublishSelectedVersion,
+    canSwitchVersions,
+    canUnpublishVersion,
+    currentVersionId,
+    handleCreateVersion,
+    handlePublishSelectedVersion,
+    handleUnpublishVersion,
+    handleVersionChange,
+    hasInlineVersionActions,
+    isCheckingVersions,
+    isCmsAvailabilityLoading,
+    isEditorLocked,
+    isLoading,
+    isVersionSelectOpen,
+    onBack,
+    selectedRouteVersion,
+    setIsVersionSelectOpen,
+    showCreateVersionAction,
+    showEditorAction,
+    triggerContent,
+    unpublishVersion,
+    versionOptions,
+  };
+}
+
+export function AgentSidebarVersionHeader(props: AgentSidebarVersionHeaderProps) {
+  const {
+    activateVersion,
+    agentName,
+    canPublishSelectedVersion,
+    canSwitchVersions,
+    canUnpublishVersion,
+    currentVersionId,
+    handleCreateVersion,
+    handlePublishSelectedVersion,
+    handleUnpublishVersion,
+    handleVersionChange,
+    hasInlineVersionActions,
+    isCheckingVersions,
+    isCmsAvailabilityLoading,
+    isEditorLocked,
+    isLoading,
+    isVersionSelectOpen,
+    onBack,
+    selectedRouteVersion,
+    setIsVersionSelectOpen,
+    showCreateVersionAction,
+    showEditorAction,
+    triggerContent,
+    unpublishVersion,
+    versionOptions,
+  } = useAgentSidebarVersionHeaderState(props);
 
   return (
     <TooltipProvider delay={0}>

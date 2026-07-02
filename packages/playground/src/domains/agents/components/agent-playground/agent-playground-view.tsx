@@ -1,13 +1,8 @@
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import type { AgentConfigTab } from './agent-playground-config';
-import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
+import { useAgentPlaygroundVersionBar } from './agent-playground-version-bar';
 
-interface AgentPlaygroundEditorPanelContentProps {
-  agentId: string;
-  activeVersionId?: string;
-  selectedVersionId?: string;
-  latestVersionId?: string;
-  onVersionSelect: (versionId: string) => void;
+interface AgentPlaygroundEditorVersionState {
   isDirty: boolean;
   isSavingDraft: boolean;
   isPublishing: boolean;
@@ -16,6 +11,16 @@ interface AgentPlaygroundEditorPanelContentProps {
   isCodeSourceAgent?: boolean;
   showCodeModeActions?: boolean;
   canOpenPr?: boolean;
+  isViewingPreviousVersion?: boolean;
+}
+
+interface AgentPlaygroundEditorPanelContentProps {
+  agentId: string;
+  activeVersionId?: string;
+  selectedVersionId?: string;
+  latestVersionId?: string;
+  onVersionSelect: (versionId: string) => void;
+  versionState: AgentPlaygroundEditorVersionState;
   openPrTitle?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
@@ -32,14 +37,7 @@ export function AgentPlaygroundEditorPanelContent({
   selectedVersionId,
   latestVersionId,
   onVersionSelect,
-  isDirty,
-  isSavingDraft,
-  isPublishing,
-  hasDraft,
-  readOnly,
-  isCodeSourceAgent,
-  showCodeModeActions,
-  canOpenPr,
+  versionState,
   openPrTitle,
   onSaveDraft,
   onPublish,
@@ -49,19 +47,12 @@ export function AgentPlaygroundEditorPanelContent({
   selectedConfigTab,
   onConfigTabChange,
 }: AgentPlaygroundEditorPanelContentProps) {
-  const { actionBar } = AgentPlaygroundVersionBar({
+  const { actionBar } = useAgentPlaygroundVersionBar({
     agentId,
     activeVersionId,
     selectedVersionId,
     onVersionSelect,
-    isDirty,
-    isSavingDraft,
-    isPublishing,
-    hasDraft,
-    readOnly,
-    isCodeSourceAgent,
-    showCodeModeActions,
-    canOpenPr,
+    ...versionState,
     openPrTitle,
     onSaveDraft,
     onPublish,

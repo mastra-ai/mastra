@@ -164,20 +164,22 @@ export function AgentVersionSidebarPanel({ agentId, onClose }: { agentId: string
           selectedVersionId={selectedVersionId ?? undefined}
           latestVersionId={latestVersion?.id}
           onVersionSelect={handleVersionSelect}
-          isDirty={isDirty}
-          isSavingDraft={isSavingDraft}
-          isPublishing={isSubmitting}
-          hasDraft={hasDraft}
-          readOnly={isViewingPreviousVersion || !isCodeAgentEditable}
-          isCodeSourceAgent={isCodeSourceAgent}
-          showCodeModeActions={showCodeModeActions}
-          canOpenPr={canOpenPr}
+          versionState={{
+            isDirty,
+            isSavingDraft,
+            isPublishing: isSubmitting,
+            hasDraft,
+            readOnly: isViewingPreviousVersion || !isCodeAgentEditable,
+            isCodeSourceAgent,
+            showCodeModeActions,
+            canOpenPr,
+            isViewingPreviousVersion,
+          }}
           openPrTitle={openPrTitle}
           onSaveDraft={handleSaveDraft}
           onPublish={handlePublishVersion}
           onDownloadJson={handleDownloadJson}
           onOpenPr={handleOpenPrClick}
-          isViewingPreviousVersion={isViewingPreviousVersion}
           selectedConfigTab={selectedConfigTab}
           onConfigTabChange={setSelectedConfigTab}
         />

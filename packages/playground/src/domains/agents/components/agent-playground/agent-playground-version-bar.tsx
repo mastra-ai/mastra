@@ -26,7 +26,7 @@ import type { ReactNode } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
 
-interface AgentPlaygroundVersionBarProps {
+interface UseAgentPlaygroundVersionBarOptions {
   agentId: string;
   activeVersionId?: string;
   selectedVersionId?: string;
@@ -60,7 +60,7 @@ function formatTimestamp(isoString: string): string {
   });
 }
 
-export function AgentPlaygroundVersionBar({
+export function useAgentPlaygroundVersionBar({
   agentId,
   activeVersionId,
   selectedVersionId,
@@ -80,7 +80,7 @@ export function AgentPlaygroundVersionBar({
   onOpenPr,
   isViewingPreviousVersion = false,
   layout = 'default',
-}: AgentPlaygroundVersionBarProps) {
+}: UseAgentPlaygroundVersionBarOptions) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
   const [changeMessage, setChangeMessage] = useState('');
   const isPanel = layout === 'panel';
