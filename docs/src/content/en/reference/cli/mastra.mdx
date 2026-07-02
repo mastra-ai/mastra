@@ -217,15 +217,13 @@ mastra deploy --env production --region eu
 
 The command runs `mastra build`, zips the output, uploads it to the selected environment, and then polls the deploy status while streaming build logs until the deploy reaches a terminal state.
 
-Organization, project, and environment are resolved in this order:
+Organization, project, and environment are resolved in order from: environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`), CLI flag (`--org`, `--project`, `--env`), `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved org and project IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
-1. Environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`)
-1. CLI flag (`--org`, `--project`, `--env`)
-1. `.mastra-project.json` config file
-1. Current organization from stored credentials
-1. Interactive prompt
+If the project doesn't exist yet, the CLI creates it from the `package.json` `name` field after confirmation. If the target environment doesn't exist, the CLI creates it (defaulting to `type: staging` for anything other than `production`) after confirmation. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
 
-If the project doesn't exist yet, the CLI creates it from the `package.json` `name` field after confirmation. If the target environment doesn't exist, the CLI creates it (defaulting to `type: staging` for anything other than `production`) after confirmation. Combined with `--yes`, this creates and deploys everything in one non-interactive command.
+```bash
+mastra deploy --env staging --yes
+```
 
 When `--env <name>` is set and `--env-file` is not, the CLI auto-selects `.env.<name>` from the project directory if present (for example `.env.staging`). The `<name>` value is validated against a strict allowlist before being interpolated into a file path.
 
@@ -260,6 +258,10 @@ Path to the project config file. Defaults to `.mastra-project.json`.
 #### `--env-file`
 
 Path to the env file to bundle with the deploy (relative to the project directory). When set, disables the `.env.<name>` auto-selection based on `--env`.
+
+```bash
+mastra deploy --env staging --env-file .env.staging.local
+```
 
 #### `--region`
 
