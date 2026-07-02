@@ -16,11 +16,9 @@ External orchestrators needed first-class signals for permission gates, interrup
 
 ```json
 {
-  "hooks": {
-    "AgentStart": [{ "type": "command", "command": "echo started >> /tmp/lifecycle.log" }],
-    "AgentEnd": [{ "type": "command", "command": "echo ended >> /tmp/lifecycle.log" }],
-    "Interrupt": [{ "type": "command", "command": "echo interrupted >> /tmp/lifecycle.log" }]
-  }
+  "AgentStart": [{ "type": "command", "command": "echo started >> /tmp/lifecycle.log" }],
+  "AgentEnd": [{ "type": "command", "command": "echo ended >> /tmp/lifecycle.log" }],
+  "Interrupt": [{ "type": "command", "command": "echo interrupted >> /tmp/lifecycle.log" }]
 }
 ```
 

@@ -791,7 +791,6 @@ export class MastraTUI {
         this.startIdleStatusTimingTicker();
         await this.runAgentEndHook(event.reason ?? 'complete');
         await this.runStopHook(stopReason);
-        this.endLifecycleRun();
 
         if (event.reason === 'error' && this.lastStreamError) {
           this.emitErrorFeedback(this.lastStreamError);
@@ -801,6 +800,7 @@ export class MastraTUI {
     } finally {
       if (event.type === 'agent_end') {
         this.stopCaffeinate();
+        this.endLifecycleRun();
       }
     }
   }

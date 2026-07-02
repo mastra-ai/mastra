@@ -167,6 +167,31 @@ describe('HookManager run_id propagation', () => {
     expect(stdin.tool_input).toEqual({ command: 'rm -rf /' });
   });
 
+  it('skips AgentEnd when no run_id is active', async () => {
+    const mgr = createManager({
+      AgentEnd: [{ type: 'command', command: 'echo test' }],
+    });
+
+    const result = await mgr.runAgentEnd('complete');
+
+    expect(result.allowed).toBe(true);
+    expect(mocks.runHooksForEvent).not.toHaveBeenCalled();
+  });
+
+  it('fires AgentEnd with stop reason and run_id', async () => {
+    const mgr = createManager({
+      AgentEnd: [{ type: 'command', command: 'echo test' }],
+    });
+    mgr.setRunId('run-uuid-agent-end');
+
+    await mgr.runAgentEnd('aborted');
+
+    const stdin = mocks.runHooksForEvent.mock.calls[0][1];
+    expect(stdin.hook_event_name).toBe('AgentEnd');
+    expect(stdin.run_id).toBe('run-uuid-agent-end');
+    expect(stdin.stop_reason).toBe('aborted');
+  });
+
   it('skips PermissionResult when no run_id is active', async () => {
     const mgr = createManager({
       PermissionResult: [{ type: 'command', command: 'echo test' }],

@@ -190,7 +190,9 @@ export async function handleSandboxAccessRequest(
   const { state } = ctx;
   return new Promise(resolve => {
     const firePermissionResult = (decision: 'approved' | 'declined' | 'dismissed') => {
-      state.hookManager?.runPermissionResult('sandbox_access', toolCallId, 'request_access', decision).catch(() => {});
+      state.hookManager
+        ?.runPermissionResult('sandbox_access', toolCallId, 'request_access', decision, { path: requestedPath, reason })
+        .catch(() => {});
     };
     const activate = () => {
       const questionComponent = new AskQuestionInlineComponent(
@@ -339,7 +341,9 @@ export async function handlePlanApproval(
   return new Promise(resolve => {
     const planFilename = snapshotKey;
     const firePermissionResult = (decision: 'approved' | 'declined') => {
-      state.hookManager?.runPermissionResult('plan_approval', toolCallId, 'submit_plan', decision).catch(() => {});
+      state.hookManager
+        ?.runPermissionResult('plan_approval', toolCallId, 'submit_plan', decision, { path: snapshotKey })
+        .catch(() => {});
     };
     const approvalOptions = {
       toolCallId,

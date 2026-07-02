@@ -527,14 +527,21 @@ export function setupKeyHandlers(
     }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      return;
     }
-    state.activeInlinePlanApproval = undefined;
-    state.activeInlineQuestion = undefined;
-    state.pendingInlineQuestions.length = 0;
-    state.pendingAskUserComponents?.clear();
-    state.userInitiatedAbort = true;
-    state.hookManager?.runInterrupt('process_sigint').catch(() => {});
-    state.session.abort();
+
+    if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('process_sigint').catch(() => {});
+      state.session.abort();
+    }
   };
   process.on('SIGINT', sigintHandler);
 

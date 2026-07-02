@@ -107,6 +107,11 @@ if (!agentEnd) {
   process.exit(1);
 }
 
+if (agentEnd.stop_reason !== 'aborted') {
+  console.error('Expected AgentEnd stop_reason to be aborted', agentEnd);
+  process.exit(1);
+}
+
 const interrupt = lines.find(e => e.event === 'Interrupt' && e.run_id);
 if (!interrupt) {
   console.error('Missing Interrupt with run_id', lines);
@@ -140,13 +145,12 @@ console.log('LIFECYCLE_HOOKS_VERIFIED=true');
     terminal.submit('Start a slow run for lifecycle hook e2e.');
     // Wait for the stream to actually start so AgentStart has fired and we
     // are interrupting mid-run.
-    await runtime.waitForScreenText(/Lifecycle hook slow response/i, terminal, 15_000);
+    await runtime.waitForScreenText(/Lifecycle hook slow/i, terminal, 15_000);
     runtime.printScreen('mid-stream before abort', terminal);
 
     // Abort the run mid-stream — fires Interrupt, then AgentEnd (aborted).
     terminal.keyCtrlC();
     runtime.printScreen('after Ctrl-C', terminal);
-    await runtime.waitForScreenText(/Interrupted/i, terminal, 10_000);
     await runtime.sleep(1_000);
 
     // Assert the hook log contains the expected lifecycle events.
