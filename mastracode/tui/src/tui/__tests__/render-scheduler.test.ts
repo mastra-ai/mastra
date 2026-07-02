@@ -55,6 +55,19 @@ describe('RenderScheduler', () => {
     vi.useRealTimers();
   });
 
+  it('uses only the scheduler when one is present', () => {
+    const legacyRender = vi.fn();
+    const scheduler = { request: vi.fn(), flush: vi.fn() } as unknown as RenderScheduler;
+    const state = { ui: { requestRender: legacyRender }, renderScheduler: scheduler };
+
+    requestRender(state);
+    flushRender(state);
+
+    expect(scheduler.request).toHaveBeenCalledOnce();
+    expect(scheduler.flush).toHaveBeenCalledOnce();
+    expect(legacyRender).not.toHaveBeenCalled();
+  });
+
   it('falls back to direct ui rendering when no scheduler is present', () => {
     const render = vi.fn();
     const state = { ui: { requestRender: render } };

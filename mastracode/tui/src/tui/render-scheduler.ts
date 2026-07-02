@@ -53,9 +53,17 @@ export interface RenderableState {
 }
 
 export function requestRender(state: RenderableState): void {
-  state.renderScheduler?.request() ?? state.ui.requestRender?.();
+  if (state.renderScheduler) {
+    state.renderScheduler.request();
+    return;
+  }
+  state.ui.requestRender?.();
 }
 
 export function flushRender(state: RenderableState): void {
-  state.renderScheduler?.flush() ?? state.ui.requestRender?.();
+  if (state.renderScheduler) {
+    state.renderScheduler.flush();
+    return;
+  }
+  state.ui.requestRender?.();
 }
