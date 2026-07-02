@@ -6,6 +6,7 @@ import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import type { LucideIcon } from 'lucide-react';
 import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react';
+import { DesktopRuntimeSettingsSection } from './desktop-runtime-settings';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
@@ -56,6 +57,8 @@ export const StudioSettingsPage = () => {
             </Select>
           </SettingsRow>
         </SectionCard>
+
+        <DesktopRuntimeSettingsSection />
 
         <SectionCard
           title="Mastra Connection"

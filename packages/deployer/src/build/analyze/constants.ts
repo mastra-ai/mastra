@@ -15,3 +15,18 @@ export const GLOBAL_EXTERNALS = [
   'execa',
 ];
 export const DEPRECATED_EXTERNALS = ['fastembed', 'nodemailer', 'jsdom', 'sqlite3'];
+
+export function getConfiguredExternals({
+  externals,
+  includeDeprecated = false,
+}: {
+  externals?: boolean | string[];
+  includeDeprecated?: boolean;
+}) {
+  if (externals === false) {
+    return [];
+  }
+
+  const userExternals = Array.isArray(externals) ? externals : [];
+  return [...GLOBAL_EXTERNALS, ...(includeDeprecated ? DEPRECATED_EXTERNALS : []), ...userExternals].filter(Boolean);
+}

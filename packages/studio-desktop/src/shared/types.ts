@@ -116,6 +116,7 @@ export interface MastraDesktopApi {
   activateTab: (tabId: string) => Promise<DesktopState>;
   closeTab: (tabId: string) => Promise<DesktopState>;
   reloadTab: (tabId: string) => Promise<DesktopState>;
+  openSettingsTab: () => Promise<DesktopState>;
   openTabExternal: (tabId: string) => Promise<void>;
   startPlatformLogin: () => Promise<DesktopState>;
   logoutPlatform: () => Promise<DesktopState>;

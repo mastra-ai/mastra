@@ -18,6 +18,10 @@ function baseConfig(overrides: Partial<StudioInjectionConfig> = {}): StudioInjec
     experimentalUI: "'false'",
     agentSignals: "'false'",
     signalsUI: "'false'",
+    organizationId: "''",
+    platformProjectId: "''",
+    platformObservabilityEndpoint: "''",
+    desktopEndpoint: "''",
     autoDetectUrl: "'false'",
     ...overrides,
   };

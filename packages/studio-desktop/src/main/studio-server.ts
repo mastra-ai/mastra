@@ -4,10 +4,25 @@ import type { IncomingMessage, OutgoingHttpHeaders, Server, ServerResponse } fro
 import { request as httpsRequest } from 'node:https';
 import { extname, join, resolve, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
+import type { DesktopSettings, DesktopState, ProbeModelsResult, UpdateSettingsResult } from '../shared/types';
 import { LOCALHOST } from './defaults';
+
+const DESKTOP_API_BASE_PATH = '/__desktop';
+
+export interface StudioDesktopApi {
+  getState: () => DesktopState;
+  updateSettings: (updates: Partial<DesktopSettings>) => Promise<UpdateSettingsResult>;
+  probeOpenAICompatibleModels: (
+    modelUrl?: string,
+    providerName?: string,
+    apiKey?: string,
+  ) => Promise<ProbeModelsResult>;
+  restartRuntime: () => Promise<DesktopState>;
+}
 
 export interface StudioServerOptions {
   builtStudioPath: string;
+  desktopApi?: StudioDesktopApi;
   port: number;
   serverUrl: string;
   apiPrefix?: string;
@@ -140,6 +155,69 @@ function proxyToMastraRuntime(req: IncomingMessage, res: ServerResponse, serverU
   req.pipe(proxyReq);
 }
 
+function sendJson(res: ServerResponse, statusCode: number, value: unknown) {
+  const body = JSON.stringify(value);
+  res.writeHead(statusCode, {
+    'Cache-Control': 'no-store',
+    'Content-Length': Buffer.byteLength(body),
+    'Content-Type': 'application/json; charset=utf-8',
+  });
+  res.end(body);
+}
+
+async function readJsonBody(req: IncomingMessage) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  }
+
+  const raw = Buffer.concat(chunks).toString('utf8').trim();
+  return raw ? (JSON.parse(raw) as unknown) : {};
+}
+
+async function handleDesktopApiRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  desktopApi: StudioDesktopApi,
+  path: string,
+) {
+  try {
+    if (req.method === 'GET' && path === `${DESKTOP_API_BASE_PATH}/state`) {
+      sendJson(res, 200, desktopApi.getState());
+      return;
+    }
+
+    if (req.method === 'PATCH' && path === `${DESKTOP_API_BASE_PATH}/settings`) {
+      const body = (await readJsonBody(req)) as Partial<DesktopSettings>;
+      sendJson(res, 200, await desktopApi.updateSettings(body));
+      return;
+    }
+
+    if (req.method === 'POST' && path === `${DESKTOP_API_BASE_PATH}/probe-models`) {
+      const body = (await readJsonBody(req)) as {
+        apiKey?: string;
+        modelUrl?: string;
+        providerName?: string;
+      };
+      sendJson(
+        res,
+        200,
+        await desktopApi.probeOpenAICompatibleModels(body.modelUrl, body.providerName, body.apiKey),
+      );
+      return;
+    }
+
+    if (req.method === 'POST' && path === `${DESKTOP_API_BASE_PATH}/restart-runtime`) {
+      sendJson(res, 200, await desktopApi.restartRuntime());
+      return;
+    }
+
+    sendJson(res, 404, { error: 'Desktop endpoint not found' });
+  } catch (error) {
+    sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 export function createStudioShellServer(options: StudioServerOptions) {
   const indexHtmlPath = join(options.builtStudioPath, 'index.html');
   if (!existsSync(indexHtmlPath)) {
@@ -162,7 +240,8 @@ export function createStudioShellServer(options: StudioServerOptions) {
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', 'true')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', '')
     .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', 'false')
-    .replaceAll('%%MASTRA_AGENT_SIGNALS%%', 'true');
+    .replaceAll('%%MASTRA_AGENT_SIGNALS%%', 'true')
+    .replaceAll('%%MASTRA_DESKTOP_ENDPOINT%%', options.desktopApi ? DESKTOP_API_BASE_PATH : '');
 
   const compressedHtml = gzipSync(Buffer.from(html));
 
@@ -173,6 +252,11 @@ export function createStudioShellServer(options: StudioServerOptions) {
     if (path === '/refresh-events') {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    if (options.desktopApi && (path === DESKTOP_API_BASE_PATH || path.startsWith(`${DESKTOP_API_BASE_PATH}/`))) {
+      void handleDesktopApiRequest(req, res, options.desktopApi, path);
       return;
     }
 

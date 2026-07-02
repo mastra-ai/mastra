@@ -22,6 +22,7 @@ const api: MastraDesktopApi = {
   activateTab: (tabId: string) => ipcRenderer.invoke('desktop:activate-tab', tabId) as Promise<DesktopState>,
   closeTab: (tabId: string) => ipcRenderer.invoke('desktop:close-tab', tabId) as Promise<DesktopState>,
   reloadTab: (tabId: string) => ipcRenderer.invoke('desktop:reload-tab', tabId) as Promise<DesktopState>,
+  openSettingsTab: () => ipcRenderer.invoke('desktop:open-settings-tab') as Promise<DesktopState>,
   openTabExternal: (tabId: string) => ipcRenderer.invoke('desktop:open-tab-external', tabId) as Promise<void>,
   startPlatformLogin: () => ipcRenderer.invoke('desktop:start-platform-login') as Promise<DesktopState>,
   logoutPlatform: () => ipcRenderer.invoke('desktop:logout-platform') as Promise<DesktopState>,

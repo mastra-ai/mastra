@@ -10,8 +10,9 @@ import { RoutePermissionGuard } from './domains/auth/components/route-permission
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
-import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
 import { SignalCrumb, SignalDetailsCrumb, SignalsRootCrumb } from './ee/signals/signal-crumb';
+import { SignalDetailsPage, SignalTraceIdPage } from './ee/signals/signal-details-page';
+import SignalsOverviewPage from './ee/signals/signals-overview-page';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -126,6 +127,7 @@ declare global {
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_PLATFORM_PROJECT_ID?: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_DESKTOP_ENDPOINT?: string;
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;

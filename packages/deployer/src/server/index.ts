@@ -509,6 +509,7 @@ export async function createHonoServer(
         organizationId: `'${escapeForHtml(organizationId)}'`,
         platformProjectId: `'${escapeForHtml(platformProjectId)}'`,
         platformObservabilityEndpoint: `'${escapeForHtml(platformObservabilityEndpoint)}'`,
+        desktopEndpoint: "''",
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 

@@ -4,8 +4,9 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { LOCALHOST } from './defaults';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { DesktopSettings, DesktopState } from '../shared/types';
+import { DEFAULT_SETTINGS, LOCALHOST } from './defaults';
 import { findAvailablePort } from './ports';
 import { startStudioShellServer } from './studio-server';
 
@@ -35,6 +36,7 @@ async function createStudioDist() {
       '  telemetryDisabled: "%%MASTRA_TELEMETRY_DISABLED%%",',
       '  cloudEndpoint: "%%MASTRA_CLOUD_API_ENDPOINT%%"',
       '};',
+      'window.MASTRA_DESKTOP_ENDPOINT = "%%MASTRA_DESKTOP_ENDPOINT%%";',
       '</script>',
       '<script type="module" src="/assets/app.js"></script>',
       '</body>',
@@ -61,6 +63,32 @@ async function createRuntimeServer() {
   return {
     requests,
     url: `http://${LOCALHOST}:${address.port}`,
+  };
+}
+
+function createDesktopState(): DesktopState {
+  return {
+    settings: {
+      ...DEFAULT_SETTINGS,
+      environmentVariables: {
+        OPENAI_API_KEY: 'test-key',
+      },
+    },
+    runtime: {
+      state: 'running',
+      url: 'http://127.0.0.1:4112',
+    },
+    studio: {},
+    activeServerUrl: 'http://127.0.0.1:4112',
+    tabs: [],
+    platform: {
+      baseUrl: DEFAULT_SETTINGS.platformBaseUrl,
+      status: 'signed-out',
+      signedIn: false,
+      organizations: [],
+      projects: [],
+    },
+    logs: [],
   };
 }
 
@@ -94,5 +122,70 @@ describe('Studio shell server', () => {
 
     await expect(fetch(`${studioUrl}/api/agents`).then(response => response.json())).resolves.toEqual({ ok: true });
     expect(runtime.requests).toEqual(['/api/agents']);
+  });
+
+  it('serves desktop runtime endpoints only when desktop controls are enabled', async () => {
+    const builtStudioPath = await createStudioDist();
+    const runtime = await createRuntimeServer();
+    const studioPort = await findAvailablePort(3133);
+    const desktopState = createDesktopState();
+    const updateSettings = vi.fn(async (updates: Partial<DesktopSettings>) => ({
+      settings: {
+        ...desktopState.settings,
+        ...updates,
+      },
+      state: desktopState,
+    }));
+    const probeOpenAICompatibleModels = vi.fn(async () => ({
+      ok: true,
+      modelUrl: 'http://localhost:1234/v1',
+      models: ['local-model'],
+    }));
+    const restartRuntime = vi.fn(async () => desktopState);
+    const studioServer = await startStudioShellServer({
+      builtStudioPath,
+      desktopApi: {
+        getState: () => desktopState,
+        probeOpenAICompatibleModels,
+        restartRuntime,
+        updateSettings,
+      },
+      port: studioPort,
+      serverUrl: runtime.url,
+    });
+    servers.push(studioServer);
+
+    const studioUrl = `http://${LOCALHOST}:${studioPort}`;
+    const html = await fetch(studioUrl).then(response => response.text());
+    expect(html).toContain('window.MASTRA_DESKTOP_ENDPOINT = "/__desktop"');
+
+    await expect(fetch(`${studioUrl}/__desktop/state`).then(response => response.json())).resolves.toMatchObject({
+      runtime: { state: 'running' },
+      settings: { environmentVariables: { OPENAI_API_KEY: 'test-key' } },
+    });
+
+    await expect(
+      fetch(`${studioUrl}/__desktop/settings`, {
+        body: JSON.stringify({ modelId: 'local-model' }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH',
+      }).then(response => response.json()),
+    ).resolves.toMatchObject({ settings: { modelId: 'local-model' } });
+
+    await expect(
+      fetch(`${studioUrl}/__desktop/probe-models`, {
+        body: JSON.stringify({ modelUrl: 'http://localhost:1234/v1' }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      }).then(response => response.json()),
+    ).resolves.toEqual({ ok: true, modelUrl: 'http://localhost:1234/v1', models: ['local-model'] });
+
+    await expect(
+      fetch(`${studioUrl}/__desktop/restart-runtime`, { method: 'POST' }).then(response => response.json()),
+    ).resolves.toMatchObject({ runtime: { state: 'running' } });
+    expect(updateSettings).toHaveBeenCalledWith({ modelId: 'local-model' });
+    expect(probeOpenAICompatibleModels).toHaveBeenCalledWith('http://localhost:1234/v1', undefined, undefined);
+    expect(restartRuntime).toHaveBeenCalledOnce();
+    expect(runtime.requests).toEqual([]);
   });
 });

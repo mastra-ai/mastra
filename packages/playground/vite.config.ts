@@ -25,7 +25,8 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_SIGNALS_UI%%/g, process.env.MASTRA_SIGNALS_UI || 'false')
       .replace(/%%MASTRA_ORGANIZATION_ID%%/g, process.env.MASTRA_ORGANIZATION_ID || '')
       .replace(/%%MASTRA_PLATFORM_PROJECT_ID%%/g, process.env.MASTRA_PLATFORM_PROJECT_ID || '')
-      .replace(/%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%/g, process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '');
+      .replace(/%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%/g, process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '')
+      .replace(/%%MASTRA_DESKTOP_ENDPOINT%%/g, '');
   },
 });
 

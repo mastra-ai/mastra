@@ -341,6 +341,38 @@ function replaceTab(tab: DesktopTab) {
   return true;
 }
 
+function settingsUrlForTab(tab: DesktopTab) {
+  if (!tab.url) return undefined;
+
+  try {
+    const url = new URL(tab.url);
+    url.pathname = '/settings';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+async function openSettingsTab() {
+  let tab = activeTab();
+  if (!tab || tab.kind === 'launcher' || !tab.url || tab.status === 'error') {
+    await createManagedTab();
+    tab = activeTab();
+  }
+
+  const settingsUrl = tab ? settingsUrlForTab(tab) : undefined;
+  if (!tab || !settingsUrl) {
+    throw new Error('Open a Studio tab before opening Settings.');
+  }
+
+  tab.url = settingsUrl;
+  tab.status = 'ready';
+  tab.error = undefined;
+  return snapshotState();
+}
+
 function createLauncherTab() {
   upsertTab({
     id: randomUUID(),
@@ -389,7 +421,10 @@ async function stopRuntime() {
   runtime = undefined;
 }
 
-async function startStudioShellForServer(serverUrl: string): Promise<StudioShellEntry> {
+async function startStudioShellForServer(
+  serverUrl: string,
+  options: { desktopRuntimeControls?: boolean } = {},
+): Promise<StudioShellEntry> {
   const key = normalizeServerUrl(serverUrl);
   const existing = studioShellServers.get(key);
   if (existing) return existing;
@@ -401,6 +436,35 @@ async function startStudioShellForServer(serverUrl: string): Promise<StudioShell
   });
   const server = await startStudioShellServer({
     builtStudioPath: studioDistPath,
+    desktopApi: options.desktopRuntimeControls
+      ? {
+          getState: () => buildState(),
+          updateSettings: async updates => {
+            currentSettings = await updateSettings(settingsPath, updates);
+            platformState = {
+              ...platformState,
+              baseUrl: currentSettings.platformBaseUrl,
+            };
+            return {
+              settings: currentSettings,
+              state: snapshotState(),
+            };
+          },
+          probeOpenAICompatibleModels: async (modelUrl, providerName, apiKey) => {
+            const result = await probeOpenAICompatibleModels(
+              modelUrl ?? currentSettings.modelUrl,
+              providerName,
+              apiKey ?? currentSettings.modelApiKey,
+            );
+            if (!result.ok) {
+              logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
+            }
+            emitState();
+            return result;
+          },
+          restartRuntime: () => restartManagedRuntime(),
+        }
+      : undefined,
     port: studioPort,
     serverUrl: key,
   });
@@ -452,7 +516,7 @@ async function ensureManagedStudio(forceRestart = false) {
 
   await waitForMastraServer(activeServerUrl);
 
-  const studio = await startStudioShellForServer(activeServerUrl);
+  const studio = await startStudioShellForServer(activeServerUrl, { desktopRuntimeControls: true });
   managedShellKey = studio.key;
   managedStudio = {
     port: studio.port,
@@ -1018,6 +1082,7 @@ function installIpc() {
     }
     return snapshotState();
   });
+  ipcMain.handle('desktop:open-settings-tab', () => openSettingsTab());
   ipcMain.handle('desktop:open-tab-external', async (_event, tabId: string) => {
     const tab = tabs.find(candidate => candidate.id === tabId);
     if (tab?.externalUrl || tab?.url) {

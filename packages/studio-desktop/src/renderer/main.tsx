@@ -4,18 +4,10 @@ import './styles.css';
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { createRoot } from 'react-dom/client';
 
-import {
-  collectEnvironmentVariables,
-  rowsFromEnvironmentVariables,
-} from '../shared/environment-variables';
-import type { EnvironmentVariableRow } from '../shared/environment-variables';
-import { LOCAL_MODEL_PRESETS } from '../shared/model-presets';
-import type { LocalModelProviderId } from '../shared/model-presets';
-import type { DesktopState, DesktopTab, MastraDesktopApi, ProbeModelsResult } from '../shared/types';
+import type { DesktopState, DesktopTab, MastraDesktopApi } from '../shared/types';
 
 import { Launcher } from './launcher';
 import type { LauncherActions } from './launcher';
-import { SettingsPanel } from './settings-panel';
 
 declare global {
   interface Window {
@@ -30,30 +22,19 @@ const settingsButton = document.querySelector<HTMLButtonElement>('#settings-butt
 const launcher = document.querySelector<HTMLElement>('#launcher');
 const webviews = document.querySelector<HTMLElement>('#webviews');
 const bootLoader = document.querySelector<HTMLElement>('#boot-loader');
-const settingsMount = document.querySelector<HTMLElement>('#settings-root');
 
-if (!tabStrip || !newTabButton || !settingsButton || !launcher || !webviews || !bootLoader || !settingsMount) {
+if (!tabStrip || !newTabButton || !settingsButton || !launcher || !webviews || !bootLoader) {
   throw new Error('Mastra Studio shell failed to mount');
 }
 
 const launcherRoot = createRoot(launcher);
 const bootLoaderRoot = createRoot(bootLoader);
-const settingsRoot = createRoot(settingsMount);
 
 bootLoaderRoot.render(<BrandLoader aria-label="Loading Mastra Studio" size="lg" />);
 
 let state: DesktopState | undefined;
 let manualServerUrl = '4111';
 let platformBaseUrl = '';
-let localProviderId: LocalModelProviderId = 'lmstudio';
-let localModelUrl = '';
-let localModelId = '';
-let localModelApiKey = '';
-let localModelFieldsDirty = false;
-let localModelProbe: ProbeModelsResult | undefined;
-let environmentRows: EnvironmentVariableRow[] = [{ key: '', value: '' }];
-let runtimeEnvironmentDirty = false;
-let settingsOpen = false;
 let busyAction: string | undefined;
 let lastError: string | undefined;
 
@@ -63,51 +44,6 @@ function escapeHtml(value: string | undefined) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
-}
-
-function providerForModelUrl(modelUrl: string): LocalModelProviderId {
-  const normalized = modelUrl.replace(/\/$/, '');
-  if (normalized === LOCAL_MODEL_PRESETS.ollama.modelUrl) return 'ollama';
-  if (normalized === LOCAL_MODEL_PRESETS.lmstudio.modelUrl) return 'lmstudio';
-  return 'custom';
-}
-
-function selectedLocalProvider() {
-  return LOCAL_MODEL_PRESETS[localProviderId] ?? LOCAL_MODEL_PRESETS.custom;
-}
-
-function syncLocalModelFields(current: DesktopState, force = false) {
-  if (!force && localModelFieldsDirty) return;
-
-  localModelUrl = current.settings.modelUrl;
-  localModelId = current.settings.modelId;
-  localModelApiKey = current.settings.modelApiKey;
-  localProviderId = providerForModelUrl(current.settings.modelUrl);
-}
-
-function syncRuntimeEnvironmentFields(current: DesktopState, force = false) {
-  if (!force && runtimeEnvironmentDirty) return;
-  environmentRows = rowsFromEnvironmentVariables(current.settings.environmentVariables);
-}
-
-function setLocalProvider(providerId: LocalModelProviderId) {
-  const preset = LOCAL_MODEL_PRESETS[providerId];
-  localProviderId = preset.id;
-  if (providerId !== 'custom') {
-    localModelUrl = preset.modelUrl;
-    localModelId = preset.modelId;
-    localModelApiKey = preset.modelApiKey;
-  }
-  localModelFieldsDirty = true;
-  localModelProbe = undefined;
-}
-
-function currentModelMatchesSettings(current: DesktopState) {
-  return (
-    localModelUrl.trim() === current.settings.modelUrl &&
-    localModelId.trim() === current.settings.modelId &&
-    localModelApiKey.trim() === current.settings.modelApiKey
-  );
 }
 
 async function runAction(action: string, task: () => Promise<DesktopState | void>) {
@@ -173,50 +109,6 @@ function renderBootLoader() {
 
 function launcherActions(): LauncherActions {
   return {
-    onApplyLocalModel: () => {
-      void runAction('apply-local-model', async () => {
-        if (!localModelUrl.trim()) throw new Error('Enter a model server base URL.');
-        if (!localModelId.trim()) throw new Error('Enter or select a model ID.');
-
-        await api.updateSettings({
-          modelUrl: localModelUrl.trim(),
-          modelId: localModelId.trim(),
-          modelApiKey: localModelApiKey.trim() || 'not-needed',
-        });
-        localModelFieldsDirty = false;
-        return api.restartRuntime();
-      });
-    },
-    onAddEnvironmentPreset: key => {
-      const hasKey = environmentRows.some(row => row.key.trim() === key);
-      if (!hasKey) {
-        environmentRows = [...environmentRows.filter(row => row.key.trim() || row.value), { key, value: '' }];
-      }
-      runtimeEnvironmentDirty = true;
-      render();
-    },
-    onRuntimeEnvironmentRowsChange: rows => {
-      environmentRows = rows.map(row => ({ key: row.key, value: row.value }));
-      runtimeEnvironmentDirty = true;
-      render();
-    },
-    onLocalModelApiKeyChange: value => {
-      localModelApiKey = value;
-      localModelFieldsDirty = true;
-      render();
-    },
-    onLocalModelIdChange: value => {
-      localModelId = value;
-      localModelFieldsDirty = true;
-      render();
-    },
-    onLocalModelUrlChange: value => {
-      localModelUrl = value;
-      localProviderId = providerForModelUrl(value);
-      localModelFieldsDirty = true;
-      localModelProbe = undefined;
-      render();
-    },
     onManualServerUrlChange: value => {
       manualServerUrl = value;
       render();
@@ -239,8 +131,7 @@ function launcherActions(): LauncherActions {
       void runAction('open-template', () => api.createManagedTab());
     },
     onOpenSettings: () => {
-      settingsOpen = true;
-      render();
+      void runAction('open-settings', () => api.openSettingsTab());
     },
     onPlatformBaseUrlChange: value => {
       platformBaseUrl = value;
@@ -255,16 +146,6 @@ function launcherActions(): LauncherActions {
     onPlatformRefresh: () => {
       void runAction('platform-refresh', () => api.refreshPlatform());
     },
-    onProbeLocalModels: () => {
-      void runAction('probe-local-models', async () => {
-        const provider = selectedLocalProvider();
-        localModelProbe = await api.probeOpenAICompatibleModels(localModelUrl, provider.name, localModelApiKey);
-        if (localModelProbe.ok && localModelProbe.models[0]) {
-          localModelId = localModelProbe.models[0];
-          localModelFieldsDirty = true;
-        }
-      });
-    },
     onReloadActiveTab: () => {
       if (state?.activeTabId) {
         void runAction('reload-active-tab', () => api.reloadTab(state!.activeTabId!));
@@ -275,42 +156,6 @@ function launcherActions(): LauncherActions {
         api.updateSettings({ platformBaseUrl: platformBaseUrl.trim() || state?.settings.platformBaseUrl }).then(result => result.state),
       );
     },
-    onSaveRuntimeEnvironment: rows => {
-      void runAction('save-runtime-env', async () => {
-        const environmentVariables = collectEnvironmentVariables(rows);
-        await api.updateSettings({ environmentVariables });
-        runtimeEnvironmentDirty = false;
-        return api.restartRuntime();
-      });
-    },
-    onSelectLocalModel: modelId => {
-      localModelId = modelId;
-      localModelFieldsDirty = true;
-      render();
-    },
-    onSetLocalProvider: providerId => {
-      setLocalProvider(providerId);
-      render();
-    },
-  };
-}
-
-function runtimeSettingsProps() {
-  const current = state;
-  if (!current) return undefined;
-
-  return {
-    actions: launcherActions(),
-    busyAction,
-    current,
-    environmentRows,
-    isLocalModelApplied: currentModelMatchesSettings(current),
-    localModelApiKey,
-    localModelId,
-    localModelProbe,
-    localModelUrl,
-    localProviderId,
-    runtimeEnvironmentDirty,
   };
 }
 
@@ -331,35 +176,10 @@ function renderLauncher() {
       activeTab={active}
       busyAction={busyAction}
       current={current}
-      environmentRows={environmentRows}
-      isLocalModelApplied={currentModelMatchesSettings(current)}
       lastError={lastError}
-      localModelApiKey={localModelApiKey}
-      localModelId={localModelId}
-      localModelProbe={localModelProbe}
-      localModelUrl={localModelUrl}
-      localProviderId={localProviderId}
       manualServerUrl={manualServerUrl}
       platformBaseUrl={platformBaseUrl}
-      runtimeEnvironmentDirty={runtimeEnvironmentDirty}
     />,
-  );
-}
-
-function renderSettingsPanel() {
-  const props = runtimeSettingsProps();
-
-  settingsRoot.render(
-    props ? (
-      <SettingsPanel
-        {...props}
-        open={settingsOpen}
-        onClose={() => {
-          settingsOpen = false;
-          render();
-        }}
-      />
-    ) : null,
   );
 }
 
@@ -367,7 +187,6 @@ function render() {
   renderTabs();
   renderStudioHost();
   renderLauncher();
-  renderSettingsPanel();
   renderBootLoader();
 }
 
@@ -391,29 +210,17 @@ newTabButton.addEventListener('click', () => {
 });
 
 settingsButton.addEventListener('click', () => {
-  settingsOpen = true;
-  render();
-});
-
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && settingsOpen) {
-    settingsOpen = false;
-    render();
-  }
+  void runAction('open-settings', () => api.openSettingsTab());
 });
 
 void api.getState().then(initialState => {
   state = initialState;
   manualServerUrl = initialState.settings.devServerUrl;
   platformBaseUrl = initialState.settings.platformBaseUrl;
-  syncLocalModelFields(initialState, true);
-  syncRuntimeEnvironmentFields(initialState, true);
   render();
 });
 
 api.onStateChanged(nextState => {
   state = nextState;
-  syncLocalModelFields(nextState);
-  syncRuntimeEnvironmentFields(nextState);
   render();
 });

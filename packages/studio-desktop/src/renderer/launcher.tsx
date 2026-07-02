@@ -6,16 +6,9 @@ import { Logo } from '@mastra/playground-ui/components/Logo';
 import { Section } from '@mastra/playground-ui/components/Section';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 
-import type { EnvironmentVariableRow } from '../shared/environment-variables';
-import type { LocalModelProviderId } from '../shared/model-presets';
-import type { DesktopState, DesktopTab, PlatformProject, ProbeModelsResult } from '../shared/types';
+import type { DesktopState, DesktopTab, PlatformProject } from '../shared/types';
 
 export interface LauncherActions {
-  onAddEnvironmentPreset: (key: string) => void;
-  onApplyLocalModel: () => void;
-  onLocalModelApiKeyChange: (value: string) => void;
-  onLocalModelIdChange: (value: string) => void;
-  onLocalModelUrlChange: (value: string) => void;
   onManualServerUrlChange: (value: string) => void;
   onOpenActiveExternal: () => void;
   onOpenDefaultLocal: () => void;
@@ -27,30 +20,17 @@ export interface LauncherActions {
   onPlatformLogin: () => void;
   onPlatformLogout: () => void;
   onPlatformRefresh: () => void;
-  onProbeLocalModels: () => void;
   onReloadActiveTab: () => void;
-  onRuntimeEnvironmentRowsChange: (rows: EnvironmentVariableRow[]) => void;
   onSavePlatformBase: () => void;
-  onSaveRuntimeEnvironment: (rows: readonly EnvironmentVariableRow[]) => void;
-  onSelectLocalModel: (modelId: string) => void;
-  onSetLocalProvider: (providerId: LocalModelProviderId) => void;
 }
 
 export interface LauncherProps {
   activeTab: DesktopTab | undefined;
   busyAction: string | undefined;
   current: DesktopState;
-  environmentRows: EnvironmentVariableRow[];
-  isLocalModelApplied: boolean;
   lastError: string | undefined;
-  localModelApiKey: string;
-  localModelId: string;
-  localModelProbe: ProbeModelsResult | undefined;
-  localModelUrl: string;
-  localProviderId: LocalModelProviderId;
   manualServerUrl: string;
   platformBaseUrl: string;
-  runtimeEnvironmentDirty: boolean;
   actions: LauncherActions;
 }
 

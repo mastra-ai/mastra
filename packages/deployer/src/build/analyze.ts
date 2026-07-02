@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
+import { DEPS_TO_IGNORE, getConfiguredExternals } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import { getPackageMetadata } from './package-info';
@@ -288,6 +288,7 @@ async function validateOutput(
     projectRoot,
     workspaceMap,
     depsVersionInfo,
+    configuredExternals,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
@@ -296,6 +297,7 @@ async function validateOutput(
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     depsVersionInfo: Map<string, ExternalDependencyInfo>;
+    configuredExternals: string[];
   },
   logger: IMastraLogger,
 ) {
@@ -357,7 +359,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
+      stubbedExternals: [...configuredExternals, ...DEPS_TO_IGNORE],
     });
   }
 
@@ -412,7 +414,6 @@ export async function analyzeBundle(
 
   let externalsPreset = false;
 
-  const userExternals = Array.isArray(bundlerOptions?.externals) ? bundlerOptions?.externals : [];
   const userDynamicPackages = bundlerOptions?.dynamicPackages ?? [];
   if (bundlerOptions?.externals === true) {
     externalsPreset = true;
@@ -420,7 +421,7 @@ export async function analyzeBundle(
 
   let index = 0;
   const depsToOptimize = new Map<string, DependencyMetadata>();
-  const allExternals: string[] = [...GLOBAL_EXTERNALS, ...userExternals].filter(Boolean) as string[];
+  const allExternals = getConfiguredExternals({ externals: bundlerOptions?.externals });
 
   // Collect pino transports detected across all entries
   const detectedPinoTransports = new Set<string>();
@@ -583,6 +584,7 @@ export async function analyzeBundle(
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
       depsVersionInfo,
+      configuredExternals: allExternals,
     },
     logger,
   );

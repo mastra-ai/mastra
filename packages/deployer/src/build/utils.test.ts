@@ -600,6 +600,7 @@ describe('injectStudioHtmlConfig', () => {
       organizationId: "''",
       platformProjectId: "''",
       platformObservabilityEndpoint: "''",
+      desktopEndpoint: "''",
       autoDetectUrl: "'false'",
     });
 
@@ -627,6 +628,7 @@ describe('injectStudioHtmlConfig', () => {
       organizationId: "'org-123'",
       platformProjectId: "'proj-456'",
       platformObservabilityEndpoint: "'https://observability.example.com'",
+      desktopEndpoint: "''",
       autoDetectUrl: "'false'",
     });
 
@@ -654,6 +656,7 @@ describe('injectStudioHtmlConfig', () => {
       organizationId: "''",
       platformProjectId: "''",
       platformObservabilityEndpoint: "''",
+      desktopEndpoint: "''",
       autoDetectUrl: "'false'",
     });
 
