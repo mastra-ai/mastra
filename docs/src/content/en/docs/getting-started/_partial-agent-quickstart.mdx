@@ -1,4 +1,4 @@
-**For AI agents:** If you're tasked to build a Mastra project from scratch, follow the condensed instructions until the next heading. Adjust the example code for the agent & tool to your needs. A complete list of documentation is available at [https://mastra.ai/llms.txt](https://mastra.ai/llms.txt)
+**For AI agents:** If you're tasked to build a Mastra project from scratch, follow the condensed instructions until the next heading. Adjust the example code for the agent & tool to your needs.
 
 Create a `package.json` file with `{ "type": "module" }`. Install the required dependencies: `npm install @mastra/core@latest zod@latest typescript@latest @types/node@latest mastra@latest`
 
@@ -107,5 +107,3 @@ const agent = mastra.getAgentById('weather-agent')
 const response = await agent.generate('Weather in SF')
 console.log(response.text)
 ```
-
-If your tasks requires to add other features, refer to the full list of docs at [https://mastra.ai/llms.txt](https://mastra.ai/llms.txt)
