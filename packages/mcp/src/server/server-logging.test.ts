@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
@@ -9,6 +10,19 @@ import { MCPClient } from '../client/configuration';
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
 const WEATHER_FIXTURE_HOST = '127.0.0.1';
+const require = createRequire(import.meta.url);
+const TSX_CLI_PATH = require.resolve('tsx/cli');
+
+function tsxFixtureArgs(fixturePath: string): string[] {
+  return [TSX_CLI_PATH, fixturePath];
+}
+
+function tsxFixtureServer(fixturePath: string): { command: string; args: string[] } {
+  return {
+    command: process.execPath,
+    args: tsxFixtureArgs(fixturePath),
+  };
+}
 
 async function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -58,7 +72,7 @@ describe('MCP Server Logging', () => {
     weatherServerPort = await getAvailablePort();
 
     // Start the weather SSE server
-    weatherProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
+    weatherProcess = spawn(process.execPath, tsxFixtureArgs(path.join(__dirname, '..', '__fixtures__/weather.ts')), {
       env: {
         ...process.env,
         WEATHER_SERVER_HOST: WEATHER_FIXTURE_HOST,
@@ -125,8 +139,7 @@ describe('MCP Server Logging', () => {
           logger: weatherLogHandler,
         },
         stock: {
-          command: 'npx',
-          args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__', 'stock-price.ts')],
+          ...tsxFixtureServer(path.join(__dirname, '..', '__fixtures__', 'stock-price.ts')),
           env: {
             FAKE_CREDS: 'test',
           },
