@@ -36,5 +36,3 @@ await mastra.datasets.delete({ id });
 const ds = await mastra.datasets.get({ id, organizationId, projectId });
 await mastra.datasets.delete({ id, organizationId, projectId });
 ```
-
-Related: [MASTRA-4438](https://linear.app/kepler-crm/issue/MASTRA-4438)
