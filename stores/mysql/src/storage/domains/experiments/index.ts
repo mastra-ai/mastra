@@ -16,6 +16,7 @@ import type {
   ExperimentResult,
   ExperimentReviewCounts,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -353,11 +354,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentRow>({
         tableName: TABLE_EXPERIMENTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperiment(row) : null;
     } catch (error) {
@@ -457,11 +464,33 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
+      // tenancy mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: any[] = [];
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.organizationId);
+      }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.projectId);
+      }
+      const gateWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+
       const connection = await this.pool.getConnection();
       try {
         await connection.beginTransaction();
+        const [gateRows] = await connection.execute(
+          `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${gateWhere} FOR UPDATE`,
+          [args.id, ...tenancyParams],
+        );
+        if (!Array.isArray(gateRows) || gateRows.length === 0) {
+          await connection.commit();
+          return;
+        }
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
           [args.id],
@@ -571,11 +600,20 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentResultRow>({
         tableName: TABLE_EXPERIMENT_RESULTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperimentResult(row) : null;
     } catch (error) {
@@ -746,8 +784,28 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
+      if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
+        const tenancyConditions: string[] = [];
+        const tenancyParams: any[] = [];
+        if (args.filters?.organizationId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.organizationId);
+        }
+        if (args.filters?.projectId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.projectId);
+        }
+        const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+        await this.pool.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
+          [args.experimentId, ...tenancyParams],
+        );
+        return;
+      }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
         [args.experimentId],
