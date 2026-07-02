@@ -1,7 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
-import { getOrCreateMapValue } from '@/lib/map';
 
 export interface VolumeRow {
   name: string;
@@ -27,7 +26,12 @@ async function fetchVolume(
   for (const group of res.groups) {
     const name = group.dimensions.entityName ?? 'unknown';
     const status = group.dimensions.status ?? 'ok';
-    const entry = getOrCreateMapValue(map, name, () => ({ completed: 0, errors: 0 }));
+    let entry = map.get(name);
+    if (!entry) {
+      entry = { completed: 0, errors: 0 };
+      map.set(name, entry);
+    }
+
     if (status === 'error') {
       entry.errors += group.value;
     } else {

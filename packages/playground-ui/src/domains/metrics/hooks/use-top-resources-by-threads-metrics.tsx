@@ -2,7 +2,6 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 import { useMetricsFilters } from './use-metrics-filters';
-import { getOrCreateMapValue } from '@/lib/map';
 
 export interface ResourceThreadsRow {
   resourceId: string;
@@ -64,7 +63,12 @@ export function useTopResourcesByThreadsMetrics() {
       const byResource = new Map<string, Entry>();
 
       const ensure = (resourceId: string): Entry => {
-        return getOrCreateMapValue(byResource, resourceId, () => ({ tokens: 0, cost: null, costUnit: null }));
+        const existing = byResource.get(resourceId);
+        if (existing) return existing;
+
+        const entry = { tokens: 0, cost: null, costUnit: null };
+        byResource.set(resourceId, entry);
+        return entry;
       };
 
       const foldTokens = (groups: typeof inputRes.groups) => {
