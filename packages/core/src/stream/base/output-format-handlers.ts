@@ -718,19 +718,6 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
       if (outputSchema?.outputFormat === 'array' && Array.isArray(chunk.object)) {
         chunkCount++;
 
-        // If this is the first chunk, decide between complete vs incremental streaming
-        if (chunkCount === 1) {
-          // If the first chunk already has multiple elements or is complete,
-          // emit as single JSON string
-          if (chunk.object.length > 0) {
-            controller.enqueue(JSON.stringify(chunk.object));
-            previousArrayLength = chunk.object.length;
-            hasStartedArray = true;
-            return;
-          }
-        }
-
-        // Incremental streaming mode (multiple chunks)
         if (!hasStartedArray) {
           controller.enqueue('[');
           hasStartedArray = true;
@@ -753,7 +740,7 @@ export function createJsonTextStreamTransformer<OUTPUT = undefined>(schema?: Sta
     },
     flush(controller) {
       // Close the array when the stream ends (only for incremental streaming)
-      if (hasStartedArray && outputSchema?.outputFormat === 'array' && chunkCount > 1) {
+      if (hasStartedArray && outputSchema?.outputFormat === 'array') {
         controller.enqueue(']');
       }
     },

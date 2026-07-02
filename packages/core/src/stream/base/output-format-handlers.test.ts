@@ -6,7 +6,11 @@ import { z } from 'zod/v4';
 import type { PublicSchema } from '../../schema';
 import type { ChunkType } from '../types';
 import { ChunkFrom } from '../types';
-import { createObjectStreamTransformer, escapeUnescapedControlCharsInJsonStrings } from './output-format-handlers';
+import {
+  createJsonTextStreamTransformer,
+  createObjectStreamTransformer,
+  escapeUnescapedControlCharsInJsonStrings,
+} from './output-format-handlers';
 
 describe('escapeUnescapedControlCharsInJsonStrings', () => {
   it('should escape newlines inside JSON strings', () => {
@@ -92,6 +96,61 @@ continued", "item2"]}`;
 });
 
 describe('output-format-handlers', () => {
+  describe('createJsonTextStreamTransformer', () => {
+    const schema = z.array(z.object({ id: z.number() }));
+
+    async function readJsonText(chunks: ChunkType<typeof schema>[]) {
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(chunks).pipeThrough(createJsonTextStreamTransformer(schema));
+      return (await convertAsyncIterableToArray(stream)).join('');
+    }
+
+    it('emits valid JSON when the first array object chunk already contains elements', async () => {
+      const output = await readJsonText([
+        { type: 'object', object: [{ id: 1 }], runId: 'test-run', from: ChunkFrom.AGENT },
+        {
+          type: 'object',
+          object: [{ id: 1 }, { id: 2 }],
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+        {
+          type: 'object',
+          object: [{ id: 1 }, { id: 2 }, { id: 3 }],
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+      ]);
+
+      expect(output).toBe('[{"id":1},{"id":2},{"id":3}]');
+      expect(JSON.parse(output)).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    });
+
+    it('emits valid JSON when the first array object chunk is empty', async () => {
+      const output = await readJsonText([
+        { type: 'object', object: [], runId: 'test-run', from: ChunkFrom.AGENT },
+        { type: 'object', object: [{ id: 1 }], runId: 'test-run', from: ChunkFrom.AGENT },
+      ]);
+
+      expect(output).toBe('[{"id":1}]');
+      expect(JSON.parse(output)).toEqual([{ id: 1 }]);
+    });
+
+    it('emits valid JSON for a single array object chunk', async () => {
+      const output = await readJsonText([
+        {
+          type: 'object',
+          object: [{ id: 1 }, { id: 2 }],
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+        },
+      ]);
+
+      expect(output).toBe('[{"id":1},{"id":2}]');
+      expect(JSON.parse(output)).toEqual([{ id: 1 }, { id: 2 }]);
+    });
+  });
+
   describe('schema validation', () => {
     it('should validate against zod schema and provide detailed error messages', async () => {
       const schema = z.object({
