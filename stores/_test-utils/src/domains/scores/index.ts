@@ -88,6 +88,46 @@ export function createScoresTest({
       expect(nonExistentScores?.scores).toHaveLength(0);
     });
 
+    if (capabilities.deterministicScorePagination === true) {
+      it('should paginate scores by scorer id in descending creation order', async () => {
+        const scorerId = `scorer-${randomUUID()}`;
+
+        const { score: oldest } = await scoresStorage.saveScore(
+          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+        );
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        const { score: middle } = await scoresStorage.saveScore(
+          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+        );
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        const { score: newest } = await scoresStorage.saveScore(
+          createSampleScore({ scorerId, traceId: randomUUID(), spanId: randomUUID() }),
+        );
+
+        const firstPage = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 0, perPage: 1 },
+        });
+        const secondPage = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 1, perPage: 1 },
+        });
+        const thirdPage = await scoresStorage.listScoresByScorerId({
+          scorerId,
+          pagination: { page: 2, perPage: 1 },
+        });
+
+        expect(firstPage.scores.map(score => score.id)).toEqual([newest.id]);
+        expect(secondPage.scores.map(score => score.id)).toEqual([middle.id]);
+        expect(thirdPage.scores.map(score => score.id)).toEqual([oldest.id]);
+        expect(firstPage.pagination.hasMore).toBe(true);
+        expect(secondPage.pagination.hasMore).toBe(true);
+        expect(thirdPage.pagination.hasMore).toBe(false);
+      });
+    }
+
     it('should return score payload matching the saved score', async () => {
       const scorerId = `scorer-${randomUUID()}`;
       const score = createSampleScore({ scorerId });

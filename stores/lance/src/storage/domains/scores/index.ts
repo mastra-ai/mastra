@@ -125,7 +125,10 @@ export class StoreScoresLance extends ScoresStorage {
     try {
       const table = await this.client.openTable(TABLE_SCORERS);
 
-      const query = table.query().where(`id = '${id}'`).limit(1);
+      const query = table
+        .query()
+        .where(`id = ${lanceStringLiteral(id)}`)
+        .limit(1);
 
       const records = await query.toArray();
 
@@ -184,15 +187,15 @@ export class StoreScoresLance extends ScoresStorage {
 
       const table = await this.client.openTable(TABLE_SCORERS);
 
-      const conditions = [`\`scorerId\` = '${scorerId}'`];
+      const conditions = [`\`scorerId\` = ${lanceStringLiteral(scorerId)}`];
       if (source) {
-        conditions.push(`\`source\` = '${source}'`);
+        conditions.push(`\`source\` = ${lanceStringLiteral(source)}`);
       }
       if (entityId) {
-        conditions.push(`\`entityId\` = '${entityId}'`);
+        conditions.push(`\`entityId\` = ${lanceStringLiteral(entityId)}`);
       }
       if (entityType) {
-        conditions.push(`\`entityType\` = '${entityType}'`);
+        conditions.push(`\`entityType\` = ${lanceStringLiteral(entityType)}`);
       }
       if (filters?.organizationId !== undefined) {
         conditions.push(`\`organizationId\` = ${lanceStringLiteral(filters.organizationId)}`);
@@ -262,14 +265,14 @@ export class StoreScoresLance extends ScoresStorage {
       // Get total count for pagination
       const allRecords = await table
         .query()
-        .where(`\`runId\` = '${runId}'${tenancyClause(filters)}`)
+        .where(`\`runId\` = ${lanceStringLiteral(runId)}${tenancyClause(filters)}`)
         .toArray();
       const total = allRecords.length;
 
       const end = perPageInput === false ? total : start + perPage;
 
       // Query for scores with the given runId
-      let query = table.query().where(`\`runId\` = '${runId}'${tenancyClause(filters)}`);
+      let query = table.query().where(`\`runId\` = ${lanceStringLiteral(runId)}${tenancyClause(filters)}`);
 
       // For perPage: false, don't use limit/offset
       if (perPageInput !== false) {
@@ -323,7 +326,9 @@ export class StoreScoresLance extends ScoresStorage {
       // Get total count for pagination
       const allRecords = await table
         .query()
-        .where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'${tenancyClause(filters)}`)
+        .where(
+          `\`entityId\` = ${lanceStringLiteral(entityId)} AND \`entityType\` = ${lanceStringLiteral(entityType)}${tenancyClause(filters)}`,
+        )
         .toArray();
       const total = allRecords.length;
 
@@ -332,7 +337,9 @@ export class StoreScoresLance extends ScoresStorage {
       // Query for scores with the given entityId and entityType
       let query = table
         .query()
-        .where(`\`entityId\` = '${entityId}' AND \`entityType\` = '${entityType}'${tenancyClause(filters)}`);
+        .where(
+          `\`entityId\` = ${lanceStringLiteral(entityId)} AND \`entityType\` = ${lanceStringLiteral(entityType)}${tenancyClause(filters)}`,
+        );
 
       // For perPage: false, don't use limit/offset
       if (perPageInput !== false) {
@@ -387,7 +394,9 @@ export class StoreScoresLance extends ScoresStorage {
       // Get total count for pagination
       const allRecords = await table
         .query()
-        .where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'${tenancyClause(filters)}`)
+        .where(
+          `\`traceId\` = ${lanceStringLiteral(traceId)} AND \`spanId\` = ${lanceStringLiteral(spanId)}${tenancyClause(filters)}`,
+        )
         .toArray();
       const total = allRecords.length;
 
@@ -396,7 +405,9 @@ export class StoreScoresLance extends ScoresStorage {
       // Query for scores with the given traceId and spanId
       let query = table
         .query()
-        .where(`\`traceId\` = '${traceId}' AND \`spanId\` = '${spanId}'${tenancyClause(filters)}`);
+        .where(
+          `\`traceId\` = ${lanceStringLiteral(traceId)} AND \`spanId\` = ${lanceStringLiteral(spanId)}${tenancyClause(filters)}`,
+        );
 
       // For perPage: false, don't use limit/offset
       if (perPageInput !== false) {

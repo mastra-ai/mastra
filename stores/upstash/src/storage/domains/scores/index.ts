@@ -30,6 +30,12 @@ function matchesTenancy(row: Record<string, any>, filters?: ScoreTenancyFilters)
   return true;
 }
 
+function compareScoresByCreatedAtDesc(a: Record<string, any>, b: Record<string, any>): number {
+  const createdAtDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  if (createdAtDiff !== 0) return createdAtDiff;
+  return String(b.id ?? '').localeCompare(String(a.id ?? ''));
+}
+
 export class ScoresUpstash extends ScoresStorage {
   private client: Redis;
   #db: UpstashDB;
@@ -124,7 +130,7 @@ export class ScoresUpstash extends ScoresStorage {
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
     const total = filtered.length;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,
@@ -233,7 +239,7 @@ export class ScoresUpstash extends ScoresStorage {
     const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,
@@ -296,7 +302,7 @@ export class ScoresUpstash extends ScoresStorage {
     const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,
@@ -359,7 +365,7 @@ export class ScoresUpstash extends ScoresStorage {
     const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const end = perPageInput === false ? filtered.length : start + perPage;
-    const paged = filtered.slice(start, end);
+    const paged = [...filtered].sort(compareScoresByCreatedAtDesc).slice(start, end);
     const scores = paged.map(row => transformScoreRow(row));
     return {
       scores,

@@ -340,11 +340,16 @@ export class ScoresMySQL extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
     return this.listScoresByScorerId(args);
   }
 
-  async getScoresByRunId(args: { runId: string; pagination: StoragePagination }): Promise<ListScoresResult> {
+  async getScoresByRunId(args: {
+    runId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResult> {
     return this.listScoresByRunId(args);
   }
 
@@ -352,6 +357,7 @@ export class ScoresMySQL extends ScoresStorage {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
     return this.listScoresByEntityId(args);
   }
@@ -360,6 +366,7 @@ export class ScoresMySQL extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResult> {
     return this.listScoresBySpan(args);
   }

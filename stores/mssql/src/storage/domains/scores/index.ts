@@ -314,7 +314,7 @@ export class ScoresMSSQL extends ScoresStorage {
       dataRequest.input('perPage', limitValue);
       dataRequest.input('offset', start);
 
-      const dataQuery = `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY [createdAt] DESC OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+      const dataQuery = `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY [seq_id] DESC OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
 
       const result = await dataRequest.query(dataQuery);
 
@@ -388,7 +388,7 @@ export class ScoresMSSQL extends ScoresStorage {
       Object.entries(tenancy.params).forEach(([key, value]) => dataRequest.input(key, value));
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1${tenancySql} ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1${tenancySql} ORDER BY [seq_id] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
       );
 
       return {
@@ -463,7 +463,7 @@ export class ScoresMSSQL extends ScoresStorage {
       Object.entries(tenancy.params).forEach(([key, value]) => dataRequest.input(key, value));
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2${tenancySql} ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2${tenancySql} ORDER BY [seq_id] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
       );
 
       return {
@@ -540,7 +540,7 @@ export class ScoresMSSQL extends ScoresStorage {
       Object.entries(tenancy.params).forEach(([key, value]) => dataRequest.input(key, value));
 
       const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2${tenancySql} ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2${tenancySql} ORDER BY [seq_id] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
       );
 
       return {

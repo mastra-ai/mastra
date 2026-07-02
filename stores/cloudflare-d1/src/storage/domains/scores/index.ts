@@ -49,6 +49,11 @@ export class ScoresStorageD1 extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -213,7 +218,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         selectQuery.andWhere('source = ?', source);
       }
       applyTenancyFilters(selectQuery, filters);
-      selectQuery.limit(limitValue).offset(start);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });
@@ -281,7 +286,7 @@ export class ScoresStorageD1 extends ScoresStorage {
       // Get paginated results
       const selectQuery = createSqlBuilder().select('*').from(fullTableName).where('runId = ?', runId);
       applyTenancyFilters(selectQuery, filters);
-      selectQuery.limit(limitValue).offset(start);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });
@@ -358,7 +363,7 @@ export class ScoresStorageD1 extends ScoresStorage {
         .where('entityId = ?', entityId)
         .andWhere('entityType = ?', entityType);
       applyTenancyFilters(selectQuery, filters);
-      selectQuery.limit(limitValue).offset(start);
+      selectQuery.orderBy('createdAt', 'DESC').limit(limitValue).offset(start);
 
       const { sql, params } = selectQuery.build();
       const results = await this.#db.executeQuery({ sql, params });

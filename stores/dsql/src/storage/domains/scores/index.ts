@@ -70,6 +70,11 @@ export class ScoresDSQL extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
