@@ -77,15 +77,54 @@ export default function Page() {
 
 Because Mastra streams tool-call arguments incrementally, the `render` function is called repeatedly as the arguments arrive, so the UI can paint progressively while the agent works.
 
-### State rendering, reasoning, and components as tools
+The Controlled tier has three more primitives. These use CopilotKit's v2 API, imported from `@copilotkit/react-core/v2`.
 
-The Controlled tier has three more primitives that follow the same shape:
+### Components as tools
 
-- **State rendering**: re-render a component as the agent's state streams, driven by CopilotKit's `useCoAgent`.
-- **Reasoning**: display the model's intermediate thinking as it streams.
-- **Components as tools**: register React components directly with the agent so it can invoke them.
+Register a React component and let the agent call it as a tool. CopilotKit renders it inline with typed props (defined with a Zod schema):
 
-See CopilotKit's [generative UI guides](https://docs.copilotkit.ai/) for the current APIs.
+```tsx title="app/page.tsx"
+import { z } from 'zod'
+import { useComponent } from '@copilotkit/react-core/v2'
+
+const schema = z.object({ text: z.string() })
+
+function Callout({ text }: z.infer<typeof schema>) {
+  return <div className="callout">{text}</div>
+}
+
+function Chat() {
+  useComponent({ name: 'callout', render: Callout, parameters: schema }, [])
+  return <CopilotChat labels={{ title: 'Assistant' }} />
+}
+```
+
+The agent invokes `callout` like any other tool, and CopilotKit renders `Callout` with the props it passed.
+
+### State rendering
+
+Render UI from the agent's state and re-render as it streams. On Mastra, agent state is the agent's working memory, streamed to the client as it changes. Read it with `useAgent`; `agent.state` is reactive, so the component updates automatically:
+
+```tsx title="app/page.tsx"
+import { useAgent } from '@copilotkit/react-core/v2'
+
+function TaskBoard() {
+  const { agent } = useAgent()
+  const tasks = (agent.state.tasks as any[]) ?? []
+
+  return (
+    <ul>
+      {tasks.map((task, i) => (
+        <li key={i}>{task.title}: {task.status}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+### Reasoning
+
+Reasoning is zero-config: when your Mastra agent runs a reasoning-capable model, `CopilotChat` renders the model's thinking inline as a dedicated message type, with no extra code. To restyle it, pass your own component to the `reasoningMessage` slot on `CopilotChat`. See CopilotKit's [generative UI guides](https://docs.copilotkit.ai/) for details.
 
 ## Declarative
 
