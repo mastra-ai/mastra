@@ -228,6 +228,21 @@ export type BaseServerOptions = {
    */
   requireToolApproval?: RequireToolApproval;
   /**
+   * How to handle MCP tool *execution* failures, which a spec-compliant server
+   * reports in-band by returning a normal `CallToolResult` with `isError: true`
+   * and the failure details in `content`.
+   *
+   * - `'throw'` (default): surface the failure on Mastra's failed-tool-call path
+   *   by throwing a `MastraError` that carries the server's `content` text. Tool
+   *   spans, stream chunks, scorers, and persisted message parts then reflect the
+   *   failure, and the model sees the error text so it can self-correct.
+   * - `'return'`: preserve the legacy behaviour and resolve successfully with the
+   *   raw result (or `structuredContent`), ignoring `isError`.
+   *
+   * @default 'throw'
+   */
+  onToolError?: 'throw' | 'return';
+  /**
    * Optional custom JSON Schema validator forwarded to the underlying MCP SDK
    * client. Use this to opt into a non-default validator implementation.
    *

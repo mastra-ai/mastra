@@ -46,8 +46,12 @@ function isNotFoundError(error: unknown): boolean {
   return (
     code === 'ENOENT' ||
     code === 'NotFound' ||
+    code === 'NoSuchFile' ||
+    code === 'NoSuchKey' ||
     name === 'ENOENT' ||
     name === 'NotFound' ||
+    name === 'NoSuchFile' ||
+    name === 'NoSuchKey' ||
     /\b(no such|not found|enoent)\b/i.test(message)
   );
 }

@@ -4678,6 +4678,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -9022,8 +9025,8 @@ importers:
   workspaces/railway:
     dependencies:
       railway:
-        specifier: ^3.3.1
-        version: 3.3.1
+        specifier: ^3.4.1
+        version: 3.4.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -26399,8 +26402,8 @@ packages:
   raf-schd@4.0.3:
     resolution: {integrity: sha512-tQkJl2GRWh83ui2DiPTJz9wEiMN20syf+5oKfB03yYP7ioZcJwsIK8FjrtLwH1m7C7e+Tt2yYBlrOpdT+dyeIQ==}
 
-  railway@3.3.1:
-    resolution: {integrity: sha512-1GiaejHe9HPM1mt7dMgh3RSqJdZasXzjtbynn0Nb7oRxF2vT+Y57mOt8W/sVkM2H4WpVa4Ks2WDsE8krVyvrGw==}
+  railway@3.4.1:
+    resolution: {integrity: sha512-SKzV9Ugyo1Q1RqQo+cYM3mCsIR69g9qMQBpSC6HKoakdFHgDI6p2EUQ+Sq9vJfuQP+ABkaKL29hixWreZoc/dA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -50721,7 +50724,7 @@ snapshots:
 
   raf-schd@4.0.3: {}
 
-  railway@3.3.1:
+  railway@3.4.1:
     dependencies:
       '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.0)
       graphql: 16.14.0
