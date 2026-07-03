@@ -8,26 +8,27 @@ import type { ThreadRailTurn } from './thread-rail-turns';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { cn } from '@/lib/utils';
 
+type ThreadRailPreviewPhase = 'hidden' | 'entering' | 'visible' | 'exiting';
+
 type ThreadRailPreviewState = {
   currentTurn: ThreadRailTurn | undefined;
   previousTurn: ThreadRailTurn | undefined;
   index: number | null;
-  settled: boolean;
+  phase: ThreadRailPreviewPhase;
   top: number;
   transitionKey: number;
-  visible: boolean;
 };
 
-const PREVIEW_EXIT_DURATION_MS = 360;
+const PREVIEW_TRANSITION_DURATION_MS = 360;
+const PREVIEW_CLEANUP_DELAY_MS = PREVIEW_TRANSITION_DURATION_MS + 80;
 
 const DEFAULT_PREVIEW_STATE: ThreadRailPreviewState = {
   currentTurn: undefined,
   previousTurn: undefined,
   index: null,
-  settled: true,
+  phase: 'hidden',
   top: 0,
   transitionKey: 0,
-  visible: false,
 };
 
 export interface ThreadRailProps {
@@ -61,7 +62,8 @@ export function ThreadRail({
   const resolvedVisibleMessageIds =
     visibleMessageIds ?? scrollerVisibility?.visibleMessageIds ?? (activeMessageId ? [activeMessageId] : []);
   const visibleMessageIdSet = new Set(resolvedVisibleMessageIds);
-  const hoveredIndex = previewState.visible ? previewState.index : null;
+  const previewHoverActive = previewState.phase === 'entering' || previewState.phase === 'visible';
+  const hoveredIndex = previewHoverActive ? previewState.index : null;
 
   const showPreview = (index: number, element: HTMLElement) => {
     const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
@@ -71,34 +73,44 @@ export function ThreadRail({
 
     setPreviewState(current => {
       const nextTop = itemRect.top + itemRect.height / 2 - railTop;
-      if (current.index === index && current.visible) {
+      if (current.index === index && current.phase !== 'hidden' && current.phase !== 'exiting') {
         return { ...current, top: nextTop };
       }
 
+      const previousTurn =
+        current.currentTurn && current.currentTurn.key !== nextTurn.key && current.phase !== 'hidden'
+          ? current.currentTurn
+          : undefined;
+
       return {
         currentTurn: nextTurn,
-        previousTurn: current.visible ? current.currentTurn : undefined,
+        previousTurn,
         index,
-        settled: false,
+        phase: 'entering',
         top: nextTop,
         transitionKey: current.transitionKey + 1,
-        visible: true,
       };
     });
   };
 
   const hidePreview = () => {
-    setPreviewState(current => ({
-      ...current,
-      index: null,
-      previousTurn: undefined,
-      settled: true,
-      visible: false,
-    }));
+    setPreviewState(current => {
+      if (!current.currentTurn || current.phase === 'hidden' || current.phase === 'exiting') {
+        return { ...current, index: null };
+      }
+
+      return {
+        ...current,
+        index: null,
+        previousTurn: undefined,
+        phase: 'exiting',
+        transitionKey: current.transitionKey + 1,
+      };
+    });
   };
 
   React.useEffect(() => {
-    if (previewState.settled) return;
+    if (previewState.phase !== 'entering') return;
 
     const requestFrame = window.requestAnimationFrame ?? window.setTimeout;
     const cancelFrame = window.cancelAnimationFrame ?? window.clearTimeout;
@@ -106,7 +118,9 @@ export function ThreadRail({
     const startFrame = requestFrame(() => {
       settleFrame = requestFrame(() => {
         setPreviewState(current =>
-          current.transitionKey === previewState.transitionKey ? { ...current, settled: true } : current,
+          current.transitionKey === previewState.transitionKey && current.phase === 'entering'
+            ? { ...current, phase: 'visible' }
+            : current,
         );
       });
     });
@@ -115,19 +129,31 @@ export function ThreadRail({
       cancelFrame(startFrame);
       if (settleFrame !== undefined) cancelFrame(settleFrame);
     };
-  }, [previewState.settled, previewState.transitionKey]);
+  }, [previewState.phase, previewState.transitionKey]);
 
   React.useEffect(() => {
-    if (!previewState.settled || !previewState.previousTurn) return;
+    if (previewState.phase !== 'visible' || !previewState.previousTurn) return;
 
     const timeout = window.setTimeout(() => {
       setPreviewState(current =>
         current.transitionKey === previewState.transitionKey ? { ...current, previousTurn: undefined } : current,
       );
-    }, PREVIEW_EXIT_DURATION_MS);
+    }, PREVIEW_CLEANUP_DELAY_MS);
 
     return () => window.clearTimeout(timeout);
-  }, [previewState.previousTurn, previewState.settled, previewState.transitionKey]);
+  }, [previewState.phase, previewState.previousTurn, previewState.transitionKey]);
+
+  React.useEffect(() => {
+    if (previewState.phase !== 'exiting') return;
+
+    const timeout = window.setTimeout(() => {
+      setPreviewState(current =>
+        current.transitionKey === previewState.transitionKey ? DEFAULT_PREVIEW_STATE : current,
+      );
+    }, PREVIEW_CLEANUP_DELAY_MS);
+
+    return () => window.clearTimeout(timeout);
+  }, [previewState.phase, previewState.transitionKey]);
 
   if (turns.length === 0) return null;
 
@@ -177,8 +203,7 @@ export function ThreadRail({
           id={previewId}
           currentTurn={previewState.currentTurn}
           previousTurn={previewState.previousTurn}
-          settled={previewState.settled}
-          visible={previewState.visible}
+          phase={previewState.phase}
           top={previewState.top}
         />
       )}
@@ -254,29 +279,26 @@ function ThreadRailPreview({
   id,
   currentTurn,
   previousTurn,
-  settled,
-  visible,
+  phase,
   top,
 }: {
   id: string;
   currentTurn: ThreadRailTurn;
   previousTurn: ThreadRailTurn | undefined;
-  settled: boolean;
-  visible: boolean;
+  phase: ThreadRailPreviewPhase;
   top: number;
 }) {
-  const containerVisible = visible && (settled || Boolean(previousTurn));
-  const enteringLayerClassName = 'scale-95 opacity-0 blur-sm';
-  const exitingLayerClassName = 'scale-95 opacity-0 blur-sm';
+  const containerVisible = phase === 'visible' || (phase === 'entering' && Boolean(previousTurn));
+  const hiddenLayerClassName = 'scale-95 opacity-0 blur-md';
   const visibleLayerClassName = 'scale-100 opacity-100 blur-none';
   const layerClassName =
-    'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-[360ms] ease-out-custom will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
+    'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-[360ms] ease-in-out will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
 
   return (
     <div
       id={id}
       data-testid="thread-rail-preview"
-      data-visible={visible ? 'true' : undefined}
+      data-visible={containerVisible ? 'true' : undefined}
       className={cn(
         'pointer-events-none absolute left-full top-0 z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[translate,opacity] duration-[360ms] ease-out-custom will-change-[translate,opacity] motion-reduce:transition-none',
         containerVisible ? 'opacity-100' : 'opacity-0',
@@ -292,17 +314,14 @@ function ThreadRailPreview({
           <div
             data-testid="thread-rail-preview-previous"
             aria-hidden
-            className={cn(layerClassName, settled || !visible ? exitingLayerClassName : visibleLayerClassName)}
+            className={cn(layerClassName, phase === 'entering' ? visibleLayerClassName : hiddenLayerClassName)}
           >
             <ThreadRailPreviewContent turn={previousTurn} className="p-3.5" />
           </div>
         )}
         <div
           data-testid="thread-rail-preview-current"
-          className={cn(
-            layerClassName,
-            !visible ? exitingLayerClassName : settled ? visibleLayerClassName : enteringLayerClassName,
-          )}
+          className={cn(layerClassName, phase === 'visible' ? visibleLayerClassName : hiddenLayerClassName)}
         >
           <ThreadRailPreviewContent turn={currentTurn} className="p-3.5" />
         </div>

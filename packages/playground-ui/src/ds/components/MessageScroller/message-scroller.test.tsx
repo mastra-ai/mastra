@@ -175,7 +175,7 @@ describe('MessageScroller', () => {
     }
   });
 
-  it('keeps one preview shell while sliding content between hovered turns', () => {
+  it('keeps one preview shell while animating enter, switch, and exit', async () => {
     renderScroller();
 
     const firstTurn = screen.getByRole('button', { name: 'Jump to First turn' });
@@ -200,10 +200,17 @@ describe('MessageScroller', () => {
     expect(preview.style.translate).toBe('0 calc(40px - 50%)');
     expect(viewport.className).not.toContain('overflow-hidden');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-[360ms]');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('ease-out-custom');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('ease-in-out');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-sm');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-md');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('First turn')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBe('true');
+      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-100');
+      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-100');
+      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-none');
+    });
 
     fireEvent.mouseEnter(secondTurn);
 
@@ -212,15 +219,26 @@ describe('MessageScroller', () => {
     expect(preview.style.translate).toBe('0 calc(100px - 50%)');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-sm');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-md');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('Second turn')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-100');
+      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-100');
+      expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-none');
+    });
 
     fireEvent.mouseLeave(screen.getByTestId('thread-rail'));
 
+    expect(screen.getByTestId('thread-rail-preview')).toBe(preview);
     expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBeNull();
     expect(preview.className).toContain('opacity-0');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-sm');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-md');
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('thread-rail-preview')).toBeNull();
+    });
   });
 });
