@@ -14,6 +14,7 @@ import type {
   StepSuccess,
   TimeTravelExecutionParams,
   WorkflowRunState,
+  WorkflowStateTracingContext,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
 import { createRestartExecutionParams, createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
@@ -285,15 +286,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * `default.ts`'s `persistTracingContext`; the evented engine holds the live span on
    * Mastra (since it can't ride pubsub events), so we resolve it via runId here.
    */
-  private resolveSuspendTracingContext(runId: string):
-    | {
-        traceId?: string;
-        spanId?: string;
-        parentSpanId?: string;
-        tracingMetadata?: Record<string, any>;
-        tracingTags?: string[];
-      }
-    | undefined {
+  private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
     const span = this.resolveRunTracingContext(runId)?.currentSpan as
       | {
           id?: string;
