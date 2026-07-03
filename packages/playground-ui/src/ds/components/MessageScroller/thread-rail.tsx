@@ -165,7 +165,8 @@ export function ThreadRail({
       className={cn('relative w-8 py-2', className)}
       onMouseLeave={hidePreview}
       onBlur={event => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) hidePreview();
+        const nextFocus = event.relatedTarget;
+        if (!(nextFocus instanceof Node) || !event.currentTarget.contains(nextFocus)) hidePreview();
       }}
     >
       <ScrollArea
@@ -222,6 +223,25 @@ interface ThreadRailItemProps {
   onSelect?: (turn: ThreadRailTurn) => void;
 }
 
+/** Width of a rail tick: widest at the hovered item, tapering to neighbours. */
+const getRailItemWidth = (distance: number | null): string => {
+  if (distance === 0) return 'w-4';
+  if (distance === 1) return 'w-3';
+  return 'w-2';
+};
+
+/** Background tone of a rail tick, prioritising hovered/active, then in-view, then proximity. */
+const getRailItemTone = ({
+  distance,
+  active,
+  inView,
+}: Pick<ThreadRailItemProps, 'distance' | 'active' | 'inView'>): string => {
+  if (distance === 0 || active) return 'bg-neutral6';
+  if (inView) return 'bg-neutral5';
+  if (distance === 1) return 'bg-neutral4';
+  return 'bg-neutral3/60';
+};
+
 function ThreadRailItem({
   turn,
   index,
@@ -232,17 +252,8 @@ function ThreadRailItem({
   onHoverChange,
   onSelect,
 }: ThreadRailItemProps) {
-  const size = distance === 0 ? 'w-4' : distance === 1 ? 'w-3' : 'w-2';
-  const tone =
-    distance === 0
-      ? 'bg-neutral6'
-      : active
-        ? 'bg-neutral6'
-        : inView
-          ? 'bg-neutral5'
-          : distance === 1
-            ? 'bg-neutral4'
-            : 'bg-neutral3/60';
+  const size = getRailItemWidth(distance);
+  const tone = getRailItemTone({ distance, active, inView });
 
   return (
     <div
@@ -289,6 +300,7 @@ function ThreadRailPreview({
   top: number;
 }) {
   const containerVisible = phase === 'visible' || (phase === 'entering' && Boolean(previousTurn));
+  // Entering and exiting share the same off-screen resting style.
   const hiddenLayerClassName = 'scale-95 opacity-0 blur-xs';
   const visibleLayerClassName = 'scale-100 opacity-100 blur-none';
   const layerClassName =

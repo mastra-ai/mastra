@@ -4,6 +4,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   buildThreadRailTurns,
+  getClientMessageKey,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -16,7 +17,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
-import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
+import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -158,8 +159,7 @@ export const Thread = ({
                       // changing key would unmount/remount the row and shift the
                       // trailing pending indicator. Falls back to `message.id` for
                       // messages without a correlation key (assistant, reloaded).
-                      const messageKey =
-                        (message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] as string | undefined) ?? message.id;
+                      const messageKey = getClientMessageKey(message);
                       return (
                         <MessageScrollerItem
                           key={messageKey}

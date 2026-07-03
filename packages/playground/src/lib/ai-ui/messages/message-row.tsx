@@ -34,6 +34,14 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+/** Read an optional field off a loosely-typed message part (or nested value) without an `as` cast. */
+const readField = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
+
+/** The stored `content.metadata` is a freeform record; treat any object as our playground metadata shape. */
+const isMessageMetadata = (value: unknown): value is MessageMetadata => isRecord(value);
+
 /**
  * Normalize the stored message role for display. A `signal`+`type:'user'` row
  * renders as a user message; a non-user (reactive) `signal` row is folded onto
@@ -57,14 +65,12 @@ const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'
 const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | null => {
   const data = toReactiveSignalData(message);
   if (!isSignalData(data)) return null;
+  const parts: MastraDBMessage['content']['parts'] = [{ type: 'data-signal', data }];
   return {
     ...message,
     role: 'assistant',
-    content: {
-      ...message.content,
-      parts: [{ type: 'data-signal', data }],
-    },
-  } as MastraDBMessage;
+    content: { ...message.content, parts },
+  };
 };
 
 const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
@@ -75,10 +81,8 @@ const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
   return { ...message, role: displayRole };
 };
 
-const getMessageMetadata = (message: MastraDBMessage): MessageMetadata | undefined => {
-  const metadata = message.content.metadata as MessageMetadata | undefined;
-  return metadata && typeof metadata === 'object' ? metadata : undefined;
-};
+const getMessageMetadata = (message: MastraDBMessage): MessageMetadata | undefined =>
+  isMessageMetadata(message.content.metadata) ? message.content.metadata : undefined;
 
 /**
  * Collect `data-*` parts from the message so badges (file-tree, sandbox) can read
@@ -93,14 +97,14 @@ const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
     .map(part => ({
       type: part.type,
       name: 'name' in part && typeof part.name === 'string' ? part.name : undefined,
-      data: 'data' in part ? (part as { data?: unknown }).data : undefined,
+      data: readField(part, 'data'),
     }));
 
 const getTextFromParts = (message: MastraDBMessage): string =>
   message.content.parts
     .filter(
       (part): part is Extract<MessagePart, { type: 'text'; text: string }> =>
-        part.type === 'text' && typeof (part as { text?: unknown }).text === 'string',
+        part.type === 'text' && typeof readField(part, 'text') === 'string',
     )
     .map(part => part.text)
     .join('\n');
@@ -112,7 +116,7 @@ const getTextFromParts = (message: MastraDBMessage): string =>
 const hasVisibleAssistantText = (message: MastraDBMessage, metadata: MessageMetadata | undefined): boolean =>
   message.content.parts.some(part => {
     if (part.type !== 'text') return false;
-    const text = (part as { text?: unknown }).text;
+    const text = readField(part, 'text');
     if (typeof text !== 'string' || text.trim().length === 0) return false;
     if (metadata?.completionResult || metadata?.isTaskCompleteResult) return false;
     return true;
@@ -131,11 +135,7 @@ const getModelMetadata = (metadata: MessageMetadata | undefined) => {
  */
 const isPendingMessage = (message: MastraDBMessage): boolean => {
   if (message.content.metadata?.status === 'pending') return true;
-  return message.content.parts.some(part => {
-    const metadata = (part as { metadata?: unknown }).metadata;
-    if (!metadata || typeof metadata !== 'object' || !('status' in metadata)) return false;
-    return (metadata as { status?: unknown }).status === 'pending';
-  });
+  return message.content.parts.some(part => readField(readField(part, 'metadata'), 'status') === 'pending');
 };
 
 const CopyButton = ({ text }: { text: string }) => {

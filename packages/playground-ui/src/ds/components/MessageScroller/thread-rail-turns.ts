@@ -16,7 +16,7 @@ export interface ThreadRailTurn {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const getClientMessageKey = (message: MastraDBMessage): string => {
+export const getClientMessageKey = (message: MastraDBMessage): string => {
   const metadata = message.content.metadata;
   const clientMessageId = isRecord(metadata) ? metadata[CLIENT_MESSAGE_ID_KEY] : undefined;
   return typeof clientMessageId === 'string' && clientMessageId.length > 0 ? clientMessageId : message.id;
