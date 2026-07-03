@@ -1361,6 +1361,31 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.2-free',
     'z-ai/glm-5v-turbo',
   ];
+  readonly kenari: readonly [
+    'claude-opus-4-7',
+    'claude-opus-4-8',
+    'claude-sonnet-4-6',
+    'deepseek-v4-flash',
+    'deepseek-v4-flash:free',
+    'deepseek-v4-pro',
+    'deepseek-v4-pro:free',
+    'gemma-4-31b-it',
+    'glm-5-1',
+    'glm-5-2',
+    'gpt-5-4-mini',
+    'gpt-5-5',
+    'gpt-image-2',
+    'gpt-oss-120b',
+    'gpt-oss-20b',
+    'grok-4-3',
+    'grok-build-0-1',
+    'kimi-k2-6',
+    'kimi-k2-7-code',
+    'mimo-v2-5',
+    'mimo-v2-5-pro',
+    'minimax-m3',
+    'qwen3-7-plus',
+  ];
   readonly openai: readonly [
     'chatgpt-image-latest',
     'gpt-3.5-turbo',
@@ -1444,6 +1469,7 @@ export type ProviderModelsMap = {
     'openai-gpt-5.5',
     'snowflake-llama3.3-70b',
   ];
+  readonly 'tencent-token-plan': readonly ['hy3'];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',
@@ -2287,7 +2313,6 @@ export type ProviderModelsMap = {
     'stepfun-ai/step-3.5-flash',
     'stepfun-ai/step-3.7-flash',
     'upstage/solar-10_7b-instruct',
-    'z-ai/glm-5.1',
   ];
   readonly evroc: readonly [
     'KBLab/kb-whisper-large',
@@ -2761,7 +2786,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly 'tencent-tokenhub': readonly ['hy3-preview'];
+  readonly 'tencent-tokenhub': readonly ['hy3', 'hy3-preview'];
   readonly wandb: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'OpenPipe/Qwen3-14B-Instruct',

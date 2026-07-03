@@ -41,8 +41,10 @@ export function TimePicker({ defaultValue, onValueChange, className }: TimePicke
   }, [defaultValue]);
 
   const handleHourChange = (val: string) => {
-    setHour(val);
-    onValueChange(`${hourOptions[+val]}:${minute} ${timePeriod}`.trim());
+    const nextHour = hourOptions[+val];
+    if (nextHour === undefined) return;
+    setHour(nextHour);
+    onValueChange(`${nextHour}:${minute} ${timePeriod}`.trim());
   };
 
   const handleMinuteChange = (val: string) => {

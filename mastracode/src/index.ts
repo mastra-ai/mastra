@@ -27,6 +27,7 @@ import {
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
+import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
@@ -972,30 +973,85 @@ export type MountedMastraCode = MastraCodeAgentController & { mastra: Mastra };
  * durability is configured in one place.
  */
 export async function mountAgentControllerOnMastra(
-  config?: MastraCodeConfig & { mastra?: Mastra; controllerId?: string },
+  config?: MastraCodeConfig & {
+    mastra?: Mastra;
+    controllerId?: string;
+    buildApiRoutes?: (deps: { controller: MountedMastraCode['controller']; authStorage: AuthStorage }) => ApiRoute[];
+    /**
+     * Additional `server` config to fold onto the constructed Mastra alongside
+     * the assembled `apiRoutes` (e.g. `middleware`, `cors`). Used by the
+     * platform entry (`src/mastra/index.ts`) to own the WorkOS gate + tenant
+     * dispatcher + CORS on the instance the deployer generates its server from.
+     * Ignored when `mastra` is provided (mounting onto a caller-owned instance).
+     */
+    buildServerConfig?: (deps: {
+      controller: MountedMastraCode['controller'];
+      authStorage: AuthStorage;
+    }) => Omit<NonNullable<ConstructorParameters<typeof Mastra>[0]>['server'], 'apiRoutes'>;
+  },
 ): Promise<MountedMastraCode> {
-  const base = await createMastraCodeAgentController(config);
-  const { controller, storage } = base;
-  const controllerId = config?.controllerId ?? controller.id;
-
-  // Construct (or reuse) the Mastra and register the controller on it BEFORE init.
-  // The Mastra constructor calls controller.__registerMastra(this), so the
-  // subsequent init() takes the "inherit parent storage" branch rather than
-  // building a duplicate internal Mastra.
-  let mastra: Mastra;
+  const prepared = await prepareAgentControllerMount(config);
   if (config?.mastra) {
     // Mounting onto a Mastra the caller already built. Ensure the controller's
     // back-reference points at it (idempotent — only sets #externalMastra).
-    mastra = config.mastra;
-    controller.__registerMastra(mastra);
-  } else {
-    mastra = new Mastra({ agentControllers: { [controllerId]: controller }, storage });
+    prepared.base.controller.__registerMastra(config.mastra);
+    await prepared.finalize();
+    return { ...prepared.base, mastra: config.mastra };
   }
+  const mastra = new Mastra(prepared.mastraArgs);
+  await prepared.finalize();
+  return { ...prepared.base, mastra };
+}
 
-  await controller.init();
-  await controller.getMastra()?.startWorkers();
+/**
+ * Assemble everything needed to construct the server-owned Mastra WITHOUT
+ * constructing it, so a caller (the platform entry `src/mastra/index.ts`) can
+ * run the `new Mastra(...)` literal in its own module. The deployer's
+ * `checkConfigExport` Babel plugin only marks the config valid when it finds a
+ * top-level `new Mastra(...)` exported as `mastra` in the ENTRY file; hiding the
+ * construction inside this helper would trip the "Invalid Mastra config" warning.
+ *
+ * Returns the constructor args plus a `finalize()` that runs the post-construct
+ * boot (`controller.init()` + `startWorkers()`). The controller is registered on
+ * the Mastra via the `agentControllers` arg at construction time.
+ */
+export async function prepareAgentControllerMount(
+  config?: MastraCodeConfig & {
+    mastra?: Mastra;
+    controllerId?: string;
+    buildApiRoutes?: (deps: { controller: MountedMastraCode['controller']; authStorage: AuthStorage }) => ApiRoute[];
+    buildServerConfig?: (deps: {
+      controller: MountedMastraCode['controller'];
+      authStorage: AuthStorage;
+    }) => Omit<NonNullable<ConstructorParameters<typeof Mastra>[0]>['server'], 'apiRoutes'>;
+  },
+): Promise<{
+  base: Awaited<ReturnType<typeof createMastraCodeAgentController>>;
+  mastraArgs: NonNullable<ConstructorParameters<typeof Mastra>[0]>;
+  finalize: () => Promise<void>;
+}> {
+  const base = await createMastraCodeAgentController(config);
+  const { controller, storage, authStorage } = base;
+  const controllerId = config?.controllerId ?? controller.id;
+  const apiRoutes = config?.buildApiRoutes?.({ controller, authStorage });
+  const extraServerConfig = config?.buildServerConfig?.({ controller, authStorage });
 
-  return { ...base, mastra };
+  const serverConfig = {
+    ...extraServerConfig,
+    ...(apiRoutes?.length ? { apiRoutes } : {}),
+  };
+  const mastraArgs = {
+    agentControllers: { [controllerId]: controller },
+    storage,
+    ...(Object.keys(serverConfig).length ? { server: serverConfig } : {}),
+  };
+
+  const finalize = async () => {
+    await controller.init();
+    await controller.getMastra()?.startWorkers();
+  };
+
+  return { base, mastraArgs, finalize };
 }
 
 /**

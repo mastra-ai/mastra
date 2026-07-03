@@ -1,5 +1,107 @@
 # @mastra/client-js
 
+## 1.30.1-alpha.0
+
+### Patch Changes
+
+- Added workspace-level provider registry to MastraEditor. You can now register WorkspaceProvider factories that build complete Workspace instances as a single unit, instead of composing from separate filesystem and sandbox providers. Stored agents can reference a workspace provider via `{ type: 'provider', provider: 'my-cloud', config: { ... } }` and the editor will call the registered factory during agent hydration. ([#18781](https://github.com/mastra-ai/mastra/pull/18781))
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+  import { Workspace } from '@mastra/core/workspace';
+
+  const editor = new MastraEditor({
+    workspaces: {
+      'my-cloud': {
+        id: 'my-cloud',
+        name: 'My Cloud Workspace',
+        createWorkspace: config =>
+          new Workspace({
+            id: 'cloud-ws',
+            name: 'Cloud WS',
+            filesystem: new MyCloudFilesystem(config),
+            sandbox: new MyCloudSandbox(config),
+          }),
+      },
+    },
+  });
+
+  // Stored agent workspace reference using the provider:
+  // { type: 'provider', provider: 'my-cloud', config: { region: 'us-east-1' } }
+  ```
+
+- Updated dependencies [[`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666)]:
+  - @mastra/core@1.50.0-alpha.0
+
+## 1.30.0
+
+### Minor Changes
+
+- Added optional tenancy arguments to `getDataset`, `updateDataset`, and `deleteDataset`. ([#18750](https://github.com/mastra-ai/mastra/pull/18750))
+
+  You can now pass `organizationId` and `projectId` to scope dataset reads, updates, and deletes to a specific tenant. Reads and updates against a dataset in a different tenant throw `DATASET_NOT_FOUND` (surfaced as a 404 over HTTP). Deletes silently no-op on a tenancy mismatch — matching the existing "delete non-existent id is a no-op" semantics so cross-tenant existence is never leaked via error timing or status.
+
+  **Example**
+
+  ```ts
+  // Before
+  await client.getDataset('abc123');
+  await client.deleteDataset('abc123');
+  await client.updateDataset({ id: 'abc123', name: 'renamed' });
+
+  // After — scope to a tenant
+  await client.getDataset('abc123', { organizationId: 'org_a', projectId: 'proj_1' });
+  await client.deleteDataset('abc123', { organizationId: 'org_a' });
+  await client.updateDataset({ id: 'abc123', name: 'renamed', organizationId: 'org_a' });
+  ```
+
+### Patch Changes
+
+- Fixed a cross-tenant data-access issue on datasets by scoping `DatasetsManager.get` and `DatasetsManager.delete` to tenancy filters. ([#18750](https://github.com/mastra-ai/mastra/pull/18750))
+
+  Previously `get({ id })` and `delete({ id })` looked up a dataset by its primary key alone. Any caller who knew a dataset id could read or delete it regardless of which `organizationId` / `projectId` it belonged to. This is now closed at the storage layer via a scoped SQL predicate (option (a) — no fetch-then-assert).
+
+  **What changed**
+  - `DatasetsManager.get` and `DatasetsManager.delete` accept optional `organizationId` and `projectId`.
+  - The tenancy is stashed on the returned `Dataset` handle and forwarded to every downstream storage call (`getDetails`, `update`, `addItem`, item batch ops, `startExperimentAsync`).
+  - The abstract storage contract (`getDatasetById`, `deleteDataset`) gained an optional `filters?: DatasetTenancyFilters` arg.
+  - Item-mutation inputs (`AddDatasetItemInput`, `UpdateDatasetItemInput`, `BatchInsertItemsInput`, `BatchDeleteItemsInput`) and `UpdateDatasetInput` accept optional `filters` for the internal existence check.
+
+  **Behavior**
+  - Omitting tenancy preserves the existing behavior (no predicate added) — fully backwards compatible.
+  - On tenancy mismatch, `get` throws NOT_FOUND (returns null at the storage layer) and `delete` is a silent no-op — matching how a missing id already behaves, so existence does not leak through error timing or messages.
+
+  **Example**
+
+  ```ts
+  // Before
+  const ds = await mastra.datasets.get({ id });
+  await mastra.datasets.delete({ id });
+
+  // After — scope to a tenant
+  const ds = await mastra.datasets.get({ id, organizationId, projectId });
+  await mastra.datasets.delete({ id, organizationId, projectId });
+  ```
+
+- Scoped `getDatasetById` and `deleteDataset` to tenancy filters when the caller passes `organizationId` / `projectId`. ([#18750](https://github.com/mastra-ai/mastra/pull/18750))
+
+  The adapters now push the tenancy predicate into the SQL/query when the new optional `filters` argument is present. Legacy calls that omit tenancy are unchanged. On mismatch, `getDatasetById` returns `null` and `deleteDataset` is a silent no-op — the cascade delete (dataset items and versions) is gated by a scoped parent pre-check, so cross-tenant data is never touched.
+
+- Added optional `organizationId` and `projectId` query parameters to the dataset routes. ([#18750](https://github.com/mastra-ai/mastra/pull/18750))
+
+  `GET /datasets/:datasetId`, `PATCH /datasets/:datasetId`, and `DELETE /datasets/:datasetId` now accept optional tenancy query parameters. When provided, they are forwarded to `mastra.datasets.get` / `.delete` and the operation returns 404 if the dataset does not belong to the requested tenant. Requests that omit the query parameters keep their existing behavior.
+
+  **Example**
+
+  ```
+  GET /datasets/abc123?organizationId=org_a&projectId=proj_1
+  DELETE /datasets/abc123?organizationId=org_a
+  ```
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb), [`9250acd`](https://github.com/mastra-ai/mastra/commit/9250acd1357f0f1f33d0dcca16f9655084c58eca), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`cc440a3`](https://github.com/mastra-ai/mastra/commit/cc440a39400d8ce06655462b26c1666a1b3d4320), [`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`ea6327b`](https://github.com/mastra-ai/mastra/commit/ea6327ba2d63ca647804bc97b347e03a58617162), [`3439fa8`](https://github.com/mastra-ai/mastra/commit/3439fa836ecfcaa257b40c20b30ac2a8be22e9ea), [`85107f2`](https://github.com/mastra-ai/mastra/commit/85107f2758b527147fccbedff962961927c2d3b8), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`06e2680`](https://github.com/mastra-ai/mastra/commit/06e26806b51d2cbd858afdc66daa2b86ff3ba64a), [`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8), [`06ff9e0`](https://github.com/mastra-ai/mastra/commit/06ff9e0befd1d642ab87ff749285ee4091205c7e), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`7f5e1ff`](https://github.com/mastra-ai/mastra/commit/7f5e1ff695a92f672bb3976363925d1e9136b54a), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`b8375c1`](https://github.com/mastra-ai/mastra/commit/b8375c1f8fe905df8ae2ae9a893bb365f17aec4e), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`1240f05`](https://github.com/mastra-ai/mastra/commit/1240f051c8e5371f1c014448bf37b1a1b9a05e47), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`003f35d`](https://github.com/mastra-ai/mastra/commit/003f35d19e07b23b4bacc591c8bc0c59b42124ae), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b), [`1340fb7`](https://github.com/mastra-ai/mastra/commit/1340fb76262a3ca062130aa71859f07257a0a5a4)]:
+  - @mastra/core@1.49.0
+  - @mastra/schema-compat@1.3.3
+
 ## 1.30.0-alpha.5
 
 ### Minor Changes

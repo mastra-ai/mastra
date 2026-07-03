@@ -323,6 +323,24 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
 }
 
 /**
+ * Escape a dynamic value for embedding inside a single-quoted JavaScript
+ * string literal in the Studio `index.html` (e.g. `window.X = '<value>'`).
+ * Without it, an env-derived value containing `'` or `</script>` breaks out
+ * of the literal and corrupts (or injects into) the served page.
+ */
+export function escapeStudioHtmlValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+/**
  * Check if a module is a Node.js builtin module
  * @param specifier - Module specifier
  * @returns True if it's a builtin module

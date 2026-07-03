@@ -2,6 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic-v5';
 import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { noopLogger } from '../../logger';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -647,6 +648,40 @@ describe('CoreToolBuilder background task schema injection', () => {
 });
 
 describe('CoreToolBuilder requestContext merge', () => {
+  it('preserves requestContext identity when closure and exec contexts are the same instance', async () => {
+    const sharedRC = new RequestContext();
+    sharedRC.set('initial-key', 'initial-value');
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      ctx.requestContext.set('tool-write-key', 'tool-write-value');
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: noopLogger,
+        requestContext: sharedRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [], requestContext: sharedRC });
+
+    expect(receivedCtx.requestContext).toBe(sharedRC);
+    expect(sharedRC.get('tool-write-key')).toBe('tool-write-value');
+  });
+
   it('preserves non-serializable closure requestContext values when exec RC is also present', async () => {
     // Simulates what happens when the evented workflow engine deserialises requestContext:
     // the 'controller' key (containing functions) is lost because JSON.stringify drops functions

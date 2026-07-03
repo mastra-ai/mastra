@@ -2,4 +2,5 @@
 '@mastra/playground-ui': patch
 ---
 
-Hardened the design system against out-of-bounds array and object access. TypeScript now checks every indexed access (noUncheckedIndexedAccess), and all code paths were updated with explicit guards or safer restructuring. No behavior changes.
+Improved playground-ui's safety around array and object access.
+This release reduces the risk of undefined reads without changing behavior.

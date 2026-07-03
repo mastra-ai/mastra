@@ -22,6 +22,7 @@ vi.mock('commander', () => {
     command: any;
     description: any;
     option: any;
+    requiredOption: any;
     parse: any;
     help: any;
 
@@ -34,6 +35,7 @@ vi.mock('commander', () => {
       this.command = vi.fn().mockReturnThis();
       this.description = vi.fn().mockReturnThis();
       this.option = vi.fn().mockReturnThis();
+      this.requiredOption = vi.fn().mockReturnThis();
       this.parse = vi.fn();
       this.help = vi.fn();
     }

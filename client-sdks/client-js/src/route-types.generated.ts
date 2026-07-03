@@ -4415,6 +4415,15 @@ export type PostAgentsAgentIdClone_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -4529,6 +4538,15 @@ export type PostAgentsAgentIdClone_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -25849,6 +25867,15 @@ export type GetStoredAgents_Response = {
                     operationTimeout?: number | undefined;
                   };
                 }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
+                  };
+                }
             )
           | {
               value:
@@ -25963,6 +25990,15 @@ export type GetStoredAgents_Response = {
                       autoSync?: boolean | undefined;
                       /** Operation timeout in milliseconds */
                       operationTimeout?: number | undefined;
+                    };
+                  }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
                     };
                   };
               rules?:
@@ -30397,6 +30433,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -30511,6 +30556,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -34813,6 +34867,15 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -34927,6 +34990,15 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -39214,6 +39286,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -39328,6 +39409,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -43575,6 +43665,15 @@ export type PostStoredAgents_Body = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -43689,6 +43788,15 @@ export type PostStoredAgents_Body = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -47925,6 +48033,15 @@ export type PostStoredAgents_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -48039,6 +48156,15 @@ export type PostStoredAgents_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -52335,6 +52461,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -52449,6 +52584,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -56710,6 +56854,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -56824,6 +56977,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:

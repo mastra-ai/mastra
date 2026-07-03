@@ -142,7 +142,7 @@ describe('mountWebAuth gate (enabled)', () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
-    const res = await app.request('/api/web/projects', { headers: { Accept: 'application/json' } });
+    const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: 'unauthorized' });
   });
@@ -159,7 +159,7 @@ describe('mountWebAuth gate (enabled)', () => {
     mockAuthenticate.mockResolvedValue({ email: 'user@example.com', name: 'User' });
     const { app } = buildApp();
 
-    const res = await app.request('/api/web/projects', { headers: { Accept: 'application/json' } });
+    const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('ok');
   });
@@ -168,7 +168,7 @@ describe('mountWebAuth gate (enabled)', () => {
     mockAuthenticate.mockRejectedValue(new Error('boom'));
     const { app } = buildApp();
 
-    const res = await app.request('/api/web/projects', { headers: { Accept: 'application/json' } });
+    const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(401);
   });
 
@@ -176,12 +176,12 @@ describe('mountWebAuth gate (enabled)', () => {
     mockAuthenticate.mockResolvedValue({ workosId: 'user_123', email: 'user@example.com', name: 'User' });
     const app = new Hono();
     mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/api/web/whoami', c => {
+    app.get('/web/whoami', c => {
       const user = getWebAuthUser(c);
       return c.json({ userId: getWebAuthUserId(user) });
     });
 
-    const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ userId: 'user_123' });
   });
@@ -287,9 +287,9 @@ describe('org-tenant identity', () => {
     mockAuthenticate.mockResolvedValue({ workosId: 'user_1', organizationId: 'org_a', email: 'u@e.com' });
     const app = new Hono();
     mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/api/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
 
-    const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: 'org_a', userId: 'user_1' });
   });
@@ -302,12 +302,12 @@ describe('org-tenant identity', () => {
     mockAuthenticate.mockResolvedValue({ workosId: 'user_solo', email: 'solo@e.com' });
     const app = new Hono();
     mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/api/web/whoami', c => {
+    app.get('/web/whoami', c => {
       const tenant = webAuthTenant(c);
       return c.json({ orgId: tenant?.orgId ?? null, userId: tenant?.userId ?? null });
     });
 
-    const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: null, userId: 'user_solo' });
   });
@@ -399,9 +399,9 @@ describe('ensureUserHasOrganization (personal-org bootstrap)', () => {
     mockAuthenticate.mockResolvedValue({ workosId: 'user_boot', email: 'boot@example.com' });
     const app = new Hono();
     mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
-    app.get('/api/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+    app.get('/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
 
-    const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ orgId: 'org_new', userId: 'user_boot' });
     expect(mockCreateOrganization).toHaveBeenCalledTimes(1);
