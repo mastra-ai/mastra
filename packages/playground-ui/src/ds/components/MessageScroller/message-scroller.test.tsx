@@ -191,6 +191,7 @@ describe('MessageScroller', () => {
     expect(preview.className).toContain('scale-90');
     expect(preview.className).toContain('opacity-0');
     expect(viewport.className).not.toContain('overflow-hidden');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-110');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('First turn')).toBeTruthy();
 
     fireEvent.mouseEnter(secondTurn);
@@ -199,7 +200,7 @@ describe('MessageScroller', () => {
     expect(secondTurn.getAttribute('aria-describedby')).toBe(previewId);
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-90');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-110');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('Second turn')).toBeTruthy();
 
     fireEvent.mouseLeave(screen.getByTestId('thread-rail'));

@@ -274,7 +274,7 @@ function ThreadRailPreview({
   const containerVisible = visible && (settled || Boolean(previousTurn));
   const incomingOffset = direction === 1 ? 'translate-y-4' : '-translate-y-4';
   const outgoingOffset = direction === 1 ? '-translate-y-4' : 'translate-y-4';
-  const enteringLayerClassName = `${incomingOffset} scale-90 opacity-0 blur-xs`;
+  const enteringLayerClassName = `${incomingOffset} scale-110 opacity-0 blur-xs`;
   const exitingLayerClassName = `${outgoingOffset} scale-90 opacity-0 blur-xs`;
   const visibleLayerClassName = 'translate-y-0 scale-100 opacity-100 blur-none';
   const layerClassName =
