@@ -159,6 +159,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-pro',
     'glm-5',
     'glm-5.1',
+    'glm-5.2',
     'kimi-k2-thinking',
     'kimi-k2.5',
     'kimi-k2.6',
@@ -2782,7 +2783,6 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'deepseek-ai/DeepSeek-V3.2',
     'google/gemma-4-31B-it',
-    'zai-org/GLM-5',
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
