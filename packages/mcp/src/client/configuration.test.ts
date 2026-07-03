@@ -233,6 +233,27 @@ describe('MCPClient tool discovery retries', () => {
     expect(capabilities).toMatchObject(customCapabilities);
   });
 
+  it('forwards coerceSchemasTo into InternalMastraMCPClient', async () => {
+    const connectSpy = vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+    const client = new MCPClient({
+      id: `configuration-test-${++clientId}`,
+      coerceSchemasTo: 'zod',
+      servers: {
+        weather: {
+          url: new URL('http://localhost:1234/sse'),
+        },
+      },
+    });
+
+    clients.push(client);
+
+    const internalClient = await (client as any).getConnectedClientForServer('weather');
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect((internalClient as any).coerceSchemasTo).toBe('zod');
+  });
+
   it('returns cached server instructions for configured servers', async () => {
     vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockImplementation(async function (this: any) {
       this.serverInstructions = this.name === 'db' ? 'Validate schema before migrating.' : undefined;

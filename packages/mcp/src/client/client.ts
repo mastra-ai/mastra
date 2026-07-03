@@ -7,7 +7,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
-import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
+import type { JSONSchema7, PublicSchema, StandardSchemaWithJSON } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -41,6 +41,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
@@ -223,6 +224,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private _roots: Root[];
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
+  private readonly coerceSchemasTo: InternalMastraMCPClientOptions['coerceSchemasTo'];
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -242,6 +244,7 @@ export class InternalMastraMCPClient extends MastraBase {
     server,
     capabilities = {},
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+    coerceSchemasTo,
   }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
     this.name = name;
@@ -252,6 +255,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.enableProgressTracking = !!server.enableProgressTracking;
     this.requireToolApproval = server.requireToolApproval;
     this.onToolError = server.onToolError ?? 'throw';
+    this.coerceSchemasTo = coerceSchemasTo ?? 'json-schema';
 
     // Initialize roots from server config
     this._roots = server.roots ?? [];
@@ -787,8 +791,14 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private async convertInputSchema(
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
-  ): Promise<JSONSchema7> {
-    return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+  ): Promise<PublicSchema> {
+    const jsonSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+
+    if (this.coerceSchemasTo === 'zod') {
+      return convertJsonSchemaToZod(jsonSchema as Record<string, unknown>);
+    }
+
+    return jsonSchema;
   }
 
   /**

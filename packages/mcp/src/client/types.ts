@@ -455,4 +455,6 @@ export type InternalMastraMCPClientOptions = {
   version?: string;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /** Optional MCP schema coercion target */
+  coerceSchemasTo?: 'json-schema' | 'zod';
 };
