@@ -1445,8 +1445,15 @@ export class Mastra<
 
     if (this.#notificationDispatchConfig?.enabled !== false) {
       const workflow = createNotificationDispatchWorkflow(this.#notificationDispatchConfig);
-      this.addWorkflow(workflow, workflow.id);
+      // Mark as hidden BEFORE addWorkflow so the scheduler-enable heuristic
+      // (#hasScheduledWorkflow) skips internal schedules. Without this,
+      // addWorkflow sets #hasScheduledWorkflow = true for the dispatcher's
+      // cron, which makes #shouldEnableScheduler() return true for every app
+      // even when the user declared no scheduled workflows — causing the
+      // scheduler to poll storage every 10 s and prevent serverless containers
+      // from ever sleeping (see #18864).
       this.#hiddenWorkflowKeys.add(workflow.id);
+      this.addWorkflow(workflow, workflow.id);
     }
 
     if (config?.workflows) {
@@ -3960,8 +3967,10 @@ export class Mastra<
     this.registerStaticWorkflowScorers(workflow);
 
     // If a schedule is declared, mark the flag and register into the
-    // running scheduler worker (if already started).
-    if (hasSchedule) {
+    // running scheduler worker (if already started). Skip hidden/internal
+    // workflows so their schedules don't auto-enable the scheduler — the
+    // scheduler should only start when the *user* declares a scheduled workflow.
+    if (hasSchedule && !this.#hiddenWorkflowKeys.has(workflowKey)) {
       this.#hasScheduledWorkflow = true;
       const worker = this.#findSchedulerWorker();
       if (worker?.scheduler) {
