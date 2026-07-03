@@ -683,6 +683,18 @@ describe('discoverFsWorkflows', () => {
     const workflows = await discoverFsWorkflows(dir);
     expect(workflows.map(w => w.key)).toEqual(['real']);
   });
+
+  it('skips workflow files without export default (named exports only)', async () => {
+    await mkdir(join(dir, 'workflows'), { recursive: true });
+    await writeFile(join(dir, 'workflows', 'fs-workflow.ts'), `export default createWorkflow({});`);
+    await writeFile(
+      join(dir, 'workflows', 'manual-workflow.ts'),
+      `export const weatherWorkflow = createWorkflow({});\nexport { weatherWorkflow };`,
+    );
+
+    const workflows = await discoverFsWorkflows(dir);
+    expect(workflows.map(w => w.key)).toEqual(['fs-workflow']);
+  });
 });
 
 describe('generateFsAgentsModule with workflows', () => {
@@ -699,8 +711,8 @@ describe('generateFsAgentsModule with workflows', () => {
 
     const source = await generateFsAgentsModule('/project/src/mastra/index.ts', agents, { workflows });
 
-    expect(source).toContain(`import * as workflow_0_pipeline from`);
-    expect(source).toContain(`__fsWorkflows["pipeline"] = __resolveDefault(workflow_0_pipeline);`);
+    expect(source).toContain(`import workflow_0_pipeline from`);
+    expect(source).toContain(`__fsWorkflows["pipeline"] = workflow_0_pipeline;`);
     expect(source).toContain(`mastra.__registerFsWorkflows`);
   });
 
@@ -724,7 +736,7 @@ describe('generateFsAgentsModule with workflows', () => {
 
     const source = await generateFsAgentsModule('/project/src/mastra/index.ts', [], { workflows });
 
-    expect(source).toContain(`import * as workflow_0_onboarding from`);
+    expect(source).toContain(`import workflow_0_onboarding from`);
     expect(source).toContain(`__registerFsWorkflows`);
     expect(source).toContain(`export const mastra = __userEntry.mastra;`);
     // Agent registration still present but with empty entries
@@ -739,10 +751,10 @@ describe('generateFsAgentsModule with workflows', () => {
 
     const source = await generateFsAgentsModule('/project/src/mastra/index.ts', [], { workflows });
 
-    expect(source).toContain(`import * as workflow_0_data_pipeline from`);
-    expect(source).toContain(`import * as workflow_1_user_onboarding from`);
-    expect(source).toContain(`__fsWorkflows["data-pipeline"] = __resolveDefault(workflow_0_data_pipeline);`);
-    expect(source).toContain(`__fsWorkflows["user-onboarding"] = __resolveDefault(workflow_1_user_onboarding);`);
+    expect(source).toContain(`import workflow_0_data_pipeline from`);
+    expect(source).toContain(`import workflow_1_user_onboarding from`);
+    expect(source).toContain(`__fsWorkflows["data-pipeline"] = workflow_0_data_pipeline;`);
+    expect(source).toContain(`__fsWorkflows["user-onboarding"] = workflow_1_user_onboarding;`);
   });
 });
 

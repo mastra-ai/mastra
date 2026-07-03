@@ -400,11 +400,12 @@ export interface DiscoveredFsWorkflow {
 }
 
 /**
- * Scan `<mastraDir>/workflows/` for file-system routed workflow modules. Each
- * `.ts`/`.js` file (excluding test/spec files) is treated as a workflow whose
- * default export is a `createWorkflow(...)` result. Returns descriptors with
+ * Scan `<mastraDir>/workflows/` for file-system routed workflow modules. Only
+ * files whose source contains an `export default` are treated as fs-routed
+ * workflows — this convention distinguishes them from workflow files that are
+ * manually imported and registered programmatically. Returns descriptors with
  * absolute, slash-normalized paths ready for codegen. Performs no module
- * evaluation — only filesystem inspection.
+ * evaluation — only filesystem and source-text inspection.
  */
 export async function discoverFsWorkflows(mastraDir: string): Promise<DiscoveredFsWorkflow[]> {
   const workflowsDir = join(mastraDir, 'workflows');
@@ -430,6 +431,12 @@ export async function discoverFsWorkflows(mastraDir: string): Promise<Discovered
     const path = join(workflowsDir, basename);
     const stats = await lstat(path);
     if (stats.isSymbolicLink() || stats.isDirectory()) {
+      continue;
+    }
+    // Convention: only files with `export default` are fs-routed workflows.
+    // Files using named exports are assumed to be manually imported.
+    const source = await readFile(path, 'utf-8');
+    if (!/\bexport\s+default\b/.test(source)) {
       continue;
     }
     discovered.push({ key: toolKey(basename), path: slash(path) });

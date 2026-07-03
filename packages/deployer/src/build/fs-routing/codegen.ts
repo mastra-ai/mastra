@@ -236,17 +236,14 @@ export function generateFsWorkflowsCodegen(workflows: DiscoveredFsWorkflow[]): {
   for (let i = 0; i < workflows.length; i++) {
     const wf = workflows[i]!;
     const ident = sanitizeIdentifier(wf.key, 'workflow', `${i}`);
-    // Namespace import so both `export default` and named exports work.
-    importLines.push(`import * as ${ident} from ${JSON.stringify(wf.path)};`);
+    importLines.push(`import ${ident} from ${JSON.stringify(wf.path)};`);
   }
 
-  // Resolve default export if present, otherwise pick the first named export.
-  registrationLines.push(`function __resolveDefault(m) { return m.default ?? Object.values(m)[0]; }`);
   registrationLines.push(`const __fsWorkflows = Object.create(null);`);
   for (let i = 0; i < workflows.length; i++) {
     const wf = workflows[i]!;
     const ident = sanitizeIdentifier(wf.key, 'workflow', `${i}`);
-    registrationLines.push(`__fsWorkflows[${JSON.stringify(wf.key)}] = __resolveDefault(${ident});`);
+    registrationLines.push(`__fsWorkflows[${JSON.stringify(wf.key)}] = ${ident};`);
   }
   registrationLines.push(``);
   registrationLines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsWorkflows === 'function') {`);
