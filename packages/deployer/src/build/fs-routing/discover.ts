@@ -444,3 +444,35 @@ export async function discoverFsWorkflows(mastraDir: string): Promise<Discovered
 
   return discovered;
 }
+
+/**
+ * A discovered singleton config file under `<mastraDir>/`. All paths are
+ * absolute and slash-normalized so they can be embedded into generated module
+ * source on any platform.
+ */
+export interface DiscoveredFsSingleton {
+  /** Absolute, slash-normalized path to the singleton module. */
+  path: string;
+}
+
+const SINGLETON_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
+
+/**
+ * Check for a singleton config file (e.g. `storage.ts`, `storage.js`) directly
+ * under `<mastraDir>`. Returns the first matching file path or `undefined`.
+ * Symlinks are rejected for security.
+ */
+export async function discoverFsSingleton(mastraDir: string, name: string): Promise<DiscoveredFsSingleton | undefined> {
+  for (const ext of SINGLETON_EXTENSIONS) {
+    const candidate = join(mastraDir, `${name}${ext}`);
+    try {
+      const stats = await lstat(candidate);
+      if (stats.isFile() && !stats.isSymbolicLink()) {
+        return { path: slash(candidate) };
+      }
+    } catch {
+      // not present
+    }
+  }
+  return undefined;
+}
