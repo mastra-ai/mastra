@@ -91,16 +91,18 @@ export function createDurableBackgroundTaskCheckStep() {
       // loop state instead — it tracks the same concept: "how many times
       // has the agentic loop iterated."
       //
-      // Matches the regular agent's gating: iterationCount === 0 (first
-      // pass) or no waitTimeoutMs configured → return immediately with
-      // backgroundTaskPending=true so the loop can re-enter without
-      // blocking.  On subsequent iterations, wait for the next task to
-      // complete so the LLM can process the result.
-
-      // First invocation or no timeout configured — signal pending but don't block
-      if (initData.iterationCount === 0 || !waitTimeoutMs) {
-        return { ...typedInput, backgroundTaskPending: true };
-      }
+      // Unlike the regular agent (which keeps its ReadableStream controller
+      // alive so background task onChunk callbacks can enqueue tool-result
+      // chunks even after backgroundTaskCheckStep returns), the durable
+      // agent closes its stream on the FINISH pubsub event. Any tool-result
+      // emitted after that is silently dropped. So the durable agent must
+      // always wait for background tasks, even on the first invocation.
+      //
+      // Use the configured waitTimeoutMs if available; otherwise use a
+      // short default (1s) that's long enough for typical fast background
+      // tasks. If the task doesn't complete in time, the timeout catch
+      // below returns without setting isContinued, ending the loop.
+      const effectiveWaitMs = waitTimeoutMs ?? 1000;
 
       // Emit initial progress chunk
       if (pubsub) {
@@ -119,7 +121,7 @@ export function createDurableBackgroundTaskCheckStep() {
       // Wait for the next task to complete (or until timeout)
       try {
         await bgManager.waitForNextTask(taskIds, {
-          timeoutMs: waitTimeoutMs,
+          timeoutMs: effectiveWaitMs,
           onProgress: (elapsedMs: number) => {
             if (!pubsub) return;
             void emitChunkEvent(pubsub, runId, {

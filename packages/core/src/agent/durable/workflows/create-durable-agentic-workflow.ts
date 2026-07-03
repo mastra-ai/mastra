@@ -345,7 +345,6 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         const initData = params.getInitData() as DurableAgenticWorkflowInput;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const registryEntry = globalRunRegistry.get(state.runId);
-
         // Two-phase stop: if onIterationComplete returned { continue: false, feedback }
         // on the previous iteration, we allowed one more LLM turn with that feedback.
         // Now that the turn has completed, stop the loop unconditionally.

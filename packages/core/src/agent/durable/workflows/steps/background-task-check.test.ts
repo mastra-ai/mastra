@@ -115,7 +115,7 @@ describe('createDurableBackgroundTaskCheckStep', () => {
     expect(result.backgroundTaskPending).toBe(true);
   });
 
-  it('flags pending without waiting on first iteration (iterationCount === 0)', async () => {
+  it('waits with configured timeout even on first iteration (iterationCount === 0)', async () => {
     const { waitForNextTask, getInitData } = setupRegistry({ waitTimeoutMs: 60_000 });
     const step = createDurableBackgroundTaskCheckStep();
 
@@ -125,11 +125,16 @@ describe('createDurableBackgroundTaskCheckStep', () => {
       getInitData: getInitData(0),
     });
 
-    expect(waitForNextTask).not.toHaveBeenCalled();
+    // Unlike the regular agent which skips waiting on retryCount=0,
+    // the durable agent must always wait because its stream closes
+    // on FINISH — any late tool-result chunks would be dropped.
+    expect(waitForNextTask).toHaveBeenCalledTimes(1);
+    expect(waitForNextTask).toHaveBeenCalledWith(['t1'], expect.objectContaining({ timeoutMs: 60_000 }));
     expect(result.backgroundTaskPending).toBe(true);
+    expect(result.stepResult.isContinued).toBe(true);
   });
 
-  it('defaults to 30 s wait when no waitTimeoutMs is configured (iterationCount > 0)', async () => {
+  it('defaults to 1 s wait when no waitTimeoutMs is configured', async () => {
     const { waitForNextTask, getInitData } = setupRegistry({});
     const step = createDurableBackgroundTaskCheckStep();
 
@@ -140,7 +145,7 @@ describe('createDurableBackgroundTaskCheckStep', () => {
     });
 
     expect(waitForNextTask).toHaveBeenCalledTimes(1);
-    expect(waitForNextTask).toHaveBeenCalledWith(['t1'], expect.objectContaining({ timeoutMs: 30_000 }));
+    expect(waitForNextTask).toHaveBeenCalledWith(['t1'], expect.objectContaining({ timeoutMs: 1000 }));
     expect(result.backgroundTaskPending).toBe(true);
     expect(result.stepResult.isContinued).toBe(true);
   });
