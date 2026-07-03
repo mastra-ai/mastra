@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { AppLayout } from './AppLayout';
-import { redirectToLogin, redirectToLogout, useWebAuth } from './domains/auth';
+import { redirectToLogout, useWebAuth } from './domains/auth';
 import type { SlashCommand } from './domains/chat';
 import { SLASH_COMMANDS, useAgentControllerSession, useGlobalShortcuts, useTranscriptScroll } from './domains/chat';
 import { useDensityPreference } from './domains/settings';
@@ -16,7 +16,7 @@ import {
 } from './domains/workspaces';
 import { useToast } from './ui';
 
-export default function App() {
+export default function Chat() {
   const { toast } = useToast();
   const { baseUrl } = useApiConfig();
   const webAuth = useWebAuth();
@@ -73,7 +73,6 @@ export default function App() {
   const auth = {
     state: webAuth.data,
     loading: webAuth.isLoading,
-    onSignIn: redirectToLogin,
     onSignOut: redirectToLogout,
   };
 

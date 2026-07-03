@@ -457,20 +457,9 @@ function SidebarAuth({ auth }: { auth?: WebAuthViewModel }) {
     );
   }
 
-  if (!auth.state?.authEnabled) return null;
-
-  if (!auth.state.authenticated) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="grid h-10 w-full grid-cols-[2.75rem_1fr_auto] items-center justify-normal gap-0 px-0"
-        onClick={auth.onSignIn}
-      >
-        <span className="col-start-2 justify-self-start">Sign in</span>
-      </Button>
-    );
-  }
+  // Unauthenticated sessions never reach the app (the router bounces them to
+  // `/signin`), so the sidebar only renders the signed-in identity.
+  if (!auth.state?.authEnabled || !auth.state.authenticated) return null;
 
   const identity = auth.state.user?.name ?? auth.state.user?.email ?? 'Signed in';
 

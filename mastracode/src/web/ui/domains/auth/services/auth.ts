@@ -5,7 +5,8 @@
  * - `fetchAuthState()` reads `/auth/me` to decide whether to show the splash
  *   (unauthenticated) or the app, and to render identity / sign-out. Degrades
  *   gracefully to "auth disabled" when the route is absent.
- * - `redirectToLogin()` / `loginUrl()` send the user to the hosted WorkOS login.
+ * - `loginUrl()` / `redirectToLogin()` build/navigate to the hosted WorkOS
+ *   login URL (used by the /signin page).
  * - `redirectToLogout()` / `logoutUrl()` send the user through the server logout route.
  */
 
@@ -17,20 +18,17 @@ export interface WebAuthState {
 }
 
 /**
- * Build the hosted-login URL, preserving the current location so the user is
- * returned here after authenticating. Used by the splash "Sign in" button.
+ * Build the hosted-login URL. `returnTo` is where the server sends the user
+ * after authenticating; it defaults to the current location so contexts that
+ * are not `/signin` (which would loop back to itself) round-trip in place.
  */
-export function loginUrl(): string {
-  const returnTo = window.location.pathname + window.location.search;
+export function loginUrl(returnTo: string = window.location.pathname + window.location.search): string {
   return `/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
-/**
- * Redirect the browser to the hosted login. Called from the splash screen when
- * the user clicks "Sign in".
- */
-export function redirectToLogin(): void {
-  window.location.assign(loginUrl());
+/** Full-page navigation to the hosted login (see `loginUrl` for `returnTo`). */
+export function redirectToLogin(returnTo?: string): void {
+  window.location.assign(loginUrl(returnTo));
 }
 
 export function logoutUrl(): string {
