@@ -343,6 +343,33 @@ describe('Schedules handlers', () => {
         } as any),
       ).rejects.toThrow(HTTPException);
     });
+
+    it('rejects ambiguous bodies carrying both agentId and workflowId', () => {
+      const result = CREATE_SCHEDULE_ROUTE.bodySchema!.safeParse({
+        agentId: 'agent-1',
+        workflowId: 'test',
+        cron: '0 * * * *',
+        prompt: 'Hello',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects empty-string target ids', () => {
+      expect(
+        CREATE_SCHEDULE_ROUTE.bodySchema!.safeParse({ agentId: '', cron: '0 * * * *', prompt: 'Hi' }).success,
+      ).toBe(false);
+      expect(CREATE_SCHEDULE_ROUTE.bodySchema!.safeParse({ workflowId: '', cron: '0 * * * *' }).success).toBe(false);
+    });
+
+    it('rejects unknown keys on the create body', () => {
+      const result = CREATE_SCHEDULE_ROUTE.bodySchema!.safeParse({
+        agentId: 'agent-1',
+        cron: '0 * * * *',
+        prompt: 'Hello',
+        bogus: true,
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('UPDATE_SCHEDULE_ROUTE', () => {

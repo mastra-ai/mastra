@@ -173,11 +173,15 @@ export const scheduleIdPathParams = z.object({
   scheduleId: z.string(),
 });
 
-/** Agent variant of the create body — targets an agent by `agentId`. */
-const createAgentScheduleBodySchema = z.object({
+/**
+ * Agent variant of the create body — targets an agent by `agentId`. Strict so
+ * a body carrying both `agentId` and `workflowId` is rejected as ambiguous
+ * instead of silently matching the agent branch of the union.
+ */
+const createAgentScheduleBodySchema = z.strictObject({
   /** Optional stable id; normalized to `agent_<slug>`. A random id is generated when omitted. */
   id: z.string().optional(),
-  agentId: z.string(),
+  agentId: z.string().min(1),
   cron: z.string(),
   timezone: z.string().optional(),
   prompt: z.string(),
@@ -193,11 +197,14 @@ const createAgentScheduleBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
-/** Workflow variant of the create body — targets a workflow by `workflowId`. */
-const createWorkflowScheduleBodySchema = z.object({
+/**
+ * Workflow variant of the create body — targets a workflow by `workflowId`.
+ * Strict so ambiguous bodies (both ids) are rejected by the union.
+ */
+const createWorkflowScheduleBodySchema = z.strictObject({
   /** Optional stable id; normalized to `schedule_<slug>`. A random id is generated when omitted. */
   id: z.string().optional(),
-  workflowId: z.string(),
+  workflowId: z.string().min(1),
   cron: z.string(),
   timezone: z.string().optional(),
   inputData: z.unknown().optional(),
@@ -209,6 +216,8 @@ const createWorkflowScheduleBodySchema = z.object({
 /**
  * Body for POST /schedules. Discriminated by which target id is present:
  * `agentId` creates an agent schedule, `workflowId` a workflow schedule.
+ * Both variants are strict, so a body carrying both ids (or unknown keys)
+ * fails validation instead of silently dropping fields.
  */
 export const createScheduleBodySchema = z.union([createAgentScheduleBodySchema, createWorkflowScheduleBodySchema]);
 
