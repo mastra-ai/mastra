@@ -1,6 +1,6 @@
 ---
-title: "Reference: VercelMicroVMSandbox | Workspace"
-description: "API reference for VercelMicroVMSandbox, a sandbox provider backed by the Vercel Sandbox ephemeral Firecracker MicroVM product."
+title: "Reference: VercelSandbox | Workspace"
+description: "API reference for VercelSandbox, a sandbox provider backed by the Vercel Sandbox ephemeral Firecracker MicroVM product."
 packages:
   - "@mastra/vercel"
 ---
@@ -8,9 +8,9 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# VercelMicroVMSandbox
+# VercelSandbox
 
-Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) — an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM running Amazon Linux 2023. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes.
+Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM running Amazon Linux 2023. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes.
 
 :::info
 
@@ -20,7 +20,7 @@ For interface details, see the [WorkspaceSandbox interface](/reference/workspace
 
 :::note
 
-This is distinct from [`VercelSandbox`](/reference/workspace/vercel), which runs commands as stateless Vercel serverless **Functions**. `VercelMicroVMSandbox` runs a full Linux MicroVM with a persistent filesystem and long-running processes.
+This is distinct from [`VercelServerlessSandbox`](/reference/workspace/vercel-serverless), which runs commands as stateless Vercel serverless **Functions**. `VercelSandbox` runs a full Linux MicroVM with a persistent filesystem and long-running processes.
 
 :::
 
@@ -32,7 +32,7 @@ npm install @mastra/vercel
 
 ## Authentication
 
-The `@vercel/sandbox` SDK uses a Vercel OIDC token automatically when available.
+The `@vercel/sandbox` SDK uses a Vercel OIDC token automatically when no explicit credentials are provided. If you provide `token`, `teamId`, or `projectId`, provide all three values together.
 
 <Tabs>
   <TabItem value="oidc" label="OIDC (recommended)">
@@ -58,7 +58,7 @@ The `@vercel/sandbox` SDK uses a Vercel OIDC token automatically when available.
 
   <TabItem value="constructor" label="Constructor">
     ```typescript
-    new VercelMicroVMSandbox({
+    new VercelSandbox({
       token: 'your-token',
       teamId: 'your-team-id',
       projectId: 'your-project-id',
@@ -69,15 +69,15 @@ The `@vercel/sandbox` SDK uses a Vercel OIDC token automatically when available.
 
 ## Usage
 
-Add a `VercelMicroVMSandbox` to a workspace and assign it to an agent:
+Add a `VercelSandbox` to a workspace and assign it to an agent:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
 import { Workspace } from '@mastra/core/workspace'
-import { VercelMicroVMSandbox } from '@mastra/vercel'
+import { VercelSandbox } from '@mastra/vercel'
 
 const workspace = new Workspace({
-  sandbox: new VercelMicroVMSandbox({
+  sandbox: new VercelSandbox({
     runtime: 'node24',
     timeout: 600_000,
   }),
@@ -101,14 +101,14 @@ console.log(response.text)
 Allocate vCPUs (2048 MB of memory per vCPU) and expose ports to reach network services running inside the sandbox:
 
 ```typescript
-const sandbox = new VercelMicroVMSandbox({
+const sandbox = new VercelSandbox({
   runtime: 'node24',
   resources: { vcpus: 4 },
   ports: [3000],
 })
 
 const workspace = new Workspace({ sandbox })
-await sandbox._start()
+await sandbox.start()
 
 // The public HTTPS domain for an exposed port is available via getInfo()
 const { metadata } = sandbox.getInfo()
@@ -211,6 +211,24 @@ Both callbacks are optional and can be used independently.
       'Override the default instructions returned by getInstructions(). Pass a string to replace them, or a function to extend the defaults.',
     isOptional: true,
   },
+  {
+    name: 'onStart',
+    type: 'SandboxLifecycleHook',
+    description: 'Lifecycle hook called after the sandbox reaches `running` status.',
+    isOptional: true,
+  },
+  {
+    name: 'onStop',
+    type: 'SandboxLifecycleHook',
+    description: 'Lifecycle hook called before the sandbox stops.',
+    isOptional: true,
+  },
+  {
+    name: 'onDestroy',
+    type: 'SandboxLifecycleHook',
+    description: 'Lifecycle hook called before the sandbox is destroyed.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -225,13 +243,13 @@ Both callbacks are optional and can be used independently.
   },
   {
     name: 'name',
-    type: 'string',
-    description: "Provider name ('VercelMicroVMSandbox').",
+    type: "'VercelSandbox'",
+    description: 'Human-readable name.',
   },
   {
     name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('vercel-microvm').",
+    type: "'vercel-sandbox'",
+    description: 'Provider type identifier.',
   },
   {
     name: 'status',
@@ -246,7 +264,7 @@ Both callbacks are optional and can be used independently.
   },
   {
     name: 'processes',
-    type: 'VercelMicroVMProcessManager',
+    type: 'VercelSandboxProcessManager',
     description:
       'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
   },
@@ -255,10 +273,10 @@ Both callbacks are optional and can be used independently.
 
 ## Background processes
 
-`VercelMicroVMSandbox` includes a process manager for spawning and managing background processes. Each spawned process runs as a detached command inside the MicroVM, with output streamed through the command logs.
+`VercelSandbox` includes a process manager for spawning and managing background processes. Each spawned process runs as a detached command inside the MicroVM, with output streamed through the command logs.
 
 ```typescript
-const sandbox = new VercelMicroVMSandbox({ runtime: 'node24', ports: [3000] })
+const sandbox = new VercelSandbox({ runtime: 'node24', ports: [3000] })
 await sandbox.start()
 
 const handle = await sandbox.processes.spawn('node server.js', {
