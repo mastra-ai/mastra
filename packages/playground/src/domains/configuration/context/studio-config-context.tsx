@@ -36,6 +36,11 @@ const getPersistentConfig = (config: StudioConfig): StudioConfig => {
   return { ...config, headers };
 };
 
+const isDesktopShell = () => {
+  if (typeof window === 'undefined') return false;
+  return Boolean(window.MASTRA_DESKTOP_ENDPOINT?.trim());
+};
+
 export const StudioConfigProvider = ({
   children,
   endpoint = 'http://localhost:4111',
@@ -43,6 +48,7 @@ export const StudioConfigProvider = ({
 }: StudioConfigProviderProps) => {
   const [urlHeaders] = useState<Record<string, string>>(readUrlAuthHeader);
   const hasUrlHeaders = Object.keys(urlHeaders).length > 0;
+  const usesDesktopShell = isDesktopShell();
   const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint, urlHeaders);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
@@ -64,8 +70,8 @@ export const StudioConfigProvider = ({
     // Don't run the effect during the fetch request
     if (!instanceStatus?.status) return;
 
-    const storedConfig = localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
-    if (storedConfig) {
+    const storedConfig = usesDesktopShell ? null : localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
+    if (!usesDesktopShell && storedConfig) {
       const parsedConfig = JSON.parse(storedConfig);
 
       if (typeof parsedConfig === 'object' && parsedConfig !== null) {
@@ -87,14 +93,14 @@ export const StudioConfigProvider = ({
 
     if (instanceStatus.status === 'active') {
       const nextConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
-      if (hasUrlHeaders) {
+      if (usesDesktopShell || hasUrlHeaders) {
         localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(nextConfig)));
       }
       return setConfig({ ...nextConfig, isLoading: false });
     }
 
     return setConfig({ baseUrl: '', headers: urlHeaders, apiPrefix: undefined, isLoading: false });
-  }, [instanceStatus, endpoint, defaultApiPrefix, isStatusLoading, error, urlHeaders, hasUrlHeaders]);
+  }, [instanceStatus, endpoint, defaultApiPrefix, isStatusLoading, error, urlHeaders, hasUrlHeaders, usesDesktopShell]);
 
   const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
     setConfig(prev => {

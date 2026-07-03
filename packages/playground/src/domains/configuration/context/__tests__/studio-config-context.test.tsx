@@ -3,24 +3,24 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { StudioConfigProvider } from '../studio-config-context';
+import { MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, StudioConfigProvider } from '../studio-config-context';
 import { useStudioConfig } from '../studio-config-state';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-const LOCAL_STORAGE_KEY = 'mastra-studio-config';
+const DESKTOP_SHELL_URL = 'http://127.0.0.1:3137';
 
 const ConfigProbe = () => {
   const config = useStudioConfig();
   return <pre data-testid="config">{JSON.stringify(config)}</pre>;
 };
 
-const renderProvider = () => {
+const renderProvider = (endpoint = BASE_URL) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <StudioConfigProvider endpoint={BASE_URL}>
+      <StudioConfigProvider endpoint={endpoint}>
         <ConfigProbe />
       </StudioConfigProvider>
     </QueryClientProvider>,
@@ -29,6 +29,7 @@ const renderProvider = () => {
 
 afterEach(() => {
   cleanup();
+  delete window.MASTRA_DESKTOP_ENDPOINT;
   window.localStorage.clear();
   window.history.replaceState(null, '', '/');
   vi.restoreAllMocks();
@@ -51,7 +52,7 @@ describe('StudioConfigProvider auth header URL handoff', () => {
     await waitFor(() => expect(window.location.search).toBe('?keep=1'));
 
     await waitFor(() => {
-      const storedConfig = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) ?? '{}');
+      const storedConfig = JSON.parse(window.localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}');
       expect(storedConfig.headers.Authorization).toBeUndefined();
     });
 
@@ -68,7 +69,7 @@ describe('StudioConfigProvider auth header URL handoff', () => {
       }),
     );
     window.localStorage.setItem(
-      LOCAL_STORAGE_KEY,
+      MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
       JSON.stringify({
         baseUrl: 'http://stored.example',
         headers: { Authorization: 'Bearer old-token', 'X-Trace': 'trace-1' },
@@ -82,7 +83,7 @@ describe('StudioConfigProvider auth header URL handoff', () => {
     await waitFor(() => expect(statusRequest).toHaveBeenCalledWith('Bearer new-token'));
 
     await waitFor(() => {
-      const storedConfig = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) ?? '{}');
+      const storedConfig = JSON.parse(window.localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}');
       expect(storedConfig).toMatchObject({
         baseUrl: 'http://stored.example',
         headers: { 'X-Trace': 'trace-1' },
@@ -94,5 +95,41 @@ describe('StudioConfigProvider auth header URL handoff', () => {
     const config = JSON.parse(screen.getByTestId('config').textContent ?? '{}');
     expect(config.headers.Authorization).toBe('Bearer new-token');
     expect(config.headers['X-Trace']).toBe('trace-1');
+  });
+});
+
+describe('StudioConfigProvider desktop shell connection', () => {
+  describe('when Desktop has a stale persisted Studio URL', () => {
+    it('uses the injected shell endpoint and overwrites the stale localStorage entry', async () => {
+      server.use(http.get(DESKTOP_SHELL_URL, () => HttpResponse.text('ok')));
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+      window.localStorage.setItem(
+        MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
+        JSON.stringify({
+          baseUrl: 'http://127.0.0.1:3133',
+          headers: { 'X-Trace': 'stale' },
+          apiPrefix: '/stale-api',
+        }),
+      );
+
+      renderProvider(DESKTOP_SHELL_URL);
+
+      await waitFor(() => {
+        const config = JSON.parse(screen.getByTestId('config').textContent ?? '{}');
+        expect(config).toMatchObject({
+          baseUrl: DESKTOP_SHELL_URL,
+          headers: {},
+          apiPrefix: '/api',
+          isLoading: false,
+        });
+      });
+
+      const storedConfig = JSON.parse(window.localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}');
+      expect(storedConfig).toMatchObject({
+        baseUrl: DESKTOP_SHELL_URL,
+        headers: {},
+        apiPrefix: '/api',
+      });
+    });
   });
 });
