@@ -28,9 +28,8 @@ export async function validateExamples({ cwd = process.cwd(), log = console.log 
       checkWorkspaceDependencies(packageJson, packageJsonPath, errors) || hasWorkspaceDependencies;
 
     // This package uses a PR snapshot version as ai-sdk-v5 is not yet released on the main branch, so it won't use overrides
-    if (packageJson.name.includes('mastra-ai-sdk-v5-use-chat-example')) {
+    if (packageJson.name?.includes('mastra-ai-sdk-v5-use-chat-example')) {
       log('Skipping validation for mastra-ai-sdk-v5-use-chat-example');
-      hasMissingOverrides = false;
     } else {
       // Validate mastra packages have correct pnpm overrides
       hasMissingOverrides = validateMastraOverrides(packageJson, packageJsonPath, errors) || hasMissingOverrides;
