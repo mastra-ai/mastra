@@ -26,6 +26,48 @@ afterEach(() => {
 
 describe('useLLMProviders', () => {
   describe('when Mastra Studio Desktop has a reachable Ollama runtime', () => {
+    it('exposes the local provider without waiting for the full server registry', async () => {
+      let resolveServerProviders: () => void = () => {};
+      const serverProvidersGate = new Promise<void>(resolve => {
+        resolveServerProviders = resolve;
+      });
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+
+      server.use(
+        http.get(`${BASE_URL}/api/agents/providers`, async () => {
+          await serverProvidersGate;
+          return HttpResponse.json({ providers: [] });
+        }),
+        http.get('*/__desktop/state', () =>
+          HttpResponse.json({
+            runtime: { state: 'running', url: 'http://127.0.0.1:4111' },
+            settings: {
+              environmentVariables: {},
+              modelApiKey: 'ollama',
+              modelId: 'glm-ocr:latest',
+              modelUrl: 'http://localhost:11434/v1',
+            },
+          }),
+        ),
+        http.post('*/__desktop/probe-models', () =>
+          HttpResponse.json({
+            ok: true,
+            modelUrl: 'http://localhost:11434/v1',
+            models: ['glm-ocr:latest'],
+          }),
+        ),
+      );
+
+      const { result } = renderHook(() => useLLMProviders(), { wrapper: createWrapper() });
+
+      try {
+        await waitFor(() => expect(result.current.data?.providers.map(provider => provider.id)).toEqual(['ollama']));
+        expect(result.current.isLoading).toBe(false);
+      } finally {
+        resolveServerProviders();
+      }
+    });
+
     it('adds the local Ollama provider when the server provider list is empty', async () => {
       const probeRequests: unknown[] = [];
       window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';

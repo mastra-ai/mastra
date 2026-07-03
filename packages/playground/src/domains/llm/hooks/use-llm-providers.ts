@@ -93,6 +93,7 @@ export const useLLMProviders = () => {
     ...providersQuery,
     data,
     isFetching: providersQuery.isFetching || isDesktopStateFetching || isDesktopProbeFetching,
-    isLoading: providersQuery.isLoading || isDesktopStateLoading || isDesktopStateFetching || isDesktopProbeFetching,
+    isLoading:
+      !data && (providersQuery.isLoading || isDesktopStateLoading || isDesktopStateFetching || isDesktopProbeFetching),
   };
 };
