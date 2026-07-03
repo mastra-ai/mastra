@@ -273,26 +273,14 @@ describe('analyzeEntry', () => {
         sourcemapEnabled: false,
         workspaceMap,
         projectRoot: root,
-        initialDepsToOptimize: new Map([
-          [
-            '@internal/shared',
-            {
-              exports: ['shared'],
-              rootPath: `${root}/packages/shared`,
-              isWorkspace: true,
-              version: '1.0.0',
-            },
-          ],
-        ]),
       },
     );
 
-    expect(rollup).toHaveBeenCalledTimes(2);
+    expect(rollup).toHaveBeenCalledTimes(3);
     expect(result.dependencies.size).toBe(2);
     expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
     // Verify that the analyzer doesn't get stuck in infinite loops.
-    // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
     // (Test will timeout if there's an infinite loop issue)
   });
 
@@ -384,6 +372,7 @@ describe('analyzeEntry', () => {
     const uncachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', baseOpts);
     const uncachedCalls = vi.mocked(rollup).mock.calls.length;
 
+    expect(uncachedCalls).toBe(4);
     expect(uncachedResult.dependencies.size).toBe(3);
     expect(uncachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(uncachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
@@ -398,12 +387,12 @@ describe('analyzeEntry', () => {
     });
     const cachedCalls = vi.mocked(rollup).mock.calls.length;
 
-    expect(cachedCalls).toBeLessThan(uncachedCalls);
+    expect(cachedCalls).toBe(uncachedCalls);
     expect(cachedResult.dependencies.size).toBe(uncachedResult.dependencies.size);
     expect(cachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(cachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
     expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
-    expect(analyzeCache.size).toBe(3);
+    expect(analyzeCache.size).toBe(4);
   });
 
   it('should not cache virtual file entries', async () => {

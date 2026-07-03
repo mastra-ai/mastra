@@ -438,7 +438,7 @@ export async function analyzeBundle(
       sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
       workspaceMap,
       projectRoot,
-      shouldCheckTransitiveDependencies: isDev || externalsPreset,
+      shouldCheckTransitiveDependencies: true,
       analyzeCache,
     });
 
@@ -557,6 +557,10 @@ export async function analyzeBundle(
       }
 
       const pkgName = getPackageName(i);
+
+      if (pkgName && workspaceMap.has(pkgName)) {
+        continue;
+      }
 
       if (pkgName) {
         // Try to get version info from our tracked dependencies, then resolve from the chunk's source module.
