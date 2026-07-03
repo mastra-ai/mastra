@@ -124,7 +124,10 @@ jobs:
           install-dependencies: false
 
       - name: Install dependencies
-        run: pnpm --config.trust-policy=no-check add -w --no-lockfile globby
+        run: pnpm --config.trust-policy=no-check add -w --no-lockfile semver tinyglobby
+
+      - name: Run examples validator tests
+        run: node --test .github/scripts/validate-examples.test.js
 
       - name: Run examples validator
         run: node .github/scripts/validate-examples.js
