@@ -522,7 +522,7 @@ export async function dev({
   const mastraPackages = await getMastraPackages(rootDir);
 
   // Check for peer dependency version mismatches
-  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages, rootDir);
+  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
   logPeerDepWarnings(peerDepMismatches);
 
   const startOptions: StartOptions = {

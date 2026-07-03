@@ -1,10 +1,11 @@
+import { getPackageInfo } from 'local-pkg';
 import { describe, expect, it, vi } from 'vitest';
 
 import { checkMastraPeerDeps, logPeerDepWarnings } from './check-peer-deps.js';
 import type { MastraPackageInfo } from './mastra-packages.js';
-import { getPackageInfo } from './package-info.js';
 
-vi.mock('./package-info.js', () => ({
+// Mock local-pkg
+vi.mock('local-pkg', () => ({
   getPackageInfo: vi.fn(),
 }));
 
@@ -17,14 +18,14 @@ describe('checkMastraPeerDeps', () => {
       { name: '@mastra/memory', version: '1.0.0' },
     ];
 
-    mockGetPackageInfo.mockReturnValue({
+    mockGetPackageInfo.mockResolvedValue({
       name: '@mastra/core',
       version: '1.0.0',
       rootPath: '/node_modules/@mastra/core',
       packageJson: {},
     } as ReturnType<typeof getPackageInfo>);
 
-    const mismatches = await checkMastraPeerDeps(packages, '/test-root');
+    const mismatches = await checkMastraPeerDeps(packages);
     expect(mismatches).toEqual([]);
   });
 
@@ -34,7 +35,7 @@ describe('checkMastraPeerDeps', () => {
       { name: '@mastra/memory', version: '1.0.0' },
     ];
 
-    mockGetPackageInfo.mockImplementation((name: string) => {
+    mockGetPackageInfo.mockImplementation(async (name: string) => {
       if (name === '@mastra/memory') {
         return {
           name: '@mastra/memory',
@@ -55,7 +56,7 @@ describe('checkMastraPeerDeps', () => {
       } as ReturnType<typeof getPackageInfo>;
     });
 
-    const mismatches = await checkMastraPeerDeps(packages, '/test-root');
+    const mismatches = await checkMastraPeerDeps(packages);
     expect(mismatches).toHaveLength(1);
     expect(mismatches[0]).toEqual({
       package: '@mastra/memory',
@@ -72,7 +73,7 @@ describe('checkMastraPeerDeps', () => {
       { name: '@mastra/memory', version: '1.0.0' },
     ];
 
-    mockGetPackageInfo.mockImplementation((name: string) => {
+    mockGetPackageInfo.mockImplementation(async (name: string) => {
       if (name === '@mastra/memory') {
         return {
           name: '@mastra/memory',
@@ -93,14 +94,14 @@ describe('checkMastraPeerDeps', () => {
       } as ReturnType<typeof getPackageInfo>;
     });
 
-    const mismatches = await checkMastraPeerDeps(packages, '/test-root');
+    const mismatches = await checkMastraPeerDeps(packages);
     expect(mismatches).toHaveLength(0);
   });
 
   it('should ignore non-mastra peer deps', async () => {
     const packages: MastraPackageInfo[] = [{ name: '@mastra/cli', version: '1.0.0' }];
 
-    mockGetPackageInfo.mockReturnValue({
+    mockGetPackageInfo.mockResolvedValue({
       name: '@mastra/cli',
       version: '1.0.0',
       rootPath: '/node_modules/@mastra/cli',
@@ -111,7 +112,7 @@ describe('checkMastraPeerDeps', () => {
       },
     } as ReturnType<typeof getPackageInfo>);
 
-    const mismatches = await checkMastraPeerDeps(packages, '/test-root');
+    const mismatches = await checkMastraPeerDeps(packages);
     expect(mismatches).toHaveLength(0);
   });
 });
