@@ -2,13 +2,13 @@
  * OAuth provider selector component for /login and /logout commands
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { OAuthProviderInterface } from '../../auth/types.js';
 import { theme } from '../theme.js';
 
 /**
  * Interface for auth provider that the selector needs.
- * Can be satisfied by Harness or AuthStorage.
+ * Can be satisfied by AgentController or AuthStorage.
  */
 export interface AuthProviderSource {
   getOAuthProviders(): OAuthProviderInterface[];

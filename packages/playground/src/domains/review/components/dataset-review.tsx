@@ -1,24 +1,22 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import {
-  Badge,
-  Button,
-  Checkbox,
-  Columns,
-  Column,
-  DataList,
-  DropdownMenu,
-  Label,
-  Spinner,
-  Textarea,
-  Txt,
-  Icon,
-  cn,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,
@@ -53,17 +51,42 @@ function truncateInput(value: unknown, max: number): string {
 
 export interface DatasetReviewProps {
   datasetId: string;
+  /** When set, scopes the review (and completed) lists to items produced by this experiment. */
+  experimentId?: string;
+  /**
+   * Optional request from the parent to auto-feature this item. Whenever this prop changes
+   * to a non-null value, the matching review row is selected. Internal interactions still
+   * own the featured state afterwards; pass a fresh value on each request (e.g. clear it
+   * to `null` when navigating away so a re-open of the same id retriggers selection).
+   */
+  featuredItemId?: string | null;
 }
 
-export function DatasetReview({ datasetId }: DatasetReviewProps) {
+export function DatasetReview({ datasetId, experimentId, featuredItemId: featuredItemIdRequest }: DatasetReviewProps) {
   const client = useMastraClient();
   const { data: dataset } = useDataset(datasetId);
-  const { data: reviewItems, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
-  const { data: completedItems, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  const { data: reviewItemsRaw, isLoading: isLoadingReview } = useDatasetReviewItems(datasetId);
+  const { data: completedItemsRaw, isLoading: isLoadingCompleted } = useDatasetCompletedItems(datasetId);
+  const reviewItems = useMemo(
+    () => (experimentId ? (reviewItemsRaw ?? []).filter(i => i.experimentId === experimentId) : reviewItemsRaw),
+    [reviewItemsRaw, experimentId],
+  );
+  const completedItems = useMemo(
+    () => (experimentId ? (completedItemsRaw ?? []).filter(i => i.experimentId === experimentId) : completedItemsRaw),
+    [completedItemsRaw, experimentId],
+  );
   const { updateExperimentResult } = useDatasetMutations();
 
   // Local state
-  const [featuredItemId, setFeaturedItemId] = useState<string | null>(null);
+  const [featuredItemId, setFeaturedItemId] = useState<string | null>(featuredItemIdRequest ?? null);
+
+  // Respond to external "feature this item" requests from the parent (e.g. clicking
+  // a "Review" button on an experiment result). The parent passes the same id again
+  // by clearing to null in between so a repeat request still re-fires this effect.
+  useEffect(() => {
+    if (featuredItemIdRequest !== undefined) setFeaturedItemId(featuredItemIdRequest);
+  }, [featuredItemIdRequest]);
+
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState(false);
@@ -85,7 +108,14 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
   const [localItems, setLocalItems] = useState<ReviewItem[] | null>(null);
   const items = useMemo(() => localItems ?? reviewItems ?? [], [localItems, reviewItems]);
 
-  // Sync server data to local on initial load
+  // Reset the local cache when the scope changes (different experiment or dataset)
+  // so it re-hydrates from the new queue below, instead of keeping the previous
+  // experiment's rows and running mutations against the wrong results.
+  useEffect(() => {
+    setLocalItems(null);
+  }, [datasetId, experimentId]);
+
+  // Sync server data to local on initial load (and after a scope reset above)
   useEffect(() => {
     if (reviewItems && localItems === null) {
       setLocalItems(reviewItems);
@@ -393,18 +423,13 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
     return displayItems.find(i => i.id === featuredItemId) ?? null;
   }, [featuredItemId, displayItems]);
 
-  // Navigation
-  const toNextItem = useCallback(() => {
-    if (!featuredItemId || displayItems.length === 0) return;
-    const idx = displayItems.findIndex(i => i.id === featuredItemId);
-    if (idx < displayItems.length - 1) setFeaturedItemId(displayItems[idx + 1].id);
-  }, [featuredItemId, displayItems]);
-
-  const toPreviousItem = useCallback(() => {
-    if (!featuredItemId || displayItems.length === 0) return;
-    const idx = displayItems.findIndex(i => i.id === featuredItemId);
-    if (idx > 0) setFeaturedItemId(displayItems[idx - 1].id);
-  }, [featuredItemId, displayItems]);
+  // Navigation — undefined at the edges so the prev/next buttons disable.
+  const featuredIndex = featuredItemId ? displayItems.findIndex(i => i.id === featuredItemId) : -1;
+  const toPreviousItem = featuredIndex > 0 ? () => setFeaturedItemId(displayItems[featuredIndex - 1].id) : undefined;
+  const toNextItem =
+    featuredIndex >= 0 && featuredIndex < displayItems.length - 1
+      ? () => setFeaturedItemId(displayItems[featuredIndex + 1].id)
+      : undefined;
 
   const gridColumns = 'auto minmax(15rem,1fr) 10rem 8rem 6rem 6rem';
 
@@ -535,10 +560,12 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
-      <Columns className={featuredItem ? 'grid-cols-[1fr_1fr]' : ''}>
-        <Column>
-          <Column.Toolbar>
+      {/* Main layout: toolbar + List + Detail Panel */}
+      <div
+        className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
+      >
+        <div className="grid gap-8 content-start w-full overflow-y-auto">
+          <div className="flex items-center justify-between w-full flex-wrap gap-4 gap-x-6">
             {/* Filters (left) */}
             <div className="flex items-center gap-3">
               <DropdownMenu>
@@ -710,7 +737,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                 </DropdownMenu>
               </div>
             )}
-          </Column.Toolbar>
+          </div>
 
           {isLoadingDisplay ? (
             <div className="flex-1 flex items-center justify-center">
@@ -758,7 +785,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                   <>
                     {/* Input preview */}
                     <DataList.Cell height="compact" className="min-w-0 text-neutral4">
-                      <span className="block truncate">{truncateInput(item.input, 80)}</span>
+                      <span className="block truncate">{truncateInput(item.input, 200)}</span>
                     </DataList.Cell>
 
                     {/* Comment preview */}
@@ -828,7 +855,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                 );
 
                 return (
-                  <DataList.Row key={item.id}>
+                  <DataList.RowWrapper key={item.id}>
                     {!showCompleted ? (
                       <DataList.SelectCell
                         checked={selectedItemIds.has(item.id)}
@@ -853,12 +880,12 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
                     >
                       {rowCells}
                     </DataList.RowButton>
-                  </DataList.Row>
+                  </DataList.RowWrapper>
                 );
               })}
             </DataList>
           )}
-        </Column>
+        </div>
 
         {featuredItem && (
           <ReviewItemPanel
@@ -882,7 +909,7 @@ export function DatasetReview({ datasetId }: DatasetReviewProps) {
             onClose={() => setFeaturedItemId(null)}
           />
         )}
-      </Columns>
+      </div>
     </div>
   );
 }

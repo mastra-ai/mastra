@@ -1,4 +1,5 @@
 import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu';
+import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
 import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '@/lib/utils';
@@ -15,37 +16,69 @@ const itemClass = cn(
 );
 
 const popupClass = cn(
-  'bg-surface3 text-neutral4 z-50 min-w-44 max-h-[min(20rem,var(--available-height))] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 p-1 shadow-dialog origin-[var(--transform-origin)] outline-none',
+  'bg-surface3 text-neutral4 z-1000 min-w-44 max-h-[min(20rem,var(--available-height))] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 p-1 shadow-dialog origin-[var(--transform-origin)] outline-none',
   'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
 
 const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 
-type ContextMenuContentProps = ContextMenuPrimitive.Popup.Props &
-  Pick<ContextMenuPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+type ContextMenuContentPositionerProps = Omit<ContextMenuPositionerProps, keyof ContextMenuPopupProps>;
+
+type ContextMenuContentProps = ContextMenuPopupProps &
+  ContextMenuContentPositionerProps & {
     container?: HTMLElement;
   };
 
 const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentProps>(
-  ({ className, align = 'start', alignOffset = 4, side, sideOffset = 0, container, ...props }, ref) => (
-    <ContextMenuPrimitive.Portal container={container}>
-      <ContextMenuPrimitive.Positioner
-        align={align}
-        alignOffset={alignOffset}
-        side={side}
-        sideOffset={sideOffset}
-        className="z-50 outline-none"
-      >
-        <ContextMenuPrimitive.Popup
-          ref={ref}
-          data-slot="context-menu-content"
-          className={cn(popupClass, className)}
-          {...props}
-        />
-      </ContextMenuPrimitive.Positioner>
-    </ContextMenuPrimitive.Portal>
-  ),
+  (
+    {
+      className,
+      align = 'start',
+      alignOffset = 4,
+      side,
+      sideOffset = 0,
+      container,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
+    const positionerProps: ContextMenuContentPositionerProps = {
+      align,
+      alignOffset,
+      side,
+      sideOffset,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
+    return (
+      <ContextMenuPrimitive.Portal container={container}>
+        <ContextMenuPrimitive.Positioner className="isolate z-1000 outline-none" {...positionerProps}>
+          <ContextMenuPrimitive.Popup
+            ref={ref}
+            data-slot="context-menu-content"
+            className={cn(popupClass, className)}
+            {...props}
+          />
+        </ContextMenuPrimitive.Positioner>
+      </ContextMenuPrimitive.Portal>
+    );
+  },
 );
 ContextMenuContent.displayName = 'ContextMenuContent';
 
@@ -170,28 +203,56 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
 );
 ContextMenuSubTrigger.displayName = 'ContextMenuSubTrigger';
 
-type ContextMenuSubContentProps = ContextMenuPrimitive.Popup.Props &
-  Pick<ContextMenuPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>;
+type ContextMenuSubContentProps = ContextMenuPopupProps & ContextMenuContentPositionerProps;
 
 const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubContentProps>(
-  ({ className, align = 'start', alignOffset = -4, side = 'right', sideOffset = -4, ...props }, ref) => (
-    <ContextMenuPrimitive.Portal>
-      <ContextMenuPrimitive.Positioner
-        align={align}
-        alignOffset={alignOffset}
-        side={side}
-        sideOffset={sideOffset}
-        className="z-50 outline-none"
-      >
-        <ContextMenuPrimitive.Popup
-          ref={ref}
-          data-slot="context-menu-sub-content"
-          className={cn(popupClass, className)}
-          {...props}
-        />
-      </ContextMenuPrimitive.Positioner>
-    </ContextMenuPrimitive.Portal>
-  ),
+  (
+    {
+      className,
+      align = 'start',
+      alignOffset = -4,
+      side = 'right',
+      sideOffset = -4,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
+    const positionerProps: ContextMenuContentPositionerProps = {
+      align,
+      alignOffset,
+      side,
+      sideOffset,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
+    return (
+      <ContextMenuPrimitive.Portal>
+        <ContextMenuPrimitive.Positioner className="isolate z-1000 outline-none" {...positionerProps}>
+          <ContextMenuPrimitive.Popup
+            ref={ref}
+            data-slot="context-menu-sub-content"
+            className={cn(popupClass, className)}
+            {...props}
+          />
+        </ContextMenuPrimitive.Positioner>
+      </ContextMenuPrimitive.Portal>
+    );
+  },
 );
 ContextMenuSubContent.displayName = 'ContextMenuSubContent';
 

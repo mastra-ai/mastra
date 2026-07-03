@@ -57,76 +57,201 @@ export const Default: Story = {
   ),
 };
 
-export const Right: Story = {
+const sideOptions = [
+  {
+    side: 'bottom',
+    label: 'Bottom',
+    title: 'Notifications',
+    description: 'A panel that slides up from the bottom edge.',
+    body: 'Swipe down or press the close button to dismiss this sheet.',
+  },
+  {
+    side: 'right',
+    label: 'Right',
+    title: 'Library',
+    description: 'A panel that slides in from the right edge.',
+    body: 'Swipe right to dismiss, or use the close button.',
+  },
+  {
+    side: 'left',
+    label: 'Left',
+    title: 'Navigation',
+    description: 'A panel that slides in from the left edge.',
+    body: 'Swipe left to dismiss, or use the close button.',
+  },
+  {
+    side: 'top',
+    label: 'Top',
+    title: 'Announcement',
+    description: 'A panel that slides in from the top edge.',
+    body: 'Swipe up to dismiss, or use the close button.',
+  },
+] as const;
+
+export const Sides: Story = {
   render: () => (
-    <Drawer side="right">
-      <DrawerTrigger asChild>
-        <Button>Open right drawer</Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Library</DrawerTitle>
-          <DrawerDescription>A panel that slides in from the right edge.</DrawerDescription>
-        </DrawerHeader>
-        <DrawerBody>
-          <p className="text-ui-sm text-neutral4">Swipe right to dismiss, or use the close button.</p>
-        </DrawerBody>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+    <div className="flex flex-wrap justify-center gap-2">
+      {sideOptions.map(({ side, label, title, description, body }) => (
+        <Drawer key={side} side={side}>
+          <DrawerTrigger asChild>
+            <Button variant={side === 'bottom' ? 'default' : 'outline'}>{label}</Button>
+          </DrawerTrigger>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>{title}</DrawerTitle>
+              <DrawerDescription>{description}</DrawerDescription>
+            </DrawerHeader>
+            <DrawerBody>
+              <p className="text-ui-sm text-neutral4">{body}</p>
+            </DrawerBody>
+            <DrawerFooter>
+              <DrawerClose asChild>
+                <Button variant="outline">Close</Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+      ))}
+    </div>
   ),
 };
 
-export const Left: Story = {
-  render: () => (
-    <Drawer side="left">
-      <DrawerTrigger asChild>
-        <Button>Open left drawer</Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Navigation</DrawerTitle>
-          <DrawerDescription>A panel that slides in from the left edge.</DrawerDescription>
-        </DrawerHeader>
-        <DrawerBody>
-          <p className="text-ui-sm text-neutral4">Swipe left to dismiss, or use the close button.</p>
-        </DrawerBody>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
-  ),
+type RepositoryPanelProps = {
+  idPrefix: string;
+  title?: string;
+  description?: string;
 };
 
-export const Top: Story = {
+function RepositoryPanel({
+  idPrefix,
+  title = 'Repository setup',
+  description = 'Select the repository and branch to attach to this project.',
+}: RepositoryPanelProps) {
+  return (
+    <DrawerContent>
+      <DrawerHeader>
+        <DrawerTitle>{title}</DrawerTitle>
+        <DrawerDescription>{description}</DrawerDescription>
+      </DrawerHeader>
+      <DrawerBody className="grid content-start gap-4">
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}-repository`}>Repository</Label>
+          <Input id={`${idPrefix}-repository`} defaultValue="mastra-ai/mastra" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}-branch`}>Branch</Label>
+          <Input id={`${idPrefix}-branch`} defaultValue="main" />
+        </div>
+      </DrawerBody>
+      <DrawerFooter>
+        <DrawerClose asChild>
+          <Button variant="outline">Cancel</Button>
+        </DrawerClose>
+        <DrawerClose asChild>
+          <Button>Save</Button>
+        </DrawerClose>
+      </DrawerFooter>
+    </DrawerContent>
+  );
+}
+
+function WorkspaceSurface({ children }: { children: React.ReactNode }) {
+  const [deployments, setDeployments] = React.useState(12);
+
+  return (
+    <div className="min-h-[560px] bg-surface1 p-4 sm:p-6">
+      <div className="mx-auto grid max-w-6xl gap-4">
+        <div className="flex flex-col gap-4 rounded-lg border border-border1 bg-surface2 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid gap-1">
+            <h2 className="text-ui-lg font-medium text-neutral6">Deployments</h2>
+            <p className="text-ui-sm text-neutral3">{deployments} active preview environments</p>
+          </div>
+          <div className="flex flex-wrap gap-2">{children}</div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
+          <div className="rounded-lg border border-border1 bg-surface2 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-ui-md font-medium text-neutral6">Recent runs</h3>
+                <p className="text-ui-sm text-neutral3">Production checks across connected branches</p>
+              </div>
+              <Button variant="outline" onClick={() => setDeployments(count => count + 1)}>
+                Queue run
+              </Button>
+            </div>
+            <div className="grid gap-2">
+              {['main', 'release/canary', 'codex/drawer-floating-variant'].map((branch, index) => (
+                <div
+                  key={branch}
+                  className="flex items-center justify-between rounded-md border border-border1 bg-surface3 px-3 py-2"
+                >
+                  <span className="text-ui-sm font-medium text-neutral5">{branch}</span>
+                  <span className="text-ui-xs text-neutral3">{index === 0 ? 'Ready' : 'Building'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border1 bg-surface2 p-4">
+            <h3 className="text-ui-md font-medium text-neutral6">Environment</h3>
+            <div className="mt-3 grid gap-3">
+              <div className="rounded-md bg-surface3 p-3">
+                <p className="text-ui-xs text-neutral3">Region</p>
+                <p className="text-ui-sm text-neutral5">eu-west-1</p>
+              </div>
+              <div className="rounded-md bg-surface3 p-3">
+                <p className="text-ui-xs text-neutral3">Runtime</p>
+                <p className="text-ui-sm text-neutral5">Node.js 22</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const FloatingOverlayModes: Story = {
   render: () => (
-    <Drawer side="top">
-      <DrawerTrigger asChild>
-        <Button>Open top drawer</Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Announcement</DrawerTitle>
-          <DrawerDescription>A panel that slides in from the top edge.</DrawerDescription>
-        </DrawerHeader>
-        <DrawerBody>
-          <p className="text-ui-sm text-neutral4">Swipe up to dismiss, or use the close button.</p>
-        </DrawerBody>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+    <WorkspaceSurface>
+      <Drawer side="right" variant="floating">
+        <DrawerTrigger asChild>
+          <Button variant="outline">No overlay</Button>
+        </DrawerTrigger>
+        <RepositoryPanel
+          idPrefix="floating-none"
+          title="No overlay"
+          description="The workspace remains available while the panel is open."
+        />
+      </Drawer>
+
+      <Drawer side="right" variant="floating" overlay="transparent">
+        <DrawerTrigger asChild>
+          <Button variant="outline">Transparent overlay</Button>
+        </DrawerTrigger>
+        <RepositoryPanel
+          idPrefix="floating-transparent"
+          title="Transparent overlay"
+          description="Outside clicks dismiss the panel without drawing a dimmed backdrop."
+        />
+      </Drawer>
+
+      <Drawer side="right" variant="floating" overlay="visible">
+        <DrawerTrigger asChild>
+          <Button>Visible overlay</Button>
+        </DrawerTrigger>
+        <RepositoryPanel
+          idPrefix="floating-visible"
+          title="Visible overlay"
+          description="The floating panel uses the standard modal backdrop treatment."
+        />
+      </Drawer>
+    </WorkspaceSurface>
   ),
+  parameters: {
+    layout: 'fullscreen',
+  },
 };
 
 function ControlledExample() {
@@ -289,29 +414,35 @@ export const SnapPoints: Story = {
   ),
 };
 
+// Escape hatch: no backdrop + viewport opts out of pointer events.
 export const NonModal: Story = {
   render: () => (
     <Drawer side="right" modal={false} disablePointerDismissal>
       <DrawerTrigger asChild>
         <Button>Open non-modal drawer</Button>
       </DrawerTrigger>
-      <DrawerContent hideBackdrop>
-        <DrawerHeader>
-          <DrawerTitle>Non-modal drawer</DrawerTitle>
-          <DrawerDescription>
-            Does not trap focus or dim the page. Outside clicks are ignored — use the close button.
-          </DrawerDescription>
-        </DrawerHeader>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
+      <DrawerPortal>
+        <DrawerViewport className="pointer-events-none">
+          <DrawerPopup className="pointer-events-auto">
+            <DrawerHeader>
+              <DrawerTitle>Non-modal drawer</DrawerTitle>
+              <DrawerDescription>
+                Does not trap focus or dim the page. Outside clicks are ignored — use the close button.
+              </DrawerDescription>
+            </DrawerHeader>
+            <DrawerFooter>
+              <DrawerClose asChild>
+                <Button variant="outline">Close</Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerPopup>
+        </DrawerViewport>
+      </DrawerPortal>
     </Drawer>
   ),
 };
 
+// Escape hatch: portal scoped to a parent box instead of `document.body`.
 function SwipeToOpenExample() {
   const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
 
@@ -357,7 +488,7 @@ function ActionSheetExample() {
       <DrawerTrigger asChild>
         <Button>Open action sheet</Button>
       </DrawerTrigger>
-      <DrawerContent hideCloseButton hideHandle>
+      <DrawerContent>
         <DrawerHeader className="sr-only">
           <DrawerTitle>Profile actions</DrawerTitle>
           <DrawerDescription>Choose an action for this user.</DrawerDescription>

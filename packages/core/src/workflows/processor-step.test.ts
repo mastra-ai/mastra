@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
-import type { MastraDBMessage, MessageList } from '../agent/message-list';
+import { MessageList } from '../agent/message-list';
+import type { MastraDBMessage } from '../agent/message-list';
 import { TripWire } from '../agent/trip-wire';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
-import { createStep, createWorkflow, isProcessor } from './workflow';
+import { createWorkflow } from './create';
+import { createStep, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
 function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
@@ -17,12 +19,16 @@ function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
       response: { db: () => messages.filter(m => m.role === 'assistant') },
     },
     add: vi.fn(),
+    addSignal: vi.fn(signal => signal),
+    markResponseMessageBoundary: vi.fn(),
     addSystem: vi.fn(),
     removeByIds: vi.fn(),
     startRecording: vi.fn(),
     stopRecording: vi.fn(() => []),
     makeMessageSourceChecker: vi.fn(() => ({ getSource: () => 'input' })),
     getAllSystemMessages: vi.fn(() => []),
+    getSystemMessages: vi.fn(() => []),
+    replaceAllSystemMessages: vi.fn(),
   } as unknown as MessageList;
   return mockMessageList;
 }
@@ -64,6 +70,14 @@ describe('isProcessor', () => {
     const processor: Processor = {
       id: 'test-processor',
       processOutputStep: async ({ messages }) => messages,
+    };
+    expect(isProcessor(processor)).toBe(true);
+  });
+
+  it('should return true for object with computeStateSignal method', () => {
+    const processor: Processor = {
+      id: 'test-processor',
+      computeStateSignal: () => ({ cacheKey: 'state', contents: 'state' }),
     };
     expect(isProcessor(processor)).toBe(true);
   });
@@ -290,9 +304,10 @@ describe('createStep with Processor', () => {
       await step.execute({ inputData, outputWriter: writer } as any);
 
       expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
-      expect(messageList.add).toHaveBeenCalledWith(expect.objectContaining({ role: 'signal' }), 'input');
+      expect(messageList.markResponseMessageBoundary).toHaveBeenCalledTimes(1);
+      expect(messageList.addSignal).toHaveBeenCalledWith(expect.objectContaining({ tagName: 'system-reminder' }));
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-system-reminder', transient: true }));
+      expect(writer).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal', transient: true }));
     });
 
     it('should provide sendSignal when phase is inputStep and messageList is synthesized', async () => {
@@ -326,6 +341,114 @@ describe('createStep with Processor', () => {
       expect(processInputStepMock).toHaveBeenCalledWith(expect.objectContaining({ sendSignal: expect.any(Function) }));
       expect(messages.some(message => message.role === 'signal')).toBe(true);
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve tagged system messages when processInput returns { messages, systemMessages }', async () => {
+      const processor: Processor = {
+        id: 'system-appender',
+        processInput: async ({ messages, systemMessages }) => ({
+          messages: messages as MastraDBMessage[],
+          systemMessages: [...systemMessages, { role: 'system' as const, content: 'channel context' }],
+        }),
+      };
+
+      const step = createStep(processor);
+      const messageList = new MessageList({ threadId: 't1', resourceId: 'r1' });
+      messageList.addSystem('Original instruction');
+      messageList.addSystem('<observations>memory</observations>', 'observational-memory');
+
+      const inputData = {
+        phase: 'input' as const,
+        messages: [],
+        messageList,
+        systemMessages: messageList.getSystemMessages(),
+      };
+
+      await step.execute({ inputData } as any);
+
+      expect(messageList.getSystemMessages('observational-memory').map(m => m.content)).toEqual([
+        '<observations>memory</observations>',
+      ]);
+      expect(messageList.getSystemMessages().map(m => m.content)).toEqual(['Original instruction', 'channel context']);
+    });
+
+    it('should preserve tagged system messages when processInputStep returns systemMessages', async () => {
+      const processor: Processor = {
+        id: 'system-appender-step',
+        processInputStep: async ({ messages, systemMessages }) => ({
+          messages: messages as MastraDBMessage[],
+          systemMessages: [...systemMessages, { role: 'system' as const, content: 'channel context' }],
+        }),
+      };
+
+      const step = createStep(processor);
+      const messageList = new MessageList({ threadId: 't1', resourceId: 'r1' });
+      messageList.addSystem('Original instruction');
+      messageList.addSystem('<observations>memory</observations>', 'observational-memory');
+
+      const inputData = {
+        phase: 'inputStep' as const,
+        messages: [],
+        messageList,
+        stepNumber: 0,
+        systemMessages: messageList.getSystemMessages(),
+      };
+
+      await step.execute({ inputData } as any);
+
+      expect(messageList.getSystemMessages('observational-memory').map(m => m.content)).toEqual([
+        '<observations>memory</observations>',
+      ]);
+      expect(messageList.getSystemMessages().map(m => m.content)).toEqual(['Original instruction', 'channel context']);
+    });
+
+    it('should keep tagged system messages off args.systemMessages in a chained processor workflow but preserve them on messageList', async () => {
+      const replacerStep = createStep({
+        id: 'replacer',
+        processInputStep: async ({ messages, systemMessages }) => ({
+          messages: messages as MastraDBMessage[],
+          systemMessages: [...systemMessages, { role: 'system' as const, content: 'channel context' }],
+        }),
+      });
+
+      let secondStepSeenSystemMessages: any[] = [];
+      const inspectorStep = createStep({
+        id: 'inspector',
+        processInputStep: async ({ systemMessages, messageList }) => {
+          secondStepSeenSystemMessages = systemMessages;
+          return { messageList };
+        },
+      });
+
+      const messageList = new MessageList({ threadId: 't1', resourceId: 'r1' });
+      messageList.addSystem('Original instruction');
+      messageList.addSystem('<observations>memory</observations>', 'observational-memory');
+
+      const step1Output = await replacerStep.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: [],
+          messageList,
+          stepNumber: 0,
+          systemMessages: messageList.getSystemMessages(),
+        },
+      } as any);
+
+      await inspectorStep.execute({
+        inputData: {
+          phase: 'inputStep' as const,
+          messages: (step1Output as any).messages ?? [],
+          messageList,
+          stepNumber: 1,
+          systemMessages: (step1Output as any).systemMessages,
+        },
+      } as any);
+
+      expect(secondStepSeenSystemMessages.map(m => m.content)).toEqual(['Original instruction', 'channel context']);
+      expect(messageList.getSystemMessages('observational-memory').map(m => m.content)).toEqual([
+        '<observations>memory</observations>',
+      ]);
+      expect(messageList.getAllSystemMessages().map(m => m.content)).toContain('<observations>memory</observations>');
     });
 
     it('should call processOutputStream when phase is outputStream (messageList optional)', async () => {

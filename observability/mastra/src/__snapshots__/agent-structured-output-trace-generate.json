@@ -294,11 +294,11 @@
               "environment": "test"
             },
             "input": {
-              "totalChunks": 5,
+              "totalChunks": 6,
               "accumulatedText": "Mock V2 generate response"
             },
             "output": {
-              "totalChunks": 5,
+              "totalChunks": 6,
               "accumulatedText": "Mock V2 generate response"
             }
           }

@@ -1,10 +1,22 @@
-import type { ReasoningMessagePart } from '@assistant-ui/react';
-import { Badge, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { BrainIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 
-export const Reasoning = ({ text }: ReasoningMessagePart) => {
+export interface ReasoningProps {
+  text: string;
+  redacted?: boolean;
+}
+
+export const Reasoning = ({ text, redacted }: ReasoningProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const body = redacted ? 'Reasoning was redacted by the provider.' : text;
+
+  if (!body) {
+    return null;
+  }
 
   return (
     <div className="mb-2 space-y-2">
@@ -17,7 +29,7 @@ export const Reasoning = ({ text }: ReasoningMessagePart) => {
 
       {!isCollapsed ? (
         <div className="rounded-lg bg-surface4 p-2 border border-border-1">
-          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-neutral6">{text}</pre>
+          <pre className="whitespace-pre-wrap text-ui-sm leading-ui-sm text-neutral6">{body}</pre>
         </div>
       ) : null}
     </div>

@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
+import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
+import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -33,13 +34,13 @@ export function isOfflineMode(): boolean {
   return value === 'true' || value === '1';
 }
 
-function getEnabledGatewayIds(gateways: MastraModelGateway[]): Set<string> {
+function getEnabledGatewayIds(gateways: MastraModelGatewayInterface[]): Set<string> {
   const enabledGatewayIds = new Set<string>();
 
   for (const gateway of gateways) {
-    const enabled = gateway.shouldEnable();
+    const enabled = shouldEnableGateway(gateway);
     if (enabled) {
-      enabledGatewayIds.add(gateway.id);
+      enabledGatewayIds.add(getGatewayId(gateway));
     }
   }
 
@@ -235,7 +236,7 @@ function getPackageRoot(): string {
   }
 }
 
-function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGateway[] = []): RegistryData {
+function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGatewayInterface[] = []): RegistryData {
   const enabledGatewayIds = getEnabledGatewayIds([
     new ModelsDevGateway({}),
     new NetlifyGateway(),
@@ -433,10 +434,16 @@ export function getRegisteredProviders(): string[] {
 // ---------------------------------------------------------------------------
 
 interface ProviderCapabilityFile {
-  attachment: string[];
+  attachment?: string[];
+  temperature?: string[];
 }
 
-const providerCapCache = new Map<string, string[] | null>();
+type CapabilityDimension = keyof ProviderCapabilityFile;
+
+const providerCapCaches: Record<CapabilityDimension, Map<string, string[] | null>> = {
+  attachment: new Map(),
+  temperature: new Map(),
+};
 
 function isDirectory(dir: string): boolean {
   try {
@@ -475,8 +482,11 @@ function findCapabilitiesDirs(useDynamicLoading: boolean): string[] {
 
 let capabilitiesDirCache: string[] | undefined;
 
-function loadProviderAttachmentModels(provider: string, useDynamicLoading: boolean): string[] | null {
-  if (providerCapCache.has(provider)) return providerCapCache.get(provider)!;
+/** Parsed capability file cache — avoids re-reading JSON per dimension. */
+const parsedCapFileCache = new Map<string, ProviderCapabilityFile | null>();
+
+function loadProviderCapabilityFile(provider: string, useDynamicLoading: boolean): ProviderCapabilityFile | null {
+  if (parsedCapFileCache.has(provider)) return parsedCapFileCache.get(provider)!;
 
   if (capabilitiesDirCache === undefined) {
     capabilitiesDirCache = findCapabilitiesDirs(useDynamicLoading);
@@ -487,53 +497,93 @@ function loadProviderAttachmentModels(provider: string, useDynamicLoading: boole
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
       const data = JSON.parse(content) as ProviderCapabilityFile;
-      providerCapCache.set(provider, data.attachment);
-      return data.attachment;
+      parsedCapFileCache.set(provider, data);
+      return data;
     } catch {
       continue;
     }
   }
 
-  providerCapCache.set(provider, null);
+  parsedCapFileCache.set(provider, null);
   return null;
 }
 
-/**
- * Check whether a model supports image/file attachments.
- * Reads only the per-provider capability file for the given model's provider.
- * Returns `true` if the model is listed, `false` if the provider is known but
- * the model isn't listed, or `undefined` when no data exists for the provider.
- */
-function getProviderAttachmentSupport(
+function loadProviderCapability(
+  provider: string,
+  dimension: CapabilityDimension,
+  useDynamicLoading: boolean,
+): string[] | null {
+  const cache = providerCapCaches[dimension];
+  if (cache.has(provider)) return cache.get(provider)!;
+
+  const file = loadProviderCapabilityFile(provider, useDynamicLoading);
+  const models = file?.[dimension] ?? null;
+  cache.set(provider, models);
+  return models;
+}
+
+function getProviderCapabilitySupport(
   provider: string,
   modelId: string,
+  dimension: CapabilityDimension,
   useDynamicLoading: boolean,
 ): boolean | undefined {
-  const models = loadProviderAttachmentModels(provider, useDynamicLoading);
+  const models = loadProviderCapability(provider, dimension, useDynamicLoading);
   if (!models) return undefined;
   return models.includes(modelId);
 }
 
-export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
+function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDimension): boolean | undefined {
   const { provider, modelId } = parseModelString(modelRouterId);
   if (!provider) return undefined;
 
   const registry = GatewayRegistry.getInstance();
   const useDynamicLoading = registry['useDynamicLoading'];
-  const directSupport = getProviderAttachmentSupport(provider, modelId, useDynamicLoading);
-  if (directSupport !== undefined) return directSupport;
+  const directSupport = getProviderCapabilitySupport(provider, modelId, dimension, useDynamicLoading);
 
+  // Positive direct match wins immediately.
+  if (directSupport === true) return true;
+
+  // For nested model IDs (e.g. `openrouter/anthropic/claude-sonnet-4-6`), the
+  // outer gateway's capability list may not enumerate every nested model. Fall
+  // back to the underlying provider's authoritative capability file before
+  // trusting a `false` from the gateway.
   const nestedProviderDelimiter = modelId.indexOf('/');
   if (nestedProviderDelimiter !== -1) {
     const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
     const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
     if (nestedProvider && nestedModelId) {
-      const nestedSupport = getProviderAttachmentSupport(nestedProvider, nestedModelId, useDynamicLoading);
+      const nestedSupport = getProviderCapabilitySupport(nestedProvider, nestedModelId, dimension, useDynamicLoading);
       if (nestedSupport !== undefined) return nestedSupport;
     }
   }
 
   return directSupport;
+}
+
+/** @internal Reset capability caches. For testing only. */
+export function _resetCapabilityCaches(): void {
+  for (const cache of Object.values(providerCapCaches)) cache.clear();
+  parsedCapFileCache.clear();
+  capabilitiesDirCache = undefined;
+}
+
+/**
+ * Check whether a model supports image/file attachments.
+ * Returns `true` if the model is listed, `false` if the provider is known but
+ * the model isn't listed, or `undefined` when no data exists for the provider.
+ */
+export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
+  return modelSupportsCapability(modelRouterId, 'attachment');
+}
+
+/**
+ * Check whether a model supports the `temperature` sampling parameter.
+ * Returns `true` if the model is listed, `false` if the provider is known but
+ * the model isn't listed, or `undefined` when no data exists for the provider.
+ */
+export function modelSupportsTemperature(modelRouterId: string): boolean | undefined {
+  return modelSupportsCapability(modelRouterId, 'temperature');
 }
 
 /**
@@ -563,7 +613,7 @@ export class GatewayRegistry {
   private refreshInterval: NodeJS.Timeout | null = null;
   private isRefreshing = false;
   private useDynamicLoading: boolean;
-  private customGateways: MastraModelGateway[] = [];
+  private customGateways: MastraModelGatewayInterface[] = [];
 
   private constructor(options: GatewayRegistryOptions = {}) {
     const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
@@ -590,14 +640,14 @@ export class GatewayRegistry {
    * Register custom gateways for type generation
    * @param gateways - Array of custom gateway instances
    */
-  registerCustomGateways(gateways: MastraModelGateway[]): void {
+  registerCustomGateways(gateways: MastraModelGatewayInterface[]): void {
     this.customGateways = gateways;
   }
 
   /**
    * Get all registered custom gateways
    */
-  getCustomGateways(): MastraModelGateway[] {
+  getCustomGateways(): MastraModelGatewayInterface[] {
     return this.customGateways;
   }
 
@@ -646,7 +696,17 @@ export class GatewayRegistry {
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models, attachmentCapabilities } = await fetchProvidersFromGateways(gateways);
+      const { providers, models, attachmentCapabilities, temperatureCapabilities, failedGateways } =
+        await fetchProvidersFromGateways(gateways);
+
+      // If any gateway failed, skip writing to prevent partial results from
+      // overwriting the complete bundled registry. The existing static registry
+      // already contains all provider data, so a partial write would only
+      // remove providers (e.g. writing only Netlify providers when models.dev
+      // is down strips all direct providers like openai, anthropic, etc.).
+      if (failedGateways.length > 0) {
+        return;
+      }
 
       // Get package root for file paths
       const packageRoot = getPackageRoot();
@@ -660,6 +720,7 @@ export class GatewayRegistry {
           providers,
           models,
           attachmentCapabilities,
+          temperatureCapabilities,
         );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
@@ -670,7 +731,14 @@ export class GatewayRegistry {
       const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
       const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
 
-      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models, attachmentCapabilities);
+      await writeRegistryFiles(
+        distJsonPath,
+        distTypesPath,
+        providers,
+        models,
+        attachmentCapabilities,
+        temperatureCapabilities,
+      );
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
       // Copy to src/ only when explicitly requested (e.g., running the generation script)
@@ -698,7 +766,8 @@ export class GatewayRegistry {
       // Clear the in-memory cache to force reload (dynamic loading only)
       if (this.useDynamicLoading) {
         registryData = null;
-        providerCapCache.clear();
+        for (const cache of Object.values(providerCapCaches)) cache.clear();
+        parsedCapFileCache.clear();
         capabilitiesDirCache = undefined;
       }
 

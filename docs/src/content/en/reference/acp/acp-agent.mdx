@@ -1,0 +1,320 @@
+---
+title: "Reference: AcpAgent class | ACP"
+description: "API reference for the AcpAgent class, which wraps an ACP-compatible coding agent as a Mastra subagent."
+packages:
+  - "@mastra/acp"
+  - "@mastra/core"
+---
+
+# AcpAgent class
+
+The `AcpAgent` class wraps an Agent Client Protocol (ACP)-compatible coding agent as a Mastra subagent. Use it when a parent Mastra agent should delegate repository inspection, code edits, or other ACP-backed tasks to a named subagent.
+
+If you want the parent agent to call the ACP agent as a tool instead, use [`createACPTool()`](/reference/acp/create-acp-tool).
+
+## Usage example
+
+Register an ACP-compatible coding agent in a parent agent's `agents` map:
+
+```typescript title="src/mastra/agents/code-supervisor.ts"
+import { AcpAgent } from '@mastra/acp'
+import { Agent } from '@mastra/core/agent'
+
+const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  description: 'An ACP-compatible coding agent that can inspect and edit files',
+  command: 'acp-agent',
+  args: ['--stdio'],
+  cwd: process.cwd(),
+})
+
+export const codeSupervisor = new Agent({
+  id: 'code-supervisor',
+  name: 'Code Supervisor',
+  instructions: 'Delegate code editing tasks to the code-agent subagent.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  agents: {
+    codeAgent,
+  },
+})
+```
+
+For Claude Code, ACP support is provided by the `@agentclientprotocol/claude-agent-acp` bridge package. Configure the ACP agent command to run the bridge, then select a Claude model after session creation:
+
+```typescript title="src/mastra/agents/claude-code-agent.ts"
+import { AcpAgent } from '@mastra/acp'
+
+export const claudeCodeAgent = new AcpAgent({
+  id: 'claude-code-agent',
+  name: 'Claude Code Agent',
+  description: 'Use Claude Code through ACP.',
+  command: 'npx',
+  args: ['@agentclientprotocol/claude-agent-acp'],
+  cwd: process.cwd(),
+  model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for the subagent.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Display name used during agent delegation. Defaults to `id`.',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Description shown to the model when it can delegate to this subagent.',
+  },
+  {
+    name: 'command',
+    type: 'string',
+    description: 'ACP agent executable to spawn.',
+  },
+  {
+    name: 'args',
+    type: 'string[]',
+    description: 'Arguments passed to the ACP agent executable.',
+    isOptional: true,
+    defaultValue: '[]',
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables to merge with the current process environment when spawning the ACP process.',
+    isOptional: true,
+  },
+  {
+    name: 'cwd',
+    type: 'string',
+    description:
+      'Working directory for the ACP process and ACP session. Also used as the default local filesystem base path.',
+    isOptional: true,
+    defaultValue: 'process.cwd()',
+  },
+  {
+    name: 'session',
+    type: 'Partial<NewSessionRequest>',
+    description: 'ACP session creation options. Defaults to `cwd` or `process.cwd()` and an empty MCP server list.',
+    isOptional: true,
+  },
+  {
+    name: 'initialize',
+    type: 'Partial<InitializeRequest>',
+    description:
+      'ACP initialization options. Defaults to Mastra client information, the current ACP protocol version, and read/write filesystem capabilities.',
+    isOptional: true,
+  },
+  {
+    name: 'authMethodId',
+    type: 'string',
+    description: 'ACP authentication method ID to invoke after initialization and before session creation.',
+    isOptional: true,
+  },
+  {
+    name: 'persistSession',
+    type: 'boolean',
+    description:
+      'Whether to keep the ACP process and session alive after each prompt. Set to `false` to stop the process after each prompt completes.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'onPermissionRequest',
+    type: '(request: RequestPermissionRequest) => Promise<RequestPermissionResponse>',
+    description:
+      'Callback invoked when the ACP agent requests permission. Defaults to selecting the first permission option, or cancelling when no option is available.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'Workspace',
+    description:
+      'Workspace used for ACP file read and write requests. Defaults to a `Workspace` backed by `LocalFilesystem` at `cwd` or `process.cwd()`.',
+    isOptional: true,
+  },
+  {
+    name: 'model',
+    type: 'ModelId',
+    description: 'Model ID to select after ACP session creation using the ACP `session/set_model` method.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'TId',
+    description: 'Readonly subagent identifier from the constructor options.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Readonly display name for this subagent.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Readonly description shown when the parent agent can delegate to this subagent.',
+  },
+  {
+    name: 'connection',
+    type: 'ACPConnection',
+    description:
+      'Readonly ACP connection used to start the agent process, create sessions, send prompts, stream updates, and manage models.',
+  },
+]}
+/>
+
+## Methods
+
+### Generation
+
+#### `generate(messages, options?)`
+
+Sends the prompt to the ACP agent, buffers text chunks from the ACP response, and returns a Mastra subagent generate result.
+
+```typescript
+const result = await codeAgent.generate('Inspect the repository and summarize the test setup')
+
+console.log(result.text)
+```
+
+#### `stream(messages, options?)`
+
+Sends the prompt to the ACP agent and returns a Mastra subagent stream result. ACP `agent_message_chunk` updates are emitted as Mastra `text-delta` chunks.
+
+```typescript
+const result = await codeAgent.stream('Refactor the selected module and explain each change')
+
+for await (const chunk of result.fullStream) {
+  if (chunk.type === 'text-delta') {
+    process.stdout.write(chunk.payload.text)
+  }
+}
+```
+
+`resumeGenerate()` and `resumeStream()` aren't supported and throw an error when called.
+
+### Model management
+
+#### `getAvailableModels()`
+
+Starts the ACP process if needed and returns the model list advertised by the ACP session.
+
+```typescript
+const models = await codeAgent.getAvailableModels()
+// [{ modelId: '__AI_SDK_ANTHROPIC_MODEL_SONNET__', name: 'Claude Sonnet' }, ...]
+```
+
+#### `setModel(modelId)`
+
+Selects a model for the active ACP session. If the ACP agent advertises available models, the model ID must match one of them.
+
+```typescript
+await codeAgent.setModel('__AI_SDK_ANTHROPIC_MODEL_SONNET__')
+```
+
+## Session lifecycle
+
+`AcpAgent` starts the configured `command` on first use, initializes the ACP client, and creates an ACP session. By default, `persistSession` is `true`, so the process and session stay alive across `generate()`, `stream()`, `getAvailableModels()`, and `setModel()` calls.
+
+Set `persistSession: false` when each prompt should run in a fresh ACP process:
+
+```typescript title="src/mastra/agents/code-agent.ts"
+import { AcpAgent } from '@mastra/acp'
+
+export const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'Run one isolated ACP coding task',
+  command: 'acp-agent',
+  args: ['--stdio'],
+  cwd: process.cwd(),
+  persistSession: false,
+})
+```
+
+With `persistSession: false`, `@mastra/acp` stops the ACP process after each prompt completes.
+
+## Workspace integration
+
+ACP file operations go through Mastra's `Workspace` abstraction. If you don't pass `workspace`, `@mastra/acp` creates a `Workspace` backed by `LocalFilesystem` and uses `cwd` or `process.cwd()` as the filesystem base path.
+
+Pass a custom `Workspace` when the ACP agent should read and write through a specific filesystem implementation:
+
+```typescript title="src/mastra/agents/code-agent.ts"
+import { AcpAgent } from '@mastra/acp'
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({
+    basePath: process.cwd(),
+  }),
+})
+
+export const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'Run coding tasks in a controlled workspace',
+  command: 'acp-agent',
+  args: ['--stdio'],
+  workspace,
+})
+```
+
+Use `cwd` and `workspace` together when the ACP process should start in one directory but file operations should use an explicitly configured workspace root.
+
+## Permission handling
+
+ACP agents may ask the client to choose a permission option before they continue. By default, `AcpAgent` selects the first option returned by the ACP agent, or cancels when no option is available.
+
+Pass `onPermissionRequest` to inspect the request and return your own permission response:
+
+```typescript title="src/mastra/agents/code-agent.ts"
+import { AcpAgent } from '@mastra/acp'
+
+export const codeAgent = new AcpAgent({
+  id: 'code-agent',
+  description: 'Use an ACP-compatible coding agent',
+  command: 'acp-agent',
+  args: ['--stdio'],
+  async onPermissionRequest(request) {
+    const allowOption = request.options.find(option => option.name === 'Allow')
+
+    if (!allowOption) {
+      return { outcome: { outcome: 'cancelled' } }
+    }
+
+    return {
+      outcome: {
+        outcome: 'selected',
+        optionId: allowOption.optionId,
+      },
+    }
+  },
+})
+```
+
+Use this callback to enforce local policy, inspect the permission title, or route the decision to your own approval flow.
+
+## Related
+
+- [Agent Client Protocol docs](/docs/agents/acp)
+- [createACPTool() reference](/reference/acp/create-acp-tool)
+- [Agent reference](/reference/agents/agent)
+- [Subagents](/docs/agents/supervisor-agents)
+- [Agent Client Protocol introduction](https://agentclientprotocol.com/overview/introduction)
+- [Agent Client Protocol schema](https://agentclientprotocol.com/protocol/schema)

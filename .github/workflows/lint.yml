@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   changes:
     name: Detect code changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
       contents: read
     outputs:
@@ -22,7 +22,7 @@ jobs:
       has_examples: ${{ steps.filter.outputs.has_examples }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 
@@ -48,7 +48,7 @@ jobs:
   lint:
     name: Lint
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
@@ -56,24 +56,22 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:rw
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
-
-      - name: Lint
-        run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./explorations/**/*" --filter "!@internal/playground" lint
-      - name: Format
-        run: pnpm prettier --check . '!docs/**/*' '!examples/**/*' '!explorations/**/*'
+      - name: Run lint and format checks
+        run: pnpm lint
 
   check-bundle:
     name: Validate build outputs
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
@@ -81,11 +79,12 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -98,7 +97,7 @@ jobs:
 
       - name: Install test dependencies
         working-directory: ./e2e-tests/pkg-outputs
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Check bundles
         working-directory: ./e2e-tests/pkg-outputs
@@ -107,15 +106,16 @@ jobs:
   validator:
     name: Validate examples packages.json
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     if: needs.changes.outputs.has_examples == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -132,15 +132,16 @@ jobs:
   agents-md-check:
     name: Validate AGENTS.md files
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     if: github.repository == 'mastra-ai/mastra'
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -152,16 +153,17 @@ jobs:
 
   peerdeps-check:
     name: Validate peer dependencies
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     # Run on main repository or for trusted bot PRs
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
@@ -174,7 +176,7 @@ jobs:
           install-dependencies: true
 
       - name: bump versions
-        run: npx changeset version
+        run: npx changeset pre exit && npx changeset version
 
       - name: Configure git
         run: |
@@ -202,18 +204,19 @@ jobs:
   validate-pkg-json:
     name: Validate package.json files
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04-2
     timeout-minutes: 10
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
+      contents: read
       pull-requests: read
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Setup Node.js 22.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 22.13.0
           package-manager-cache: false

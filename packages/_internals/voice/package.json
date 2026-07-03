@@ -1,0 +1,98 @@
+{
+  "name": "@internal/voice",
+  "version": "0.0.11",
+  "description": "Internal Mastra voice primitives and utilities",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./voice": {
+      "import": {
+        "types": "./dist/voice/index.d.ts",
+        "default": "./dist/voice/index.js"
+      },
+      "require": {
+        "types": "./dist/voice/index.d.ts",
+        "default": "./dist/voice/index.cjs"
+      }
+    },
+    "./voice/aisdk": {
+      "import": {
+        "types": "./dist/voice/aisdk/index.d.ts",
+        "default": "./dist/voice/aisdk/index.js"
+      },
+      "require": {
+        "types": "./dist/voice/aisdk/index.d.ts",
+        "default": "./dist/voice/aisdk/index.cjs"
+      }
+    },
+    "./routes": {
+      "import": {
+        "types": "./dist/routes/index.d.ts",
+        "default": "./dist/routes/index.js"
+      },
+      "require": {
+        "types": "./dist/routes/index.d.ts",
+        "default": "./dist/routes/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.106",
+    "@internal/lint": "workspace:*",
+    "@internal/llm-recorder": "workspace:*",
+    "@internal/test-utils": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@types/node": "22.19.21",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "eslint": "^10.4.1",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/_internals/voice"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

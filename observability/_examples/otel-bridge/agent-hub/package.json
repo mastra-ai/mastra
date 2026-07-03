@@ -15,7 +15,7 @@
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20",
-    "pnpm": "^10"
+    "pnpm": ">=11.0.0"
   },
   "dependencies": {
     "@fastify/otel": "0.9.4",

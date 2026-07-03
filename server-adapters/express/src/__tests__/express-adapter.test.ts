@@ -9,6 +9,8 @@ import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
@@ -118,6 +120,8 @@ describe('Express Server Adapter', () => {
         const isStream =
           contentType.includes('text/plain') ||
           contentType.includes('text/event-stream') ||
+          contentType.includes('audio/') ||
+          contentType.includes('application/octet-stream') ||
           transferEncoding === 'chunked';
 
         if (isStream && response.body) {
@@ -244,6 +248,156 @@ describe('Express Server Adapter', () => {
       const finish = chunks.find(c => c.type === 'finish');
       expect(finish).toBeDefined();
       expect(finish.payload.metadata.request).toBeUndefined();
+    });
+
+    it('should pass SSE comment chunks through without data wrapping', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-comment',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(': heartbeat\n\n');
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-comment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).toContain(': heartbeat\n\n');
+      expect(text).toContain('data: {"type":"text-delta","payload":{"text":"hello"}}\n\n');
+      expect(text).not.toContain('data: ": heartbeat');
+    });
+
+    it('should write SSE connected comment when sseFlushOnConnect is true', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        sseFlushOnConnect: true,
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-flush`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      const connectedIndex = text.indexOf(': connected\n\n');
+      const dataIndex = text.indexOf('data: ');
+      expect(connectedIndex).toBeGreaterThanOrEqual(0);
+      expect(dataIndex).toBeGreaterThanOrEqual(0);
+      expect(connectedIndex).toBeLessThan(dataIndex);
+    });
+
+    it('should not write SSE connected comment when sseFlushOnConnect is not set', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/sse-no-flush',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+              controller.close();
+            },
+          }),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+      const port = address.port;
+
+      const response = await fetch(`http://localhost:${port}/test/sse-no-flush`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      expect(text).not.toContain(': connected');
+      expect(text).toContain('data: ');
     });
 
     it('should NOT redact sensitive data when streamOptions.redact is false', async () => {
@@ -405,6 +559,67 @@ describe('Express Server Adapter', () => {
       const textDelta = chunks.find(c => c.type === 'text-delta');
       expect(textDelta).toBeDefined();
       expect(textDelta.textDelta).toBe('Hello');
+    });
+  });
+
+  // Repro for https://github.com/mastra-ai/mastra/issues/17821 — a chunk that
+  // JSON.stringify can't handle (e.g. a BigInt step output) used to throw inside
+  // the stream loop and silently close the HTTP stream.
+  describe('Stream Chunk Serialization', () => {
+    let context: AdapterTestContext;
+    let server: Server | null = null;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>(resolve => {
+          server!.close(() => resolve());
+        });
+        server = null;
+      }
+    });
+
+    it('serializes BigInt chunks and skips unserializable chunks without killing the stream', async () => {
+      const app = express();
+      app.use(express.json());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/unserializable-stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithUnserializableChunk(),
+      };
+
+      app.use(adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      server = await new Promise<Server>(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Failed to get server address');
+      }
+
+      const response = await fetch(`http://localhost:${address.port}/test/unserializable-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      const chunks = await consumeSSEStream(response.body);
+      expectSerializedStreamChunks(chunks);
     });
   });
 

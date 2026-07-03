@@ -29,6 +29,9 @@ describe('resolveCurrentOrg', () => {
     setCurrentOrgIdMock.mockReset();
     selectMock.mockReset();
     delete process.env.MASTRA_ORG_ID;
+    delete process.env.CI;
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
   });
 
   test('auto-selects when user belongs to a single org', async () => {
@@ -84,6 +87,26 @@ describe('resolveCurrentOrg', () => {
     await resolveCurrentOrg('tok', { forcePrompt: true });
 
     expect(setCurrentOrgIdMock).not.toHaveBeenCalled();
+  });
+
+  test('forcePrompt reuses the current org without prompting when non-interactive', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    fetchOrgsMock.mockResolvedValue([ORG_A, ORG_B]);
+    getCurrentOrgIdMock.mockResolvedValue('org_b');
+
+    const result = await resolveCurrentOrg('tok', { forcePrompt: true });
+
+    expect(result).toEqual({ orgId: 'org_b', orgName: 'Org B' });
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  test('forcePrompt throws a setup error instead of prompting when non-interactive and no current org exists', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    fetchOrgsMock.mockResolvedValue([ORG_A, ORG_B]);
+    getCurrentOrgIdMock.mockResolvedValue(null);
+
+    await expect(resolveCurrentOrg('tok', { forcePrompt: true })).rejects.toThrow(/set MASTRA_ORG_ID/i);
+    expect(selectMock).not.toHaveBeenCalled();
   });
 
   test('MASTRA_ORG_ID overrides forcePrompt and skips picker', async () => {

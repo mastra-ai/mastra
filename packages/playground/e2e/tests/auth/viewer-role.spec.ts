@@ -16,15 +16,15 @@
 
 import { test, expect } from '@playwright/test';
 import { setupViewerAuth, setupMockAuth } from '../__utils__/auth';
-import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Viewer Role', () => {
   test.afterEach(async () => {
     await resetStorage();
   });
 
-  test.describe('Navigation Access', () => {
+  test.describe('when a viewer user navigates the studio', () => {
     // TODO: Re-enable after the viewer RBAC/sidebar expectations are reconciled with
     // the current Observability section behavior: Metrics stays visible, so the
     // section header can still render even when Traces is hidden.
@@ -64,7 +64,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Agents Access - Read Only', () => {
+  test.describe('when a viewer user accesses agents read-only', () => {
     test('viewer can view agents list', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents');
@@ -123,7 +123,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Workflows Access - Read Only', () => {
+  test.describe('when a viewer user accesses workflows read-only', () => {
     test('viewer can view workflows list', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/workflows');
@@ -132,7 +132,7 @@ test.describe('Viewer Role', () => {
       await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('.entity-list-row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -142,7 +142,7 @@ test.describe('Viewer Role', () => {
 
       // Click on a workflow
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -196,27 +196,15 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Tools Access - No Permission', () => {
+  test.describe('when a viewer user accesses tools without permission', () => {
     test('viewer navigating to tools page handles gracefully', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/tools');
 
-      // Viewer does NOT have tools:read permission
-      // The page might show permission denied or redirect
-      // Either behavior is acceptable for no tools access
-
-      // Wait for page to load with a timeout
-      await page.waitForLoadState('domcontentloaded');
-
-      // Check if we're still on tools page or redirected
-      const currentUrl = page.url();
-
-      if (currentUrl.includes('/tools')) {
-        // If still on tools page, might see permission denied or empty state or the tools list
-        // The route header should still identify the page either way
-        await expectCurrentBreadcrumb(page, 'Tools');
-      }
-      // If redirected, that's also acceptable
+      // Viewer does NOT have tools:read permission.
+      // RoutePermissionGuard redirects to the first accessible route (/agents).
+      await page.waitForURL(/\/agents(\/|$)/);
+      await expectCurrentBreadcrumb(page, 'Agents');
     });
 
     test('viewer cannot access tool execution', async ({ page }) => {
@@ -237,7 +225,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Permission Verification', () => {
+  test.describe('when verifying the viewer permission set', () => {
     test('viewer has correct read-only permissions', async ({ page }) => {
       // Set up viewer with explicit permission verification
       await setupMockAuth(page, {
@@ -284,7 +272,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Viewer vs Other Roles Comparison', () => {
+  test.describe('when comparing the viewer role to other roles', () => {
     test('viewer has fewer permissions than admin', async ({ page }) => {
       // First, check viewer view
       await setupViewerAuth(page);
@@ -363,7 +351,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Read-Only UI State', () => {
+  test.describe('when the viewer-only UI state is rendered', () => {
     test('viewer sees read-only agent chat with disabled input', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents/weather-agent/chat');
@@ -411,7 +399,7 @@ test.describe('Viewer Role', () => {
     });
   });
 
-  test.describe('Action Buttons Verification', () => {
+  test.describe('when verifying action buttons for a viewer', () => {
     test('action buttons are hidden or disabled on agents page', async ({ page }) => {
       await setupViewerAuth(page);
       await page.goto('/agents');

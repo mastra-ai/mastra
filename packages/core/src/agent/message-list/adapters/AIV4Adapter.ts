@@ -90,6 +90,23 @@ function getSignalType(message: MastraDBMessage): string | undefined {
   return message.type;
 }
 
+function getSignalTagName(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const tagName = (signal as Record<string, unknown>).tagName;
+    if (typeof tagName === 'string') return tagName;
+  }
+
+  const type = getSignalType(message);
+  if (type === 'user') return 'user';
+  if (type === 'reactive') return message.type;
+  return type;
+}
+
+function isUserSignalType(type: string | undefined): boolean {
+  return type === 'user' || type === 'user-message';
+}
+
 function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
   const signal =
     message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
@@ -99,14 +116,23 @@ function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMes
     signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
       ? (signal.metadata as Record<string, unknown>)
       : {};
+  const attributes =
+    signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : {};
 
+  const type = getSignalType(message) ?? 'signal';
+  const tagName = getSignalTagName(message) ?? type;
   return {
-    type: `data-${getSignalType(message) ?? 'signal'}`,
+    type: type === 'user' ? 'data-user-message' : 'data-signal',
     data: {
       id: typeof signal.id === 'string' ? signal.id : message.id,
-      type: getSignalType(message) ?? 'signal',
+      type,
+      tagName,
       contents: 'contents' in signal ? signal.contents : contents,
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(Object.keys(attributes).length ? { attributes } : {}),
       ...(Object.keys(metadata).length ? { metadata } : {}),
     },
   } as MastraMessagePart;
@@ -183,8 +209,13 @@ export class AIV4Adapter {
           continue;
         } else if (part.type === 'tool-invocation') {
           // Handle tool invocations with step number logic
+          const isDeniedApproval = part.toolInvocation.state === 'output-denied';
           const toolInvocation = {
             ...part.toolInvocation,
+            // v4 has no denied state and AI SDK v4's convertToCoreMessages requires every
+            // tool invocation to carry a result. Downgrade a declined approval to a normal
+            // result whose value is the decline reason so the conversion accepts it.
+            ...(isDeniedApproval ? { state: 'result' as const } : {}),
             args: getDisplayTransform(
               part.providerMetadata,
               'input-available',
@@ -205,7 +236,9 @@ export class AIV4Adapter {
                     transformToolPayloads,
                   ),
                 }
-              : {}),
+              : isDeniedApproval
+                ? { result: part.toolInvocation.approval?.reason ?? 'Tool call was not approved by the user' }
+                : {}),
           };
 
           // Find the step number for this tool invocation
@@ -249,7 +282,7 @@ export class AIV4Adapter {
     }
 
     const signalType = m.role === 'signal' ? getSignalType(m) : undefined;
-    const isUserMessageSignal = signalType === 'user-message';
+    const isUserMessageSignal = isUserSignalType(signalType);
     const v4Parts = preserveExtendedParts(
       m.role === 'signal' && !isUserMessageSignal ? [toSignalDataPart(m, m.content.content || contentString)] : parts,
     );
@@ -494,7 +527,7 @@ export class AIV4Adapter {
             {
               const part: MastraDBMessage['content']['parts'][number] = {
                 type: 'reasoning',
-                reasoning: '',
+                reasoning: aiV4Part.text,
                 details: [{ type: 'text', text: aiV4Part.text, signature: aiV4Part.signature }],
               };
               if (aiV4Part.providerOptions) {

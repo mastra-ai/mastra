@@ -3,10 +3,11 @@
  * Uses pi-tui overlay pattern with navigation.
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, TUI } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import type { McpServerStatus, McpSkippedServer } from '../../mcp/types.js';
+import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
 
 // =============================================================================
@@ -301,7 +302,7 @@ export class McpSelectorComponent extends Box implements Focusable {
       // Skipped servers have no sub-menu actions
     }
     // 'r' — reload all servers
-    else if (data === 'r') {
+    else if (decodePrintableShortcut(data) === 'r') {
       this.doReloadAll();
     }
     // Escape or Ctrl+C

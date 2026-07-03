@@ -1,141 +1,58 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createOpenAI } from '@ai-sdk/openai';
-import type { HarnessRequestContext } from '@mastra/core/harness';
-import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
-import { wrapLanguageModel } from 'ai';
-import { AuthStorage } from '../auth/storage.js';
-import { getCustomProviderId, loadSettings, MEMORY_GATEWAY_PROVIDER } from '../onboarding/settings.js';
-import {
-  buildAnthropicOAuthFetch,
-  claudeCodeMiddleware,
-  opencodeClaudeMaxProvider,
-  promptCacheMiddleware,
-} from '../providers/claude-max.js';
-import { githubCopilotProvider } from '../providers/github-copilot.js';
-import {
-  buildOpenAICodexOAuthFetch,
-  createCodexMiddleware,
-  getEffectiveThinkingLevel,
-  openaiCodexProvider,
-  THINKING_LEVEL_TO_REASONING_EFFORT,
-} from '../providers/openai-codex.js';
+import { loadSettings } from '../onboarding/settings.js';
+import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
+import {
+  MASTRA_GATEWAY_PREFIX,
+  MASTRACODE_GATEWAY_ID,
+  MastraCodeGateway,
+  reloadAuthStorage,
+  stripMastraGatewayPrefix,
+} from './mastracode-gateway.js';
+import type { MastraCodeGatewayOptions } from './mastracode-gateway.js';
 
-const authStorage = new AuthStorage();
+export {
+  getAnthropicApiKey,
+  getOpenAIApiKey,
+  MASTRACODE_GATEWAY_ID,
+  MastraCodeGateway,
+  remapOpenAIModelForCodexOAuth,
+  resolveAuth,
+} from './mastracode-gateway.js';
+export type { MastraCodeCustomProvider, MastraCodeGatewayOptions } from './mastracode-gateway.js';
 
-const OPENAI_PREFIX = 'openai/';
-const GITHUB_COPILOT_PREFIX = 'github-copilot/';
-const MASTRA_GATEWAY_PREFIX = 'mastra/';
-
-const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
-  'gpt-5.3': 'gpt-5.3-codex',
-  'gpt-5.2': 'gpt-5.2-codex',
-  'gpt-5.1': 'gpt-5.1-codex',
-  'gpt-5.1-mini': 'gpt-5.1-codex-mini',
-  'gpt-5': 'gpt-5-codex',
-};
-
-type ResolvedModel =
-  | ReturnType<typeof openaiCodexProvider>
-  | ReturnType<typeof opencodeClaudeMaxProvider>
-  | ReturnType<typeof githubCopilotProvider>
-  | ModelRouterLanguageModel
-  | ReturnType<ReturnType<typeof createAnthropic>>
-  | ReturnType<ReturnType<typeof createOpenAI>>;
-
+type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
-function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
-  const harnessContext = requestContext?.get('harness') as HarnessRequestContext<any> | undefined;
+function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
+  const agentControllerContext = requestContext?.get('controller') as AgentControllerRequestContext<any> | undefined;
   const headers = {
-    ...(harnessContext?.threadId ? { 'x-thread-id': harnessContext.threadId } : {}),
-    ...(harnessContext?.resourceId ? { 'x-resource-id': harnessContext.resourceId } : {}),
+    ...(agentControllerContext?.threadId ? { 'x-thread-id': agentControllerContext.threadId } : {}),
+    ...(agentControllerContext?.resourceId ? { 'x-resource-id': agentControllerContext.resourceId } : {}),
   };
 
   return Object.keys(headers).length > 0 ? headers : undefined;
 }
 
-function stripMastraGatewayPrefix(modelId: string): string {
-  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
+export function createMastraCodeGateway(options: MastraCodeGatewayOptions): MastraCodeGateway {
+  return new MastraCodeGateway(options);
 }
 
-function normalizeAnthropicModelId(modelId: string): string {
-  return modelId.replace(/\.(?=\d)/g, '-');
-}
-
-export function remapOpenAIModelForCodexOAuth(modelId: string): string {
-  const normalizedModelId = stripMastraGatewayPrefix(modelId);
-
-  if (!normalizedModelId.startsWith(OPENAI_PREFIX)) {
-    return modelId;
-  }
-
-  const openaiModelId = normalizedModelId.substring(OPENAI_PREFIX.length);
-
-  if (openaiModelId.includes('-codex')) {
-    return modelId;
-  }
-
-  const codexModelId = CODEX_OPENAI_MODEL_REMAPS[openaiModelId];
-  if (!codexModelId) {
-    return modelId;
-  }
-
-  const remappedModelId = `${OPENAI_PREFIX}${codexModelId}`;
-  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? `${MASTRA_GATEWAY_PREFIX}${remappedModelId}` : remappedModelId;
+export function createMastraCodeModelCatalogProvider(gateway: MastraModelGatewayInterface) {
+  return gateway instanceof MastraCodeGateway
+    ? gateway.createModelCatalogProvider()
+    : MastraCodeGateway.createModelCatalogProvider(gateway);
 }
 
 /**
- * Resolve the Anthropic API key.
- * Main slot → dedicated apikey: slot → env var.
+ * Placeholder for future model ID normalization.
+ * Currently returns the input unchanged, but exists as a seam
+ * for aliasing, casing fixes, or validation in the future.
  */
-export function getAnthropicApiKey(): string | undefined {
-  const storedCred = authStorage.get('anthropic');
-  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-    return storedCred.key.trim();
-  }
-  const dedicatedKey = authStorage.getStoredApiKey('anthropic')?.trim();
-  if (dedicatedKey) return dedicatedKey;
-  return process.env.ANTHROPIC_API_KEY?.trim() || undefined;
-}
-
-/**
- * Resolve the OpenAI API key.
- * Main slot → dedicated apikey: slot → env var.
- */
-export function getOpenAIApiKey(): string | undefined {
-  const storedCred = authStorage.get('openai-codex');
-  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-    return storedCred.key.trim();
-  }
-  const dedicatedKey = authStorage.getStoredApiKey('openai-codex')?.trim();
-  if (dedicatedKey) return dedicatedKey;
-  return process.env.OPENAI_API_KEY?.trim() || undefined;
-}
-
-/**
- * Create an Anthropic model using a direct API key (no OAuth).
- * Applies prompt caching but NOT the Claude Code identity middleware
- * (which is only required for Claude Max OAuth).
- */
-function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
-  const anthropic = createAnthropic({ apiKey, headers });
-  return wrapLanguageModel({
-    model: anthropic(modelId),
-    middleware: [promptCacheMiddleware],
-  });
-}
-
-/**
- * Create an OpenAI model using a direct API key from AuthStorage.
- */
-function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
-  const openai = createOpenAI({ apiKey, headers });
-  return wrapLanguageModel({
-    model: openai.responses(modelId),
-    middleware: [],
-  });
+export function resolveModelId(modelId: string): string {
+  return modelId;
 }
 
 /**
@@ -150,172 +67,107 @@ function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRe
 export function resolveModel(
   modelId: string,
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
-): ResolvedModel {
-  authStorage.reload();
-  const headers = getHarnessHeaders(options?.requestContext);
-  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
-  const normalizedModelId = stripMastraGatewayPrefix(modelId);
-  const [providerId, modelName] = normalizedModelId.split('/', 2);
+): GatewayLanguageModel {
+  reloadAuthStorage();
+  const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  const customProvider =
-    !isMastraGatewayModel && providerId && modelName
-      ? settings.customProviders.find(provider => {
-          return providerId === getCustomProviderId(provider.name);
-        })
-      : undefined;
+  // Bedrock was previously cataloged under the MastraCode gateway namespace
+  // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
+  // standalone `amazon-bedrock/<model>` form so they resolve through the
+  // dedicated Bedrock gateway.
+  const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
+  const normalizedInput = modelId.startsWith(bedrockLegacyPrefix)
+    ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
+    : modelId;
+  const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
+  const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
+  const [providerId, ...modelParts] = normalizedModelId.split('/');
+  const bareModelId = modelParts.join('/');
+  if (!providerId || !bareModelId) {
+    throw new Error(`Invalid model id: ${modelId}`);
+  }
 
-  if (customProvider) {
-    return new ModelRouterLanguageModel({
-      id: normalizedModelId as `${string}/${string}`,
-      url: customProvider.url,
-      apiKey: customProvider.apiKey,
+  if (providerId === AMAZON_BEDROCK_GATEWAY_ID) {
+    const bedrockGateway = createAmazonBedrockGateway();
+    const routerId = `${AMAZON_BEDROCK_GATEWAY_ID}/${bareModelId}`;
+    const auth = bedrockGateway.resolveAuth({
+      gatewayId: AMAZON_BEDROCK_GATEWAY_ID,
+      providerId: AMAZON_BEDROCK_GATEWAY_ID,
+      modelId: bareModelId,
+      routerId,
+    });
+    return bedrockGateway.resolveLanguageModel({
+      providerId: AMAZON_BEDROCK_GATEWAY_ID,
+      modelId: bareModelId,
+      apiKey: auth?.apiKey ?? '',
       headers,
     });
   }
 
-  // --- Memory Gateway path ---
-  const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  if (mgApiKey && isMastraGatewayModel) {
-    // Normalize gateway base URL: strip trailing slashes and "/v1", then append "/v1"
-    const rawBase =
-      settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
-    const gatewayBaseURL = rawBase.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
+  const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
-    const anthropicCred = authStorage.get('anthropic');
-    const openaiCred = authStorage.get('openai-codex');
+  const mgApiKey = MastraCodeGateway.getMemoryGatewayApiKey();
+  const rawGatewayBase =
+    settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
+    mastraGatewayApiKey: mgApiKey,
+    routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
+    thinkingLevel: options?.thinkingLevel,
+    customProviders: settings.customProviders,
+  });
 
-    // Anthropic OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
-    // Required because claudeCodeMiddleware must inject the Claude Code identity system message
-    if (normalizedModelId.startsWith('anthropic/') && anthropicCred?.type === 'oauth') {
-      const bareModelId = normalizeAnthropicModelId(normalizedModelId.substring('anthropic/'.length));
-      const anthropic = createAnthropic({
-        apiKey: 'oauth-gateway-placeholder',
-        baseURL: gatewayBaseURL,
-        headers: {
-          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
-          ...headers,
-        },
-        fetch: buildAnthropicOAuthFetch({ authStorage }) as any,
-      });
-      return wrapLanguageModel({
-        model: anthropic(bareModelId),
-        middleware: [claudeCodeMiddleware, promptCacheMiddleware],
-      });
-    }
+  const auth = gateway.resolveAuth({
+    gatewayId: MASTRACODE_GATEWAY_ID,
+    providerId,
+    modelId: bareModelId,
+    routerId,
+  });
 
-    // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
-    // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
-    if (normalizedModelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
-      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
-      const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
-      const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
-      const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
-      const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
-      const middleware = createCodexMiddleware(reasoningEffort);
-
-      const openai = createOpenAI({
-        apiKey: 'oauth-gateway-placeholder',
-        baseURL: gatewayBaseURL,
-        headers: {
-          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
-          ...headers,
-        },
-        fetch: buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false }) as any,
-      });
-      return wrapLanguageModel({
-        model: openai.responses(resolvedBareModelId),
-        middleware: [middleware],
-      });
-    }
-
-    // All other models: route through MastraGateway + ModelRouterLanguageModel
-    const gateway = new MastraGateway({
-      apiKey: mgApiKey,
-      baseUrl: gatewayBaseURL.replace(/\/v1$/, ''),
-    });
-
-    return new ModelRouterLanguageModel({ id: `mastra/${normalizedModelId}` as `${string}/${string}`, headers }, [
-      gateway,
-    ]);
-  }
-
-  const isAnthropicModel = normalizedModelId.startsWith('anthropic/');
-  const isOpenAIModel = normalizedModelId.startsWith(OPENAI_PREFIX);
-  const isMoonshotModel = normalizedModelId.startsWith('moonshotai/');
-  const isGitHubCopilotModel = normalizedModelId.startsWith(GITHUB_COPILOT_PREFIX);
-
-  if (isGitHubCopilotModel) {
-    const bareModelId = normalizedModelId.substring(GITHUB_COPILOT_PREFIX.length);
-    return githubCopilotProvider(bareModelId, { headers });
-  }
-
-  if (isMoonshotModel) {
-    if (!process.env.MOONSHOT_AI_API_KEY) {
-      throw new Error(`Need MOONSHOT_AI_API_KEY`);
-    }
-    return createAnthropic({
-      apiKey: process.env.MOONSHOT_AI_API_KEY!,
-      baseURL: 'https://api.moonshot.ai/anthropic/v1',
-      name: 'moonshotai.anthropicv1',
-      headers,
-    })(normalizedModelId.substring('moonshotai/'.length));
-  } else if (isAnthropicModel) {
-    const bareModelId = normalizeAnthropicModelId(normalizedModelId.substring('anthropic/'.length));
-    const storedCred = authStorage.get('anthropic');
-
-    // Primary path: explicit OAuth credential
-    if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { headers });
-    }
-
-    // Secondary path: explicit stored API key credential
-    if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers);
-    }
-
-    // Fallback: direct API key from AuthStorage
-    const apiKey = getAnthropicApiKey();
-    if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers);
-    }
-    // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId, { headers });
-  } else if (isOpenAIModel) {
-    const bareModelId = normalizedModelId.substring(OPENAI_PREFIX.length);
-    const storedCred = authStorage.get('openai-codex');
-
-    if (storedCred?.type === 'oauth') {
-      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
-      return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-        thinkingLevel: options?.thinkingLevel,
-        headers,
-      });
-    }
-
-    const apiKey = getOpenAIApiKey();
-    if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey, headers);
-    }
-
-    return new ModelRouterLanguageModel({ id: normalizedModelId as `${string}/${string}`, headers });
-  } else {
-    return new ModelRouterLanguageModel({ id: normalizedModelId as `${string}/${string}`, headers });
-  }
+  return gateway.resolveLanguageModel({
+    providerId,
+    modelId: bareModelId,
+    apiKey: auth?.apiKey ?? mgApiKey ?? '',
+    headers,
+  });
 }
 
 /**
- * Dynamic model function that reads the current model from harness state.
+ * Dynamic model function that reads the current model from controller state.
  * This allows runtime model switching via the /models picker.
  */
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
+  const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.state?.currentModelId;
+  const modelId = agentControllerContext?.session?.modelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
+  const thinkingLevel = agentControllerContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
   return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
+}
+
+/**
+ * Goal judge model resolver for the agent's `goal.judge` config. Resolves the
+ * configured goal judge model through mastracode's gateway so provider
+ * credentials (stored in auth storage, not just env) are injected — a bare model
+ * id handed to core's default model router would fail to find the API key.
+ *
+ * Returns `undefined` when no judge model is configured, which keeps the goal
+ * step a complete no-op (the goal mechanism requires a judge to do anything).
+ *
+ * `settingsPath` must be the same source `createMastraCode()` reads from so the
+ * judge model and the goal budget (`goalMaxTurns`) come from one config — with a
+ * custom `settingsPath` a bare `loadSettings()` here could read a different file
+ * and silently turn the goal step into a no-op.
+ */
+export function getGoalJudgeModel(
+  { requestContext }: { requestContext: RequestContext },
+  settingsPath?: string,
+): ResolvedModel | undefined {
+  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel;
+  if (!judgeModelId) return undefined;
+  return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
 }

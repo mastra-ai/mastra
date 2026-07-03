@@ -7,7 +7,8 @@ import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
-import type { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_CONTROLLER_ROUTES } from './agent-controller';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -16,6 +17,7 @@ import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
+import { HEARTBEATS_ROUTES } from './heartbeats';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -54,6 +56,8 @@ export type ServerContext = {
   abortSignal: AbortSignal;
   /** The route prefix configured for the server (e.g., '/api') */
   routePrefix?: string;
+  /** The web-standard Request object for accessing headers, cookies, etc. */
+  request?: Request;
 };
 
 /**
@@ -120,6 +124,7 @@ export type ServerRoute<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
+  sseFlushOnConnect?: boolean;
   // Method signature is bivariant in params, allowing heterogeneous route arrays
   // while still preserving specific param types on individual routes.
   handler(params: TParams & ServerContext): ReturnType<ServerRouteHandler<TParams, TResponse, TResponseType>>;
@@ -186,8 +191,11 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...DATASETS_ROUTES,
   ...BACKGROUND_TASK_ROUTES,
   ...EDITOR_BUILDER_ROUTES,
+  ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
+  ...HEARTBEATS_ROUTES,
   ...CHANNELS_ROUTES,
+  ...AGENT_CONTROLLER_ROUTES,
 ];
 
 /**

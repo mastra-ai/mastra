@@ -7,7 +7,9 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import { toStandardSchema } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -15,6 +17,137 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod/v3';
 
 import { InternalMastraMCPClient } from './client.js';
+
+describe('InternalMastraMCPClient - server instructions', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockSdkConnection(instructions: string | undefined) {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined as any);
+    vi.spyOn(Client.prototype, 'getInstructions').mockReturnValue(instructions);
+    vi.spyOn(StreamableHTTPClientTransport.prototype, 'close').mockResolvedValue(undefined as any);
+  }
+
+  it('retrieves instructions after connect', async () => {
+    mockSdkConnection('Validate schemas before migrations.');
+
+    const client = new InternalMastraMCPClient({
+      name: 'db-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+
+    expect(client.instructions).toBe('Validate schemas before migrations.');
+    await client.disconnect();
+  });
+
+  it('refreshes instructions on forceReconnect', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined as any);
+    vi.spyOn(Client.prototype, 'getInstructions')
+      .mockReturnValueOnce('Use the old schema policy.')
+      .mockReturnValueOnce('Use the new schema policy.');
+    vi.spyOn(StreamableHTTPClientTransport.prototype, 'close').mockResolvedValue(undefined as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'db-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+    expect(client.instructions).toBe('Use the old schema policy.');
+
+    await client.forceReconnect();
+    expect(client.instructions).toBe('Use the new schema policy.');
+
+    await client.disconnect();
+  });
+
+  it('handles empty instructions', async () => {
+    mockSdkConnection(undefined);
+
+    const client = new InternalMastraMCPClient({
+      name: 'empty-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+
+    expect(client.instructions).toBeUndefined();
+    await client.disconnect();
+  });
+
+  it('adds forwarding metadata to MCP tools', async () => {
+    mockSdkConnection('Only run read-only checks.');
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'check',
+          description: 'Check state',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+    } as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'audit-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+        forwardInstructions: false,
+        instructionsMaxLength: 16,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.check.mcpMetadata).toMatchObject({
+      serverName: 'audit-tools',
+      serverInstructions: 'Only run read-only checks.',
+      forwardInstructions: false,
+      instructionsMaxLength: 16,
+    });
+
+    await client.disconnect();
+  });
+
+  it('defaults forwardInstructions to false (opt-in)', async () => {
+    mockSdkConnection('Only run read-only checks.');
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'check',
+          description: 'Check state',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+    } as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'audit-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.check.mcpMetadata).toMatchObject({
+      serverName: 'audit-tools',
+      forwardInstructions: false,
+    });
+
+    await client.disconnect();
+  });
+});
 
 async function setupTestServer(withSessionManagement: boolean) {
   const httpServer: HttpServer = createServer();
@@ -271,9 +404,8 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 describe('MastraMCPClient - outputSchema without structuredContent', () => {
   // When MCP servers (e.g. FastMCP) define outputSchema on a tool but don't
   // return structuredContent in the response, the full CallToolResult envelope
-  // should be returned as-is. We don't pass outputSchema to createTool, so
-  // Zod won't strip unrecognised keys. The MCP SDK validates structuredContent
-  // against outputSchema internally via AJV.
+  // should be returned as-is. outputSchema is attached for documentation with a
+  // no-op validator; the MCP SDK validates structuredContent via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -390,6 +522,151 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
 
     expect(storedSchema.properties?.root?.$ref).toBe('#/$defs/node');
     expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
+  });
+
+  it('exposes output JSON schema for documentation while Mastra validation always succeeds', async () => {
+    const sdkClient = (client as any).client as Client;
+    const outputSchema = {
+      type: 'object' as const,
+      properties: {
+        result: { type: 'number' },
+        expression: { type: 'string' },
+      },
+      required: ['result'],
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { expression: { type: 'string' } },
+          },
+          outputSchema,
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+    expect(calculateTool).toBeDefined();
+
+    const documentedSchema = calculateTool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-07' });
+    expect(documentedSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        result: { type: 'number' },
+        expression: { type: 'string' },
+      },
+    });
+
+    const invalidOutput = { result: 'not-a-number', extraField: true };
+    expect(calculateTool.outputSchema?.['~standard'].validate(invalidOutput)).toEqual({ value: invalidOutput });
+    expect(toStandardSchema(outputSchema)['~standard'].validate(invalidOutput)).toHaveProperty('issues');
+
+    const callToolResult = {
+      content: [{ type: 'text', text: JSON.stringify({ result: 2, expression: '1 + 1' }) }],
+      isError: false,
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+    await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual(callToolResult);
+  });
+});
+
+describe('MastraMCPClient - isError handling', () => {
+  // Per the MCP spec, tool execution failures are reported in-band as a normal
+  // CallToolResult with `isError: true` and the failure text in `content`.
+  // By default the client surfaces these on Mastra's failed-tool-call path by
+  // throwing, so spans/chunks/scorers reflect the failure and the model can
+  // self-correct.
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+  });
+
+  afterEach(async () => {
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  const failingResult = {
+    content: [{ type: 'text', text: 'API key invalid' }],
+    isError: true,
+  };
+
+  it('throws with the content text when a tool returns isError: true (default)', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-default-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(failingResult);
+
+    const tools = await client.tools();
+    await expect(tools['fetch'].execute?.({})).rejects.toThrow('API key invalid');
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('throws the content text rather than dropping it for tools with an outputSchema', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-output-schema-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'fetch',
+          description: 'Fetches data',
+          inputSchema: { type: 'object' as const },
+          outputSchema: { type: 'object' as const, properties: { result: { type: 'number' } } },
+        },
+      ],
+    });
+    // Spec-compliant servers put the failure text in content (not structuredContent) when isError.
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(failingResult);
+
+    const tools = await client.tools();
+    await expect(tools['fetch'].execute?.({})).rejects.toThrow('API key invalid');
+
+    await client.disconnect().catch(() => {});
+  });
+
+  it('returns the raw envelope when onToolError is "return" (legacy behaviour)', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'iserror-return-client',
+      server: { url: testServer.baseUrl, onToolError: 'return' },
+    });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(failingResult);
+
+    const tools = await client.tools();
+    const result = await tools['fetch'].execute?.({});
+    expect(result).toEqual(failingResult);
+
+    await client.disconnect().catch(() => {});
   });
 });
 
@@ -625,6 +902,51 @@ describe('MastraMCPClient - tools without outputSchema preserve envelope', () =>
 
     // Returns the full CallToolResult envelope
     expect(result).toEqual(callToolResult);
+  });
+});
+
+describe('MastraMCPClient - multimodal content', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'multimodal-test',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should not attach toModelOutput that duplicates MCP image content into providerMetadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'screenshot',
+          description: 'Takes a screenshot',
+          inputSchema: { type: 'object' as const, properties: {} },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const tool = tools['screenshot'];
+    expect(tool).toBeDefined();
+    expect((tool as any).toModelOutput).toBeUndefined();
   });
 });
 
@@ -900,7 +1222,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(parsed.action).toBe('cancel');
   });
 
-  it('should return an error when elicitation handler throws error', async () => {
+  it('should throw when elicitation handler throws error', async () => {
     const mockHandler = vi.fn(async _request => {
       throw new Error('Handler failed');
     });
@@ -919,16 +1241,14 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const collectUserInfoTool = tools['collectUserInfo'];
     expect(collectUserInfoTool).toBeDefined();
 
-    // Call the tool which will trigger elicitation, handler will throw error
-    const result = await collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {});
+    // The tool reports the failure in-band (isError: true), which the client now
+    // surfaces on the failed-tool-call path by throwing.
+    await expect(collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {})).rejects.toThrow();
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-
-    expect(result.isError).toBe(true);
   });
 
-  it('should return an error when client has no elicitation handler', async () => {
+  it('should throw when client has no elicitation handler', async () => {
     client = new InternalMastraMCPClient({
       name: 'no-elicitation-client',
       server: {
@@ -943,11 +1263,8 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const collectUserInfoTool = tools['collectUserInfo'];
     expect(collectUserInfoTool).toBeDefined();
 
-    // Call the tool which will trigger elicitation, should fail gracefully
-    const result = await collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {});
-
-    expect(result.content).toBeDefined();
-    expect(result.isError).toBe(true);
+    // Call the tool which will trigger elicitation; the in-band error is surfaced by throwing.
+    await expect(collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {})).rejects.toThrow();
   });
 
   it('should validate elicitation request schema structure', async () => {
@@ -980,17 +1297,14 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     const collectUserInfoTool = tools['collectUserInfo'];
     expect(collectUserInfoTool).toBeDefined();
 
-    // Call the tool which will trigger elicitation with schema validation
-    const result = await collectUserInfoTool?.execute?.({ message: 'Schema validation test' }, {});
-
-    console.log('result', result);
+    // Call the tool which will trigger elicitation with schema validation. The
+    // schema mismatch is reported in-band (isError: true) and surfaced by throwing,
+    // carrying the server's error text so the model can self-correct.
+    await expect(collectUserInfoTool?.execute?.({ message: 'Schema validation test' }, {})).rejects.toThrow(
+      'Elicitation response content does not match requested schema',
+    );
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
-    expect(result.content).toBeDefined();
-    expect(result.content[0].type).toBe('text');
-
-    const elicitationResultText = result.content[0].text;
-    expect(elicitationResultText).toContain('Elicitation response content does not match requested schema');
   });
 });
 
@@ -3100,4 +3414,51 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
 
     tokenWaiters.forEach(cancel => cancel());
   }, 20000);
+});
+
+describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', () => {
+  let testServer: Awaited<ReturnType<typeof setupTestServer>>;
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'test-close-cleanup-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('closes and clears the stale transport when the connection closes', async () => {
+    const staleTransport = (client as any).transport;
+    expect(staleTransport).toBeDefined();
+    const closeSpy = vi.spyOn(staleTransport, 'close');
+
+    // Simulate a server-initiated close firing the SDK client's onclose handler.
+    (client as any).client.onclose?.();
+
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    // Let the fire-and-forget close settle.
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  it('does not throw when the stale transport close rejects', async () => {
+    const staleTransport = (client as any).transport;
+    vi.spyOn(staleTransport, 'close').mockRejectedValueOnce(new Error('already closed'));
+
+    expect(() => (client as any).client.onclose?.()).not.toThrow();
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 });

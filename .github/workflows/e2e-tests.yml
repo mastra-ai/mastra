@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -40,13 +40,13 @@ jobs:
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/monorepo
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Test
         working-directory: ./e2e-tests/monorepo
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
 
   e2e-no-bundling:
     name: E2E no-bundling
@@ -61,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -73,13 +73,13 @@ jobs:
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/no-bundling
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Test
         working-directory: ./e2e-tests/no-bundling
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
 
   e2e-create-mastra:
     name: E2E create-mastra
@@ -94,7 +94,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -106,13 +106,13 @@ jobs:
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/create-mastra
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Test
         working-directory: ./e2e-tests/create-mastra
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
 
   e2e-commonjs:
     name: E2E CommonJS
@@ -127,7 +127,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -139,7 +139,7 @@ jobs:
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/commonjs
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Test
         working-directory: ./e2e-tests/commonjs
@@ -158,7 +158,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -170,13 +170,13 @@ jobs:
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/deployers
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Test
         working-directory: ./e2e-tests/deployers
         run: pnpm test
         env:
-          NPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '@mastra/* mastra create-mastra'
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
 
   e2e-type-check:
     name: E2E Type check
@@ -191,7 +191,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -203,7 +203,7 @@ jobs:
 
       - name: Install e2e test type-check
         working-directory: ./e2e-tests/type-check
-        run: pnpm install --ignore-workspace
+        run: pnpm install
 
       - name: Test
         working-directory: ./e2e-tests/type-check
@@ -216,7 +216,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     permissions:
       contents: read
     env:
@@ -226,7 +226,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -234,7 +234,17 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Build
-        run: pnpm build
+        run: >-
+          pnpm turbo
+          --filter "@mastra/core"
+          --filter "mastra"
+          --filter "@mastra/editor"
+          --filter "@mastra/memory"
+          --filter "@mastra/libsql"
+          --filter "@mastra/loggers"
+          --filter "@mastra/mcp"
+          --filter "@internal/playground"
+          build
 
       - name: Setup e2e project dependencies
         working-directory: ./packages/playground
@@ -258,7 +268,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
 

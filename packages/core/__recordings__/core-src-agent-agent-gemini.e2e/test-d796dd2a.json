@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-d796dd2a",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle single turn with maxSteps=1 and messages ending with assistant",
     "createdAt": "2026-05-18T10:50:51.680Z",
-    "updatedAt": "2026-05-20T14:04:38.843Z"
+    "updatedAt": "2026-05-28T17:33:41.205Z"
   },
   "recordings": [
     {
@@ -54,7 +54,7 @@
             ]
           }
         },
-        "timestamp": 1779285876859
+        "timestamp": 1779989619907
       },
       "response": {
         "status": 200,
@@ -62,9 +62,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:38 GMT",
+          "date": "Thu, 28 May 2026 17:33:41 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1949",
+          "server-timing": "gfet4t7; dur=1174",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -77,19 +77,19 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"selection\": \"C\",\n  \"reason\": \"You indicated that you value reliability most, and option C is the most reliable.\"\n}"
+                    "text": "{\n  \"selection\": \"C\",\n  \"reason\": \"You indicated that reliability is your most important factor. Therefore, option C (reliable) is the best choice for you.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.13821145259972775
+              "avgLogprobs": -0.11035105077231802
             }
           ],
           "usageMetadata": {
             "promptTokenCount": 55,
-            "candidatesTokenCount": 33,
-            "totalTokenCount": 88,
+            "candidatesTokenCount": 41,
+            "totalTokenCount": 96,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
@@ -99,13 +99,13 @@
             "candidatesTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 33
+                "tokenCount": 41
               }
             ],
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "dL8Naru4O6ivkdUP2t_xoQM"
+          "responseId": "dHwYavWuDsPU_uMP1PPAyAI"
         },
         "isStreaming": false
       }

@@ -62,7 +62,7 @@ export function inputToMastraDBMessage(
     return stampMessageParts(mastraMessageV1ToMastraDBMessage(message, messageSource, context), messageSource);
   }
   if (TypeDetector.isMastraDBMessage(message)) {
-    return stampMessageParts(hydrateMastraDBMessageFields(message, context), messageSource);
+    return stampMessageParts(hydrateMastraDBMessageFields(message, context, messageSource), messageSource);
   }
   if (TypeDetector.isAIV4CoreMessage(message)) {
     return stampMessageParts(AIV4Adapter.fromCoreMessage(message, context, messageSource), messageSource);
@@ -108,7 +108,7 @@ export function inputToMastraDBMessage(
   }
 
   if (TypeDetector.isAIV5CoreMessage(message)) {
-    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource);
+    const dbMsg = AIV5Adapter.fromModelMessage(message, messageSource, context);
     // Only use the original createdAt from input message metadata, not the generated one from the static method
     // This fixes issue #10683 where messages without createdAt would get shuffled
     const rawCreatedAt =
@@ -183,13 +183,16 @@ export function mastraMessageV1ToMastraDBMessage(
 export function hydrateMastraDBMessageFields(
   message: MastraDBMessage,
   context: InputConversionContext,
+  messageSource: MessageSource,
 ): MastraDBMessage {
   // Generate ID if missing
   if (!message.id) {
     message.id = context.newMessageId();
   }
 
-  if (!(message.createdAt instanceof Date)) {
+  if (message.createdAt === undefined || message.createdAt === null) {
+    message.createdAt = context.generateCreatedAt(messageSource);
+  } else if (!(message.createdAt instanceof Date)) {
     message.createdAt = new Date(message.createdAt);
   }
 

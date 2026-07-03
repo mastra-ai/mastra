@@ -4,12 +4,15 @@ import { mkdir, rm, stat, access, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { config } from 'dotenv';
+
+import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
+import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
-import { MASTRA_STUDIO_URL } from '../auth/client.js';
+import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
@@ -40,7 +43,7 @@ async function zipOutput(projectDir: string): Promise<string> {
 
   return new Promise((resolvePromise, reject) => {
     const output = createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
 
     output.on('close', () => resolvePromise(zipPath));
     archive.on('error', reject);
@@ -322,19 +325,42 @@ async function resolveProject(
 /*  Main deploy action                                                */
 /* ------------------------------------------------------------------ */
 
-export async function serverDeployAction(
-  dir: string | undefined,
-  opts: {
-    org?: string;
-    project?: string;
-    yes?: boolean;
-    config?: string;
-    skipBuild?: boolean;
-    skipPreflight?: boolean;
-    debug?: boolean;
-    envFile?: string;
-  },
-) {
+type ServerDeployOptions = {
+  org?: string;
+  project?: string;
+  yes?: boolean;
+  config?: string;
+  skipBuild?: boolean;
+  skipPreflight?: boolean;
+  debug?: boolean;
+  envFile?: string;
+};
+
+export async function serverDeployAction(dir: string | undefined, opts: ServerDeployOptions) {
+  const analytics = getAnalytics();
+  if (!analytics) {
+    return runServerDeploy(dir, opts);
+  }
+  return analytics.trackCommandExecution({
+    command: 'mastra server deploy',
+    args: {
+      yes: Boolean(opts.yes),
+      skipBuild: Boolean(opts.skipBuild),
+      skipPreflight: Boolean(opts.skipPreflight),
+      hasOrg: Boolean(opts.org),
+      hasProject: Boolean(opts.project),
+      hasEnvFile: Boolean(opts.envFile),
+      hasConfig: Boolean(opts.config),
+      debug: Boolean(opts.debug),
+      headless: Boolean(process.env.MASTRA_API_TOKEN),
+      targetApi: bucketApiHost(MASTRA_PLATFORM_API_URL),
+    },
+    execution: () => runServerDeploy(dir, opts),
+    origin: process.env.MASTRA_ANALYTICS_ORIGIN as CLI_ORIGIN | undefined,
+  });
+}
+
+async function runServerDeploy(dir: string | undefined, opts: ServerDeployOptions) {
   const targetDir = resolve(dir || process.cwd());
   // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
   // auto-link to the project that `mastra init --observability` provisioned.

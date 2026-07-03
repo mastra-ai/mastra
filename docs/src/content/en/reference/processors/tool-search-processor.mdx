@@ -50,7 +50,7 @@ const toolSearch = new ToolSearchProcessor({
           },
           {
             name: 'search',
-            type: '{ topK?: number; minScore?: number }',
+            type: '{ topK?: number; minScore?: number; autoLoad?: boolean }',
             description: 'Configuration for the search behavior.',
             isOptional: true,
           },
@@ -69,12 +69,35 @@ const toolSearch = new ToolSearchProcessor({
             default: '0',
           },
           {
+            name: 'search.autoLoad',
+            type: 'boolean',
+            description:
+              'When true, tools returned by search_tools are activated immediately as part of the search. The load_tool meta-tool is not exposed, collapsing the two-step search then load flow into a single search step. Discovered tools become available on the next turn. Keep topK conservative since every match is activated.',
+            isOptional: true,
+            default: 'false',
+          },
+          {
+            name: 'storage',
+            type: "'in-memory' | 'context'",
+            description:
+              "Where loaded-tool state lives. 'in-memory' (default) tracks loaded tools in an in-memory map per thread with TTL cleanup (see ttl); state is lost on restart and anonymous requests share a 'default' entry. 'context' derives loaded state from the conversation messages — a tool is loaded while a search_tools/load_tool result naming it remains in the messages; it is restart-safe, requires no memory, and de-loads automatically once that result is no longer present in the messages. The 'context' store is opt-in.",
+            isOptional: true,
+            default: "'in-memory'",
+          },
+          {
             name: 'ttl',
             type: 'number',
             description:
-              'Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.',
+              "Time-to-live for in-memory thread state, in milliseconds. Only applies to the default storage: 'in-memory' store; after this duration of inactivity thread state is cleaned up. Set to 0 to disable cleanup. Ignored by the 'context' store.",
             isOptional: true,
             default: '3600000',
+          },
+          {
+            name: 'filter',
+            type: '(args: ToolSearchFilterArgs) => boolean | Promise<boolean>',
+            description:
+              'Optional request-aware hook for hiding tools from search results, blocking tool loading, or hiding already-loaded tools for the current request.',
+            isOptional: true,
           },
         ],
       },
@@ -109,6 +132,77 @@ const toolSearch = new ToolSearchProcessor({
 ]}
 />
 
+## Methods
+
+### State inspection (legacy `'in-memory'` store)
+
+These methods operate on the default `'in-memory'` store only. They're no-ops for the `'context'` store, whose state lives in the conversation messages rather than an in-process map.
+
+#### `clearState(threadId)`
+
+Clears the loaded-tool state for a single thread.
+
+```typescript
+processor.clearState('thread-123')
+```
+
+#### `clearAllState()`
+
+Clears loaded-tool state for every thread.
+
+```typescript
+processor.clearAllState()
+```
+
+#### `getStateStats()`
+
+Returns the number of tracked threads and the oldest access time, for debugging in-memory growth.
+
+```typescript
+const { threadCount, oldestAccessTime } = processor.getStateStats()
+```
+
+Returns: `{ threadCount: number; oldestAccessTime: number | null }`
+
+#### `cleanupNow()`
+
+Immediately runs TTL cleanup instead of waiting for the scheduled sweep.
+
+```typescript
+const cleaned = processor.cleanupNow()
+```
+
+Returns: `number` — the count of threads cleaned up.
+
+## Request-aware filtering
+
+Use `filter` to apply request-specific policy to dynamic tools. The hook receives the resolved tool ID as `toolName`, the tool, request context, and phase. `toolName` is the ID returned by `search_tools`, which may differ from the key used in the `tools` object.
+
+```typescript
+import { ToolSearchProcessor } from '@mastra/core/processors'
+
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  filter: ({ toolName, requestContext, phase }) => {
+    const plan = requestContext?.get('plan')
+
+    if (phase === 'search') {
+      return true
+    }
+
+    return plan === 'pro' || !toolName.startsWith('premium_')
+  },
+})
+```
+
+The `phase` value describes where the filter is being applied:
+
+- `search`: Filters results returned by `search_tools`.
+- `load`: Blocks `load_tool` from loading disallowed tools.
+- `active`: Hides already-loaded tools from the current request if they're no longer allowed.
+
+If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available; `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
+
 ## Extended usage example
 
 ```typescript title="src/mastra/agents/dynamic-tools-agent.ts"
@@ -133,6 +227,7 @@ const toolSearch = new ToolSearchProcessor({
 })
 
 const agent = new Agent({
+  id: 'dynamic-tools-agent',
   name: 'dynamic-tools-agent',
   instructions:
     'You are a helpful assistant with access to many tools. Use search_tools to find relevant tools, then load_tool to make them available.',
@@ -149,6 +244,64 @@ The agent workflow is:
 1. The loaded tool becomes available on the next turn
 1. Agent uses the loaded tool normally
 
+## Single-step discovery with `autoLoad`
+
+Set `search.autoLoad` to `true` to skip the separate load step. The tools returned by `search_tools` are activated immediately, and the `load_tool` meta-tool isn't exposed. This removes one model turn per discovery, which lowers token usage and latency, and works the same across providers.
+
+```typescript
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  search: {
+    topK: 3,
+    autoLoad: true,
+  },
+})
+```
+
+With `autoLoad` the workflow becomes:
+
+1. Agent receives a user message
+1. Agent calls `search_tools` with keywords
+1. The matching tools are activated automatically and become available on the next turn
+1. Agent uses the tool normally
+
+Every match is activated, so keep `topK` small (for example, `3`) to avoid adding tools the agent didn't need. Activated tools are appended after existing tools, which keeps the cached prompt prefix stable for providers that support prompt caching.
+
+## Loaded-tool storage
+
+The `storage` option controls where the set of loaded tools is tracked. The default is `'in-memory'`; the `'context'` store is opt-in.
+
+### `'in-memory'` (default)
+
+Loaded tools are tracked in an in-memory map per thread, with TTL-based cleanup controlled by the `ttl` option (default one hour). This is the original behavior:
+
+- Requires no memory configuration.
+- State is lost on process restart.
+- Requests with no thread ID share a single `'default'` entry.
+
+Use `clearState`, `clearAllState`, `getStateStats`, and `cleanupNow` to inspect or reset this store.
+
+### `'context'`
+
+Loaded state is derived from the conversation messages: a tool is loaded while a `search_tools` or `load_tool` result naming it remains in the messages. This mode:
+
+- Requires no memory configuration.
+- Is restart-safe — the durable record is the persisted message history.
+- De-loads a tool automatically once that result is no longer present in the messages.
+
+```typescript
+import { ToolSearchProcessor } from '@mastra/core/processors'
+
+const toolSearch = new ToolSearchProcessor({
+  tools: allTools,
+  storage: 'context',
+})
+```
+
+Loading tools is cache-friendly in both modes: loads are append-only, so the cached prompt prefix stays stable for providers that support prompt caching.
+
+Unloading a tool changes the tool definitions sent to the model, which shifts the cached prefix and causes the next turn to pay a cache write instead of a cache hit. In `'in-memory'` mode this happens when a thread's state is evicted by `ttl`. In `'context'` mode it happens when a tool's discovery result is no longer present in the messages (for example, when older messages are trimmed) — the tool de-loads and the model must search for it again before reuse. This is expected: removing an unused tool trades one cache write for a smaller prefix on later turns.
+
 ## Combining with other processors
 
 ```typescript
@@ -156,6 +309,7 @@ import { Agent } from '@mastra/core/agent'
 import { ToolSearchProcessor, TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [

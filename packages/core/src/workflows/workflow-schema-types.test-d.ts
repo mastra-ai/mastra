@@ -1,6 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
-import { createStep, createWorkflow } from './workflow';
+import { createWorkflow } from './create';
+import { createStep } from './workflow';
 
 describe('Workflow schema type inference', () => {
   describe('schemas with .optional().default()', () => {
@@ -547,6 +548,74 @@ describe('Workflow schema type inference', () => {
 
       // @ts-expect-error - step's requestContextSchema does not match the workflow's
       workflow.parallel([step]);
+    });
+  });
+
+  // Regression: https://github.com/mastra-ai/mastra/issues/14627
+  // createWorkflow must infer the workflow state type from stateSchema so that
+  // `state` in dowhile/dountil condition callbacks is typed from the schema,
+  // not `unknown`. (state was already correct inside createStep; the factory
+  // is what lost the inference.) These tests guard against regressing it.
+  describe('stateSchema inference (issue #14627)', () => {
+    const stateSchema = z.object({
+      attempts: z.number(),
+      lastError: z.string().optional(),
+    });
+    const ioSchema = z.object({ value: z.number() });
+
+    const loopStep = createStep({
+      id: 'loop-step',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      stateSchema,
+      execute: async ({ inputData }) => ({ value: inputData.value + 1 }),
+    });
+
+    it('types `state` in the dowhile condition from the workflow stateSchema', () => {
+      const workflow = createWorkflow({
+        id: 'dowhile-state',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+        stateSchema,
+      });
+
+      workflow.dowhile(loopStep, async ({ state }) => {
+        expectTypeOf(state).not.toBeUnknown();
+        expectTypeOf(state).not.toBeAny();
+        expectTypeOf(state.attempts).toBeNumber();
+        expectTypeOf(state.lastError).toEqualTypeOf<string | undefined>();
+        return state.attempts < 5;
+      });
+    });
+
+    it('types `state` in the dountil condition from the workflow stateSchema', () => {
+      const workflow = createWorkflow({
+        id: 'dountil-state',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+        stateSchema,
+      });
+
+      workflow.dountil(loopStep, async ({ state }) => {
+        expectTypeOf(state).not.toBeUnknown();
+        expectTypeOf(state).not.toBeAny();
+        expectTypeOf(state.attempts).toBeNumber();
+        expectTypeOf(state.lastError).toEqualTypeOf<string | undefined>();
+        return state.attempts >= 5;
+      });
+    });
+
+    it('leaves `state` as unknown when no stateSchema is declared', () => {
+      const workflow = createWorkflow({
+        id: 'no-state',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+      });
+
+      workflow.dowhile(loopStep, async ({ state }) => {
+        expectTypeOf(state).toBeUnknown();
+        return true;
+      });
     });
   });
 });

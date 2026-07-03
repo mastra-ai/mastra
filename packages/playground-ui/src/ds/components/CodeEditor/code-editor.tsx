@@ -1,7 +1,6 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { languages } from '@codemirror/language-data';
 import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -11,6 +10,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
+import { codeLanguages } from './code-languages';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -24,7 +24,7 @@ export type CodeEditorLanguage = 'json' | 'markdown';
 function buildDarkTheme(): Extension {
   const baseTheme = draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.8rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -78,7 +78,7 @@ function buildDarkTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',
@@ -119,7 +119,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.8rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
@@ -154,7 +154,7 @@ function buildLightTheme(): Extension {
       boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
     },
     '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
       color: 'var(--neutral6)',
@@ -216,6 +216,7 @@ function buildLightTheme(): Extension {
   return [editorTheme, syntaxHighlighting(highlightStyle)];
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
 export const useCodemirrorTheme = (): Extension => {
   const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
@@ -235,6 +236,8 @@ export type CodeEditorProps = {
   autoFocus?: boolean;
   /** Show line numbers in the gutter (default: true) */
   lineNumbers?: boolean;
+  /** Wrap long lines within the editor viewport (default: true) */
+  lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
 } & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
@@ -253,6 +256,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       schema,
       autoFocus,
       lineNumbers = true,
+      lineWrapping = true,
       editable,
       ...props
     },
@@ -264,11 +268,14 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const extensions = useMemo(() => {
       const exts: Extension[] = [];
 
+      if (lineWrapping) {
+        exts.push(EditorView.lineWrapping);
+      }
+
       if (language === 'json') {
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
-        exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }));
-        exts.push(EditorView.lineWrapping);
+        exts.push(markdown({ base: markdownLanguage, codeLanguages }));
       }
 
       if (highlightVariables && language === 'markdown') {
@@ -284,7 +291,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable]);
+    }, [language, highlightVariables, schema, editable, lineWrapping]);
 
     return (
       <div
@@ -310,20 +317,3 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     );
   },
 );
-
-export async function highlight(code: string, language: string) {
-  const { codeToTokens, bundledLanguages } = await import('shiki');
-
-  if (!(language in bundledLanguages)) return null;
-
-  const { tokens } = await codeToTokens(code, {
-    lang: language as keyof typeof bundledLanguages,
-    defaultColor: false,
-    themes: {
-      light: 'github-light',
-      dark: 'github-dark',
-    },
-  });
-
-  return tokens;
-}

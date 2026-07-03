@@ -1,5 +1,7 @@
-import { Button, StatusBadge, cn } from '@mastra/playground-ui';
-import { Monitor, ChevronUp, ChevronDown, Maximize2, PanelRight, X } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
@@ -15,7 +17,7 @@ interface BrowserThumbnailProps {
  *
  * Has two states:
  * - Collapsed: Small thumbnail bar (click to expand)
- * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
+ * - Expanded: Larger view with screencast + actions, with a button to switch to modal
  */
 export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
   const { hasSession, viewMode, status, currentUrl, setViewMode, closeBrowser } = useBrowserSession();
@@ -65,10 +67,6 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
     setViewMode('modal');
   }, [setViewMode]);
 
-  const handleOpenSidebar = useCallback(() => {
-    setViewMode('sidebar');
-  }, [setViewMode]);
-
   const handleClose = useCallback(async () => {
     await closeBrowser();
   }, [closeBrowser]);
@@ -83,7 +81,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
   }, [currentUrl]);
 
   // Don't render if no browser session or if showing in other modes
-  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') {
+  if (!hasSession || viewMode === 'modal') {
     return null;
   }
 
@@ -92,7 +90,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
   return (
     <div
       className={cn(
-        'bg-surface2 border border-border1 rounded-lg overflow-hidden transition-all duration-200',
+        'bg-surface2 border border-border1 rounded-3xl overflow-hidden transition-all duration-200',
         'hover:border-border2',
       )}
     >
@@ -153,15 +151,6 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   className="bg-surface1/80 backdrop-blur-sm"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="default"
-                  size="icon-sm"
-                  tooltip="Open in sidebar"
-                  onClick={handleOpenSidebar}
-                  className="bg-surface1/80 backdrop-blur-sm"
-                >
-                  <PanelRight className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="default"

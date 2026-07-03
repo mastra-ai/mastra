@@ -180,6 +180,20 @@ export class MockMemory extends MastraMemory {
     };
   }
 
+  async updateThread({
+    id,
+    title,
+    metadata,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    const memoryStorage = await this.getMemoryStore();
+    return memoryStorage.updateThread({ id, title, metadata });
+  }
+
   async deleteThread(threadId: string) {
     const memoryStorage = await this.getMemoryStore();
     return memoryStorage.deleteThread({ threadId });
@@ -223,7 +237,7 @@ export class MockMemory extends MastraMemory {
 
   public listTools(_config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(_config);
-    if (!mergedConfig.workingMemory?.enabled) {
+    if (!mergedConfig.workingMemory?.enabled || mergedConfig.workingMemory.agentManaged === false) {
       return {};
     }
 

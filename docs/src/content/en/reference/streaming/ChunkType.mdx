@@ -1173,7 +1173,7 @@ Contains output from workflow step execution, used primarily for usage tracking 
 
 ## Background task chunks
 
-Emitted when a tool call is dispatched as a [background task](/docs/agents/background-tasks) and `streamUntilIdle()` is used.
+Emitted when a tool call is dispatched as a [background task](/docs/long-running-agents/background-tasks) and `streamUntilIdle()` is used.
 
 ### background-task-started
 
@@ -1752,6 +1752,88 @@ Contains monitoring and observability data from agent execution. Can include wor
             name: '[key: string]',
             type: 'any',
             description: 'Additional monitoring and execution data',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### goal
+
+Emitted on every evaluation of an agent [goal](/docs/long-running-agents/goals). Consumers use this to render judge progress and the result mid-run. A goal that has no judge model configured produces no `goal` chunk.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"goal"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'payload',
+    type: 'GoalEvaluationPayload',
+    description: 'The result of one goal evaluation',
+    properties: [
+      {
+        type: 'GoalEvaluationPayload',
+        parameters: [
+          {
+            name: 'objective',
+            type: 'string',
+            description: 'The objective being judged',
+          },
+          {
+            name: 'iteration',
+            type: 'number',
+            description: 'Goal evaluations consumed so far (runsUsed after this evaluation)',
+          },
+          {
+            name: 'maxRuns',
+            type: 'number',
+            description: 'Max evaluations before the goal stops',
+          },
+          {
+            name: 'passed',
+            type: 'boolean',
+            description: 'Whether the goal is judged complete',
+          },
+          {
+            name: 'status',
+            type: '"active" | "paused" | "done"',
+            description: 'The objective status after this evaluation',
+          },
+          {
+            name: 'results',
+            type: 'ScorerResult[]',
+            description: 'Individual scorer results',
+          },
+          {
+            name: 'reason',
+            type: 'string',
+            isOptional: true,
+            description: 'Judge feedback or stop reason',
+          },
+          {
+            name: 'duration',
+            type: 'number',
+            description: 'Total duration of the goal scoring check',
+          },
+          {
+            name: 'timedOut',
+            type: 'boolean',
+            description: 'Whether scoring timed out',
+          },
+          {
+            name: 'maxRunsReached',
+            type: 'boolean',
+            description: 'Whether the run budget (maxRuns) was reached',
+          },
+          {
+            name: 'suppressFeedback',
+            type: 'boolean',
+            description: 'Whether the goal feedback message is suppressed from memory',
           },
         ],
       },

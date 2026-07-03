@@ -1,0 +1,70 @@
+---
+title: "Workspace | Agent Builder"
+description: Configure the default workspace for Agent Builder agents — filesystem, sandbox, and skills.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Workspace
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+A [workspace](/docs/workspace/overview) gives agents filesystem access, command execution, and skill loading. The Agent Builder pins a default workspace onto every new agent through `builder.configuration.agent.workspace`. End users can still override the workspace per agent through the Builder UI.
+
+## Quickstart
+
+Pin an inline workspace snapshot as the Builder default:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+
+export const mastra = new Mastra({
+  editor: new MastraEditor({
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: {
+          workspace: {
+            type: 'inline',
+            config: {
+              name: 'project-workspace',
+              filesystem: {
+                provider: 'local',
+                config: { basePath: './workspace' },
+              },
+            },
+          },
+        },
+      },
+    },
+  }),
+})
+```
+
+The Builder derives a deterministic id from the inline config and persists the snapshot, so identical inline configs are deduplicated across agents.
+
+## Workspace references
+
+`configuration.agent.workspace` accepts a `StorageWorkspaceRef`:
+
+- **`{ type: 'inline', config }`**: Embeds a serialized workspace snapshot directly on the agent. Useful for per-agent, ad-hoc configurations.
+- **`{ type: 'id', workspaceId }`**: References a workspace already registered on the `Mastra` instance via `new Mastra({ workspace })` or `mastra.addWorkspace(...)`. Use this for shared, named workspaces.
+
+See the [StorageWorkspaceRef reference](/reference/editor/storage-workspace-ref) for both variants.
+
+## Filesystem and sandbox
+
+A workspace combines a `filesystem` (file tools) and an optional `sandbox` (command execution). For local development, point both at the same directory so files written through the filesystem are immediately visible to commands in the sandbox.
+
+For cloud deployments, swap `LocalFilesystem` / `LocalSandbox` for managed providers (e.g., S3, E2B). See [Deploying](/docs/agent-builder/deploying) for the cloud-swap pattern.
+
+## Related
+
+- [Workspace overview](/docs/workspace/overview): The underlying workspace model.
+- [Filesystem](/docs/workspace/filesystem) and [Sandbox](/docs/workspace/sandbox): The building blocks.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults): The full `workspace` field schema.
+- [Configuration](/docs/agent-builder/configuration): Wire `workspace` alongside the rest of the Builder config.

@@ -16,7 +16,7 @@ ClickHouse is most commonly used as the dedicated observability backend in a [co
 
 Production observability for traces, logs, metrics, scores, and feedback.
 
-For local development, use a composite store that combines [LibSQL](/reference/storage/libsql) (for memory and workflows) and `@mastra/duckdb` (for observability). Neither alone covers a development setup: LibSQL does not implement the observability domain, and DuckDB does not implement the other domains. See the [observability overview](/docs/observability/overview) for an example.
+For local development, use a composite store that combines [LibSQL](/reference/storage/libsql) (for memory and workflows) and `@mastra/duckdb` (for observability). Neither alone covers a development setup: LibSQL doesn't implement the observability domain, and DuckDB doesn't implement the other domains. See the [observability overview](/docs/observability/overview) for an example.
 
 ## Installation
 
@@ -32,7 +32,7 @@ You will also need a running ClickHouse server. See [Hosting options](#hosting-o
 
 `ObservabilityStorageClickhouseVNext` is the current observability domain implementation. It uses an insert-only schema backed by `ReplacingMergeTree` and is optimized for the volume produced by traces, logs, metrics, scores, and feedback.
 
-Compose it with another storage adapter so observability writes do not contend with your application data:
+Compose it with another storage adapter so observability writes don't contend with your application data:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -69,11 +69,11 @@ export const mastra = new Mastra({
 })
 ```
 
-`MastraStorageExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/tracing/exporters/mastra-storage#tracing-strategies) for details.
+`MastraStorageExporter` automatically selects the `insert-only` strategy when ClickHouse is the observability backend, which gives the highest write throughput. See [tracing strategies](/docs/observability/integrations/exporters/mastra-storage#tracing-strategies) for details.
 
 ### Observability with the legacy domain
 
-`ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that have not migrated to the vNext schema. The configuration shape is the same as the vNext class.
+`ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that haven't migrated to the vNext schema. The configuration shape is the same as the vNext class.
 
 ```typescript
 import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
@@ -201,6 +201,13 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
     isOptional: true,
   },
   {
+    name: 'replication',
+    type: '{ cluster?: string; zookeeperPath?: string; replicaName?: string }',
+    description:
+      'Opt-in replicated table configuration for multi-replica ClickHouse clusters. When set, Mastra creates replicated MergeTree tables. When `cluster` is set, Mastra also adds `ON CLUSTER` to Mastra-owned data definition language (DDL).',
+    isOptional: true,
+  },
+  {
     name: 'disableInit',
     type: 'boolean',
     description:
@@ -212,6 +219,49 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
 />
 
 `ClickhouseStore` also accepts every option from `ClickHouseClientConfigOptions` (such as `database`, `request_timeout`, `compression`, `keep_alive`, and `max_open_connections`).
+
+### Replicated clusters
+
+Use `replication` when Mastra writes to a multi-replica ClickHouse cluster through a load balancer.
+
+```typescript
+const storage = new ClickhouseStoreVNext({
+  id: 'clickhouse-storage',
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+  replication: {
+    cluster: 'company_cluster',
+  },
+})
+```
+
+When `replication` is set, Mastra rewrites its `MergeTree` and `ReplacingMergeTree` table engines to `ReplicatedMergeTree` and `ReplicatedReplacingMergeTree`. The default engine arguments are:
+
+- `zookeeperPath`: `'/clickhouse/tables/{shard}/{database}/{table}'`
+- `replicaName`: `'{replica}'`
+
+The defaults match the most common self-managed convention. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match. Mastra does not read your cluster's convention from Keeper, so a mismatched default writes Mastra's metadata to a separate branch from the rest of the cluster.
+
+```typescript
+new ClickhouseStoreVNext({
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+  replication: {
+    cluster: 'company_cluster',
+    zookeeperPath: '/clickhouse/tables/{shard}/{table}',
+  },
+})
+```
+
+Set `cluster` to add `ON CLUSTER` to Mastra-owned DDL such as table creation, materialized view creation, column migrations, TTL changes, and table drops.
+
+Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These operations can be expensive on a large cluster. Prefer running them outside peak hours, and let routine merges happen on the background merge queue rather than triggering them on every restart.
+
+If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` before enabling replication. The typical sequence is: rename the local table, run `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, run `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop the renamed local table.
+
+Do not set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and explicit `ReplicatedMergeTree` engines produce incorrect DDL. `replication` is only for self-managed multi-replica clusters.
 
 ### Observability domain options
 
@@ -289,7 +339,7 @@ Two ways to provision the database:
 The same approach applies to other hosts with ephemeral filesystems. For application data that should also live off-host, pair this setup with a managed PostgreSQL or LibSQL/Turso instance for the `default` storage.
 
 :::warning
-Do not point an embedded backend like DuckDB at a path inside an ephemeral container filesystem. Data written there is lost when the container restarts, and on some platforms the path is read-only.
+Don't point an embedded backend like DuckDB at a path inside an ephemeral container filesystem. Data written there is lost when the container restarts, and on some platforms the path is read-only.
 :::
 
 ## Initialization
@@ -319,11 +369,11 @@ ClickHouse is the recommended backend for production observability:
 - **Insert-only strategy**: `MastraStorageExporter` writes completed spans in batches without per-span updates, which is the highest-throughput strategy available.
 - **Columnar compression**: Span attributes and log payloads compress well compared to the same data in row-oriented databases.
 
-For the full strategy matrix and production guidance, see the [`MastraStorageExporter` reference](/docs/observability/tracing/exporters/mastra-storage#storage-provider-support).
+For the full strategy matrix and production guidance, see the [`MastraStorageExporter` reference](/docs/observability/integrations/exporters/mastra-storage#storage-provider-support).
 
 ## Related
 
 - [Storage overview](/reference/storage/overview)
 - [Composite storage](/reference/storage/composite)
-- [`MastraStorageExporter`](/docs/observability/tracing/exporters/mastra-storage)
+- [`MastraStorageExporter`](/docs/observability/integrations/exporters/mastra-storage)
 - [Observability overview](/docs/observability/overview)

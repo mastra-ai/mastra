@@ -54,7 +54,15 @@ export class AgentsLibSQL extends AgentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_AGENT_VERSIONS,
       schema: AGENT_VERSIONS_SCHEMA,
-      ifNotExists: ['mcpClients', 'requestContextSchema', 'workspace', 'skills', 'skillsFormat', 'browser'],
+      ifNotExists: [
+        'mcpClients',
+        'requestContextSchema',
+        'workspace',
+        'skills',
+        'skillsFormat',
+        'browser',
+        'toolProviders',
+      ],
     });
 
     // Migrate tools field from string[] to JSONB format
@@ -133,6 +141,7 @@ export class AgentsLibSQL extends AgentsStorage {
           workflows: row.workflows ?? null,
           agents: row.agents ?? null,
           integrationTools: row.integrationTools ?? null,
+          toolProviders: row.toolProviders ?? null,
           inputProcessors: row.inputProcessors ?? null,
           outputProcessors: row.outputProcessors ?? null,
           memory: row.memory ?? null,
@@ -677,6 +686,7 @@ export class AgentsLibSQL extends AgentsStorage {
           workflows: input.workflows ?? null,
           agents: input.agents ?? null,
           integrationTools: input.integrationTools ?? null,
+          toolProviders: input.toolProviders ?? null,
           inputProcessors: input.inputProcessors ?? null,
           outputProcessors: input.outputProcessors ?? null,
           memory: input.memory ?? null,
@@ -983,6 +993,7 @@ export class AgentsLibSQL extends AgentsStorage {
       workflows: this.parseJson(row.workflows, 'workflows'),
       agents: this.parseJson(row.agents, 'agents'),
       integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
+      toolProviders: this.parseJson(row.toolProviders, 'toolProviders'),
       inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
       outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
       memory: this.parseJson(row.memory, 'memory'),

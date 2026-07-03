@@ -1014,6 +1014,143 @@ describe('TokenCounter', () => {
       expect(modelOutputTokens).toBeLessThan(rawResultTokens);
     });
 
+    it('counts stored multimodal tool modelOutput as media instead of base64 JSON text', () => {
+      const counter = new TokenCounter();
+      const modelOutput = {
+        type: 'content',
+        value: [
+          { type: 'text', text: 'Calculator screenshot' },
+          { type: 'image-data', data: 'a'.repeat(200_000), mediaType: 'image/png' },
+        ],
+      };
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'cua_screenshot',
+              result: { content: [{ type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' }] },
+            },
+            providerMetadata: {
+              mastra: { modelOutput },
+            },
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeLessThan(2_000);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(modelOutput)));
+    });
+
+    it('counts raw MCP multimodal tool results as media instead of base64 JSON text', () => {
+      const counter = new TokenCounter();
+      const rawResultWithoutMalformed = {
+        content: [
+          { type: 'text', text: 'Calculator screenshot' },
+          { type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' },
+        ],
+      };
+      const rawResult = {
+        content: [...rawResultWithoutMalformed.content, { type: 'audio', mimeType: 'audio/wav' }],
+      };
+      const createScreenshotMessage = (result: unknown) =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'cua_screenshot',
+                result,
+              },
+            },
+          ],
+        });
+      const message = createScreenshotMessage(rawResult);
+      const messageWithoutMalformed = createScreenshotMessage(rawResultWithoutMalformed);
+
+      const tokens = counter.countMessage(message);
+      const tokensWithoutMalformed = counter.countMessage(messageWithoutMalformed);
+      const estimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(tokensWithoutMalformed);
+      expect(tokens).toBeLessThan(2_000);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeLessThan(counter.countString(JSON.stringify(rawResult)));
+    });
+
+    it('honors client-supplied tokenEstimate on raw MCP multimodal content parts', () => {
+      const counter = new TokenCounter();
+      const createCloudResult = (withClientEstimates: boolean) => ({
+        content: [
+          { type: 'text', text: 'Cloud-hosted multimodal result' },
+          {
+            type: 'image',
+            data: 'storage://bucket/screenshot-ref',
+            mimeType: 'image/png',
+            ...(withClientEstimates
+              ? {
+                  providerMetadata: {
+                    mastra: {
+                      tokenEstimate: { v: 0, source: 'client', key: 'client-image', tokens: 5_000 },
+                    },
+                  },
+                }
+              : {}),
+          },
+          {
+            type: 'audio',
+            data: 'storage://bucket/audio-ref',
+            mimeType: 'audio/wav',
+            ...(withClientEstimates
+              ? {
+                  providerMetadata: {
+                    mastra: {
+                      tokenEstimate: { v: 0, source: 'client', key: 'client-audio', tokens: 7_000 },
+                    },
+                  },
+                }
+              : {}),
+          },
+        ],
+      });
+      const createToolResultMessage = (result: unknown) =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'cloud_multimodal_tool',
+                result,
+              },
+            },
+          ],
+        });
+      const withClientEstimates = createToolResultMessage(createCloudResult(true));
+      const withoutClientEstimates = createToolResultMessage(createCloudResult(false));
+
+      const estimatedTokens = counter.countMessage(withClientEstimates);
+      const fallbackTokens = counter.countMessage(withoutClientEstimates);
+      const estimate = withClientEstimates.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(estimatedTokens).toBeGreaterThanOrEqual(12_000);
+      expect(estimatedTokens).toBeGreaterThan(fallbackTokens);
+      expect(estimate.key).toContain('tool-result-multimodal-content');
+      expect(estimate.tokens).toBeGreaterThanOrEqual(12_000);
+    });
+
     it('recomputes tool-result estimates when stored modelOutput changes', async () => {
       const counter = new TokenCounter();
       const args = { q: 'weather in sf' };
@@ -1080,6 +1217,65 @@ describe('TokenCounter', () => {
       expect(estimate?.tokens).toBeLessThan(
         counter.countString(JSON.stringify(message.content.parts[0].toolInvocation.result)),
       );
+    });
+  });
+
+  describe('tool approval (output-denied)', () => {
+    // Regression: a declined approval persists as state 'output-denied', a tool-invocation
+    // state the counter did not handle and used to throw on ("Unhandled tool-invocation
+    // state ..."). It now counts the denial reason like a small tool result.
+    const DEFAULT_DECLINE_REASON = 'Tool call was not approved by the user';
+
+    const createDeniedMessage = (approval?: { id: string; approved: boolean; reason?: string }) =>
+      createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-denied',
+              toolCallId: 'tool-1',
+              toolName: 'findUserTool',
+              args: { name: 'Dero Israel' },
+              ...(approval ? { approval } : {}),
+            },
+          },
+        ],
+      });
+
+    it('counts a declined approval by its approval reason instead of throwing', () => {
+      const counter = new TokenCounter();
+      const reason = 'Manager rejected this lookup';
+      const message = createDeniedMessage({ id: 'tool-1', approved: false, reason });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(0);
+      expect(estimate?.key).toContain('tool-result-denied');
+      expect(estimate?.tokens).toBe(counter.countString(reason));
+    });
+
+    it('falls back to the default decline reason when approval.reason is absent', () => {
+      const counter = new TokenCounter();
+      const message = createDeniedMessage({ id: 'tool-1', approved: false });
+
+      const tokens = counter.countMessage(message);
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(0);
+      expect(estimate?.key).toContain('tool-result-denied');
+      expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
+    });
+
+    it('does not throw when the output-denied invocation has no approval object at all', () => {
+      const counter = new TokenCounter();
+      const message = createDeniedMessage();
+
+      expect(() => counter.countMessage(message)).not.toThrow();
+      const estimate = message.content.parts[0].providerMetadata?.mastra?.tokenEstimate;
+      expect(estimate?.key).toContain('tool-result-denied');
+      expect(estimate?.tokens).toBe(counter.countString(DEFAULT_DECLINE_REASON));
     });
   });
 

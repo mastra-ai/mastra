@@ -19,7 +19,13 @@ import type {
   BackgroundTasksStorage,
   SchedulesStorage,
   ChannelsStorage,
+  HarnessStorage,
+  ToolProviderConnectionsStorage,
+  NotificationsStorage,
+  ThreadStateStorage,
 } from './domains';
+import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
+import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
 
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
@@ -27,6 +33,7 @@ export type StorageDomains = {
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
+  notifications?: NotificationsStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
@@ -41,6 +48,9 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  harness?: HarnessStorage;
+  toolProviderConnections?: ToolProviderConnectionsStorage;
+  threadState?: ThreadStateStorage;
 };
 
 /**
@@ -57,6 +67,7 @@ export const EDITOR_DOMAINS = [
   'workspaces',
   'skills',
   'favorites',
+  'toolProviderConnections',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**
@@ -187,6 +198,28 @@ export interface MastraCompositeStoreConfig {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+
+  /**
+   * Opt-in, table-granular, age-based retention policies.
+   *
+   * Declare per-domain, per-table `maxAge` policies; call `storage.prune()`
+   * to delete rows older than their configured age. Anything left unset is
+   * kept forever (no behavior change by default).
+   *
+   * @example
+   * ```typescript
+   * retention: {
+   *   memory: {
+   *     messages: { maxAge: '30d' },
+   *     threads: { maxAge: '90d' },
+   *   },
+   *   observability: {
+   *     spans: { maxAge: '7d' },
+   *   },
+   * }
+   * ```
+   */
+  retention?: RetentionConfig;
 }
 
 /**
@@ -225,17 +258,44 @@ export interface MastraCompositeStoreConfig {
  * await memory?.saveThread({ thread });
  * ```
  */
+/**
+ * Minimal interface a storage adapter sees from the Mastra instance.
+ * Kept narrow on purpose to avoid pulling the full Mastra type into the
+ * storage layer (which would create a circular import).
+ */
+export interface StorageMastraRef {
+  getAgentById?: (id: string) => { source?: string; __getEditorConfig?: () => unknown } | undefined;
+  listAgents?: () => Record<string, { id: string; source?: string; __getEditorConfig?: () => unknown }> | undefined;
+  getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
+}
+
+/** A domain that implements the age-based retention `prune()` contract. */
+interface PruneCapable {
+  prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]>;
+}
+
+function isPruneCapable(value: unknown): value is PruneCapable {
+  return typeof value === 'object' && value !== null && typeof (value as PruneCapable).prune === 'function';
+}
+
 export class MastraCompositeStore extends MastraBase {
   protected hasInitialized: null | Promise<boolean> = null;
   protected shouldCacheInit = true;
 
   id: string;
   stores?: StorageDomains;
+  protected mastra?: StorageMastraRef;
 
   /**
    * When true, automatic initialization (table creation/migrations) is disabled.
    */
   disableInit: boolean = false;
+
+  /**
+   * Opt-in, table-granular, age-based retention policies. Consumed by
+   * `prune()`. Undefined means nothing is pruned (keep forever).
+   */
+  protected retention?: RetentionConfig;
 
   /**
    * Retained references to the parent stores supplied via composition. `init()`
@@ -261,6 +321,7 @@ export class MastraCompositeStore extends MastraBase {
 
     this.id = config.id;
     this.disableInit = config.disableInit ?? false;
+    this.retention = config.retention;
 
     // If composition config is provided (default, editor, or domains), compose the stores
     if (config.default || config.editor || config.domains) {
@@ -313,9 +374,44 @@ export class MastraCompositeStore extends MastraBase {
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
         channels: resolve('channels'),
+        harness: resolve('harness'),
+        toolProviderConnections: resolve('toolProviderConnections'),
+        notifications: resolve('notifications'),
+        // The thread-state domain always has an in-memory store wired by default
+        // so the built-in task tools work out of the box without a configured
+        // backend. Configure a durable backend for state that must survive a
+        // process restart.
+        threadState: resolve('threadState') ?? new InMemoryThreadStateStorage(),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
+  }
+
+  /**
+   * Register the Mastra instance with this storage adapter and cascade the
+   * reference to all owned domain stores and parent composites. Storage
+   * adapters that need to look up agents, editor config, etc. can read
+   * `this.mastra` after this is called.
+   * @internal
+   */
+  __registerMastra(mastra: StorageMastraRef, seen: Set<unknown> = new Set<unknown>()): void {
+    if (seen.has(this)) return;
+    seen.add(this);
+    this.mastra = mastra;
+    const cascade = (target: unknown) => {
+      if (!target || typeof target !== 'object' || seen.has(target)) return;
+      const fn = (target as { __registerMastra?: (m: StorageMastraRef, s?: Set<unknown>) => void }).__registerMastra;
+      if (typeof fn === 'function') {
+        fn.call(target, mastra, seen);
+      } else {
+        seen.add(target);
+      }
+    };
+    if (this.parentDefault) cascade(this.parentDefault);
+    if (this.parentEditor) cascade(this.parentEditor);
+    if (this.stores) {
+      for (const domain of Object.values(this.stores)) cascade(domain);
+    }
   }
 
   /**
@@ -334,6 +430,52 @@ export class MastraCompositeStore extends MastraBase {
    */
   async getStore<K extends keyof StorageDomains>(storeName: K): Promise<StorageDomains[K] | undefined> {
     return this.stores?.[storeName];
+  }
+
+  /**
+   * Delete rows older than their configured `maxAge` across all domains that
+   * have a policy declared in `retention`.
+   *
+   * Prune is safe at scale: each domain deletes in bounded, batched, resumable,
+   * cancellable chunks (see {@link PruneOptions}). It only deletes rows. On
+   * SQLite/LibSQL freed pages are reused by future writes so the file stops
+   * growing; handing disk back to the OS is left to the underlying database and
+   * the operator to manage.
+   *
+   * Returns one {@link PruneResult} per table touched. A result with
+   * `done: false` means eligible rows remain — call `prune()` again (e.g. on
+   * the next cron tick) to continue.
+   *
+   * Prune is meant to run unattended (a cron tick), so a failure in one
+   * domain is logged and skipped rather than rejecting the whole call — the
+   * results already gathered for other domains are still returned, and the
+   * failed domain is retried naturally on the next tick.
+   *
+   * With no `retention` configured this is a no-op returning `[]`.
+   */
+  async prune(options?: PruneOptions): Promise<PruneResult[]> {
+    const retention = this.retention;
+    if (!retention) return [];
+
+    const results: PruneResult[] = [];
+    for (const [domainKey, tablePolicies] of Object.entries(retention) as [
+      keyof StorageDomains,
+      Record<string, TableRetentionPolicy> | undefined,
+    ][]) {
+      if (options?.signal?.aborted) break;
+      if (!tablePolicies || Object.keys(tablePolicies).length === 0) continue;
+
+      const domain = this.stores?.[domainKey];
+      if (!isPruneCapable(domain)) continue; // domain not configured / doesn't support retention
+
+      try {
+        const domainResults = await domain.prune(tablePolicies, options);
+        results.push(...domainResults);
+      } catch (error) {
+        this.logger?.error(`prune() failed for domain "${domainKey}"`, { error });
+      }
+    }
+    return results;
   }
 
   /**
@@ -412,11 +554,22 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.backgroundTasks);
       maybeInit(this.stores.schedules);
       maybeInit(this.stores.channels);
+      maybeInit(this.stores.harness);
+      maybeInit(this.stores.toolProviderConnections);
+      maybeInit(this.stores.notifications);
+      maybeInit(this.stores.threadState);
     }
 
     await Promise.all(initTasks);
     return true;
   }
+  /**
+   * Optional lifecycle hook: release underlying client/connection handles.
+   * Implementations (e.g. LibSQLStore) override this to checkpoint WAL files
+   * and close the database client so OS handles are freed synchronously.
+   * Called automatically by Mastra.shutdown().
+   */
+  close?(): Promise<void>;
 }
 
 /**

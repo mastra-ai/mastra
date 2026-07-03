@@ -1,0 +1,86 @@
+---
+title: "Storage | Observability"
+description: "Choose storage backends for observability data and route signals to the right backend."
+packages:
+  - "@mastra/observability"
+---
+
+# Storage
+
+Storage determines which observability signals persist, which queries are available, and whether metrics aggregation works. Use a dedicated observability store instead of your primary application store.
+
+## When to use storage
+
+- Keep traces, logs, and metrics available in Mastra Studio during development.
+- Enable metrics with an OLAP-capable observability store.
+- Route the observability domain to a dedicated production backend.
+
+## Quickstart
+
+The following example demonstrates the recommended local testing setup: route observability data to DuckDB while keeping the rest of your application on LibSQL.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+import { DuckDBStore } from '@mastra/duckdb'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new MastraStorageExporter()],
+      },
+    },
+  }),
+})
+```
+
+## Signal support
+
+Mastra storage-backed observability currently depends on an OLAP-capable backend for full signal support:
+
+- DuckDB: Recommended for local testing and development.
+- ClickHouse: Recommended for production observability.
+- Mastra platform: Use `MastraPlatformExporter` if you want hosted observability without managing the backend yourself.
+
+Primary application stores such as LibSQL or PostgreSQL shouldn't be used as the observability store. Route the `observability` domain separately with composite storage when you use `MastraStorageExporter`.
+
+## Local development
+
+For local development, the recommended setup is:
+
+- `LibSQLStore` for primary application storage
+- `DuckDBStore` for the `observability` domain
+- `MastraStorageExporter` for local Studio access
+
+This setup is for local testing and development. It gives you persisted traces, logs, and metrics without introducing external infrastructure.
+
+## Production deployment
+
+Observability traffic is usually more write-heavy than the rest of the application. In production:
+
+- Use `MastraStorageExporter` with ClickHouse for the `observability` domain when you keep observability in your own storage.
+- Use `MastraPlatformExporter` if you want hosted Mastra platform observability instead of managing the backend yourself.
+- Don't route observability to your primary application store.
+
+For backend compatibility details and exporter batching behavior, see [Mastra Storage exporter](/docs/observability/integrations/exporters/mastra-storage).
+
+## Next steps
+
+- [Configuration](/docs/observability/config)
+- [Logging](/docs/observability/logging)
+- [Metrics overview](/docs/observability/metrics/overview)
+- [Mastra Storage exporter](/docs/observability/integrations/exporters/mastra-storage)

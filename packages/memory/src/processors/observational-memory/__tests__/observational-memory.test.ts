@@ -1,12 +1,20 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
+import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
+import {
+  createCurrentTaskExtractor,
+  createSuggestedResponseExtractor,
+  createThreadTitleExtractor,
+} from '../built-in-extractors';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
+import { Extractor } from '../extractor';
 import {
   filterObservedMessages,
   getBufferedChunks,
@@ -2584,8 +2592,11 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
         // The function model should be resolved with requestContext, looked up,
@@ -2698,11 +2709,14 @@ describe('Observer Agent Helpers', () => {
           ],
         };
 
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
         await observer.call(undefined, [message], undefined, {
-          requestContext: { threadId: 'test-thread' } as any,
+          requestContext,
         });
 
-        expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
+        expect(spy.mock.calls[0][0]).toBe('openai/gpt-4o');
         const content = capturedPrompt[1].content as any[];
         expect(content.some((part: any) => part.type === 'image')).toBe(true);
       } finally {
@@ -2710,7 +2724,7 @@ describe('Observer Agent Helpers', () => {
       }
     });
 
-    it('should inject thread title instructions into the observer request when enabled', async () => {
+    it('should keep skip-continuation task guidance separate from resolved output sections', async () => {
       let capturedPrompt: any;
 
       const observer = new ObserverRunner({
@@ -2720,6 +2734,12 @@ describe('Observer Agent Helpers', () => {
           bufferTokens: false,
           previousObserverTokens: 1000,
           threadTitle: true,
+          extractors: [
+            createCurrentTaskExtractor(),
+            createSuggestedResponseExtractor(),
+            createThreadTitleExtractor(),
+            new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+          ],
         } as any,
         observedMessageIds: new Set(),
         resolveModel: () => ({ model: 'test-model' as any }),
@@ -2742,13 +2762,31 @@ describe('Observer Agent Helpers', () => {
 
       await observer.call(undefined, [createTestMessage('Need a better title', 'user')], undefined, {
         priorThreadTitle: 'Old thread title',
+        skipContinuationHints: true,
       });
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
       expect(capturedPrompt).toHaveLength(2);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[0].content).toContain('Also output a <thread-title>');
+      const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [
+        createCurrentTaskExtractor(),
+        createSuggestedResponseExtractor(),
+        createThreadTitleExtractor(),
+        new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+      ]);
+
+      expect(capturedPrompt[0].content).not.toContain('Also output a <thread-title>');
       expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(systemPrompt).toContain('<current-task>');
+      expect(systemPrompt).toContain('<suggested-response>');
+      expect(systemPrompt).toContain('<thread-title>');
+      expect(systemPrompt).toContain('<user-info>');
+      expect(capturedPrompt[0].content).toContain('Output <observations> every time.');
+      expect(capturedPrompt[0].content).not.toContain(
+        'If the observations include information relevant to <thread-title>',
+      );
+      expect(capturedPrompt[0].content).not.toContain('Only output <observations> and <thread-title>');
+      expect(capturedPrompt[0].content).not.toContain('Do NOT include <current-task> or <suggested-response>');
       expect(capturedPrompt[0].content).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
@@ -2807,8 +2845,8 @@ describe('Observer Agent Helpers', () => {
 
       expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
       expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
-      expect(observerCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o');
-      expect(reflectorCreateAgentSpy).toHaveBeenCalledWith('openai/gpt-4o-mini');
+      expect(observerCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o');
+      expect(reflectorCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o-mini');
     });
   });
 
@@ -2960,6 +2998,30 @@ Here's the implementation...
       expect(result.currentTask).toBe('Working on implementation');
       expect(result.observations).not.toContain('Working on implementation');
       expect(result.observations).not.toContain('<current-task>');
+    });
+
+    it('should parse thread title and custom inline extractor sections together', () => {
+      const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user information.' });
+      const output = `
+<observations>
+- 🔴 User Tyler introduced himself.
+</observations>
+
+<thread-title>
+Tyler introduction
+</thread-title>
+
+<user-info>
+name: Tyler
+</user-info>
+      `;
+
+      const result = parseObserverOutput(output, [userInfo]);
+
+      expect(result.threadTitle).toBe('Tyler introduction');
+      expect(result.extractedValues).toEqual({ 'user-info': 'name: Tyler' });
+      expect(result.observations).toContain('User Tyler introduced himself');
+      expect(result.observations).not.toContain('<user-info>');
     });
 
     it('should handle output without continuation hint', () => {
@@ -3298,7 +3360,13 @@ describe('didProviderChange', () => {
 
   it('returns true when both sides are fully-formatted but differ', () => {
     expect(didProviderChange('openai/gpt-4o', 'anthropic/claude-opus-4-7')).toBe(true);
-    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai.responses/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+  });
+
+  it('returns false when provider subnamespaces differ but base provider and modelId match', () => {
+    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(false);
+    expect(didProviderChange('openai/gpt-5.4', 'openai.responses/gpt-5.4')).toBe(false);
   });
 
   it('returns false when persisted history has bare modelId that matches actor modelId', () => {
@@ -4063,9 +4131,9 @@ describe('ObservationalMemory Integration', () => {
       );
       const formattedText = formatted.join('\n\n');
 
-      expect(formattedText).toContain('## Group `group-1`');
-      expect(formattedText).toContain('_range: `msg-1:msg-2`_');
-      expect(formattedText).toContain('recall tool');
+      expect(formattedText).toContain('<observation-group id="group-1" range="msg-1:msg-2">');
+      expect(formattedText).toContain('- 🔴 User prefers direct answers');
+      expect(formattedText).toContain('</observation-group>');
     });
 
     it('should default retrieval mode to false', () => {
@@ -5178,8 +5246,8 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('observer system prompt should include thread title instructions when enabled', () => {
-    const systemPrompt = buildObserverSystemPrompt(false, undefined, true);
+  it('observer system prompt should include thread title instructions from the extractor list', () => {
+    const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [createThreadTitleExtractor()]);
 
     expect(systemPrompt).toContain('<thread-title>');
     expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
@@ -6017,6 +6085,73 @@ describe('Resource Scope Observation Flow', () => {
     expect(priorMetadata?.get('thread-1')?.suggestedResponse).toBe('Ask for the invoice number.');
     expect(priorMetadata?.get('thread-2')?.currentTask).toBe('Track rollout readiness');
     multiThreadSpy.mockRestore();
+  });
+
+  it('isolates structured extraction source output per thread in multi-thread observation', async () => {
+    const structuredPrompts: string[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: { prompt: unknown }) => {
+        const promptText = JSON.stringify(prompt);
+        const observerOutput = promptText.includes('Thread one')
+          ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+          : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: observerOutput },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
+        const promptText = JSON.stringify(prompt);
+        structuredPrompts.push(promptText);
+        const priority = promptText.includes('thread-1-secret') ? 'alpha' : 'beta';
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          content: [{ type: 'text', text: JSON.stringify({ priority }) }],
+          warnings: [],
+        };
+      },
+    });
+    const observer = new ObserverRunner({
+      observationConfig: {
+        model,
+        messageTokens: 1000,
+        bufferTokens: false,
+        previousObserverTokens: 1000,
+        observeAttachments: 'auto',
+        extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() })],
+      } as any,
+      observedMessageIds: new Set(),
+      resolveModel: () => ({ model: model as any }),
+      tokenCounter: { countMessages: () => 1 } as any,
+    });
+    const results = await observer.callMultiThread(
+      undefined,
+      new Map([
+        ['thread-1', [createTestMessage('Thread one says alpha.', 'user', 't1-msg-1')]],
+        ['thread-2', [createTestMessage('Thread two says beta.', 'user', 't2-msg-1')]],
+      ]),
+      ['thread-1', 'thread-2'],
+    );
+
+    expect(results.results.get('thread-1')?.extractedValues).toEqual({ priority: 'alpha' });
+    expect(results.results.get('thread-2')?.extractedValues).toEqual({ priority: 'beta' });
+    expect(structuredPrompts).toHaveLength(2);
+    const threadOnePrompt = structuredPrompts.find(prompt => prompt.includes('thread-1-secret'));
+    const threadTwoPrompt = structuredPrompts.find(prompt => prompt.includes('thread-2-secret'));
+    expect(threadOnePrompt).toBeDefined();
+    expect(threadOnePrompt).not.toContain('thread-2-secret');
+    expect(threadTwoPrompt).toBeDefined();
+    expect(threadTwoPrompt).not.toContain('thread-1-secret');
   });
 
   it('should NOT use thread tags in thread scope mode', async () => {
@@ -9838,7 +9973,7 @@ describe('Full Async Buffering Flow', () => {
     const reflectorCalls: { input: string }[] = [];
 
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
 
         // Detect whether this is a reflection call (reflector prompt mentions "consolidate")
@@ -10412,12 +10547,12 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
 
     // The mock captures `input: JSON.stringify(prompt).slice(0, 200)`.
-    // buildObserverPrompt appends "Do NOT include <current-task> or <suggested-response>"
-    // when skipContinuationHints is true. Since the mock only captures 200 chars
-    // of the serialized prompt, we can't reliably check the end of the prompt here.
-    // The important thing: the observer was called (buffering happened), and the
-    // skipContinuationHints logic is unit-tested in buildObserverPrompt's own tests.
-    // For this integration test, we verify the async buffering path was exercised.
+    // buildObserverPrompt appends skipContinuationHints guidance near the end of the prompt.
+    // Since the mock only captures 200 chars of the serialized prompt, we can't reliably
+    // check the end of the prompt here. The important thing: the observer was called
+    // (buffering happened), and the skipContinuationHints logic is unit-tested in
+    // buildObserverPrompt's own tests. For this integration test, we verify the async
+    // buffering path was exercised.
     const lastCall = observerCalls[observerCalls.length - 1];
     expect(lastCall).toBeDefined();
     expect(lastCall.input.length).toBeGreaterThan(0);
@@ -10891,7 +11026,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -11076,7 +11211,7 @@ describe('Full Async Buffering Flow', () => {
 
     const observerCalls: { input: string }[] = [];
     const mockModel = createStreamCapableMockModel({
-      doGenerate: async ({ prompt }) => {
+      doGenerate: async ({ prompt }: { prompt: unknown }) => {
         observerCalls.push({ input: JSON.stringify(prompt).slice(0, 200) });
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -11552,7 +11687,7 @@ describe('Full Async Buffering Flow', () => {
 
       let _reflectorCallCount = 0;
       const mockModel = createStreamCapableMockModel({
-        doGenerate: async ({ prompt }) => {
+        doGenerate: async ({ prompt }: { prompt: unknown }) => {
           const promptText = JSON.stringify(prompt);
           const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
           if (isReflection) {
@@ -13628,6 +13763,68 @@ describe('Single-thread replay red tests', () => {
 
     expect(remainingText).not.toContain('old-at-boundary');
     expect(remainingText).toContain('new-after-boundary');
+  });
+
+  it('T1-C: historical response messages after an inflated watermark should not replay', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+
+    const observedUserAt = new Date('2025-01-01T10:00:00.000Z');
+    const observedResponseAt = new Date('2025-01-01T10:00:01.000Z');
+    const lastObservedAt = new Date('2025-01-01T10:00:02.000Z');
+    const futurePartTimestamp = new Date('2025-01-02T10:00:00.000Z').getTime();
+
+    messageList.add(
+      {
+        id: 'observed-user',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-user' }] },
+        createdAt: observedUserAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'watermark-advancer',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'already-observed-watermark',
+          parts: [{ type: 'text', text: 'already-observed-watermark', createdAt: futurePartTimestamp }],
+        },
+        createdAt: lastObservedAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'observed-response',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'already-observed-response',
+          parts: [{ type: 'text', text: 'already-observed-response' }],
+        },
+        createdAt: observedResponseAt,
+      } as any,
+      'response',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['watermark-advancer'], lastObservedAt } as any,
+      fallbackCursor: { createdAt: lastObservedAt.toISOString(), id: 'observed-response' },
+    });
+
+    expect(messageList.get.all.db().map((m: any) => m.id)).toEqual([]);
+    expect(getModelVisibleText(messageList)).not.toContain('already-observed-response');
   });
 
   it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {

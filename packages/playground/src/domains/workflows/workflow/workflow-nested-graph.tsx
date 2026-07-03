@@ -1,19 +1,12 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { Spinner } from '@mastra/playground-ui';
-import type { NodeProps } from '@xyflow/react';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ReactFlow, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useCurrentRun } from '../context/use-current-run';
+import { useEffect, useState } from 'react';
+import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
 import { constructNodesAndEdges } from './utils';
-import { WorkflowAfterNode } from './workflow-after-node';
-import { WorkflowConditionNode } from './workflow-condition-node';
-import type { DefaultNode } from './workflow-default-node';
-import { WorkflowDefaultNode } from './workflow-default-node';
-import { WorkflowLoopResultNode } from './workflow-loop-result-node';
-import type { NestedNode } from './workflow-nested-node';
-import { WorkflowNestedNode } from './workflow-nested-node';
+import type { WorkflowGraphEdge, WorkflowGraphNode } from './utils';
 import { ZoomSlider } from './zoom-slider';
 
 export interface WorkflowNestedGraphProps {
@@ -27,46 +20,16 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
     stepGraph,
   });
   const [isMounted, setIsMounted] = useState(false);
-  const [nodes, _, onNodesChange] = useNodesState(initialNodes);
-  const [edges] = useEdgesState(initialEdges);
-  const { steps } = useCurrentRun();
-
-  const stepsFlow = useMemo(() => {
-    return initialEdges.reduce(
-      (acc, edge) => {
-        if (edge.data) {
-          const stepId = edge.data.nextStepId as string;
-          const prevStepId = edge.data.previousStepId as string;
-
-          return {
-            ...acc,
-            [stepId]: [...new Set([...(acc[stepId] || []), prevStepId])],
-          };
-        }
-
-        return acc;
-      },
-      {} as Record<string, string[]>,
-    );
-  }, [initialEdges]);
-
-  const nodeTypes = {
-    'default-node': (props: NodeProps<DefaultNode>) => (
-      <WorkflowDefaultNode parentWorkflowName={workflowName} {...props} stepsFlow={stepsFlow} />
-    ),
-    'condition-node': WorkflowConditionNode,
-    'after-node': WorkflowAfterNode,
-    'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': (props: NodeProps<NestedNode>) => (
-      <WorkflowNestedNode parentWorkflowName={workflowName} {...props} stepsFlow={stepsFlow} />
-    ),
-  };
+  const [nodes, _, onNodesChange] = useNodesState<WorkflowGraphNode>(initialNodes);
+  const [edges] = useEdgesState<WorkflowGraphEdge>(initialEdges);
+  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName, stepGraph });
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setIsMounted(true);
       }, 500); // Delay to ensure modal is fully rendered
+      return () => clearTimeout(timer);
     }
   }, [open]);
 
@@ -75,21 +38,8 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
       {isMounted ? (
         <ReactFlow
           nodes={nodes}
-          edges={edges.map(e => ({
-            ...e,
-            style: {
-              ...e.style,
-              stroke:
-                steps[`${workflowName}.${e.data?.previousStepId}`]?.status === 'success' &&
-                steps[`${workflowName}.${e.data?.nextStepId}`]
-                  ? '#22c55e'
-                  : e.data?.conditionNode &&
-                      !steps[`${workflowName}.${e.data?.previousStepId}`] &&
-                      Boolean(steps[`${workflowName}.${e.data?.nextStepId}`]?.status)
-                    ? '#22c55e'
-                    : undefined,
-            },
-          }))}
+          edges={styledEdges}
+          edgeTypes={edgeTypes}
           fitView
           fitViewOptions={{
             maxZoom: 1,

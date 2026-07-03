@@ -7,6 +7,7 @@ import type {
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
+  AgentEditorConfig,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
@@ -35,7 +36,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-
+import type { ChunkType } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type {
   TimeTravelContext,
@@ -126,11 +127,49 @@ export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
 
 /**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
+
+/**
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
+}
+
+export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+
+/**
+ * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
+ * Date fields (e.g. `suspendedAt`) are ISO strings over the wire, matching
+ * the rest of the client SDK.
+ */
+export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
+
+export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface ProcessAgentThreadStreamOptions {
+  onChunk: (chunk: ChunkType) => void | Promise<void>;
+  reconnect?:
+    | boolean
+    | {
+        /** Maximum reconnect attempts after the initial stream ends or errors. Defaults to Infinity. */
+        maxRetries?: number;
+        /** Delay between reconnect attempts in milliseconds. Defaults to 1000. */
+        delayMs?: number;
+      };
 }
 
 export interface RequestOptions {
@@ -452,6 +491,7 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
+  supportsMemory?: boolean;
   modelList:
     | Array<{
         id: string;
@@ -475,6 +515,7 @@ export interface GetAgentResponse {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+  editor?: AgentEditorConfig;
 }
 
 /**
@@ -587,6 +628,7 @@ export type GetWorkflowRunByIdResponse = WorkflowState;
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   steps: {
     [key: string]: {
       id: string;
@@ -1104,6 +1146,64 @@ export interface StoredMCPClientToolsConfig {
 }
 
 /**
+ * One pinned connection on a `toolProviders[providerId].connections[toolkit]` bucket.
+ * Part of the Agent Builder / CMS tool-providers shape
+ * (`StoredAgentSnapshot.toolProviders`).
+ */
+export interface StoredToolProviderConnection {
+  /**
+   * Identity binding kind.
+   *
+   * - `'author'` — uses the agent author's connection (v1 default).
+   * - `'invoker'` — uses the end-user's connection (v1.5, reserved).
+   * - `'platform'` — uses a shared platform account (v2, reserved).
+   */
+  kind: 'author' | 'invoker' | 'platform';
+  /** Parent toolkit slug. Denormalized for callsite clarity. */
+  toolkit: string;
+  /**
+   * Provider-opaque identifier for the OAuth bucket.
+   *
+   * Required for `'author'` and `'platform'`; reserved (empty) for `'invoker'`.
+   */
+  connectionId: string;
+  /**
+   * Display label and LLM disambiguator. Optional when this is the only
+   * connection on a `toolkit`; required (non-empty, ≤ 32 chars,
+   * `[A-Za-z0-9 _-]+`, case-insensitively unique) once ≥ 2 connections share
+   * the same `toolkit`.
+   */
+  label?: string;
+  /**
+   * Ownership scope of the underlying OAuth bucket.
+   *
+   * - `'per-author'` (default) — bucketed under the agent author's id.
+   * - `'shared'` — bucketed under a constant shared id; visible to and
+   *   usable by anyone with edit access.
+   * - `'caller-supplied'` — bucketed under the request-context
+   *   `MASTRA_RESOURCE_ID_KEY` value at runtime. Used for multi-tenant
+   *   deployments where the host app sets the user id per request.
+   */
+  scope?: 'per-author' | 'shared' | 'caller-supplied';
+}
+
+/** Per-tool override stored alongside the selected tool slug. */
+export interface StoredToolProviderToolMeta {
+  /**
+   * Toolkit this slug belongs to. The runtime groups selected slugs
+   * by this field when fanning out across connections.
+   */
+  toolkit?: string;
+  description?: string;
+}
+
+/** Stored shape for one tool provider's configuration on one agent. */
+export interface StoredToolProviderConfig {
+  tools: Record<string, StoredToolProviderToolMeta>;
+  connections: Record<string, StoredToolProviderConnection[]>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -1160,6 +1260,18 @@ export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
+ * Resolved author identity. Returned by the server when an auth provider is
+ * configured and the agent's `authorId` could be looked up. All fields except
+ * `id` are optional — providers may not expose every field.
+ */
+export interface ResolvedAuthor {
+  id: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1168,6 +1280,7 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -1186,6 +1299,7 @@ export interface StoredAgentResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1286,6 +1400,7 @@ export interface CreateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1301,6 +1416,29 @@ export interface CreateStoredAgentParams {
 /**
  * Parameters for updating a stored agent
  */
+export type ExportStoredAgentParams = Partial<
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+>;
+
+export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
+  changeMessage?: string;
+  userName?: string;
+  inspectOnly?: boolean;
+};
+
+export interface ExportStoredAgentResponse {
+  agentId: string;
+  fileName: string;
+  content: string;
+  config: Record<string, unknown>;
+}
+
+export interface OpenStoredAgentChangeRequestResponse {
+  id?: string | number;
+  url: string;
+  ref?: string;
+}
+
 export interface UpdateStoredAgentParams {
   authorId?: string;
   /** Visibility of the agent. */
@@ -1319,6 +1457,7 @@ export interface UpdateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1339,6 +1478,26 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+/**
+ * A single agent that references another agent as a sub-agent. Includes both
+ * public and the caller's own private agents — anything the caller can read.
+ */
+export interface StoredAgentDependent {
+  id: string;
+  name: string;
+}
+
+/**
+ * Response for listing dependents of a stored agent.
+ * `dependents` lists caller-readable references (with names).
+ * `hiddenCount` aggregates dependents the caller cannot read; it is only
+ * non-zero when the target agent is public.
+ */
+export interface StoredAgentDependentsResponse {
+  dependents: StoredAgentDependent[];
+  hiddenCount: number;
 }
 
 // ============================================================================
@@ -1584,6 +1743,7 @@ export interface AgentVersionResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -2301,6 +2461,57 @@ export type ListToolProviderToolsResponse = GeneratedResponse<'GET /tool-provide
 export type GetToolProviderToolSchemaResponse =
   GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
 
+// ── v2 surface: authorize / connections / fields / status / health ──────────
+
+export type AuthorizeToolProviderParams = GeneratedRequest<Body<'POST /tool-providers/:providerId/authorize'>>;
+
+export type AuthorizeToolProviderResponse = GeneratedResponse<'POST /tool-providers/:providerId/authorize'>;
+
+export type ToolProviderAuthStatusResponse = GeneratedResponse<'GET /tool-providers/:providerId/auth-status/:authId'>;
+
+export type ToolProviderConnectionStatusParams = GeneratedRequest<
+  Body<'POST /tool-providers/:providerId/connection-status'>
+>;
+
+export type ToolProviderConnectionStatusResponse =
+  GeneratedResponse<'POST /tool-providers/:providerId/connection-status'>;
+
+export type ListToolProviderConnectionsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections'>
+>;
+
+export type ListToolProviderConnectionsResponse = GeneratedResponse<'GET /tool-providers/:providerId/connections'>;
+
+export type ListToolProviderConnectionFieldsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connection-fields'>
+>;
+
+export type ListToolProviderConnectionFieldsResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connection-fields'>;
+
+export type DisconnectToolProviderConnectionParams = GeneratedRequest<
+  QueryParams<'DELETE /tool-providers/:providerId/connections/:connectionId'>
+>;
+
+export type DisconnectToolProviderConnectionResponse =
+  GeneratedResponse<'DELETE /tool-providers/:providerId/connections/:connectionId'>;
+
+export type UpdateToolProviderConnectionParams = GeneratedRequest<
+  Body<'PATCH /tool-providers/:providerId/connections/:connectionId'>
+>;
+
+export type UpdateToolProviderConnectionResponse =
+  GeneratedResponse<'PATCH /tool-providers/:providerId/connections/:connectionId'>;
+
+export type GetToolProviderConnectionUsageParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections/:connectionId/usage'>
+>;
+
+export type GetToolProviderConnectionUsageResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connections/:connectionId/usage'>;
+
+export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/:providerId/health'>;
+
 // ============================================================================
 // Processor Provider Types
 // ============================================================================
@@ -2381,8 +2592,28 @@ export class MastraClientError extends Error {
 // ============================================
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
+}
+
+/** A single item-level static tool mock (agent targets only). */
+export interface DatasetItemToolMock {
+  /** Name of the tool this mock applies to. */
+  toolName: string;
+  /** Arguments to match against the tool call (deep equality when matchArgs is 'strict'). */
+  args: Record<string, unknown>;
+  /** Output served to the agent when this mock is matched and consumed. */
+  output: unknown;
+  /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
+}
+
+/** Diagnostic receipt for item-level tool mocks, returned on experiment results. */
+export interface ToolMockReport {
+  served: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  unconsumed: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  liveCalls: Array<{ toolName: string; args: unknown }>;
+  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
 }
 
 export interface DatasetItem {
@@ -2392,6 +2623,7 @@ export interface DatasetItem {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2448,6 +2680,7 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  toolMockReport?: ToolMockReport | null;
   scores: Array<{
     scorerId: string;
     scorerName: string;
@@ -2490,6 +2723,10 @@ export interface UpdateDatasetParams {
   targetType?: string;
   targetIds?: string[];
   scorerIds?: string[] | null;
+  /** Restrict the lookup to a specific tenant organization. */
+  organizationId?: string;
+  /** Restrict the lookup to a specific tenant project. */
+  projectId?: string;
 }
 
 export interface AddDatasetItemParams {
@@ -2497,6 +2734,7 @@ export interface AddDatasetItemParams {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2508,6 +2746,7 @@ export interface UpdateDatasetItemParams {
   input?: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2519,6 +2758,7 @@ export interface BatchInsertDatasetItemsParams {
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2578,6 +2818,7 @@ export interface DatasetItemVersionResponse {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -2799,17 +3040,15 @@ export interface ScheduleResponse {
 
 export type ScheduleTriggerOutcome =
   | 'published'
-  | 'failed'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
   | 'skipped'
-  | 'acked'
-  | 'alerted'
-  | 'deferred'
-  | 'appended-from-queue'
-  | 'dropped-stale'
-  | 'dropped-superseded'
-  | 'dropped-busy';
+  | 'aborted'
+  | 'failed';
 
-export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
 export interface ScheduleTriggerResponse {
   id?: string;
@@ -2842,6 +3081,128 @@ export interface ListScheduleTriggersParams {
 
 export interface ListScheduleTriggersResponse {
   triggers: ScheduleTriggerResponse[];
+}
+
+// ---------------------------------------------------------------------------
+// Heartbeats
+//
+// A Heartbeat is the user-facing view of a scheduled agent self-message. The
+// underlying storage is a Schedule + built-in workflow, but callers of the
+// SDK never see that — the server flattens the schedule's `inputData` onto
+// the top level so the SDK contract stays stable across implementations.
+// ---------------------------------------------------------------------------
+
+/** Attributes rendered onto the signal's XML tag. */
+export type HeartbeatSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+
+/** Behavior applied when the thread is already streaming. */
+export interface HeartbeatIfActive {
+  behavior?: 'deliver' | 'persist' | 'discard';
+  attributes?: HeartbeatSignalAttributes;
+}
+
+/**
+ * Behavior applied when the thread is idle, plus a serializable subset of
+ * stream options forwarded to the woken run.
+ */
+export interface HeartbeatIfIdle {
+  behavior?: 'wake' | 'persist' | 'discard';
+  attributes?: HeartbeatSignalAttributes;
+  streamOptions?: {
+    requestContext?: Record<string, unknown>;
+  };
+}
+
+export interface Heartbeat {
+  id: string;
+  agentId: string;
+  name?: string;
+  threadId?: string;
+  resourceId?: string;
+  prompt: string;
+  cron: string;
+  timezone?: string;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  signalType?: string;
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  lastRun?: ScheduleRunSummary;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Body for `client.createHeartbeat(...)`. Mirrors the public
+ * `CreateHeartbeatInput` shape on the core Heartbeats service. `agentId`
+ * names the agent the heartbeat fires as.
+ */
+export interface CreateHeartbeatInput {
+  /** Optional stable id; normalized to `hb_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  agentId: string;
+  cron: string;
+  prompt: string;
+  name?: string;
+  timezone?: string;
+  threadId?: string;
+  resourceId?: string;
+  signalType?: string;
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Patch body for `client.updateHeartbeat(...)`. `threadId` / `resourceId` are
+ * part of the heartbeat identity and cannot be changed — to retarget,
+ * delete and recreate.
+ */
+export interface UpdateHeartbeatOptions {
+  cron?: string;
+  prompt?: string;
+  name?: string;
+  timezone?: string;
+  signalType?: string;
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListHeartbeatsParams {
+  agentId?: string;
+  threadId?: string;
+  resourceId?: string;
+  name?: string;
+}
+
+export interface ListHeartbeatsResponse {
+  heartbeats: Heartbeat[];
+}
+
+/**
+ * Response for POST /heartbeats/:heartbeatId/run.
+ *
+ * The run runs asynchronously through the same HeartbeatWorker pipeline as
+ * scheduled fires. `claimId` is the trigger row's `runId` (used to look up
+ * the resulting trigger row).
+ */
+export interface RunHeartbeatResponse {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
 }
 
 export interface ExperimentReviewCounts {
@@ -2919,6 +3280,29 @@ export interface BuilderSettingsResponse {
    */
   modelPolicyWarnings?: string[];
 }
+
+/**
+ * Response from GET /editor/builder/models/available.
+ *
+ * Same provider shape as {@link ListAgentsModelProvidersResponse}, but each
+ * provider's `models` list is already filtered by the active builder model
+ * policy (the server applies the EE allowlist). Providers with no allowed
+ * models are omitted, so the picker can render this verbatim.
+ */
+export type BuilderAvailableModelsResponse = GeneratedResponse<'GET /editor/builder/models/available'>;
+
+/**
+ * A valid permission-pattern string (e.g. `agents:read`, `*`).
+ *
+ * Kept as a string alias so the Playground can name the type while the
+ * authoritative set is fetched from the server at runtime.
+ */
+export type PermissionPattern = string;
+
+/**
+ * Response from GET /auth/permission-patterns.
+ */
+export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**
  * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.

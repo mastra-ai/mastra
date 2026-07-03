@@ -1,10 +1,14 @@
+import { loadSettings } from '../../onboarding/settings.js';
 import { buildHelpText } from '../components/help-overlay.js';
+import { describeShellPassthroughInvocation, resolveShellPassthroughInvocation } from '../shell-config.js';
 import type { SlashCommandContext } from './types.js';
 
 export function handleHelpCommand(ctx: SlashCommandContext): void {
+  const shellInvocation = resolveShellPassthroughInvocation('', loadSettings().shellPassthrough);
   const text = buildHelpText({
-    modes: ctx.harness.listModes().length,
+    modes: ctx.controller.listModes().length,
     customSlashCommands: ctx.customSlashCommands,
+    shellModeLabel: describeShellPassthroughInvocation(shellInvocation),
   });
   ctx.showInfo(text);
 }

@@ -1,5 +1,7 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -105,7 +107,7 @@ export function ExperimentResultsList({
             }
 
             return (
-              <DataList.Row key={result.id}>
+              <DataList.RowWrapper key={result.id}>
                 <DataList.SelectCell
                   checked={selectedIds!.has(result.id)}
                   onToggle={() => onToggleSelect!(result.id)}
@@ -119,7 +121,7 @@ export function ExperimentResultsList({
                 >
                   {rowCells}
                 </DataList.RowButton>
-              </DataList.Row>
+              </DataList.RowWrapper>
             );
           })}
 

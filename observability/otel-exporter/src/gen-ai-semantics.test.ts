@@ -1,6 +1,12 @@
 import { SpanType } from '@mastra/core/observability';
-import type { AnyExportedSpan, ModelGenerationAttributes, UsageStats } from '@mastra/core/observability';
+import type {
+  AnyExportedSpan,
+  ModelGenerationAttributes,
+  RagEmbeddingAttributes,
+  UsageStats,
+} from '@mastra/core/observability';
 import { describe, it, expect } from 'vitest';
+import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
 import { getAttributes, formatUsageMetrics } from './gen-ai-semantics';
 
 function createModelGenerationSpan(attributes: ModelGenerationAttributes): AnyExportedSpan {
@@ -13,6 +19,33 @@ function createModelGenerationSpan(attributes: ModelGenerationAttributes): AnyEx
     isRootSpan: false,
     isEvent: false,
     attributes,
+  } as AnyExportedSpan;
+}
+
+function createRagEmbeddingSpan(attributes: RagEmbeddingAttributes): AnyExportedSpan {
+  return {
+    id: 'test-span-id',
+    traceId: 'test-trace-id',
+    name: 'test-embedding',
+    type: SpanType.RAG_EMBEDDING,
+    startTime: new Date(),
+    isRootSpan: false,
+    isEvent: false,
+    attributes,
+  } as AnyExportedSpan;
+}
+
+function createSpan(type: SpanType, metadata?: Record<string, unknown>): AnyExportedSpan {
+  return {
+    id: 'test-span-id',
+    traceId: 'test-trace-id',
+    name: 'test-span',
+    type,
+    startTime: new Date(),
+    isRootSpan: false,
+    isEvent: false,
+    metadata,
+    attributes: {},
   } as AnyExportedSpan;
 }
 
@@ -57,6 +90,27 @@ describe('getAttributes - token usage', () => {
     const attrs = getAttributes(span);
     expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(400);
   });
+
+  it('should extract model, provider, usage, and RAG metadata for embedding spans', () => {
+    const span = createRagEmbeddingSpan({
+      model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
+      provider: 'OpenAI',
+      mode: 'ingest',
+      dimensions: 1536,
+      inputCount: 3,
+      usage: { inputTokens: 120 },
+    });
+    const attrs = getAttributes(span);
+
+    expect(attrs['gen_ai.operation.name']).toBe('embeddings');
+    expect(attrs['gen_ai.request.model']).toBe(MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__);
+    expect(attrs['gen_ai.provider.name']).toBe('openai');
+    expect(attrs['gen_ai.usage.input_tokens']).toBe(120);
+    expect(attrs['gen_ai.embeddings.dimension.count']).toBe(1536);
+    expect(attrs['mastra.rag_embedding.mode']).toBe('ingest');
+    expect(attrs['mastra.rag_embedding.dimensions']).toBe(1536);
+    expect(attrs['mastra.rag_embedding.input_count']).toBe(3);
+  });
 });
 
 describe('formatUsageMetrics', () => {
@@ -99,5 +153,22 @@ describe('formatUsageMetrics', () => {
   it('should return empty metrics for undefined usage', () => {
     const result = formatUsageMetrics(undefined);
     expect(result).toEqual({});
+  });
+});
+
+describe('getAttributes - conversation id', () => {
+  it.each([SpanType.MODEL_GENERATION, SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL])(
+    'should set gen_ai.conversation.id from metadata.threadId for %s spans',
+    spanType => {
+      const attrs = getAttributes(createSpan(spanType, { threadId: 'thread-123' }));
+
+      expect(attrs['gen_ai.conversation.id']).toBe('thread-123');
+    },
+  );
+
+  it('should not set gen_ai.conversation.id when metadata.threadId is absent', () => {
+    const attrs = getAttributes(createSpan(SpanType.MODEL_GENERATION, { resourceId: 'resource-123' }));
+
+    expect(attrs).not.toHaveProperty('gen_ai.conversation.id');
   });
 });

@@ -1,6 +1,6 @@
 ---
 title: "Reference: Channels | Agents"
-description: "API reference for agent channels, which connect agents to messaging platforms like Slack, Discord, and Telegram."
+description: "API reference for the ChannelConfig agent channels object, which connects agents to messaging platforms like Slack, Discord, and Telegram."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.22.0`
 
-Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. See the [Channels guide](/docs/agents/channels) for concepts and platform setup instructions.
+Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. The object you pass is a `ChannelConfig`. See the [Channels guide](/docs/agents/channels) for concepts and platform setup instructions.
 
 ## Usage example
 
@@ -33,6 +33,8 @@ export const supportAgent = new Agent({
 ```
 
 ## Parameters
+
+The `channels` property accepts a `ChannelConfig` object with the following fields:
 
 <PropertiesTable
   content={[
@@ -90,11 +92,11 @@ export const supportAgent = new Agent({
   },
   {
     name: 'threadContext',
-    type: '{ maxMessages?: number }',
+    type: '{ maxMessages?: number; addSystemMessage?: boolean }',
     isOptional: true,
-    defaultValue: '{ maxMessages: 10 }',
+    defaultValue: '{ maxMessages: 10, addSystemMessage: true }',
     description:
-      'Fetch recent messages from the platform when the agent is first mentioned in a thread. Set `maxMessages: 0` to disable. Only applies to non-DM threads.',
+      'How the agent picks up context about the current thread. `maxMessages` controls how many recent platform messages are fetched on first mention (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.',
   },
   {
     name: 'chatOptions',
@@ -102,6 +104,27 @@ export const supportAgent = new Agent({
     isOptional: true,
     description:
       'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+  },
+  {
+    name: 'resolveResourceId',
+    type: '(ctx: ResolveResourceIdContext) => string | Promise<string>',
+    isOptional: true,
+    description:
+      'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
+  },
+  {
+    name: 'waitUntil',
+    type: '(promise: Promise<unknown>) => void',
+    isOptional: true,
+    description:
+      'Platform `waitUntil` function. Required on Vercel so background agent runs survive after the webhook returns 200. On Vercel pass `waitUntil` from `@vercel/functions`. Cloudflare Workers and Netlify Functions are detected automatically from the request context. AWS Lambda does not need `waitUntil` because it waits for the event loop to drain naturally.',
+  },
+  {
+    name: 'resolveWaitUntil',
+    type: '(c: Context) => ((promise: Promise<unknown>) => void) | undefined',
+    isOptional: true,
+    description:
+      'Resolver for runtimes where `waitUntil` lives on the Hono request context but is not covered by the built-in helper. Resolution order: bare `waitUntil` → `resolveWaitUntil(c)` → default (Cloudflare Workers, Netlify).',
   },
 ]}
 />
@@ -116,6 +139,7 @@ import { createDiscordAdapter } from '@chat-adapter/discord'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
+  id: 'example',
   name: 'Example',
   instructions: '...',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -239,9 +263,10 @@ import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
+  id: 'streaming-agent',
   name: 'Streaming Agent',
   instructions: '...',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
       slack: {
@@ -270,9 +295,10 @@ import { defaultTypingStatus } from '@mastra/core/channels'
 import { createDiscordAdapter } from '@chat-adapter/discord'
 
 const agent = new Agent({
+  id: 'custom-typing-agent',
   name: 'Custom Typing Agent',
   instructions: '...',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
       discord: {
@@ -302,6 +328,7 @@ import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
+  id: 'custom-handler-agent',
   name: 'Custom Handler Agent',
   instructions: '...',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -353,9 +380,69 @@ type ChannelHandler = (
 ) => Promise<void>
 ```
 
+## Resource ID resolution
+
+By default a channel thread's memory `resourceId` is `${platform}:${message.author.userId}`. The sender owns the memory, scoped per platform. For apps with a shared identity, such as single sign-on (SSO), this splits memory: the same user gets `feishu:user_123` in a Feishu DM but `user_123` on the web.
+
+Pass `resolveResourceId` to decide memory ownership separately from the sender. It runs only when a new thread is created. Reused threads keep their stored `resourceId` and never call the hook, so existing conversations don't depend on the resolver being available. Return `ctx.defaultResourceId` to fall back to the built-in behavior.
+
+```typescript title="src/mastra/agents/sso-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  id: 'sso-agent',
+  name: 'SSO Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    resolveResourceId: async ({ thread, message }) => {
+      // DM: share resource-level memory with the web app by using the bare SSO id
+      if (thread.isDM) {
+        return await resolveSsoUserId(message)
+      }
+      // Group chat: the conversation owns the memory; the sender stays the actor
+      return thread.channelId
+    },
+  },
+})
+```
+
+The `ResolveResourceIdContext` passed to the function:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'platform',
+    type: 'string',
+    description: 'Platform name (e.g. `slack`, `discord`).',
+  },
+  {
+    name: 'thread',
+    type: 'Thread',
+    description:
+      'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+  },
+  {
+    name: 'message',
+    type: 'Message',
+    description: 'The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner.',
+  },
+  {
+    name: 'defaultResourceId',
+    type: 'string',
+    description:
+      'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
+  },
+]}
+/>
+
 ## Inline media
 
-Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that do not match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
+Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
 
 The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 

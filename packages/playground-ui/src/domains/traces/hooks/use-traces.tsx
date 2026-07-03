@@ -1,4 +1,10 @@
-import type { ListBranchesArgs, ListBranchesResponse, ListTracesArgs, ListTracesResponse } from '@mastra/core/storage';
+import type {
+  LightSpanRecord,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  ListTracesArgs,
+  ListTracesResponse,
+} from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import type { InfiniteData } from '@tanstack/react-query';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -71,27 +77,14 @@ function isHttp501(error: unknown): boolean {
 
 type FetchTracesFnArgs = TracesFilters & {
   client: ReturnType<typeof useMastraClient>;
-  mode?: 'page' | 'delta';
-  page?: number;
-  perPage?: number;
-  after?: string;
-  limit?: number;
-};
+} & ({ mode: 'delta'; after?: string; limit?: number } | { mode?: 'page'; page: number; perPage: number });
 
-const fetchTracesFn = async ({
-  client,
-  mode,
-  page,
-  perPage,
-  after,
-  limit,
-  filters,
-  listMode = 'traces',
-}: FetchTracesFnArgs) => {
+const fetchTracesFn = async (args: FetchTracesFnArgs) => {
+  const { client, filters, listMode = 'traces' } = args;
   const params =
-    mode === 'delta'
-      ? { mode: 'delta' as const, after, limit, filters }
-      : { pagination: { page: page!, perPage: perPage! }, filters };
+    args.mode === 'delta'
+      ? { mode: 'delta' as const, after: args.after, limit: args.limit, filters }
+      : { pagination: { page: args.page, perPage: args.perPage }, filters };
 
   if (listMode === 'branches') {
     return client.listBranches(params as ListBranchesArgs);
@@ -128,7 +121,10 @@ function getPageSpans(page: TracesPageResponse) {
 
 /** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
  *  Also surfaces page 0's deltaCursor so the live-tail query can read it reactively. */
-export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
+export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
+  spans: LightSpanRecord[];
+  deltaCursor: string | undefined;
+} {
   const seen = new Set<string>();
   const spans = data.pages
     .flatMap(page => getPageSpans(page))
@@ -243,7 +239,32 @@ export interface UseTracesArgs extends TracesFilters {
   polling?: TracesPollingConfig;
 }
 
-export const useTraces = ({ filters, listMode = 'traces', polling = {} }: UseTracesArgs) => {
+interface UseTracesReturn {
+  data: { spans: LightSpanRecord[]; deltaCursor: string | undefined } | undefined;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => void;
+  isLoading: boolean;
+  isError: boolean;
+  error: Error | null;
+  setEndOfListElement: (node: HTMLDivElement | null) => void;
+  isRefetching: boolean;
+  autoRefetch: boolean;
+  setAutoRefetch: (v: boolean) => void;
+  recentlyAddedKeys: Set<string>;
+  dataUpdatedAt: number;
+  errorUpdatedAt: number;
+  isFetching: boolean;
+  isSuccess: boolean;
+  fetchStatus: 'idle' | 'fetching' | 'paused';
+  refetch: () => void;
+}
+
+export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
+  filters,
+  listMode = 'traces',
+  polling = {},
+}: UseTracesArgs) => {
   const {
     deltaPollIntervalMs = DEFAULT_POLLING_CONFIG.deltaPollIntervalMs,
     deltaChaseIntervalMs = DEFAULT_POLLING_CONFIG.deltaChaseIntervalMs,

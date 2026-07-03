@@ -8,6 +8,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
+import type { SourceControlProvider } from '../storage/source-control';
 import type {
   AgentInstructionBlock,
   StorageCreateAgentInput,
@@ -55,6 +56,7 @@ import type {
 import type { ToolProvider } from '../tool-provider';
 import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 import type { WorkspaceSandbox } from '../workspace/sandbox/sandbox';
+import type { Workspace } from '../workspace/workspace';
 
 // ============================================================================
 // Workspace Provider Interfaces
@@ -141,6 +143,28 @@ export interface BrowserProvider<TConfig = Record<string, unknown>> {
   createBrowser(config: TConfig): MastraBrowser | Promise<MastraBrowser>;
 }
 
+/**
+ * A registered workspace provider that the editor can use to hydrate
+ * stored workspace configs into complete runtime Workspace instances.
+ *
+ * Unlike filesystem/sandbox providers which build individual components,
+ * workspace providers build the entire Workspace as a single unit.
+ * No built-in workspace providers exist — they must be supplied via
+ * `MastraEditorConfig.workspaces`.
+ */
+export interface WorkspaceProvider<TConfig = Record<string, unknown>> {
+  /** Unique provider identifier (e.g., 'my-cloud') — matches `StorageWorkspaceRef.provider` */
+  id: string;
+  /** Human-readable name for UI display */
+  name: string;
+  /** Short description for UI display */
+  description?: string;
+  /** JSON Schema describing the provider-specific configuration. Used by UI to render config forms. */
+  configSchema?: Record<string, unknown>;
+  /** Create a complete workspace instance from the stored config */
+  createWorkspace(config: TConfig): Workspace<any, any, any> | Promise<Workspace<any, any, any>>;
+}
+
 export interface MastraEditorConfig {
   logger?: IMastraLogger;
   /** Tool providers for integration tools (e.g., Composio) */
@@ -174,10 +198,44 @@ export interface MastraEditorConfig {
    */
   browsers?: Record<string, BrowserProvider>;
   /**
+   * Workspace providers for hydrating stored workspace configs into complete
+   * runtime Workspace instances as a single unit (instead of composing from
+   * separate filesystem/sandbox providers).
+   * No built-in providers exist — workspace providers must be registered here.
+   * @example { [myCloudProvider.id]: myCloudProvider }
+   */
+  workspaces?: Record<string, WorkspaceProvider>;
+  /**
    * Configuration for the Agent Builder EE feature.
    * When present and enabled, the editor provides agent building capabilities.
    */
   builder?: AgentBuilderOptions;
+  /**
+   * Source of truth for agent overrides — controls how they are persisted and
+   * surfaced in Studio.
+   *
+   * - `'code'` — overrides live as deterministic per-agent JSON files on disk
+   *   (default `./mastra/editor/`). Studio replaces Save/Publish with
+   *   filesystem/PR actions and routes editor storage domains through a local
+   *   `FilesystemStore` at `codePath`.
+   * - `'db'` — overrides live in the configured storage backend. Studio shows
+   *   the standard Save/Publish flow.
+   */
+  source?: 'code' | 'db';
+  /**
+   * Filesystem path used by the `'code'` source for per-agent JSON files.
+   * Defaults to `./mastra/editor/`. Ignored when `source` is not `'code'`.
+   */
+  codePath?: string;
+  /**
+   * Optional provider used by the `'code'` source to persist overrides in a
+   * source-control backed system instead of the local filesystem.
+   *
+   * Local development can omit this and use `codePath`. Hosted deployments
+   * should provide a source provider or expose code-source editing as
+   * unavailable.
+   */
+  sourceControlProvider?: SourceControlProvider;
 }
 
 export interface GetByIdOptions {
@@ -410,6 +468,12 @@ export interface IMastraEditor {
 
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined;
+  /**
+   * Like {@link getToolProvider}, but throws {@link UnknownToolProviderError}
+   * when the id is unknown. Useful in HTTP handlers that want to translate
+   * a missing provider into a 404.
+   */
+  getToolProviderOrThrow(id: string): ToolProvider;
   /** List all registered tool providers */
   getToolProviders(): Record<string, ToolProvider>;
 
@@ -432,4 +496,14 @@ export interface IMastraEditor {
    * Optional for backwards compatibility.
    */
   resolveBuilder?(): Promise<IAgentBuilder | undefined>;
+
+  /**
+   * Returns the editor's configured source (`'code'` | `'db'`), or `undefined`
+   * if the editor was constructed without an explicit source. Optional for
+   * backwards compatibility.
+   */
+  getSource?(): 'code' | 'db' | undefined;
+
+  /** Returns the source control provider configured for code source, if any. */
+  getSourceControlProvider?(): SourceControlProvider | undefined;
 }

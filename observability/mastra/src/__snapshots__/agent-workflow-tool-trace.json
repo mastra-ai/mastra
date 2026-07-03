@@ -448,7 +448,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool: workflowExecutor]"
+                    "content": "[tool-result: workflowExecutor]"
                   }
                 ],
                 "output": {

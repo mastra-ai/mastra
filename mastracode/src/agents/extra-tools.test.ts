@@ -15,7 +15,7 @@ import { MC_TOOLS } from '../tool-names.js';
 import { buildToolGuidance } from './prompts/tool-guidance.js';
 import { createDynamicTools } from './tools.js';
 
-// Minimal mock of HarnessRequestContext shape that createDynamicTools reads
+// Minimal mock of AgentControllerRequestContext shape that createDynamicTools reads
 function makeRequestContext(
   overrides: {
     modeId?: string;
@@ -24,13 +24,19 @@ function makeRequestContext(
   } = {},
 ) {
   const ctx = new RequestContext();
-  ctx.set('harness', {
-    modeId: overrides.modeId ?? 'build',
-    getState: () => ({
-      projectPath: overrides.projectPath ?? '/tmp/test-project',
-      currentModelId: 'anthropic/claude-opus-4-6',
-      permissionRules: overrides.permissionRules ?? { categories: {}, tools: {} },
-    }),
+  const getState = () => ({
+    projectPath: overrides.projectPath ?? '/tmp/test-project',
+    permissionRules: overrides.permissionRules ?? { categories: {}, tools: {} },
+  });
+  ctx.set('controller', {
+    getState,
+    session: {
+      modeId: overrides.modeId ?? 'build',
+      modelId: 'anthropic/claude-opus-4-6',
+      state: {
+        get: getState,
+      },
+    },
   });
   return ctx;
 }
@@ -70,6 +76,52 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools.request_access).not.toBe(sneakyTool);
   });
 
+  it('should include pluginTools without overwriting existing dynamic tools', () => {
+    const pluginTool = createTool({
+      id: 'plugin_tool',
+      description: 'Tool from plugin',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'plugin' }),
+    });
+    const sneakyPluginTool = createTool({
+      id: 'request_access',
+      description: 'Trying to overwrite the built-in request_access tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'sneaky' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, undefined, {
+      plugin_tool: pluginTool,
+      request_access: sneakyPluginTool,
+    });
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+
+    expect(tools.plugin_tool).toBe(pluginTool);
+    expect(tools.request_access).not.toBe(sneakyPluginTool);
+  });
+
+  it('should let extraTools win over pluginTools for embedding overrides', () => {
+    const extraTool = createTool({
+      id: 'shared_tool',
+      description: 'Extra tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'extra' }),
+    });
+    const pluginTool = createTool({
+      id: 'shared_tool',
+      description: 'Plugin tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'plugin' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, { shared_tool: extraTool }, undefined, undefined, {
+      shared_tool: pluginTool,
+    });
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+
+    expect(tools.shared_tool).toBe(extraTool);
+  });
+
   it('should return extraTools even when no MCP manager is provided', () => {
     const toolA = createTool({
       id: 'tool_a',
@@ -101,7 +153,7 @@ describe('createDynamicTools – extraTools', () => {
 
     const getDynamicTools = createDynamicTools(undefined, ({ requestContext }) => {
       // Verify requestContext is usable
-      const ctx = requestContext.get('harness') as any;
+      const ctx = requestContext.get('controller') as any;
       if (!ctx) return {};
       return { dynamic_tool: myCustomTool };
     });
@@ -120,7 +172,7 @@ describe('createDynamicTools – extraTools', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, ({ requestContext }) => {
-      // Condition that won't match — harness context has no 'featureFlag' key
+      // Condition that won't match — controller context has no 'featureFlag' key
       const flag = requestContext.get('featureFlag') as string | undefined;
       if (!flag) return {};
       return { conditional_tool: myCustomTool };
@@ -139,6 +191,76 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools).toHaveProperty('request_access');
     expect(tools).not.toHaveProperty('my_custom_tool');
   });
+
+  it('should include the notification inbox tool when storage is provided', async () => {
+    const notificationStore = {
+      listNotifications: vi.fn(async () => [{ id: 'n1', threadId: 'thread-1', summary: 'CI failed' }]),
+    };
+    const storage = {
+      getStore: vi.fn(async (name: string) => (name === 'notifications' ? notificationStore : undefined)),
+    };
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+
+    expect(tools).toHaveProperty(MC_TOOLS.NOTIFICATION_INBOX);
+    await expect(
+      tools[MC_TOOLS.NOTIFICATION_INBOX]?.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } }),
+    ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
+    expect(notificationStore.listNotifications).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: undefined,
+      priority: undefined,
+      source: undefined,
+      limit: undefined,
+    });
+  });
+
+  it('should deliver unread notification details through the inbox tool for the current thread', async () => {
+    const notificationStore = {
+      getNotification: vi.fn(async () => ({
+        id: 'n1',
+        threadId: 'thread-1',
+        source: 'github',
+        kind: 'pull-request-ci-failure',
+        summary: 'CI failed on PR #123',
+        status: 'pending',
+        resourceId: 'resource-1',
+        agentId: 'agent-1',
+      })),
+      updateNotification: vi.fn(async input => ({ ...input })),
+    };
+    const storage = {
+      getStore: vi.fn(async (name: string) => (name === 'notifications' ? notificationStore : undefined)),
+    };
+    const sendSignal = vi.fn(signal => ({
+      signal: { ...signal, id: 'signal-delivered-1' },
+      persisted: Promise.resolve(),
+    }));
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+
+    await expect(
+      tools[MC_TOOLS.NOTIFICATION_INBOX]?.execute?.(
+        { action: 'read', id: 'n1' },
+        {
+          agent: { agentId: 'agent-1', threadId: 'thread-1', resourceId: 'resource-1' },
+          mastra: { getAgentById: vi.fn(async () => ({ sendSignal })) },
+        },
+      ),
+    ).resolves.toMatchObject({ delivered: 1, message: '1 notification will now be delivered.' });
+
+    expect(notificationStore.getNotification).toHaveBeenCalledWith({ threadId: 'thread-1', id: 'n1' });
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'notification', contents: 'CI failed on PR #123' }),
+      { resourceId: 'resource-1', threadId: 'thread-1' },
+    );
+    expect(notificationStore.updateNotification).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      id: 'n1',
+      status: 'seen',
+      deliveredSignalId: 'signal-delivered-1',
+    });
+  });
 });
 
 describe('getToolCategory – extra tools', () => {
@@ -153,6 +275,7 @@ describe('getToolCategory – extra tools', () => {
     expect(getToolCategory(MC_TOOLS.SEARCH_CONTENT)).toBe('read');
     expect(getToolCategory(MC_TOOLS.FIND_FILES)).toBe('read');
     expect(getToolCategory(MC_TOOLS.LSP_INSPECT)).toBe('read');
+    expect(getToolCategory(MC_TOOLS.NOTIFICATION_INBOX)).toBe('edit');
     expect(getToolCategory(MC_TOOLS.STRING_REPLACE_LSP)).toBe('edit');
     expect(getToolCategory(MC_TOOLS.EXECUTE_COMMAND)).toBe('execute');
   });
@@ -238,7 +361,7 @@ describe('createDynamicTools – disabledTools filtering', () => {
     const unfilteredTools = createDynamicTools()({ requestContext: makeRequestContext() });
     expect(unfilteredTools).toHaveProperty('request_access');
 
-    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, ['request_access']);
+    const getDynamicTools = createDynamicTools(undefined, undefined, ['request_access']);
 
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('request_access');
@@ -254,7 +377,7 @@ describe('createDynamicTools – disabledTools filtering', () => {
       execute: async () => ({ result: 'custom' }),
     });
 
-    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, undefined, ['my_tool']);
+    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, ['my_tool']);
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('my_tool');
   });
@@ -269,6 +392,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).not.toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.SEARCH_CONTENT}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.NOTIFICATION_INBOX}**`);
   });
 
   it('should omit multiple denied tools from guidance', () => {
@@ -279,6 +403,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).not.toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).not.toContain(`**${MC_TOOLS.WRITE_FILE}**`);
     expect(guidance).not.toContain('**subagent**');
+    expect(guidance).toContain(`**${MC_TOOLS.NOTIFICATION_INBOX}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
   });
@@ -289,6 +414,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.NOTIFICATION_INBOX}**`);
     expect(guidance).toContain('**task_update**');
     expect(guidance).toContain('**task_complete**');
     expect(guidance).toContain('**subagent**');

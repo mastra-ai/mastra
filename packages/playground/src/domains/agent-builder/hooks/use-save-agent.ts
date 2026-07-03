@@ -1,12 +1,12 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useCallback } from 'react';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { formValuesToSaveParams } from '../services/form-values-to-save-params';
 import type { AgentTool } from '../types/agent-tool';
+import { isModelNotAllowedError } from '../utils/is-model-not-allowed';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { isModelNotAllowedError } from '@/domains/builder';
 
 interface UseSaveAgentArgs {
   agentId: string;
@@ -33,6 +33,11 @@ export function useSaveAgent({
       const workspaceField = params.workspace ? { workspace: params.workspace } : {};
       const browserField = { browser: params.browser };
       const metadataField = params.metadata ? { metadata: params.metadata } : {};
+      // Only forward `toolProviders` when the form actually produced a value.
+      // Conditional (code-authored) toolProviders surface as `undefined` from
+      // `extractFormToolProviders`; omitting the field on update lets the
+      // server preserve the original stored shape.
+      const toolProvidersField = params.toolProviders ? { toolProviders: params.toolProviders } : {};
 
       try {
         const updated = await updateStoredAgent.mutateAsync({
@@ -48,6 +53,7 @@ export function useSaveAgent({
           ...workspaceField,
           ...browserField,
           ...metadataField,
+          ...toolProvidersField,
         });
         if (!silent) toast.success('Agent updated');
         onSuccess?.(agentId);

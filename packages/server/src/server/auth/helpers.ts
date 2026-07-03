@@ -1,8 +1,7 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ApiRoute, MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
+import type { ApiRoute, IMastraAuthProvider, MastraAuthConfig, MastraAuthRequest } from '@mastra/core/server';
 
 import {
   MASTRA_RESOURCE_ID_KEY,
@@ -10,6 +9,7 @@ import {
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_AUTH_MODE_KEY,
 } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
@@ -276,7 +276,7 @@ export interface AuthMiddlewareContext {
   authConfig: MastraAuthConfig;
   customRouteAuthConfig?: Map<string, boolean>;
   requestContext: { get: (key: string) => unknown; set: (key: string, value: unknown) => void };
-  rawRequest: unknown;
+  rawRequest: MastraAuthRequest;
   token: string | null;
   buildAuthorizeContext: () => unknown;
   /** When true, force authentication even if the path matches a public pattern. */
@@ -289,10 +289,22 @@ export type AuthResult =
 
 const pass: AuthResult = { action: 'next' };
 
+const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
+  if (!(request instanceof Request)) {
+    return request;
+  }
+
+  return {
+    raw: request,
+    headers: request.headers,
+    header: name => request.headers.get(name) ?? undefined,
+  };
+};
+
 export interface GetAuthenticatedUserOptions {
   mastra: Mastra;
   token: string;
-  request: Request | HonoRequest;
+  request: MastraAuthRequest;
 }
 
 export const getAuthenticatedUser = async <TUser = unknown>({
@@ -310,7 +322,7 @@ export const getAuthenticatedUser = async <TUser = unknown>({
     return null;
   }
 
-  return (await authConfig.authenticateToken(normalizedToken, request as any)) as TUser | null;
+  return (await authConfig.authenticateToken(normalizedToken, request)) as TUser | null;
 };
 
 /**
@@ -318,8 +330,8 @@ export const getAuthenticatedUser = async <TUser = unknown>({
  * Returns true if the auth provider implements the necessary ISessionProvider methods.
  */
 export function supportsSessionRefresh(
-  authConfig: MastraAuthConfig | MastraAuthProvider,
-): authConfig is (MastraAuthConfig | MastraAuthProvider) &
+  authConfig: MastraAuthConfig | IMastraAuthProvider,
+): authConfig is (MastraAuthConfig | IMastraAuthProvider) &
   Pick<ISessionProvider, 'refreshSession' | 'getSessionIdFromRequest' | 'getSessionHeaders'> {
   return (
     typeof (authConfig as any).getSessionIdFromRequest === 'function' &&
@@ -371,10 +383,11 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   let user: unknown;
   let refreshHeaders: Record<string, string> | undefined;
+  const authRequest = adaptToMastraAuthRequest(rawRequest);
 
   try {
     if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token ?? '', rawRequest as any);
+      user = await authConfig.authenticateToken(token ?? '', authRequest);
     } else {
       throw new Error('No token verification method configured');
     }
@@ -409,7 +422,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
               const cookieValue = refreshedCookie.includes('=')
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
-              user = await authConfig.authenticateToken(cookieValue, refreshedRequest as any);
+              user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
             }
             if (!user) {
               refreshHeaders = undefined;
@@ -473,8 +486,14 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     try {
+      // Determine which RBAC provider to use based on auth mode
+      const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);
       const serverConfig = mastra.getServer();
-      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+      const studioConfig = mastra.getStudio?.();
+      // Use studio RBAC if this is a studio request, otherwise use server RBAC
+      const rbacProvider = (authMode === 'studio' ? (studioConfig?.rbac ?? serverConfig?.rbac) : serverConfig?.rbac) as
+        | IRBACProvider<EEUser>
+        | undefined;
 
       if (rbacProvider) {
         if (!user || typeof user !== 'object' || !('id' in user)) {
@@ -507,7 +526,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, rawRequest as any);
+      const isAuthorized = await authConfig.authorizeUser(user, authRequest);
 
       if (!isAuthorized) {
         return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };

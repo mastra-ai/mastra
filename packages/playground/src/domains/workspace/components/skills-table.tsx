@@ -1,4 +1,7 @@
-import { Button, DataList, DataListSkeleton, Icon, SkillIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
@@ -128,7 +131,7 @@ export function SkillsTable({
             }
 
             return (
-              <DataList.Row key={skill.path}>
+              <DataList.RowWrapper key={skill.path}>
                 <DataList.RowButton flushRight flushLeft colEnd={-2} onClick={onClick}>
                   {rowContent}
                 </DataList.RowButton>
@@ -154,7 +157,7 @@ export function SkillsTable({
                     )}
                   </div>
                 </DataList.Cell>
-              </DataList.Row>
+              </DataList.RowWrapper>
             );
           })
         )}

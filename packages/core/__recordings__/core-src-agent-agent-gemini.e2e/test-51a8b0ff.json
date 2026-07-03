@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-51a8b0ff",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should throw error for empty user message",
     "createdAt": "2026-05-18T10:50:50.877Z",
-    "updatedAt": "2026-05-20T14:04:36.852Z"
+    "updatedAt": "2026-05-28T17:33:39.900Z"
   },
   "recordings": [
     {
@@ -23,7 +23,7 @@
             ]
           }
         },
-        "timestamp": 1779285876790
+        "timestamp": 1779989619710
       },
       "response": {
         "status": 400,
@@ -31,9 +31,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:36 GMT",
+          "date": "Thu, 28 May 2026 17:33:39 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=31",
+          "server-timing": "gfet4t7; dur=70",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",

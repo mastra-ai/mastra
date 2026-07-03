@@ -492,16 +492,16 @@ export const getThreadByIdResponseSchema = threadSchema;
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
-  uiMessages: z.unknown(), // Converted messages in UI format
+  uiMessages: z.array(z.any()).nullable(), // Converted messages in UI format
 });
 
 /**
  * Response for GET /memory/threads/:threadId/working-memory
  */
 export const getWorkingMemoryResponseSchema = z.object({
-  workingMemory: z.unknown(), // Can be string or structured object depending on template
+  workingMemory: z.unknown().nullable(), // Can be string or structured object depending on template
   source: z.enum(['thread', 'resource']),
-  workingMemoryTemplate: z.unknown(), // Template structure varies
+  workingMemoryTemplate: z.unknown().nullable(), // Template structure varies
   threadExists: z.boolean(),
 });
 
@@ -645,6 +645,22 @@ export const getObservationalMemoryQuerySchema = z.object({
  * Observational Memory record schema for API responses
  * Matches the ObservationalMemoryRecord type from @mastra/core/storage
  */
+const bufferedObservationChunkSchema = z.object({
+  id: z.string().optional(),
+  cycleId: z.string(),
+  observations: z.string(),
+  tokenCount: z.number(),
+  messageIds: z.array(z.string()).optional(),
+  messageTokens: z.number(),
+  lastObservedAt: z.date().optional(),
+  createdAt: z.date().optional(),
+  suggestedContinuation: z.string().optional(),
+  currentTask: z.string().optional(),
+  threadTitle: z.string().optional(),
+  extractedValues: z.record(z.string(), z.unknown()).optional(),
+  extractionFailures: z.array(z.object({ slug: z.string(), error: z.string() })).optional(),
+});
+
 const observationalMemoryRecordSchema = z.object({
   id: z.string(),
   scope: z.enum(['thread', 'resource']),
@@ -652,6 +668,7 @@ const observationalMemoryRecordSchema = z.object({
   threadId: z.string().nullable(),
   activeObservations: z.string(),
   bufferedObservations: z.string().optional(),
+  bufferedObservationChunks: z.array(bufferedObservationChunkSchema).optional(),
   bufferedReflection: z.string().optional(),
   originType: z.enum(['initial', 'observation', 'reflection']),
   generationCount: z.number(),

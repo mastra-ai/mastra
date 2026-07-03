@@ -4,8 +4,8 @@
  * Allows entering a key or cancelling to proceed without one.
  */
 
-import { Box, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable } from '@earendil-works/pi-tui';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
 

@@ -319,8 +319,11 @@ export class DatadogExporter extends BaseExporter {
     }
 
     // Forward span.attributes to metadata (minus known fields handled separately)
-    // This ensures tool/workflow spans preserve custom attributes like other exporters
-    const knownFields = ['usage', 'model', 'provider', 'parameters'];
+    // This ensures tool/workflow spans preserve custom attributes like other exporters.
+    // `model`/`provider` are surfaced as native LLM Obs fields and `usage` as metrics;
+    // everything else (including `parameters`, which carries model settings like
+    // reasoning_effort/temperature) flows into metadata so it reaches Datadog.
+    const knownFields = ['usage', 'model', 'provider'];
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
     // Separate requestContextKeys from span.metadata AND span.attributes:

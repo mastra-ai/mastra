@@ -14,14 +14,14 @@ concurrency:
 jobs:
   changes:
     name: Detect docs changes
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
       contents: read
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 
@@ -38,10 +38,10 @@ jobs:
     name: Check for deleted pages without redirects
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Setup Node.js
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: '22.13.0'
           package-manager-cache: false
@@ -71,7 +71,7 @@ jobs:
 
       - name: Comment on PR if redirects are missing
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
             const logsUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
@@ -119,21 +119,27 @@ jobs:
     name: Validate redirects
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+
+      - name: Verify generated vercel redirects are up to date
+        working-directory: ./docs
+        run: |
+          pnpm generate-vercel-redirects
+          git diff --exit-code -- vercel.json vercel.redirects.json
 
       - name: Run validate-redirects
         run: node .github/scripts/validate-redirects.js
 
       - name: Comment on PR if redirect issues found
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
           script: |
             const logsUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
@@ -181,11 +187,11 @@ jobs:
     name: Lint docs
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 

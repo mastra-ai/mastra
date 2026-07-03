@@ -1,16 +1,11 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import {
-  Button,
-  EmptyState,
-  Entity,
-  EntityContent,
-  EntityName,
-  EntityDescription,
-  ScrollArea,
-  Searchbar,
-  Switch,
-} from '@mastra/playground-ui';
-import { Plus, Drill } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Plus, Drill, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -82,7 +77,17 @@ export function SkillsPage() {
           )}
         </div>
 
-        <Searchbar onSearch={setSearch} label="Search skills" placeholder="Search skills" />
+        <InputGroup variant="outline">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label="Search skills"
+            placeholder="Search skills"
+            onChange={event => setSearch(event.target.value)}
+          />
+        </InputGroup>
 
         {filteredSkills.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -123,12 +128,7 @@ export function SkillsPage() {
         )}
       </div>
 
-      <SkillEditDialog
-        isOpen={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSkillCreated={handleSkillCreated}
-        readOnly={readOnly}
-      />
+      <SkillEditDialog isOpen={dialogOpen} onClose={() => setDialogOpen(false)} onSkillCreated={handleSkillCreated} />
     </ScrollArea>
   );
 }

@@ -15,7 +15,7 @@ Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform 
 
 :::note
 
-`MastraPlatformExporter` was previously called `CloudExporter`. The original `CloudExporter` class is still exported from `@mastra/observability` so existing imports keep working, but it is deprecated and will be removed in a future major version. New code should use `MastraPlatformExporter`.
+`MastraPlatformExporter` was previously called `CloudExporter`. The original `CloudExporter` class is still exported from `@mastra/observability` so existing imports keep working, but it's deprecated and will be removed in a future major version. New code should use `MastraPlatformExporter`.
 
 :::
 
@@ -152,7 +152,7 @@ async onMetricEvent(event: MetricEvent): Promise<void>
 
 Processes metric signals for export.
 
-Every `MetricEvent` passed to this handler is buffered and exported to the metrics endpoint derived from the configured base endpoint. There is no additional filtering by metric subtype or status inside `MastraPlatformExporter`; the exporter forwards every metric event it receives unless it is disabled.
+Every `MetricEvent` passed to this handler is buffered and exported to the metrics endpoint derived from the configured base endpoint. No additional filtering by metric subtype or status inside `MastraPlatformExporter` is performed; the exporter forwards every metric event it receives unless it's disabled.
 
 <PropertiesTable
   props={[
@@ -175,7 +175,7 @@ async onScoreEvent(event: ScoreEvent): Promise<void>
 
 Processes score signals for export.
 
-Every `ScoreEvent` passed to this handler is buffered and exported to the scores endpoint derived from the configured base endpoint. There is no extra filtering at the exporter layer beyond the disabled-exporter check, so all score events received by this method are forwarded.
+Every `ScoreEvent` passed to this handler is buffered and exported to the scores endpoint derived from the configured base endpoint. No extra filtering at the exporter layer beyond the disabled-exporter check is performed, so all score events received by this method are forwarded.
 
 <PropertiesTable
   props={[
@@ -198,7 +198,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void>
 
 Processes feedback signals for export.
 
-Every `FeedbackEvent` passed to this handler is buffered and exported to the feedback endpoint derived from the configured base endpoint. There is no feedback-type filtering inside `MastraPlatformExporter`; all feedback events received here are forwarded unless the exporter is disabled.
+Every `FeedbackEvent` passed to this handler is buffered and exported to the feedback endpoint derived from the configured base endpoint. No feedback-type filtering inside `MastraPlatformExporter` is performed; all feedback events received here are forwarded unless the exporter is disabled.
 
 <PropertiesTable
   props={[
@@ -269,7 +269,7 @@ Errors raised by `MastraPlatformExporter` use the `MASTRA_PLATFORM_EXPORTER_*` `
 
 ## Span wire format
 
-The shape of each span sent to Mastra platform is documented here for reference only — it is not exported from `@mastra/observability` and should not be imported. The exporter spreads the original `AnyExportedSpan` (so the source field names are preserved) and layers a small set of platform-friendly aliases on top:
+The shape of each span sent to Mastra platform is documented here for reference only — it's not exported from `@mastra/observability` and shouldn't be imported. The exporter spreads the original `AnyExportedSpan` (so the source field names are preserved) and layers a small set of platform-friendly aliases on top:
 
 ```typescript
 type MastraPlatformSpanRecord = AnyExportedSpan & {
@@ -327,7 +327,7 @@ The original `CloudExporter` is preserved unchanged so dashboards or alert rules
 ### Documentation
 
 - [Tracing Overview](/docs/observability/tracing/overview): Complete guide
-- [Exporters](/docs/observability/tracing/overview#exporters): Exporter concepts
+- [Exporters](/docs/observability/integrations/overview#exporters): Exporter concepts
 
 ### Other Exporters
 

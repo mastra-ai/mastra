@@ -1,4 +1,5 @@
-import { StatusBadge, cn } from '@mastra/playground-ui';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, ChevronDown, ChevronUp, Minus } from 'lucide-react';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 

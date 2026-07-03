@@ -1,15 +1,101 @@
 import { z } from 'zod';
 import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants';
 
+export type PermissionPolicy = 'allow' | 'ask' | 'deny';
+
+export type MastraCodeSessionState = {
+  currentModelId: string;
+  modeId: string;
+};
+
+export type MastraCodeComposedState = MastraCodeState & MastraCodeSessionState;
+
+export interface MastraCodeState {
+  [key: string]: unknown;
+  [key: `subagentModelId_${string}`]: string | undefined;
+  subagentModelId?: string;
+  projectPath?: string;
+  projectName?: string;
+  /** When set, this project is a GitHub/cloud-sandbox-backed project. */
+  githubProjectId?: string;
+  /** Persisted sandbox id for reattaching the project's cloud workspace. */
+  sandboxId?: string;
+  /** Path inside the sandbox the repo is cloned into. */
+  sandboxWorkdir?: string;
+  /** Active git worktree path inside the sandbox for the current unit of work. */
+  worktreePath?: string;
+  /** Active feature branch checked out in the worktree. */
+  branch?: string;
+  configDir: string;
+  homeDir?: string;
+  gitBranch?: string;
+  lastCommand?: string;
+  observerModelId: string;
+  reflectorModelId: string;
+  observationThreshold: number;
+  reflectionThreshold: number;
+  cavemanObservations: boolean;
+  observeAttachments: 'auto' | boolean;
+  omScope?: 'thread' | 'resource';
+  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  yolo: boolean;
+  permissionRules: {
+    categories: Record<string, PermissionPolicy>;
+    tools: Record<string, PermissionPolicy>;
+  };
+  smartEditing: boolean;
+  notifications: 'bell' | 'system' | 'both' | 'off';
+  tasks: Array<{
+    id?: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }>;
+  sandboxAllowedPaths: string[];
+  pluginSkillPaths: string[];
+  pluginCommandPaths: string[];
+  pluginInstructions: string[];
+  activePlan: {
+    title: string;
+    plan: string;
+    approvedAt: string;
+  } | null;
+  activeBrowserSettings?: {
+    enabled: boolean;
+    provider: 'stagehand' | 'agent-browser';
+    headless?: boolean;
+    viewport?: {
+      width: number;
+      height: number;
+    };
+    cdpUrl?: string;
+    stagehand?: {
+      env: 'LOCAL' | 'BROWSERBASE';
+      apiKey?: string;
+      projectId?: string;
+    };
+  };
+}
+
 export const stateSchema = z.object({
+  // Session-scoped selection.
+  // validates state against this schema, so they MUST be declared here — Zod
+  // strips unknown keys on parse, which would otherwise silently discard the
+  // seeded model and leave the controller with no model selected.
+  currentModelId: z.string().optional(),
+  modeId: z.string().optional(),
+  subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  githubProjectId: z.string().optional(),
+  sandboxId: z.string().optional(),
+  sandboxWorkdir: z.string().optional(),
+  worktreePath: z.string().optional(),
+  branch: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
+  homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
-  currentModelId: z.string().default(''),
-  // Subagent model settings (per-thread/per-mode)
-  subagentModelId: z.string().optional(), // Thread-level default for subagents
   // Observational Memory model settings
   observerModelId: z.string().default(DEFAULT_OM_MODEL_ID),
   reflectorModelId: z.string().default(DEFAULT_OM_MODEL_ID),
@@ -54,6 +140,10 @@ export const stateSchema = z.object({
     .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
+  // Asset directories contributed by active plugins.
+  pluginSkillPaths: z.array(z.string()).default([]),
+  pluginCommandPaths: z.array(z.string()).default([]),
+  pluginInstructions: z.array(z.string()).default([]),
   // Active plan (set when a plan is approved in Plan mode)
   activePlan: z
     .object({

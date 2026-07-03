@@ -1,19 +1,26 @@
 /**
- * Implementation of `DurableAgent.streamUntilIdle`. Mirrors the regular
- * agent's `stream-until-idle.ts` but adapted for durable execution:
+ * Implementation of `DurableAgent.streamUntilIdle` and
+ * `DurableAgent.resume(..., { untilIdle })`. Mirrors the regular agent's
+ * `stream-until-idle.ts` (shared `runWithIdleWrapper` + thin delegates per
+ * entry point) but adapted for durable execution:
  * - `DurableAgent.stream()` returns `DurableAgentStreamResult` (not `MastraModelOutput`)
  * - Each continuation starts a new durable workflow (new runId)
  * - Cleanup functions from each inner stream are tracked and called on close
+ * - Inner `abort()` handles are fanned out so the outer `result.abort()`
+ *   cancels every active durable run
  *
  * High-level flow:
- * 1. Resolve memory scope (threadId, resourceId) -- falls through to plain
- *    `agent.stream` if no memory or bgManager.
+ * 1. Resolve memory scope (threadId, resourceId) -- falls through to the
+ *    plain underlying call if no memory or bgManager.
  * 2. Register this call as the active wrapper for the scope, aborting any
  *    prior wrapper.
- * 3. Run initial turn via `agent.stream(messages, { _skipBgTaskWait: true })`
- *    and pipe its `fullStream` into a combined outer stream.
+ * 3. Run initial turn via the `firstTurn` callback (either `agent.stream(...)`
+ *    or `agent.resume(...)`) and pipe its `fullStream` into a combined outer
+ *    stream.
  * 4. Subscribe to `bgManager.stream(...)` for background task lifecycle
- *    events. On terminal events, queue a continuation.
+ *    events. On terminal events, queue a continuation (always via
+ *    `agent.stream([], continuationOpts)` — we're back in normal multi-turn
+ *    flow at that point).
  * 5. `maxIdleMs` fires only between turns when nothing is happening.
  */
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
@@ -123,11 +130,30 @@ function releaseStreamSlot(activeStreams: Map<string, () => void>, scopeKey: str
   }
 }
 
-export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
+/**
+ * Hook the caller passes to `runWithIdleWrapper` to drive the initial turn.
+ * Receives the prepared options object and returns the resulting
+ * `DurableAgentStreamResult`. Lets `runDurableStreamUntilIdle` pass
+ * `agent.stream(messages, opts)` and `runResumeDurableStreamUntilIdle` pass
+ * `agent.resume(runId, resumeData, opts)` — the rest of the wrapper (state
+ * machine, bg-task subscription, continuation loop) is identical between
+ * the two.
+ */
+type FirstTurnRunner<OUTPUT> = (opts: Record<string, any>) => Promise<DurableAgentStreamResult<OUTPUT>>;
+
+/**
+ * Shared idle-loop wrapper used by both `runDurableStreamUntilIdle` (initial
+ * turn: `agent.stream(messages, ...)`) and `runResumeDurableStreamUntilIdle`
+ * (initial turn: `agent.resume(runId, resumeData, ...)`). The continuation
+ * loop — triggered by terminal bg-task events — always uses
+ * `agent.stream([], continuationOpts)` regardless of how the run started,
+ * since at that point we're back to a normal multi-turn conversation.
+ */
+async function runWithIdleWrapper<OUTPUT>(
   agent: DurableAgent<any, any, OUTPUT>,
-  messages: MessageListInput,
   streamOptions: (DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number }) | undefined,
   deps: DurableStreamUntilIdleDeps,
+  firstTurn: FirstTurnRunner<OUTPUT>,
 ): Promise<DurableAgentStreamResult<OUTPUT>> {
   const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
 
@@ -142,7 +168,7 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
   const scope = await resolveScope(agent, mergedOptions);
 
   if (!deps.bgManager || !scope) {
-    return (agent as any).stream(messages, restStreamOptions as any) as Promise<DurableAgentStreamResult<OUTPUT>>;
+    return firstTurn(restStreamOptions as Record<string, any>);
   }
 
   const { threadId, resourceId, scopeKey } = scope;
@@ -167,6 +193,10 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
   // dropped as a "duplicate" of the earlier `background-task-suspended`.
   const processedTerminalKeys = new Set<string>();
   const innerCleanups: Array<() => void> = [];
+  // Forward `result.abort(reason)` from the idle-loop wrapper onto whichever
+  // inner DurableAgent.stream() run is currently active. We collect their
+  // `abort` handles as they come up and call each on shutdown.
+  const innerAborts: Array<(reason?: unknown) => void> = [];
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -259,6 +289,7 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
       const inner = await (agent as any).stream([], continuationOpts);
       innerCleanups.push(inner.cleanup);
+      if (typeof inner.abort === 'function') innerAborts.push(inner.abort);
       await pipeInner(inner.fullStream);
     } catch (err) {
       try {
@@ -348,13 +379,14 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
   clearIdleTimer();
   let first: DurableAgentStreamResult<OUTPUT>;
   try {
-    first = await (agent as any).stream(messages, initialStreamOpts);
+    first = await firstTurn(initialStreamOpts as Record<string, any>);
   } catch (err) {
     forceClose();
     throw err;
   }
   firstRunId = first.runId;
   innerCleanups.push(first.cleanup);
+  if (typeof first.abort === 'function') innerAborts.push(first.abort);
 
   void (async () => {
     try {
@@ -390,5 +422,61 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
     threadId,
     resourceId,
     cleanup: forceClose,
+    abort: (reason?: unknown) => {
+      // Fan the abort out to every inner DurableAgent.stream() that has been
+      // spawned by the idle loop so far. `forceClose` then unwinds the outer
+      // stream + idle timer.
+      for (const innerAbort of innerAborts) {
+        try {
+          innerAbort(reason);
+        } catch {
+          // ignore — best-effort abort across siblings
+        }
+      }
+      forceClose();
+    },
   };
+}
+
+/**
+ * Run `DurableAgent.streamUntilIdle` (or `DurableAgent.stream({ untilIdle })`).
+ * Initial turn invokes `agent.stream(messages, ...)`; continuations triggered
+ * by background-task completions run as fresh `agent.stream([], ...)` calls
+ * against the same memory thread.
+ */
+export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
+  agent: DurableAgent<any, any, OUTPUT>,
+  messages: MessageListInput,
+  streamOptions: (DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number }) | undefined,
+  deps: DurableStreamUntilIdleDeps,
+): Promise<DurableAgentStreamResult<OUTPUT>> {
+  return runWithIdleWrapper<OUTPUT>(
+    agent,
+    streamOptions,
+    deps,
+    opts => (agent as any).stream(messages, opts) as Promise<DurableAgentStreamResult<OUTPUT>>,
+  );
+}
+
+/**
+ * Run `DurableAgent.resume(..., { untilIdle })`. Same idle-loop semantics as
+ * `runDurableStreamUntilIdle` — initial turn calls `agent.resume(runId,
+ * resumeData, ...)` against the existing run snapshot, and subsequent
+ * continuations triggered by background-task completions use
+ * `agent.stream([], continuationOpts)` (a normal multi-turn agent stream)
+ * since the resume completes and we're back in regular conversation flow.
+ */
+export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
+  agent: DurableAgent<any, any, OUTPUT>,
+  runId: string,
+  resumeData: unknown,
+  streamOptions: (DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number }) | undefined,
+  deps: DurableStreamUntilIdleDeps,
+): Promise<DurableAgentStreamResult<OUTPUT>> {
+  return runWithIdleWrapper<OUTPUT>(
+    agent,
+    streamOptions,
+    deps,
+    opts => (agent as any).resume(runId, resumeData, opts) as Promise<DurableAgentStreamResult<OUTPUT>>,
+  );
 }

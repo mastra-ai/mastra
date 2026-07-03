@@ -1,5 +1,99 @@
 # @mastra/schema-compat
 
+## 1.3.3
+
+### Patch Changes
+
+- Fix the Zod v4 nullable and optional handlers gating on the wrapper type instead of the wrapped inner type. They checked `value.constructor.name` (always `"ZodNullable"`/`"ZodOptional"`), so the inner type was always processed. A nullable/optional wrapping an unsupported inner type (such as a tuple) is now passed through unchanged, matching the v3 handler, instead of being processed and rejected. Closes #18687. ([#18688](https://github.com/mastra-ai/mastra/pull/18688))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Fix the Zod v4 nullable and optional handlers gating on the wrapper type instead of the wrapped inner type. They checked `value.constructor.name` (always `"ZodNullable"`/`"ZodOptional"`), so the inner type was always processed. A nullable/optional wrapping an unsupported inner type (such as a tuple) is now passed through unchanged, matching the v3 handler, instead of being processed and rejected. Closes #18687. ([#18688](https://github.com/mastra-ai/mastra/pull/18688))
+
+## 1.3.2
+
+### Patch Changes
+
+- Fix the Zod v4 string handler silently dropping unrecognized `string_format` checks. Formats without a textual description (such as `ipv4`, `ipv6`, `datetime`, `date`, `time`, `base64`, `cuid2`, `ulid`, `nanoid`, `jwt`) are now preserved as validation instead of being removed, so schemas using them keep rejecting invalid input. Closes #18634. ([#18673](https://github.com/mastra-ai/mastra/pull/18673))
+
+- Fix inverted date constraint descriptions in the Zod v4 schema handler. `z.date().min()` and `z.date().max()` were described with their bounds swapped (a lower bound was labelled "older than" and an upper bound "newer than"), so the schema sent to the model stated the opposite and impossible constraint. The handler now matches Zod semantics and the existing v3 handler. Closes #18581. ([#18582](https://github.com/mastra-ai/mastra/pull/18582))
+
+- Fixed 'Type instantiation is excessively deep' (TS2589) errors that occurred when defining workflows with Zod schemas. Workflow and step type inference is now significantly faster and no longer causes TypeScript to crash or report depth errors. ([#18608](https://github.com/mastra-ai/mastra/pull/18608))
+
+## 1.3.2-alpha.1
+
+### Patch Changes
+
+- Fix the Zod v4 string handler silently dropping unrecognized `string_format` checks. Formats without a textual description (such as `ipv4`, `ipv6`, `datetime`, `date`, `time`, `base64`, `cuid2`, `ulid`, `nanoid`, `jwt`) are now preserved as validation instead of being removed, so schemas using them keep rejecting invalid input. Closes #18634. ([#18673](https://github.com/mastra-ai/mastra/pull/18673))
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Fix inverted date constraint descriptions in the Zod v4 schema handler. `z.date().min()` and `z.date().max()` were described with their bounds swapped (a lower bound was labelled "older than" and an upper bound "newer than"), so the schema sent to the model stated the opposite and impossible constraint. The handler now matches Zod semantics and the existing v3 handler. Closes #18581. ([#18582](https://github.com/mastra-ai/mastra/pull/18582))
+
+- Fixed 'Type instantiation is excessively deep' (TS2589) errors that occurred when defining workflows with Zod schemas. Workflow and step type inference is now significantly faster and no longer causes TypeScript to crash or report depth errors. ([#18608](https://github.com/mastra-ai/mastra/pull/18608))
+
+## 1.3.1
+
+### Patch Changes
+
+- Fixed createTool type error when passing jsonSchema() or a Schema object from @ai-sdk/provider-utils as inputSchema — no more cast needed ([#17435](https://github.com/mastra-ai/mastra/pull/17435))
+
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Fixed createTool type error when passing jsonSchema() or a Schema object from @ai-sdk/provider-utils as inputSchema — no more cast needed ([#17435](https://github.com/mastra-ai/mastra/pull/17435))
+
+## 1.3.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.2.14
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.2.14-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.2.12
+
+### Patch Changes
+
+- Fixed schema compatibility type declarations so JSON Schema types are bundled correctly. ([#17877](https://github.com/mastra-ai/mastra/pull/17877))
+
+## 1.2.11
+
+### Patch Changes
+
+- Fixed Gemini REST tool calls failing for `z.discriminatedUnion`, `z.lazy`, and `z.tuple` inputs. `GoogleSchemaCompatLayer` now rewrites JSON Schema 2020-12 keywords into the OpenAPI 3.0 Schema Object subset that Gemini expects: `oneOf` → `anyOf`, `const` → `enum`, tuple `items: [array]` → `items: { anyOf: [...] }`, nullable `anyOf` collapse, `$ref` inlining with recursive schema support, and stripping of `$schema`/`additionalProperties`/`propertyNames`. Fixes #17057. ([#17179](https://github.com/mastra-ai/mastra/pull/17179))
+
+- Fixed Zod 4 schemas with `.transform()` producing the wrong JSON Schema for structured output and tool calling. The generated schema now describes the pre-transform input the model must produce instead of the post-transform output, so a field like `z.string().transform(JSON.parse)` is advertised as a `string` rather than `string | number | boolean | null`. ([#17357](https://github.com/mastra-ai/mastra/pull/17357))
+
+## 1.2.11-alpha.0
+
+### Patch Changes
+
+- Fixed Gemini REST tool calls failing for `z.discriminatedUnion`, `z.lazy`, and `z.tuple` inputs. `GoogleSchemaCompatLayer` now rewrites JSON Schema 2020-12 keywords into the OpenAPI 3.0 Schema Object subset that Gemini expects: `oneOf` → `anyOf`, `const` → `enum`, tuple `items: [array]` → `items: { anyOf: [...] }`, nullable `anyOf` collapse, `$ref` inlining with recursive schema support, and stripping of `$schema`/`additionalProperties`/`propertyNames`. Fixes #17057. ([#17179](https://github.com/mastra-ai/mastra/pull/17179))
+
+- Fixed Zod 4 schemas with `.transform()` producing the wrong JSON Schema for structured output and tool calling. The generated schema now describes the pre-transform input the model must produce instead of the post-transform output, so a field like `z.string().transform(JSON.parse)` is advertised as a `string` rather than `string | number | boolean | null`. ([#17357](https://github.com/mastra-ai/mastra/pull/17357))
+
 ## 1.2.10
 
 ### Patch Changes

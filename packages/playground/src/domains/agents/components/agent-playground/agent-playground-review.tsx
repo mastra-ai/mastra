@@ -1,25 +1,24 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import {
-  Badge,
-  Button,
-  Checkbox,
-  Column,
-  Columns,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogBody,
   DialogFooter,
-  DataList,
-  DropdownMenu,
-  Label,
-  Spinner,
-  Textarea,
-  Txt,
-  Icon,
-  toast,
-  cn,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,
@@ -517,7 +516,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
         </DialogContent>
       </Dialog>
 
-      {/* Main layout: toolbar + EntityList + Detail Panel */}
+      {/* Main layout: toolbar + List + Detail Panel */}
       <Columns className={cn('p-4', featuredItem ? 'grid-cols-[1fr_1fr]' : '')}>
         <Column>
           <Column.Toolbar>
@@ -839,7 +838,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 );
 
                 return (
-                  <DataList.Row key={item.id}>
+                  <DataList.RowWrapper key={item.id}>
                     {!showCompleted ? (
                       <DataList.SelectCell
                         checked={selectedItemIds.has(item.id)}
@@ -864,7 +863,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     >
                       {rowCells}
                     </DataList.RowButton>
-                  </DataList.Row>
+                  </DataList.RowWrapper>
                 );
               })}
             </DataList>
