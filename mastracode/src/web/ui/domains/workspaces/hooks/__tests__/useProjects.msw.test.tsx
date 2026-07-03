@@ -133,9 +133,7 @@ describe('projects query hooks', () => {
 
   it('leaves the projects cache unchanged when resourceId resolution fails', async () => {
     saveProjects([legacyProject]);
-    server.use(
-      http.get(`${ORIGIN}/web/project/resolve`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
-    );
+    server.use(http.get(`${ORIGIN}/web/project/resolve`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
 
     const { result } = renderHookWithProviders(() => {
       const projects = useProjectsQuery();
