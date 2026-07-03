@@ -41,7 +41,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.47.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.50.0-0 <2.0.0-0",
     "hono": "^4.12.8"
   },
   "engines": {
