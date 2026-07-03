@@ -132,6 +132,35 @@ describe('Agent schedules — scheduler integration', () => {
     expect(triggers[0]!.outcome).toBe('succeeded');
   }, 10_000);
 
+  it('does not start duplicate scheduling workers when create() is called concurrently after startWorkers()', async () => {
+    const agent = makeAgent('beat-concurrent');
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-concurrent': agent },
+      notifications: { dispatch: { enabled: false } },
+      scheduler: { tickIntervalMs: 50 },
+    });
+    track(mastra);
+
+    await mastra.startWorkers();
+    expect(mastra.scheduler).toBeUndefined();
+
+    // Both create() calls race through __ensureScheduleRuntimeReady(); the
+    // in-flight startup promise must serialize them so only one scheduler
+    // and one agent-schedule worker are ever injected.
+    await Promise.all([
+      mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id }),
+      mastra.schedules.create({ cron: '* * * * * *', prompt: 'pong', agentId: agent.id }),
+    ]);
+
+    await waitForScheduler(mastra);
+
+    expect(mastra.workers.filter(w => w.name === 'scheduler')).toHaveLength(1);
+    expect(mastra.workers.filter(w => w.name === 'agent-schedule')).toHaveLength(1);
+  }, 10_000);
+
   it('auto-starts the scheduler and agent-schedule worker on boot when agent-schedule rows already exist in storage', async () => {
     const storage = new MockStore();
 

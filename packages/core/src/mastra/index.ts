@@ -684,6 +684,12 @@ export class Mastra<
    * `scheduler: { enabled: false }`.
    */
   #schedulerRequested = false;
+  /**
+   * In-flight promise for `#ensureSchedulingWorkersStarted()`. Serializes
+   * concurrent startup requests so two callers can't both pass the
+   * worker-existence checks and double-subscribe to the scheduling topics.
+   */
+  #schedulingWorkersStartPromise?: Promise<void>;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -4014,6 +4020,18 @@ export class Mastra<
    * @internal
    */
   async #ensureSchedulingWorkersStarted(): Promise<void> {
+    // Memoize the in-flight startup so concurrent callers can't both pass the
+    // worker-existence checks and start duplicate workers (which would
+    // double-subscribe to the scheduling topics on push-based pubsubs).
+    if (!this.#schedulingWorkersStartPromise) {
+      this.#schedulingWorkersStartPromise = this.#startSchedulingWorkers().finally(() => {
+        this.#schedulingWorkersStartPromise = undefined;
+      });
+    }
+    await this.#schedulingWorkersStartPromise;
+  }
+
+  async #startSchedulingWorkers(): Promise<void> {
     if (!this.#shouldEnableScheduler()) return;
     if (!this.#storage) return;
 
