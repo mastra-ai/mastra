@@ -157,7 +157,7 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -1022,7 +1022,7 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit/llms.txt",
-      "destination": "/guides/build-your-ui/copilotkit/llms.txt",
+      "destination": "/guides/build-your-ui/copilotkit/overview/llms.txt",
       "permanent": true
     },
     {
