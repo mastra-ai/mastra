@@ -4,27 +4,28 @@ import { useCallback, useState } from 'react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { AppLayout } from './AppLayout';
-import { SLASH_COMMANDS } from './commands';
-import type { SlashCommand } from './commands';
-import { useToast } from './toast';
-import { useActiveProject } from './useActiveProject';
-import { useAgentControllerSession } from './useAgentControllerSession';
-import { useDensityPreference } from './useDensityPreference';
-import { useGlobalShortcuts } from './useGlobalShortcuts';
-import { useProjectModalAutoOpen } from './useProjectModalAutoOpen';
-import { useProjectSessionSync } from './useProjectSessionSync';
-import { useTranscriptScroll } from './useTranscriptScroll';
+import { redirectToLogin, redirectToLogout, useWebAuth } from './domains/auth';
+import type { SlashCommand } from './domains/chat';
+import { SLASH_COMMANDS, useAgentControllerSession, useGlobalShortcuts, useTranscriptScroll } from './domains/chat';
+import { useDensityPreference } from './domains/settings';
+import {
+  deriveProjectPath,
+  useProjectModalAutoOpen,
+  useProjectSessionSync,
+  useActiveProject,
+} from './domains/workspaces';
+import { useToast } from './ui';
 
 export default function App() {
   const { toast } = useToast();
   const { baseUrl } = useApiConfig();
-  const { projects, activeProject, activeProjectId, resourceId, sessionEnabled, setProjects, selectProject } =
-    useActiveProject();
+  const webAuth = useWebAuth();
+  const { projects, activeProject, activeProjectId, resourceId, sessionEnabled, selectProject } = useActiveProject();
 
   const session = useAgentControllerSession({
     agentControllerId: 'code',
     resourceId,
-    projectPath: activeProject?.path,
+    projectPath: deriveProjectPath(activeProject),
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -68,6 +69,13 @@ export default function App() {
   const closeSidebar = () => setSidebarOpen(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
+
+  const auth = {
+    state: webAuth.data,
+    loading: webAuth.isLoading,
+    onSignIn: redirectToLogin,
+    onSignOut: redirectToLogout,
+  };
 
   useProjectModalAutoOpen(projects.length, setProjectsOpen);
   useGlobalShortcuts({
@@ -173,6 +181,7 @@ export default function App() {
       activeProject={activeProject}
       activeProjectId={activeProjectId}
       projects={projects}
+      auth={auth}
       threads={threads}
       transcript={transcript}
       status={status}
@@ -198,7 +207,6 @@ export default function App() {
       density={density}
       resourceId={resourceId}
       sessionEnabled={sessionEnabled}
-      setProjects={setProjects}
       selectProject={selectProject}
       changeDensity={changeDensity}
       setTheme={setTheme}

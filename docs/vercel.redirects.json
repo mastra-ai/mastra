@@ -1,11 +1,6 @@
 {
   "redirects": [
     {
-      "source": "/docs/agents/heartbeats",
-      "destination": "/docs/agents/schedules",
-      "permanent": true
-    },
-    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -88,6 +83,46 @@
     {
       "source": "/docs/logging",
       "destination": "/docs/observability/logging",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/adding-voice",
+      "destination": "/docs/voice/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/durable-agents",
+      "destination": "/docs/long-running-agents/durable-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/goals",
+      "destination": "/docs/long-running-agents/goals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signal-providers",
+      "destination": "/docs/long-running-agents/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signals",
+      "destination": "/docs/long-running-agents/signals",
       "permanent": true
     },
     {
@@ -802,7 +837,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
       "permanent": true
     },
     {
@@ -843,6 +878,21 @@
     {
       "source": "/reference/harness/session",
       "destination": "/reference/agent-controller/session",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/contributing-templates",
+      "destination": "https://mastra.ai/templates",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/discord",
+      "destination": "https://discord.gg/BTYqqHKUrf",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing",
+      "destination": "/docs/license",
       "permanent": true
     }
   ]

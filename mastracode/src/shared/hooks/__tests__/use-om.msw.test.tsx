@@ -9,7 +9,7 @@ import { queryKeys } from '../../api/keys';
 import { useOMQuery, useUpdateOMModel, useUpdateOMObserveAttachments, useUpdateOMThresholds } from '../use-om';
 import { omResponse } from './fixtures/om';
 
-const URL = `${TEST_BASE_URL}/api/web/config/om`;
+const URL = `${TEST_BASE_URL}/web/config/om`;
 
 describe('useOMQuery', () => {
   describe('when no resourceId is provided', () => {

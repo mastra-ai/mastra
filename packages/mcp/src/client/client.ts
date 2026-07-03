@@ -6,8 +6,8 @@ import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
-
-import type { JSONSchema7 } from '@mastra/schema-compat';
+import { toStandardSchema } from '@mastra/schema-compat';
+import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -791,6 +791,24 @@ export class InternalMastraMCPClient extends MastraBase {
     return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
   }
 
+  /**
+   * Wraps the output schema with a validator that always succeeds. The MCP SDK validates
+   * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
+   */
+  private convertOutputSchema(
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
+  ): StandardSchemaWithJSON | undefined {
+    if (!outputSchema) return outputSchema;
+    const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
+    const standardSchema = toStandardSchema(schema)['~standard'];
+    return {
+      '~standard': {
+        ...standardSchema,
+        validate: value => ({ value }),
+      },
+    };
+  }
+
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({}, { timeout: this.timeout });
@@ -845,16 +863,13 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
+          outputSchema: this.convertOutputSchema(tool.outputSchema),
           strict: getMastraToolStrictMeta(toolMeta),
           // Preserve the full _meta from the remote MCP server (including ui.resourceUri
           // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
           // Also propagate MCP tool annotations so listTools() / listToolsets() consumers
           // can read them via `tool.mcp.annotations`.
           ...mcpToolProps,
-          // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
-          // already validates structuredContent against the tool's outputSchema using AJV.
-          // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
-          // envelope, returning {} for tools without structuredContent.
           requireApproval,
           mcpMetadata: {
             serverName: this.name,
