@@ -96,21 +96,13 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/durable-agents',
-              label: 'Durable Agents',
-              customProps: {
-                tags: ['beta'],
-              },
-            },
-            {
-              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
             {
               type: 'doc',
-              id: 'agents/adding-voice',
-              label: 'Voice',
+              id: 'agents/processors',
+              label: 'Processors',
             },
             {
               type: 'doc',
@@ -121,64 +113,16 @@ const sidebars = {
               },
             },
             {
-              type: 'category',
-              label: 'Advanced',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'agents/processors',
-                  label: 'Processors',
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/goals',
-                  label: 'Goals',
-                  customProps: {
-                    tags: ['beta'],
-                  },
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/background-tasks',
-                  label: 'Background Tasks',
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/code-mode',
-                  label: 'Code Mode',
-                  customProps: {
-                    tags: ['beta'],
-                  },
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/signals',
-                  label: 'Signals',
-                  customProps: {
-                    tags: ['beta'],
-                  },
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/signal-providers',
-                  label: 'Signal Providers',
-                  customProps: {
-                    tags: ['beta'],
-                  },
-                },
-                {
-                  type: 'doc',
-                  id: 'agents/heartbeats',
-                  label: 'Heartbeats',
-                  customProps: {
-                    tags: ['beta'],
-                  },
-                },
-              ],
+              type: 'doc',
+              id: 'agents/code-mode',
+              label: 'Code Mode',
+              customProps: {
+                tags: ['beta'],
+              },
             },
             {
               type: 'category',
-              label: 'Protocols',
+              label: 'Connections',
               items: [
                 {
                   type: 'doc',
@@ -348,6 +292,26 @@ const sidebars = {
             },
             {
               type: 'category',
+              label: 'Agent Builder',
+              customProps: {
+                tags: ['new'],
+              },
+              items: [
+                { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+                { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+                { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+                { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+                { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+                { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+                { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+                { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+                { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
+                { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+                { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
+              ],
+            },
+            {
+              type: 'category',
               label: 'Editor',
               items: [
                 {
@@ -449,65 +413,6 @@ const sidebars = {
         },
         {
           type: 'category',
-          label: 'Agent Builder',
-          customProps: {
-            tags: ['new'],
-          },
-          items: [
-            { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-            { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-            { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-            { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-            { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-            { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-            { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-            { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-            { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-            { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-            { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'AgentController',
-          customProps: {
-            tags: ['beta'],
-          },
-          items: [
-            {
-              type: 'doc',
-              id: 'agent-controller/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/session',
-              label: 'Session',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/modes',
-              label: 'Modes',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/threads-and-state',
-              label: 'Threads and State',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/subagents',
-              label: 'Subagents',
-            },
-            {
-              type: 'doc',
-              id: 'agent-controller/tool-approvals',
-              label: 'Tool Approvals',
-            },
-          ],
-        },
-        {
-          type: 'category',
           label: 'RAG',
           items: [
             {
@@ -560,6 +465,101 @@ const sidebars = {
               type: 'doc',
               id: 'voice/speech-to-speech',
               label: 'Speech to Speech',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Long-running Agents',
+      collapsible: false,
+      collapsed: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'long-running-agents/durable-agents',
+          label: 'Durable Agents',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'long-running-agents/background-tasks',
+          label: 'Background Tasks',
+        },
+        {
+          type: 'doc',
+          id: 'long-running-agents/goals',
+          label: 'Goals',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'long-running-agents/heartbeats',
+          label: 'Heartbeats',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'long-running-agents/signals',
+          label: 'Signals',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'long-running-agents/signal-providers',
+          label: 'Signal Providers',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'category',
+          label: 'Agent Controller',
+          customProps: {
+            tags: ['beta'],
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'agent-controller/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/session',
+              label: 'Session',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/modes',
+              label: 'Modes',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/threads-and-state',
+              label: 'Threads and State',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/subagents',
+              label: 'Subagents',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/tool-approvals',
+              label: 'Tool Approvals',
             },
           ],
         },
