@@ -88,6 +88,7 @@ export class MCPClient extends MastraBase {
    * @param args.id - Optional unique identifier to allow multiple instances with same config
    * @param args.servers - Map of server names to server configurations
    * @param args.timeout - Optional global timeout in milliseconds (default: 60000)
+   * @param args.coerceSchemasTo - Schema representation for MCP tool inputs: 'json-schema' (default) or 'zod' for edge runtimes
    *
    * @throws {Error} If multiple instances with identical config are created without an ID
    *
