@@ -9,6 +9,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
+import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { deepMerge } from '../../utils';
@@ -352,7 +353,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
     // processors are skipped by ProcessorRunner.runProcessLLMRequest.
     llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
-    outputProcessors = await typedAgent.listOutputProcessors(requestContext);
+    // Call-time outputProcessors replace constructor-level ones (parity with
+    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+    outputProcessors = execOptions?.outputProcessors
+      ? execOptions.outputProcessors
+      : await typedAgent.listOutputProcessors(requestContext);
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
@@ -670,6 +675,18 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // workflow input so they never reach durable storage; the durable
     // llm-execution step reads them from this registry slot instead.
     callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
+    // Call-time structured output config with the live schema. The schema is
+    // non-serializable (Zod / standard-schema instance), so it lives on the
+    // in-process registry. The durable stream adapter reads it to pipe LLM
+    // text through `createObjectStreamTransformer`, producing `object-result`
+    // chunks. Cross-process engines lose this slot and structured output
+    // degrades to raw text.
+    structuredOutput: execOptions?.structuredOutput?.schema
+      ? {
+          ...execOptions.structuredOutput,
+          schema: toStandardSchema(execOptions.structuredOutput.schema),
+        }
+      : undefined,
     cleanup: () => {},
   };
 

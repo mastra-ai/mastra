@@ -7,6 +7,11 @@
  * unambiguous.
  */
 export const queryKeys = {
+  webAuth: () => ['web-auth'] as const,
+  projects: () => ['projects'] as const,
+  githubStatus: () => ['github', 'status'] as const,
+  githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
+  workspaces: (projectId: string | undefined) => ['workspaces', projectId ?? null] as const,
   providers: () => ['providers'] as const,
   customProviders: () => ['custom-providers'] as const,
   modelPacks: (resourceId: string | undefined) => ['model-packs', resourceId ?? null] as const,

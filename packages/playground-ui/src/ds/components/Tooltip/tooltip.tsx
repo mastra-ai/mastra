@@ -30,7 +30,7 @@ function TooltipProvider({ delay, delayDuration, timeout, skipDelayDuration, ...
 const Tooltip = TooltipPrimitive.Root;
 
 type TooltipTriggerProps = TooltipPrimitive.Trigger.Props & {
-  /** Radix-style alias for Base UI's native `render` prop. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 

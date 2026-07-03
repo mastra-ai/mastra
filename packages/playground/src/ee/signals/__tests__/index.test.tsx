@@ -13,7 +13,7 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const OBSERVABILITY_ENDPOINT = 'https://observability.test';
-const ENTITY_LEARNING_ROOT = `${OBSERVABILITY_ENDPOINT}/entity-learning`;
+const ENTITY_LEARNING_ROOT = `${OBSERVABILITY_ENDPOINT}/api/learning`;
 
 type EntityLearningWindow = typeof globalThis & {
   MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;

@@ -23,6 +23,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -31,12 +32,15 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
+
 import type { Collection } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+import { applyTenancyFilter } from '../utils';
 
 const MANAGED_COLLECTIONS = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
 
@@ -256,10 +260,18 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
       const collection = await this.getCollection(TABLE_DATASETS);
-      const row = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const row = await collection.findOne(query);
       return row ? this.transformDatasetRow(row) : null;
     } catch (error) {
       throw new MastraError(
@@ -275,7 +287,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('MONGODB', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -317,8 +329,18 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
+      // Tenancy predicate is applied on the destructive parent deleteOne (not
+      // only the pre-check), so a concurrent delete/recreate under a different
+      // tenant cannot let a scoped delete hit another tenant's row. Silent
+      // no-op on mismatch.
+      const datasetsCollectionForGate = await this.getCollection(TABLE_DATASETS);
+      const gateQuery: Record<string, any> = { id };
+      applyTenancyFilter(gateQuery, filters);
+      const gateHit = await datasetsCollectionForGate.findOne(gateQuery, { projection: { id: 1 } });
+      if (!gateHit) return;
+
       // Detach experiments — tolerate missing collections (NamespaceNotFound)
       // but rethrow real operational failures
       try {
@@ -352,7 +374,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       await versionsCollection.deleteMany({ datasetId: id });
       await itemsCollection.deleteMany({ datasetId: id });
-      await datasetsCollection.deleteOne({ id });
+      const parentDeleteQuery: Record<string, any> = { id };
+      applyTenancyFilter(parentDeleteQuery, filters);
+      await datasetsCollection.deleteOne(parentDeleteQuery);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -376,6 +400,15 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       if (args.filters?.projectId !== undefined) filter.projectId = args.filters.projectId;
       if (args.filters?.candidateKey !== undefined) filter.candidateKey = args.filters.candidateKey;
       if (args.filters?.candidateId !== undefined) filter.candidateId = args.filters.candidateId;
+      if (args.filters?.targetType !== undefined) filter.targetType = args.filters.targetType;
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // Match documents whose targetIds array contains any of the supplied IDs.
+        filter.targetIds = { $in: args.filters.targetIds };
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        const escapedName = args.filters.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        filter.name = { $regex: escapedName, $options: 'i' };
+      }
 
       const total = await collection.countDocuments(filter);
 
@@ -657,7 +690,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       const existing = await this.getItemById({ id });
       if (!existing) return; // no-op if not found

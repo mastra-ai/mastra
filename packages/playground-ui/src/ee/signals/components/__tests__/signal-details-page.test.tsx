@@ -19,7 +19,7 @@ import { SignalDetailsPage } from '../signal-details-page';
 
 const BASE_URL = 'http://localhost:4111';
 const OBSERVABILITY_ENDPOINT = 'https://observability.test';
-const ROOT = `${OBSERVABILITY_ENDPOINT}/entity-learning`;
+const ROOT = `${OBSERVABILITY_ENDPOINT}/api/learning`;
 
 const server = setupServer();
 

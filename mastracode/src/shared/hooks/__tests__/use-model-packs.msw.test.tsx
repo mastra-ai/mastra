@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderHookWithProviders, waitForMutationsIdle } from '..
 import { useActivateModelPack, useModelPacksQuery, useRemoveModelPack, useSaveModelPack } from '../use-model-packs';
 import { packsResponse } from './fixtures/model-packs';
 
-const URL = `${TEST_BASE_URL}/api/web/config/model-packs`;
+const URL = `${TEST_BASE_URL}/web/config/model-packs`;
 
 describe('useModelPacksQuery', () => {
   describe('when no resourceId is provided', () => {
