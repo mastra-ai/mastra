@@ -230,6 +230,10 @@ describe('mastra.schedules canonical service', () => {
   it('get returns null for unknown ids and for workflow-target rows it cannot match', async () => {
     const { mastra } = makeMastra(['a']);
     expect(await mastra.schedules.get('agent_nope')).toBeNull();
+
+    const wf = await mastra.schedules.create({ workflowId: 'daily-report', cron: '0 6 * * *' });
+    // An agent-prefixed id must not resolve to a workflow-target row.
+    expect(await mastra.schedules.get(`agent_${wf.id.slice('schedule_'.length)}`)).toBeNull();
   });
 
   it('reuses the same Schedules instance across getter accesses', () => {
