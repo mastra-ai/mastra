@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
+import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);

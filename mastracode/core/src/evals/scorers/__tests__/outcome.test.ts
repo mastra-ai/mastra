@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
-import { createOutcomeScorer } from '../outcome';
+import { createOutcomeScorer } from '../outcome.js';
 
 /**
  * Build a minimal MastraDBMessage with tool-invocation parts.

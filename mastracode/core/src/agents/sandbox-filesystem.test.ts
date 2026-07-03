@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SandboxFilesystem } from './sandbox-filesystem';
-import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem';
+import { SandboxFilesystem } from './sandbox-filesystem.js';
+import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem.js';
 
 /**
  * Fake sandbox that records every command and returns scripted results. Lets us

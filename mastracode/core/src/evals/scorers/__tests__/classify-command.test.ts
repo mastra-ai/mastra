@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isBuildCommand, isTestCommand, getExitCode, isSuccessResult, matchFilePath } from '../classify-command';
+import { isBuildCommand, isTestCommand, getExitCode, isSuccessResult, matchFilePath } from '../classify-command.js';
 
 describe('classify-command', () => {
   describe('isBuildCommand', () => {

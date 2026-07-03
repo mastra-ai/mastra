@@ -25,9 +25,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { createScorer, filterRun } from '@mastra/core/evals';
 
-import { isBuildCommand, isTestCommand, getExitCode } from './classify-command';
-import type { ExtractedToolCall } from './extract-tools';
-import { extractToolCalls } from './extract-tools';
+import { isBuildCommand, isTestCommand, getExitCode } from './classify-command.js';
+import type { ExtractedToolCall } from './extract-tools.js';
+import { extractToolCalls } from './extract-tools.js';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURATION — Adjust weights and thresholds here

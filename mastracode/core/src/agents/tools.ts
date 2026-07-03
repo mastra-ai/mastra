@@ -11,11 +11,11 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { ToolHooks } from '@mastra/core/tools';
-import type { HookManager } from '../hooks';
-import type { McpManager } from '../mcp';
-import type { MastraCodeComposedState } from '../schema';
+import type { HookManager } from '../hooks/index.js';
+import type { McpManager } from '../mcp/index.js';
+import type { MastraCodeComposedState } from '../schema.js';
 import { MC_TOOLS } from '../tool-names.js';
-import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
+import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools/index.js';
 
 /** Minimal shape for tools passed to createDynamicTools. */
 export type ToolLike = {

@@ -4,10 +4,10 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
-import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants';
-import type { MastraCodeState } from '../schema';
-import { getOmScope } from '../utils/project';
-import { resolveModel } from './model';
+import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
+import type { MastraCodeState } from '../schema.js';
+import { getOmScope } from '../utils/project.js';
+import { resolveModel } from './model.js';
 
 let cachedMemory: Memory | null = null;
 let cachedMemoryKey: string | null = null;

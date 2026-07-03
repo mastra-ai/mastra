@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { writeToolProgress } from './plugin';
+import { writeToolProgress } from './plugin.js';
 
 describe('writeToolProgress', () => {
   it('writes transient Mastra Code progress chunks with the current tool call id', async () => {

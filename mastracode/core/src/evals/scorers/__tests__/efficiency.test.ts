@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
-import { createEfficiencyScorer } from '../efficiency';
+import { createEfficiencyScorer } from '../efficiency.js';
 
 function makeMsg(
   role: 'user' | 'assistant',

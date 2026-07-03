@@ -48,6 +48,11 @@ function runtimeConfigPlugin(mode: string): Plugin {
 export default defineConfig(({ mode }) => ({
   root: resolve(here, 'ui'),
   plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
+  resolve: {
+    // Monorepo packages arrive via `link:` and would otherwise resolve their
+    // own react copy from the monorepo store — force a single copy from here.
+    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+  },
   build: {
     outDir: resolve(here, '../../dist/web/ui'),
     emptyOutDir: true,

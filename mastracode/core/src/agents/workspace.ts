@@ -10,7 +10,7 @@ import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '
 import type { LSPConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
-import type { MastraCodeState } from '../schema';
+import type { MastraCodeState } from '../schema.js';
 import { getPlansDir } from '../utils/plans.js';
 import { SandboxFilesystem } from './sandbox-filesystem.js';
 import { reattachProjectSandbox } from './sandbox-reattach.js';

@@ -27,6 +27,7 @@ export default defineConfig({
       '@shared': resolve(pkgRoot, 'src/shared'),
       '@web': resolve(pkgRoot, 'src/web'),
     },
+    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   test: {
     environment: 'jsdom',

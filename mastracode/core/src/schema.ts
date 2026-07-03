@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants';
+import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants.js';
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 

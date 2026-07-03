@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path, { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { getLanguageId } from './language';
+import { getLanguageId } from './language.js';
 
 /**
  * LSP Server definition and spawning logic

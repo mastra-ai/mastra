@@ -3,7 +3,7 @@ import { StreamMessageReader, StreamMessageWriter, createMessageConnection } fro
 import type { MessageConnection } from 'vscode-jsonrpc/node.js';
 import { TextDocumentIdentifier, Position } from 'vscode-languageserver-protocol';
 import type { Diagnostic } from 'vscode-languageserver-protocol';
-import type { LSPServerInfo } from './server';
+import type { LSPServerInfo } from './server.js';
 
 /**
  * LSP Client wrapper for JSON-RPC communication

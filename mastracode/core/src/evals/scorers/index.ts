@@ -1,2 +1,2 @@
-export { createOutcomeScorer } from './outcome';
-export { createEfficiencyScorer } from './efficiency';
+export { createOutcomeScorer } from './outcome.js';
+export { createEfficiencyScorer } from './efficiency.js';

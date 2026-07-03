@@ -186,7 +186,7 @@ import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
+import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import {
