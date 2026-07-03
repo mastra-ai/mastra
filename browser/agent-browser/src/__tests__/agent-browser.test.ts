@@ -493,8 +493,7 @@ describe('AgentBrowser', () => {
         rejectNavigation = reject;
       });
       const originalWaitForNavigation = mockPage.waitForNavigation;
-      mockPage.waitForNavigation = (() =>
-        navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
 
       mockLocator.click.mockImplementation(async () => {
         rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
@@ -580,8 +579,7 @@ describe('AgentBrowser', () => {
         rejectNavigation = reject;
       });
       const originalWaitForNavigation = mockPage.waitForNavigation;
-      mockPage.waitForNavigation = (() =>
-        navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
 
       mockPage.keyboard.press.mockImplementation(async () => {
         rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
@@ -643,8 +641,7 @@ describe('AgentBrowser', () => {
         rejectNavigation = reject;
       });
       const originalWaitForNavigation = mockPage.waitForNavigation;
-      mockPage.waitForNavigation = (() =>
-        navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
 
       mockLocator.selectOption.mockImplementation(async () => {
         rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
