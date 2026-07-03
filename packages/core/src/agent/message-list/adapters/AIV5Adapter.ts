@@ -583,7 +583,6 @@ export class AIV5Adapter {
     // Process parts to build V2 content
     const toolInvocationParts = parts.filter(p => AIV5.isToolUIPart(p));
     const reasoningParts = parts.filter(p => p.type === 'reasoning');
-    const fileParts = parts.filter(p => p.type === 'file');
     const textParts = parts.filter(p => p.type === 'text');
 
     // Build tool invocations array
@@ -618,14 +617,11 @@ export class AIV5Adapter {
       reasoning = reasoningParts.map(p => p.text).join('\n');
     }
 
-    // Build experimental_attachments from file parts
-    let experimental_attachments: MastraDBMessage['content']['experimental_attachments'] = undefined;
-    if (fileParts.length > 0) {
-      experimental_attachments = fileParts.map(p => ({
-        url: p.url || '',
-        contentType: p.mediaType,
-      }));
-    }
+    // Note: we deliberately do NOT derive `experimental_attachments` from file parts here.
+    // The file parts are retained in the V2 parts array below, so persisting attachments too
+    // would store every attachment's bytes twice in the same row. Read paths derive
+    // attachments from file parts when needed (AIV4Adapter.toUIMessage), and the V5 read
+    // path already prefers file parts over attachments.
 
     // Build content from text parts (AIV4 content is a string)
     let content: MastraDBMessage['content']['content'] = undefined;
@@ -754,7 +750,6 @@ export class AIV5Adapter {
         parts: filteredV2Parts as MastraMessageContentV2['parts'],
         toolInvocations,
         reasoning,
-        experimental_attachments,
         content,
         metadata: Object.keys(cleanMetadata).length > 0 ? cleanMetadata : undefined,
       },

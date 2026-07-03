@@ -26,6 +26,7 @@ import {
 } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
 import { MessageMerger } from './merge';
+import { rehydrateMessagePayloadRefs } from './payload-refs';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { downloadAssetsFromMessages } from './prompt/download-assets';
@@ -1503,7 +1504,12 @@ export class MessageList {
       });
     }
 
-    const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    let messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    if (messageSource === 'memory') {
+      // Messages read from storage may carry at-rest payload-ref markers (deduped
+      // providerMetadata.mastra.modelOutput). Restore the full in-process shape.
+      messageV2 = rehydrateMessagePayloadRefs([messageV2])[0]!;
+    }
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)

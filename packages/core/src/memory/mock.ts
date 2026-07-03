@@ -1,6 +1,7 @@
 import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../agent/message-list';
+import { dedupeMessagePayloadRefs, rehydrateMessagePayloadRefs } from '../agent/message-list/payload-refs';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type {
@@ -139,7 +140,10 @@ export class MockMemory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const memoryStorage = await this.getMemoryStore();
-    return memoryStorage.saveMessages({ messages: messages.filter(message => message.role !== 'system') });
+    const result = await memoryStorage.saveMessages({
+      messages: dedupeMessagePayloadRefs(messages.filter(message => message.role !== 'system')),
+    });
+    return { ...result, messages: rehydrateMessagePayloadRefs(result.messages) };
   }
 
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
@@ -174,7 +178,7 @@ export class MockMemory extends MastraMemory {
     return {
       ...result,
       messages: filterSystemReminderMessages(
-        result.messages.filter(message => message.role !== 'system'),
+        rehydrateMessagePayloadRefs(result.messages.filter(message => message.role !== 'system')),
         includeSystemReminders,
       ),
     };

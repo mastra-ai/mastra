@@ -2,7 +2,7 @@ import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, dedupeMessagePayloadRefs, rehydrateMessagePayloadRefs } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 
 import { coreFeatures } from '@mastra/core/features';
@@ -366,7 +366,8 @@ export class Memory extends MastraMemory {
     }>;
   }): Promise<{ messages: MastraDBMessage[]; total: number; page: number; perPage: number | false; hasMore: boolean }> {
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.listMessagesByResourceId(args);
+    const result = await memoryStore.listMessagesByResourceId(args);
+    return { ...result, messages: rehydrateMessagePayloadRefs(result.messages) };
   }
 
   protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfigInternal) {
@@ -597,7 +598,9 @@ export class Memory extends MastraMemory {
           : {}),
       });
       // Reverse to restore chronological order if we queried DESC to get newest messages
-      const rawMessages = shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages;
+      const rawMessages = rehydrateMessagePayloadRefs(
+        shouldGetNewestAndReverse ? paginatedResult.messages.reverse() : paginatedResult.messages,
+      );
 
       const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
 
@@ -1156,8 +1159,10 @@ ${workingMemory}`;
         .get.all.db();
 
       const memoryStore = await this.getMemoryStore();
+      // Dedupe redundant payload copies (e.g. providerMetadata.mastra.modelOutput strings that
+      // byte-match the sibling tool result) at rest. Read paths rehydrate the original shape.
       const result = await memoryStore.saveMessages({
-        messages: dbMessages,
+        messages: dedupeMessagePayloadRefs(dbMessages),
       });
 
       let totalTokens = 0;
@@ -1281,7 +1286,12 @@ ${workingMemory}`;
         }
       }
 
-      const saveResult = { ...result, usage: totalTokens > 0 ? { tokens: totalTokens } : undefined };
+      // Callers must see the full in-process shape, not the at-rest deduped one.
+      const saveResult = {
+        ...result,
+        messages: rehydrateMessagePayloadRefs(result.messages),
+        usage: totalTokens > 0 ? { tokens: totalTokens } : undefined,
+      };
 
       span?.end({
         output: { success: true },
@@ -1602,7 +1612,7 @@ ${workingMemory}`;
           perPage: false,
           filter: dateFilter,
         });
-        messages = result.messages;
+        messages = rehydrateMessagePayloadRefs(result.messages);
       } else {
         const result = await memoryStore.listMessages({
           threadId,
@@ -1610,7 +1620,7 @@ ${workingMemory}`;
           perPage: false,
           filter: dateFilter,
         });
-        messages = result.messages;
+        messages = rehydrateMessagePayloadRefs(result.messages);
       }
     } else {
       // No OM: load recent messages
@@ -1624,7 +1634,7 @@ ${workingMemory}`;
           orderBy: { field: 'createdAt', direction: 'DESC' },
           perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
         });
-        messages = result.messages.reverse(); // DESC → chronological order
+        messages = rehydrateMessagePayloadRefs(result.messages.reverse()); // DESC → chronological order
       }
     }
 
@@ -1649,7 +1659,7 @@ ${workingMemory}`;
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.saveMessages({ messages: persistableMessages });
+    await memoryStore.saveMessages({ messages: dedupeMessagePayloadRefs(persistableMessages) });
   }
 
   /**
@@ -2242,7 +2252,9 @@ Notes:
         const existingMessagesResult = await memoryStore.listMessagesById({
           messageIds: messagesWithContent.map(m => m.id),
         });
-        const existingMessagesMap = new Map(existingMessagesResult.messages.map(m => [m.id, m]));
+        const existingMessagesMap = new Map(
+          rehydrateMessagePayloadRefs(existingMessagesResult.messages).map(m => [m.id, m]),
+        );
 
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
@@ -2380,7 +2392,8 @@ Notes:
       }
     }
 
-    return memoryStore.updateMessages({ messages });
+    const updated = await memoryStore.updateMessages({ messages });
+    return rehydrateMessagePayloadRefs(updated);
   }
 
   /**

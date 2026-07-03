@@ -72,6 +72,14 @@ export { MessageStateManager } from './state';
 // Detection exports
 export { TypeDetector } from './detection';
 
+// Payload ref exports (storage-level dedupe of modelOutput payloads)
+export {
+  dedupeMessagePayloadRefs,
+  rehydrateMessagePayloadRefs,
+  PAYLOAD_REF_KEY,
+  PAYLOAD_REF_MIN_LENGTH,
+} from './payload-refs';
+
 // Cache exports
 export { CacheKeyGenerator } from './cache';
 

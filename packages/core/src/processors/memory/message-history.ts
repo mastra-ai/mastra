@@ -1,5 +1,6 @@
 import type { Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
+import { dedupeMessagePayloadRefs } from '../../agent/message-list/payload-refs';
 import { parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
@@ -317,7 +318,8 @@ export class MessageHistory implements Processor {
       });
     }
 
-    // Persist messages after thread is guaranteed to exist
-    await this.storage.saveMessages({ messages: filtered });
+    // Persist messages after thread is guaranteed to exist.
+    // Dedupe redundant modelOutput payloads at rest (rehydrated on read).
+    await this.storage.saveMessages({ messages: dedupeMessagePayloadRefs(filtered) });
   }
 }

@@ -179,6 +179,10 @@ const thread = await memory.getThreadById({ threadId: 'thread-123' })
 
 Once you have a thread, use [`recall()`](/reference/memory/recall) to retrieve its messages. It supports pagination, date filtering, and [semantic search](/docs/memory/semantic-recall).
 
+:::note
+Large tool-result payloads that also appear in a tool's `toModelOutput()` mapping are stored once at rest and rehydrated transparently on read. Messages returned by `recall()` always contain the full payloads.
+:::
+
 Basic recall returns all messages from a thread:
 
 ```typescript
