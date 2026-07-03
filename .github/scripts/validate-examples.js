@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const STUDIO_PREVIEW_PACKAGE_NAME = 'examples-studio-preview';
 const MASTRA_CORE_PACKAGE = '@mastra/core';
 
-export async function validateExamples({ cwd = process.cwd(), log = console.log } = {}) {
+async function validateExamples({ cwd = process.cwd(), log = console.log } = {}) {
   // Find all package.json files in examples directory
   const packageJsonFiles = await globby(['examples/**/package.json', '!**/node_modules/**', '!./examples/dane/**'], {
     cwd,
@@ -52,7 +52,7 @@ export async function validateExamples({ cwd = process.cwd(), log = console.log 
   };
 }
 
-export function validateStudioPreviewCorePeerOverrides(
+function validateStudioPreviewCorePeerOverrides(
   packageJson,
   packageJsonPath,
   { repoRoot = process.cwd(), errors = [] } = {},
