@@ -62,6 +62,12 @@ export const StudioConfigProvider = ({
   }, []);
 
   useLayoutEffect(() => {
+    if (usesDesktopShell) {
+      const nextConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
+      localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(nextConfig)));
+      return setConfig({ ...nextConfig, isLoading: false });
+    }
+
     // Handle error case - stop loading but don't configure
     if (error && !isStatusLoading) {
       return setConfig({ baseUrl: '', headers: urlHeaders, apiPrefix: undefined, isLoading: false });
@@ -70,8 +76,8 @@ export const StudioConfigProvider = ({
     // Don't run the effect during the fetch request
     if (!instanceStatus?.status) return;
 
-    const storedConfig = usesDesktopShell ? null : localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
-    if (!usesDesktopShell && storedConfig) {
+    const storedConfig = localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
+    if (storedConfig) {
       const parsedConfig = JSON.parse(storedConfig);
 
       if (typeof parsedConfig === 'object' && parsedConfig !== null) {
@@ -93,7 +99,7 @@ export const StudioConfigProvider = ({
 
     if (instanceStatus.status === 'active') {
       const nextConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
-      if (usesDesktopShell || hasUrlHeaders) {
+      if (hasUrlHeaders) {
         localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(nextConfig)));
       }
       return setConfig({ ...nextConfig, isLoading: false });

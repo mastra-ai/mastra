@@ -132,4 +132,23 @@ describe('StudioConfigProvider desktop shell connection', () => {
       });
     });
   });
+
+  describe('when the Desktop shell status check is temporarily inactive', () => {
+    it('keeps using the injected shell endpoint instead of showing the manual config fallback', async () => {
+      server.use(http.get(DESKTOP_SHELL_URL, () => HttpResponse.text('starting', { status: 503 })));
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+
+      renderProvider(DESKTOP_SHELL_URL);
+
+      await waitFor(() => {
+        const config = JSON.parse(screen.getByTestId('config').textContent ?? '{}');
+        expect(config).toMatchObject({
+          baseUrl: DESKTOP_SHELL_URL,
+          headers: {},
+          apiPrefix: '/api',
+          isLoading: false,
+        });
+      });
+    });
+  });
 });

@@ -747,13 +747,17 @@ function App() {
 }
 
 export default function AppWrapper() {
-  const protocol = window.MASTRA_SERVER_PROTOCOL || 'http';
-  const host = window.MASTRA_SERVER_HOST || 'localhost';
-  const port = window.MASTRA_SERVER_PORT || 4111;
-  const apiPrefix = window.MASTRA_API_PREFIX || '/api';
-  const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
-  const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
-  const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
+  const protocol = injectedWindowValue(window.MASTRA_SERVER_PROTOCOL, 'http');
+  const host = injectedWindowValue(window.MASTRA_SERVER_HOST, 'localhost');
+  const port = injectedWindowValue(window.MASTRA_SERVER_PORT, '4111');
+  const apiPrefix = injectedWindowValue(window.MASTRA_API_PREFIX, '/api');
+  const cloudApiEndpoint = injectedWindowValue(window.MASTRA_CLOUD_API_ENDPOINT, '');
+  const desktopEndpoint = injectedWindowValue(window.MASTRA_DESKTOP_ENDPOINT, '');
+  const autoDetectUrl = injectedWindowValue(window.MASTRA_AUTO_DETECT_URL, '') === 'true';
+  const currentOrigin = currentWindowOrigin();
+  const isElectronDesktop = typeof navigator !== 'undefined' && /\bElectron\b/.test(navigator.userAgent);
+  const shouldUseCurrentOrigin = Boolean(currentOrigin && (autoDetectUrl || desktopEndpoint || isElectronDesktop));
+  const endpoint = cloudApiEndpoint || (shouldUseCurrentOrigin ? currentOrigin! : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
@@ -762,4 +766,14 @@ export default function AppWrapper() {
       </StudioConfigProvider>
     </PlaygroundQueryClient>
   );
+}
+
+function injectedWindowValue(value: string | undefined, fallback: string) {
+  if (!value || value.includes('%%')) return fallback;
+  return value;
+}
+
+function currentWindowOrigin() {
+  if (typeof window === 'undefined' || !window.location.origin || window.location.origin === 'null') return undefined;
+  return window.location.origin;
 }
