@@ -183,7 +183,7 @@ export async function createPublishedRegistry({
     await copyFile(join(__dirname, 'verdaccio.yaml'), configPath);
   }
 
-  let teardown = () => {};
+  let teardown = async () => {};
   let registry;
 
   try {
@@ -191,10 +191,10 @@ export async function createPublishedRegistry({
 
     teardown = await prepareMonorepo(rootDir, globby, tag);
     registry = await startRegistry(verdaccioPath, port, dirname(configPath), configPath);
-    publishPackages([...new Set(publishFilters)], tag, rootDir, registry);
+    await publishPackages([...new Set(publishFilters)], tag, rootDir, registry);
   } finally {
     await stopRegistry(registry);
-    teardown();
+    await teardown();
   }
 
   const registryUrl = `http://localhost:${port}`;

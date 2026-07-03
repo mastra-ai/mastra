@@ -25,9 +25,6 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
-      MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/mastra-e2e-registry
-      MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
-      MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
       MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
       MASTRA_E2E_REGISTRY_PORT: '4873'
 
@@ -36,6 +33,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.head_sha }}
+          persist-credentials: false
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -50,6 +48,10 @@ jobs:
       - name: Publish packages to local registry storage
         working-directory: ./e2e-tests/_local-registry-setup
         run: pnpm publish-ci-registry
+        env:
+          MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/mastra-e2e-registry
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
 
       - name: Upload E2E registry artifact
         uses: actions/upload-artifact@v6
