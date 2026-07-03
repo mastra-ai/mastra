@@ -272,13 +272,13 @@ function ThreadRailPreview({
   style?: React.CSSProperties;
 }) {
   const containerVisible = visible && (settled || Boolean(previousTurn));
-  const incomingOffset = direction === 1 ? 'translate-y-4' : '-translate-y-4';
-  const outgoingOffset = direction === 1 ? '-translate-y-4' : 'translate-y-4';
-  const enteringLayerClassName = `${incomingOffset} scale-110 opacity-0 blur-xs`;
-  const exitingLayerClassName = `${outgoingOffset} scale-90 opacity-0 blur-xs`;
-  const visibleLayerClassName = 'translate-y-0 scale-100 opacity-100 blur-none';
+  const incomingOffset = direction === 1 ? 'translate-y-8' : '-translate-y-8';
+  const outgoingOffset = direction === 1 ? '-translate-y-8' : 'translate-y-8';
+  const enteringLayerClassName = `${incomingOffset} opacity-0`;
+  const exitingLayerClassName = `${outgoingOffset} opacity-0`;
+  const visibleLayerClassName = 'translate-y-0 opacity-100';
   const layerClassName =
-    'absolute inset-x-0 top-0 h-full transition-[opacity,translate,scale,filter] duration-normal ease-out will-change-[opacity,translate,scale,filter] motion-reduce:translate-y-0 motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
+    'absolute inset-x-0 top-0 h-full transition-[opacity,translate] duration-normal ease-out will-change-[opacity,translate] motion-reduce:translate-y-0 motion-reduce:transition-none';
 
   return (
     <div
@@ -286,8 +286,8 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={visible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute left-full z-30 ml-3 w-72 -translate-y-1/2 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[top,opacity,scale] duration-normal ease-out motion-reduce:transition-none',
-        containerVisible ? 'scale-100 opacity-100' : 'scale-90 opacity-0',
+        'pointer-events-none absolute left-full z-30 ml-3 w-72 -translate-y-1/2 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[top,opacity] duration-normal ease-out motion-reduce:transition-none',
+        containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={style}
     >

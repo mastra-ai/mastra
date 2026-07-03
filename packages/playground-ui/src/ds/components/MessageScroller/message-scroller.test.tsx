@@ -188,10 +188,9 @@ describe('MessageScroller', () => {
     const viewport = screen.getByTestId('thread-rail-preview-viewport');
     expect(firstTurn.getAttribute('aria-describedby')).toBe(previewId);
     expect(preview.className).toContain('overflow-hidden');
-    expect(preview.className).toContain('scale-90');
     expect(preview.className).toContain('opacity-0');
     expect(viewport.className).not.toContain('overflow-hidden');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-110');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('translate-y-8');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('First turn')).toBeTruthy();
 
     fireEvent.mouseEnter(secondTurn);
@@ -199,17 +198,14 @@ describe('MessageScroller', () => {
     expect(screen.getByTestId('thread-rail-preview')).toBe(preview);
     expect(secondTurn.getAttribute('aria-describedby')).toBe(previewId);
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-110');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('translate-y-8');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('Second turn')).toBeTruthy();
 
     fireEvent.mouseLeave(screen.getByTestId('thread-rail'));
 
     expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBeNull();
-    expect(preview.className).toContain('scale-90');
     expect(preview.className).toContain('opacity-0');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-90');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('-translate-y-8');
   });
 });
