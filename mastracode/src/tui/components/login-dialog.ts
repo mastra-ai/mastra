@@ -2,12 +2,41 @@
  * Login dialog component - handles OAuth login flow UI
  */
 
-import { exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
 import { getOAuthProviders } from '../../auth/index.js';
 import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
+
+/**
+ * Open a URL in the default browser without going through a shell.
+ * Only well-formed http(s) URLs are opened; anything else is ignored
+ * (the URL is still displayed for the user to open manually).
+ */
+function openUrlInBrowser(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return;
+  }
+
+  const [cmd, args]: [string, string[]] =
+    process.platform === 'darwin'
+      ? ['open', [url]]
+      : process.platform === 'win32'
+        ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
+        : ['xdg-open', [url]];
+
+  const child = spawn(cmd, args, { stdio: 'ignore', detached: true });
+  // Opening the browser is best-effort — the URL is shown in the dialog.
+  child.on('error', () => {});
+  child.unref();
+}
 
 export class LoginDialogComponent extends Box implements Focusable {
   private contentContainer: Container;
@@ -94,9 +123,11 @@ export class LoginDialogComponent extends Box implements Focusable {
       this.contentContainer.addChild(new Text(theme.fg('warning', instructions)));
     }
 
-    // Try to open browser
-    const openCmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
-    exec(`${openCmd} "${url}"`);
+    // Try to open browser. The URL comes from the auth provider, so treat it
+    // as untrusted: only open well-formed http(s) URLs, and spawn without a
+    // shell so it can't be used for command injection (CodeQL
+    // js/shell-command-constructed-from-input).
+    openUrlInBrowser(url);
 
     this.tui.requestRender();
   }

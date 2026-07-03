@@ -9,7 +9,6 @@ import type { StreamTransport } from '../../stream/types';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { AISDKV7LanguageModel } from './aisdk/v7/model';
-import { parseModelRouterId } from './gateway-resolver.js';
 import { MASTRA_GATEWAY_STREAM_TRANSPORT } from './gateways/base.js';
 import type {
   GatewayAuthResult,
@@ -19,12 +18,13 @@ import type {
   MastraModelGatewayInterface,
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
-import { GatewayManager, getGatewayId } from './gateways/index.js';
+import { GatewayManager } from './gateways/index.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAITransport, ProviderOptions, ResponsesWebSocketOptions } from './provider-options.js';
 import type { ModelRouterModelId } from './provider-registry.js';
+import { modelSupportsTemperature } from './provider-registry.js';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
 
 export { defaultGateways, gateways } from './gateways/defaults.js';
@@ -173,19 +173,17 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       routerId: normalizedConfig.id,
     };
 
-    // Resolve gateway once using the normalized ID
-    const allGateways = [...(customGateways ?? []), ...defaultGateways];
-    this.#manager = new GatewayManager(allGateways);
-    this.gateway = this.#manager.findGatewayForModel(normalizedConfig.id);
-    this.gatewayId = getGatewayId(this.gateway);
-    // Extract provider from id if present
-    const gatewayPrefix = GatewayManager.getPrefix(this.gatewayId);
-    const parsed = parseModelRouterId(normalizedConfig.id, gatewayPrefix);
+    // Resolve gateway once using the normalized ID. The manager deduplicates
+    // the gateway chain (custom-before-default, first-wins) and centralises
+    // gateway selection + id parsing in a single resolveModelId call.
+    this.#manager = new GatewayManager([...(customGateways ?? []), ...defaultGateways]);
+    const resolved = this.#manager.resolveModelId(normalizedConfig.id);
+    this.gateway = resolved.gateway;
+    this.gatewayId = resolved.gatewayId;
+    this.provider = resolved.providerId || 'openai-compatible';
 
-    this.provider = parsed.providerId || 'openai-compatible';
-
-    if (parsed.providerId && parsed.modelId !== normalizedConfig.id) {
-      parsedConfig.id = parsed.modelId as `${string}/${string}`;
+    if (resolved.providerId && resolved.modelId !== normalizedConfig.id) {
+      parsedConfig.id = resolved.modelId as `${string}/${string}`;
     }
 
     this.modelId = parsedConfig.id;
@@ -226,15 +224,14 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
   private async _fetchSupportedUrls(): Promise<Record<string, RegExp[]>> {
     let apiKey: string;
     try {
-      const parsed = parseModelRouterId(this.config.routerId, GatewayManager.getPrefix(this.gatewayId));
-      const auth = await this.resolveAuth(parsed.providerId, parsed.modelId);
+      const resolved = this.#manager.resolveModelId(this.config.routerId);
+      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
       apiKey = auth.apiKey ?? '';
-      const gatewayPrefix = GatewayManager.getPrefix(this.gatewayId);
       const model = await this.resolveLanguageModel({
         apiKey,
         auth,
         headers: mergeHeaders(this.config.headers, auth.headers),
-        ...parseModelRouterId(this.config.routerId, gatewayPrefix),
+        ...resolved,
       });
 
       // Get supportedUrls from the underlying model
@@ -359,13 +356,22 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     this.setStreamTransportHandle({ resolvedTransport, transport, responsesWebSocket });
   }
 
+  private stripUnsupportedSamplingParams(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+    const supports = modelSupportsTemperature(this.config.routerId);
+    if (supports !== false) return options;
+
+    const { temperature, topP, topK, ...rest } = options;
+    if (temperature === undefined && topP === undefined && topK === undefined) return options;
+    return rest;
+  }
+
   async doGenerate(options: LanguageModelV2CallOptions): Promise<StreamResult> {
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
     let auth: GatewayAuthResult;
     try {
       // If custom URL is provided, skip gateway API key resolution
       // The provider might not be in the registry (e.g., custom providers like ollama)
-      const parsed = parseModelRouterId(this.config.routerId, GatewayManager.getPrefix(this.gatewayId));
-      auth = await this.resolveAuth(parsed.providerId, parsed.modelId);
+      auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
     } catch (error) {
       // Return an error stream instead of throwing
       return {
@@ -381,37 +387,36 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const gatewayPrefix = GatewayManager.getPrefix(this.gatewayId);
+    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+
     const model = await this.resolveLanguageModel({
       apiKey: auth.apiKey ?? '',
       auth,
       headers: mergeHeaders(this.config.headers, auth.headers),
-      ...parseModelRouterId(this.config.routerId, gatewayPrefix),
+      ...resolved,
     });
 
     // Handle V2, V3, and V4 models
     if (isLanguageModelV4(model)) {
       const aiSDKV7Model = new AISDKV7LanguageModel(model);
-      // Cast V4 stream result to V2 format - the stream contents are compatible at runtime
-      return aiSDKV7Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+      return aiSDKV7Model.doGenerate(sanitizedOptions as any) as unknown as Promise<StreamResult>;
     }
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
-      // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      return aiSDKV6Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+      return aiSDKV6Model.doGenerate(sanitizedOptions as any) as unknown as Promise<StreamResult>;
     }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
-    return aiSDKV5Model.doGenerate(options);
+    return aiSDKV5Model.doGenerate(sanitizedOptions);
   }
 
   async doStream(options: LanguageModelV2CallOptions): Promise<StreamResult> {
     // Validate API key and return error stream if validation fails
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
     let auth: GatewayAuthResult;
     try {
       // If custom URL is provided, skip gateway API key resolution
       // The provider might not be in the registry (e.g., custom providers like ollama)
-      const parsed = parseModelRouterId(this.config.routerId, GatewayManager.getPrefix(this.gatewayId));
-      auth = await this.resolveAuth(parsed.providerId, parsed.modelId);
+      auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
     } catch (error) {
       // Return an error stream instead of throwing
       return {
@@ -427,11 +432,11 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const gatewayPrefix = GatewayManager.getPrefix(this.gatewayId);
-    const parsedModelId = parseModelRouterId(this.config.routerId, gatewayPrefix);
+    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+
     const { transport, websocket } = getOpenAITransport(
-      options.providerOptions as ProviderOptions | undefined,
-      parsedModelId.providerId,
+      sanitizedOptions.providerOptions as ProviderOptions | undefined,
+      resolved.providerId,
     );
     const requestedTransport: OpenAITransport = transport === 'auto' ? 'websocket' : transport;
     const allowWebSocket =
@@ -447,7 +452,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       headers: mergeHeaders(this.config.headers, auth.headers),
       transport: resolvedTransport,
       responsesWebSocket: websocket,
-      ...parsedModelId,
+      ...resolved,
     });
 
     // Handle V2, V3, and V4 models
@@ -455,19 +460,19 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     if (isLanguageModelV4(model)) {
       const aiSDKV7Model = new AISDKV7LanguageModel(model);
       // Cast V4 stream result to V2 format - the stream contents are compatible at runtime
-      const streamResult = (await aiSDKV7Model.doStream(options as any)) as unknown as StreamResult;
+      const streamResult = (await aiSDKV7Model.doStream(sanitizedOptions as any)) as unknown as StreamResult;
       attachModelStreamTransport(streamResult, streamTransport);
       return streamResult;
     }
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
       // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      const streamResult = (await aiSDKV6Model.doStream(options as any)) as unknown as StreamResult;
+      const streamResult = (await aiSDKV6Model.doStream(sanitizedOptions as any)) as unknown as StreamResult;
       attachModelStreamTransport(streamResult, streamTransport);
       return streamResult;
     }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
-    const streamResult = await aiSDKV5Model.doStream(options);
+    const streamResult = await aiSDKV5Model.doStream(sanitizedOptions);
     attachModelStreamTransport(streamResult, streamTransport);
     return streamResult;
   }

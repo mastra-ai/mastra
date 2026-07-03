@@ -5,11 +5,19 @@ import type {
   TaskListResult,
   UpdateBackgroundTask,
 } from '@mastra/core/background-tasks';
-import type { CreateIndexOptions } from '@mastra/core/storage';
+import type {
+  CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+} from '@mastra/core/storage';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -73,6 +81,15 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
 
   static readonly MANAGED_TABLES = [TABLE_BACKGROUND_TASKS] as const;
 
+  /**
+   * Completed background tasks accumulate as dead weight. Anchored on the
+   * timezone-aware `completedAtZ` mirror column: NULL (in-flight) rows are
+   * excluded automatically since `completedAtZ < cutoff` is false for NULL.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    backgroundTasks: { table: TABLE_BACKGROUND_TASKS, column: 'completedAtZ', indexed: true },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
     const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
@@ -95,6 +112,42 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(BackgroundTasksPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
+  }
+
+  /** Delete completed tasks older than the `backgroundTasks` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: BackgroundTasksPG.retentionTables,
+      order: ['backgroundTasks'],
+    });
+    return runPrune({ db: this.#db, domain: 'backgroundTasks', targets, options });
   }
 
   static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {

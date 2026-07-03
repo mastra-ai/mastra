@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   superHandleInput: vi.fn(),
@@ -21,7 +21,10 @@ vi.mock('node:fs', () => ({
 
 vi.mock('@earendil-works/pi-tui', () => {
   class MockEditor {
-    constructor(_tui: unknown, _theme: unknown) {}
+    protected tui: unknown;
+    constructor(_tui: unknown, _theme: unknown) {
+      this.tui = _tui;
+    }
 
     handleInput(data: string): void {
       mocks.superHandleInput(data);
@@ -449,5 +452,243 @@ describe('CustomEditor image paste handling', () => {
     expect(onImagePaste).toHaveBeenCalledWith(pastedImage);
     expect(mocks.getClipboardText).not.toHaveBeenCalled();
     expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+});
+
+describe('CustomEditor voice push-to-talk', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Other describe blocks may leave a custom matchesKey implementation;
+    // reset it so plain spaces are not misread as another shortcut.
+    mocks.matchesKey.mockImplementation(() => false);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function makeVoiceHook(overrides: Partial<Record<string, any>> = {}) {
+    return {
+      isEnabled: vi.fn(() => true),
+      isRecording: vi.fn(() => false),
+      startRecording: vi.fn(),
+      stopRecording: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it('does not engage voice handling when voice input is disabled', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const hook = makeVoiceHook({ isEnabled: vi.fn(() => false) });
+    editor.voiceInput = hook;
+
+    for (let i = 0; i < 6; i++) {
+      editor.handleInput(' ');
+      vi.advanceTimersByTime(80);
+    }
+
+    expect(hook.startRecording).not.toHaveBeenCalled();
+  });
+
+  it('types single space taps instantly without lag', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const hook = makeVoiceHook();
+    editor.voiceInput = hook;
+
+    editor.handleInput(' ');
+
+    // Space is passed straight through immediately — no deferral.
+    expect(mocks.superHandleInput).toHaveBeenCalledWith(' ');
+    expect(hook.startRecording).not.toHaveBeenCalled();
+  });
+
+  it('does not trigger on slow, deliberate spaces', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const hook = makeVoiceHook();
+    editor.voiceInput = hook;
+
+    for (let i = 0; i < 5; i++) {
+      editor.handleInput(' ');
+      vi.advanceTimersByTime(400); // slower than the repeat-gap threshold
+    }
+
+    expect(hook.startRecording).not.toHaveBeenCalled();
+  });
+
+  it('starts recording after a rapid space-repeat burst (held key)', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const hook = makeVoiceHook();
+    editor.voiceInput = hook;
+
+    // Simulate terminal auto-repeat at ~84ms cadence.
+    editor.handleInput(' ');
+    vi.advanceTimersByTime(84);
+    editor.handleInput(' ');
+    vi.advanceTimersByTime(84);
+    editor.handleInput(' '); // third rapid space confirms a hold
+
+    expect(hook.startRecording).toHaveBeenCalledTimes(1);
+    // The two literal spaces typed before detection are deleted via backspace.
+    const backspaces = mocks.superHandleInput.mock.calls.filter(c => c[0] === '\x7f');
+    expect(backspaces.length).toBe(2);
+  });
+
+  it('stops recording once auto-repeat stops (key released)', () => {
+    const editor = new CustomEditor({} as any, {} as any);
+    const hook = makeVoiceHook();
+    editor.voiceInput = hook;
+
+    editor.handleInput(' ');
+    vi.advanceTimersByTime(84);
+    editor.handleInput(' ');
+    vi.advanceTimersByTime(84);
+    editor.handleInput(' '); // recording starts
+    vi.advanceTimersByTime(84);
+    editor.handleInput(' '); // repeat keeps it alive
+
+    expect(hook.stopRecording).not.toHaveBeenCalled();
+
+    // Repeats stop; release idle window elapses.
+    vi.advanceTimersByTime(300);
+
+    expect(hook.stopRecording).toHaveBeenCalledTimes(1);
+  });
+
+  it('inserts the transcript text and requests a render so it shows immediately', () => {
+    const requestRender = vi.fn();
+    const editor = new CustomEditor({ requestRender } as any, {} as any);
+    let text = '';
+    editor.getText = vi.fn(() => text);
+    mocks.editorSetText.mockImplementation((next: string) => {
+      text = next;
+    });
+
+    editor.insertVoiceTranscript('hello world');
+
+    expect(mocks.editorSetText).toHaveBeenCalledWith('hello world');
+    expect(text).toBe('hello world');
+    expect(requestRender).toHaveBeenCalled();
+  });
+
+  it('separates dictated text from existing content with a leading space', () => {
+    const requestRender = vi.fn();
+    const editor = new CustomEditor({ requestRender } as any, {} as any);
+    let text = 'foo';
+    editor.getText = vi.fn(() => text);
+    mocks.editorSetText.mockImplementation((next: string) => {
+      text = next;
+    });
+
+    // Listening captures the cursor anchor (end of "foo") as the dictation point.
+    editor.setVoiceListening(true);
+    editor.insertVoiceTranscript('bar');
+
+    expect(text).toBe('foo bar');
+  });
+
+  it('replaces the dictated run with each live partial instead of appending', () => {
+    const requestRender = vi.fn();
+    const editor = new CustomEditor({ requestRender } as any, {} as any);
+    let text = 'note: ';
+    editor.getText = vi.fn(() => text);
+    mocks.editorSetText.mockImplementation((next: string) => {
+      text = next;
+    });
+
+    // Anchor dictation after the existing "note: " prefix.
+    editor.setVoiceListening(true);
+
+    editor.replaceVoiceTranscript('hello');
+    expect(text).toBe('note: hello');
+
+    // A fuller partial supersedes the previous one, keeping the base intact.
+    editor.replaceVoiceTranscript('hello world');
+    expect(text).toBe('note: hello world');
+  });
+
+  it('ignores a late partial transcript after the user resumes typing', () => {
+    const requestRender = vi.fn();
+    const editor = new CustomEditor({ requestRender } as any, {} as any);
+    let text = '';
+    editor.getText = vi.fn(() => text);
+    mocks.editorSetText.mockImplementation((next: string) => {
+      text = next;
+    });
+
+    editor.setVoiceListening(true);
+    editor.replaceVoiceTranscript('hello');
+    expect(text).toBe('hello');
+
+    // User edits — the dictation session is no longer active.
+    mocks.matchesKey.mockReturnValue(false);
+    editor.handleInput('x');
+
+    // A stale partial that arrives afterward must not clobber the user's input.
+    editor.replaceVoiceTranscript('hello world');
+    expect(text).not.toBe('hello world');
+  });
+
+  it('drives a listening animation timer while recording', () => {
+    const requestRender = vi.fn();
+    const editor = new CustomEditor({ requestRender } as any, {} as any);
+
+    editor.setVoiceListening(true);
+    requestRender.mockClear();
+
+    // The pulse timer should tick and request renders on its own.
+    vi.advanceTimersByTime(360);
+    expect(requestRender).toHaveBeenCalled();
+
+    requestRender.mockClear();
+    editor.setVoiceListening(false);
+    vi.advanceTimersByTime(360);
+    // After stopping, no further animation ticks occur.
+    expect(requestRender).toHaveBeenCalledTimes(1); // only the stop's own render
+  });
+
+  it('renders dictated text greyed-out and stops greying once edited', async () => {
+    const { theme } = await import('../../theme.js');
+    const [r, g, b] = theme
+      .getTheme()
+      .muted.match(/\w\w/g)!
+      .map(h => parseInt(h, 16));
+    const greySeq = `\x1b[38;2;${r};${g};${b}m`;
+
+    const editor = new CustomEditor({ requestRender: vi.fn() } as any, {} as any);
+    let text = '';
+    editor.getText = vi.fn(() => text);
+    editor.setText = vi.fn((t: string) => {
+      text = t;
+    });
+    (editor as any).insertTextAtCursor = undefined;
+
+    // Mimic a realistic pi-tui content line: the dictated text, an APC cursor
+    // marker, a reverse-video cursor at the end, and trailing box padding.
+    const realisticLine = () => ['────', `hello world\x1b_pi:c\x07\x1b[7m \x1b[0m     `, '────'];
+    mocks.superRender.mockImplementation(realisticLine);
+
+    editor.insertVoiceTranscript('hello world');
+    const out = editor.render(40).join('\n');
+    // The dictated run is greyed...
+    expect(out).toContain(`${greySeq}hello world`);
+    // ...while the cursor highlight and trailing padding are left intact.
+    expect(out).toContain('\x1b[7m \x1b[0m');
+
+    // A genuine keystroke marks the text as user-owned; greying stops.
+    mocks.matchesKey.mockReturnValue(false);
+    editor.handleInput('x');
+    expect(editor.render(40).join('\n')).not.toContain(greySeq);
+  });
+
+  it('renders an animated soundwave bar while listening', () => {
+    const editor = new CustomEditor({ requestRender: vi.fn() } as any, {} as any);
+    editor.getText = vi.fn(() => 'hello');
+    editor.getModeColor = vi.fn(() => '#16c858');
+
+    editor.setVoiceListening(true);
+    const output = editor.render(20).join('\n');
+    const waveBars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    expect(waveBars.some(bar => output.includes(bar))).toBe(true);
   });
 });

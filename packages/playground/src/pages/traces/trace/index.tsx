@@ -1,18 +1,16 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
-import {
-  SpanDataPanelView,
-  TraceDataPanelView,
-  TraceKeysAndValues,
-  TracesErrorContent,
-  useSpanDetail,
-  useTraceLightSpans,
-  useTraceSpanNavigation,
-} from '@mastra/playground-ui';
-import type { SpanTab } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
+import { TraceKeysAndValues } from '@mastra/playground-ui/domains/traces/components/trace-keys-and-values';
+import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
+import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
+import { useTraceLightSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-light-spans';
+import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
+import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleGaugeIcon, SaveIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';

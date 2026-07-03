@@ -18,6 +18,7 @@ import { Agent } from '@mastra/core/agent'
 import { AgentController } from '@mastra/core/agent-controller'
 
 const agent = new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'Use subagents when a focused task needs a narrower toolset.',
   model: '__GATEWAY_OPENAI_MODEL__',

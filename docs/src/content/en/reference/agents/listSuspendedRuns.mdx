@@ -1,0 +1,148 @@
+---
+title: "Reference: Agent.listSuspendedRuns() | Agents"
+description: "API reference for Agent.listSuspendedRuns(), which discovers suspended agent runs from storage so approvals survive restarts."
+packages:
+  - "@mastra/core"
+---
+
+# Agent.listSuspendedRuns()
+
+**Added in:** `@mastra/core@1.43.0`
+
+The `.listSuspendedRuns()` method lists suspended agent runs from workflow snapshot storage: runs waiting on a tool call requiring [approval](/docs/agents/agent-approval), or on a tool that called `suspend()`. Because discovery is backed by storage rather than in-memory state, it works after a server restart and across multiple server instances.
+
+Pass the returned `runId` to [`resumeStream()`](/docs/agents/agent-approval#runtime-suspension-with-suspend), `approveToolCall()`, or `declineToolCall()` to continue the run.
+
+The filter contract mirrors the workflow run listing APIs (`listWorkflowRuns`), plus the agent-level `threadId` filter.
+
+## Usage example
+
+Discover the pending run for a conversation and continue it. Check `requiresApproval` to pick the right continuation — `approveToolCall()` / `declineToolCall()` for approval suspensions, `resumeStream()` with resume data for `suspend()`-based suspensions:
+
+```typescript
+const { runs } = await agent.listSuspendedRuns({
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+})
+
+const run = runs[0]
+const toolCall = run?.toolCalls[0]
+
+if (run && toolCall) {
+  const stream = toolCall.requiresApproval
+    ? await agent.approveToolCall({ runId: run.runId, toolCallId: toolCall.toolCallId })
+    : await agent.resumeStream({ name: 'San Francisco' }, { runId: run.runId })
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'AgentListSuspendedRunsOptions',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Filters and pagination for scoping the results.',
+    properties: [
+      {
+        type: 'AgentListSuspendedRunsOptions',
+        parameters: [
+          {
+            name: 'threadId',
+            type: 'string',
+            isOptional: true,
+            description: 'Only return runs that belong to this memory thread.',
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Only return runs that belong to this memory resource.',
+          },
+          {
+            name: 'fromDate',
+            type: 'Date',
+            isOptional: true,
+            description: 'Only return runs created at or after this date.',
+          },
+          {
+            name: 'toDate',
+            type: 'Date',
+            isOptional: true,
+            description: 'Only return runs created at or before this date.',
+          },
+          {
+            name: 'perPage',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Number of items per page. Pagination is applied when both perPage and page are provided; otherwise all matching runs are returned.',
+          },
+          {
+            name: 'page',
+            type: 'number',
+            isOptional: true,
+            description: 'Zero-indexed page number.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'result',
+    type: 'Promise<AgentListSuspendedRunsResult>',
+    description: 'A promise that resolves to the matching runs and the total count before pagination.',
+  },
+]}
+/>
+
+```typescript
+interface AgentListSuspendedRunsResult {
+  runs: AgentRun[]
+  /** Total number of matching runs, before pagination */
+  total: number
+}
+
+interface AgentRun {
+  /** Run ID accepted by resumeStream(), approveToolCall(), and declineToolCall() */
+  runId: string
+  status: 'suspended'
+  threadId?: string
+  resourceId?: string
+  /** When the run suspended */
+  suspendedAt: Date
+  /** Suspended tool calls awaiting approval or resume data */
+  toolCalls: AgentRunToolCall[]
+}
+
+interface AgentRunToolCall {
+  toolCallId?: string
+  toolName?: string
+  /** Arguments the model supplied (approval suspensions only) */
+  args?: unknown
+  /** True when the run is waiting on a tool-call approval */
+  requiresApproval: boolean
+  /** The tool-defined suspend payload when the tool called suspend() */
+  suspendPayload?: unknown
+}
+```
+
+## Discovery scope
+
+Results are scoped to runs started by the agent you call `listSuspendedRuns()` on: snapshots persist the owning agent's id, so runs started by other agents on the same Mastra instance are not returned. In [supervisor setups](/docs/agents/agent-approval#tool-approval-supervisor-agents) the supervisor sees its outer run — the one to resume — while a subagent's inner run is only visible from the subagent itself. Filter by `threadId` and `resourceId` to scope results to one conversation.
+
+Run snapshots are only persisted while a run is waiting on input and are deleted when it finishes, so suspended runs are the only runs discoverable from storage. Suspended runs only survive restarts when the Mastra instance has a persistent [storage provider](/docs/memory/storage) configured. With the default in-memory store, snapshots are lost on restart.
+
+## Related
+
+- [Agent approval](/docs/agents/agent-approval)
+- [Storage](/docs/memory/storage)

@@ -32,10 +32,11 @@ Available providers:
 - [`AzureBlobFilesystem`](/reference/workspace/azure-blob-filesystem): Stores files in Azure Blob Storage
 - [`FilesSDKFilesystem`](/reference/workspace/files-sdk-filesystem): Stores files in any [FilesSDK](https://files-sdk.dev) adapter (S3, R2, GCS, Azure Blob, Vercel Blob, local filesystem, and more) — useful when you want one provider that can target multiple backends
 - [`AgentFSFilesystem`](/reference/workspace/agentfs-filesystem): Stores files in a Turso/SQLite database via AgentFS
+- [`MesaFilesystem`](/reference/workspace/mesa-filesystem): Stores files in versioned Mesa repos
 
 :::tip
 
-`LocalFilesystem` is the simplest way to get started as it requires no external services. For cloud storage, use `S3Filesystem`, `GCSFilesystem`, or `AzureBlobFilesystem`. For database-backed storage without external services, use `AgentFSFilesystem`.
+`LocalFilesystem` is the simplest way to get started as it requires no external services. For cloud storage, use `S3Filesystem`, `GCSFilesystem`, or `AzureBlobFilesystem`. For versioned storage, use `MesaFilesystem`. For database-backed storage without external services, use `AgentFSFilesystem`.
 
 :::
 
@@ -248,5 +249,6 @@ When you configure a filesystem on a workspace, agents receive tools for reading
 - [AzureBlobFilesystem reference](/reference/workspace/azure-blob-filesystem)
 - [FilesSDKFilesystem reference](/reference/workspace/files-sdk-filesystem)
 - [AgentFSFilesystem reference](/reference/workspace/agentfs-filesystem)
+- [MesaFilesystem reference](/reference/workspace/mesa-filesystem)
 - [Workspace overview](/docs/workspace/overview)
 - [Sandbox](/docs/workspace/sandbox)

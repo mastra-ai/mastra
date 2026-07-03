@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -51,6 +51,7 @@
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/observability": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@mendable/firecrawl-js": "^1.29.3",
     "@types/node": "22.19.21",

@@ -1,11 +1,8 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "37.0.1-alpha.2",
+  "version": "39.0.1-alpha.0",
   "description": "Mastra Playground components",
-  "main": "dist/index.umd.js",
-  "module": "dist/index.es.js",
-  "types": "dist/index.d.ts",
   "sideEffects": [
     "**/*.css"
   ],
@@ -15,13 +12,7 @@
     "CHANGELOG.md"
   ],
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.es.js"
-      }
-    },
-    "./style.css": "./dist/index.css",
+    "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
@@ -33,16 +24,6 @@
         "default": "./dist/tokens.cjs.js"
       }
     },
-    "./utils": {
-      "import": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.es.js"
-      },
-      "require": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.cjs.js"
-      }
-    },
     "./utils/*": {
       "import": {
         "types": "./dist/utils/*.d.ts",
@@ -51,6 +32,56 @@
       "require": {
         "types": "./dist/utils/*.d.ts",
         "default": "./dist/utils/*.cjs.js"
+      }
+    },
+    "./domains/*": {
+      "import": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.es.js"
+      },
+      "require": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.cjs.js"
+      }
+    },
+    "./ee/*": {
+      "import": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.es.js"
+      },
+      "require": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.cjs.js"
+      }
+    },
+    "./primitives/*": {
+      "import": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.es.js"
+      },
+      "require": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.cjs.js"
+      }
+    },
+    "./resize/*": {
+      "import": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.es.js"
+      },
+      "require": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.cjs.js"
+      }
+    },
+    "./store/*": {
+      "import": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.es.js"
+      },
+      "require": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.cjs.js"
       }
     },
     "./hooks/*": {

@@ -61,6 +61,7 @@ function mergeRequestContexts(
   closureRC: RequestContext | undefined,
   execRC: RequestContext | undefined,
 ): RequestContext {
+  if (closureRC && closureRC === execRC) return closureRC;
   if (!closureRC && !execRC) return new RequestContext();
   if (!closureRC) return execRC instanceof RequestContext ? execRC : new RequestContext();
   if (!execRC || !(execRC instanceof RequestContext) || execRC.size() === 0) return closureRC;
@@ -649,7 +650,7 @@ export class CoreToolBuilder extends MastraBase {
                 resumeData,
                 threadId,
                 resourceId,
-                outputWriter: execOptions.outputWriter,
+                outputWriter: options.outputWriter || execOptions.outputWriter,
                 flushMessages: execOptions.flushMessages,
               },
             };

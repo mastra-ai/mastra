@@ -202,7 +202,7 @@ export class PostgresStore extends MastraCompositeStore {
   constructor(config: PostgresStoreConfig) {
     try {
       validateConfig('PostgresStore', config);
-      super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit });
+      super({ id: config.id, name: 'PostgresStore', disableInit: config.disableInit, retention: config.retention });
       // Validate schema name to prevent SQL injection
       this.schema = parseSqlIdentifier(config.schemaName || 'public', 'schema name');
 

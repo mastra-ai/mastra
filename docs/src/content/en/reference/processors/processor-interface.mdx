@@ -1269,7 +1269,7 @@ Configure processors that implement `processAPIError` in `errorProcessors`:
 
 ```typescript
 const agent = new Agent({
-  // ...
+  id: 'agent',
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -1530,6 +1530,7 @@ import { Agent } from '@mastra/core/agent'
 import { PrefillErrorHandler } from '@mastra/core/processors'
 
 const agent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: '...',
@@ -1548,7 +1549,7 @@ Each array also accepts a function so processors can be built per-request from `
 
 ```typescript
 new Agent({
-  // ...
+  id: 'processor-interface-agent',
   inputProcessors: ({ requestContext }) => {
     const blockedWords = requestContext.get('blockedWords') ?? []
     return [new ContentFilter(blockedWords)]
