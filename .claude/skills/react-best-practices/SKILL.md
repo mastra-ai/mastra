@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 19 rules across 8 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 20 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -73,6 +73,10 @@ Rules are prioritized by impact:
 
 - BDD tests that drive the real `@mastra/client-js` + React Query stack and mock only the network; never `vi.mock` our own hooks/services/auth gating or the SDK (`testing-bdd-no-mocks`)
 
+**Type Safety:**
+
+- No `as` type assertions anywhere — production **or tests**; narrow with type guards, query generics (`querySelector<T>`, `getByRole<T>`), typed fixture factories, or `implements` on mocks. `as const` is the only allowed form (`types-no-type-assertions`)
+
 ### Rendering Patterns
 
 - Animate SVG wrappers, not SVG elements directly (`rendering-animate-svg-wrapper`)
@@ -109,5 +113,6 @@ grep -l "Tanstack" references/rules/
 - `rerender-*` - Re-render optimization (4 rules)
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
+- `types-*` - Type-safety / no-`as`-cast rules (1 rule)
 - `structure-*` - Component/hook structure (5 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy (1 rule)

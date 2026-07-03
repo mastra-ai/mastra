@@ -99,6 +99,12 @@ This catalog is an index for React performance and quality guidance used by agen
 | ---------------------- | ------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | `testing-bdd-no-mocks` | BDD Tests That Mock Only the Network | MEDIUM-HIGH | Drive the real `@mastra/client-js` + React Query stack and mock only the network; write tests BDD-style. Lint-enforced. | `references/rules/testing-bdd-no-mocks.md` |
 
+### 9. Type Safety
+
+| Rule                       | Title                                     | Impact | Summary                                                                                                   | Canonical file                                 |
+| -------------------------- | ----------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `types-no-type-assertions` | No `as` Type Assertions (Including Tests) | HIGH   | Never use `as` casts (production or tests); narrow with type guards, query generics, typed factories, or `implements`. | `references/rules/types-no-type-assertions.md` |
+
 ## External References
 
 - [React](https://react.dev)
