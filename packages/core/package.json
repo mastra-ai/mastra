@@ -421,6 +421,16 @@
         "default": "./dist/schema/index.cjs"
       }
     },
+    "./schedules": {
+      "import": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.js"
+      },
+      "require": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.cjs"
+      }
+    },
     "./skills": {
       "import": {
         "types": "./dist/skills/index.d.ts",

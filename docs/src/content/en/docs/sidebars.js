@@ -185,9 +185,6 @@ const sidebars = {
           type: 'doc',
           id: 'agents/sdk-agents',
           label: 'SDK Agents',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -220,8 +217,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'agents/heartbeats',
-          label: 'Heartbeats',
+          id: 'agents/schedules',
+          label: 'Schedules',
           customProps: {
             tags: ['beta'],
           },

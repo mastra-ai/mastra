@@ -20,7 +20,9 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
     if (!term) return schedules;
-    return schedules.filter(s => s.id.toLowerCase().includes(term) || s.target.workflowId.toLowerCase().includes(term));
+    return schedules.filter(
+      s => s.id.toLowerCase().includes(term) || (s.workflowId ?? s.agentId ?? '').toLowerCase().includes(term),
+    );
   }, [schedules, search]);
 
   if (isLoading) {
@@ -43,7 +45,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
 
       {filtered.map(s => (
         <DataList.RowLink key={s.id} to={paths.scheduleLink(s.id)} LinkComponent={Link}>
-          <DataList.NameCell>{s.target.workflowId}</DataList.NameCell>
+          <DataList.NameCell>{s.workflowId ?? s.agentId}</DataList.NameCell>
           <DataList.Cell height="compact" className="min-w-0">
             <span className="block truncate font-mono text-ui-smd text-neutral3" title={s.id}>
               {s.id}

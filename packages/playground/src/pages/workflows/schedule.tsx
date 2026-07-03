@@ -64,7 +64,7 @@ export default function SchedulePage() {
     );
   }
 
-  const workflowId = schedule?.target.type === 'workflow' ? schedule.target.workflowId : undefined;
+  const workflowId = schedule?.workflowId;
 
   return (
     <PageLayout>

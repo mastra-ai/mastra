@@ -3675,7 +3675,7 @@ describe('Agent signals', () => {
   });
 
   it('completes a signal-started run that no caller subscribes to or consumes', async () => {
-    // Regression: a fire-and-forget wake (e.g. a heartbeat) starts a thread run
+    // Regression: a fire-and-forget wake (e.g. an agent schedule) starts a thread run
     // but never subscribes to or consumes the returned stream. The runtime must
     // still drive the stream to completion on its own so the run reaches a
     // terminal state and its active-run record releases. If it does not, the
