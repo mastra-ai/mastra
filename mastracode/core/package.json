@@ -1,0 +1,89 @@
+{
+  "name": "@internal/mastracode",
+  "version": "0.1.0",
+  "description": "Internal Mastra Code core (everything except the TUI) — bundled into the published mastracode package",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./*": {
+      "import": {
+        "types": "./dist/*.d.ts",
+        "default": "./dist/*.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "mastracode/core"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.21.0",
+    "@ai-sdk/amazon-bedrock": "^3.0.102",
+    "@ai-sdk/anthropic": "^3.0.82",
+    "@ai-sdk/openai": "^3.0.63",
+    "@ai-sdk/openai-compatible": "^2.0.47",
+    "@ast-grep/napi": "^0.42.0",
+    "@aws-sdk/credential-providers": "^3.864.0",
+    "@mastra/agent-browser": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/duckdb": "workspace:*",
+    "@mastra/fastembed": "workspace:*",
+    "@mastra/github-signals": "workspace:*",
+    "@mastra/libsql": "workspace:*",
+    "@mastra/mcp": "workspace:*",
+    "@mastra/memory": "workspace:*",
+    "@mastra/observability": "workspace:*",
+    "@mastra/pg": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
+    "@mastra/stagehand": "workspace:*",
+    "@mastra/tavily": "workspace:*",
+    "ai": "^6.0.176",
+    "execa": "^9.6.1",
+    "posthog-node": "^5.37.0",
+    "tokenx": "^1.3.0",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "yaml": "^2.7.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@types/node": "22.19.21",
+    "eslint": "^10.4.1",
+    "tsup": "^8.5.1",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.57.0",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}
