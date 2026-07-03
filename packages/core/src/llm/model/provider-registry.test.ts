@@ -360,26 +360,20 @@ describe('GatewayRegistry Auto-Refresh', () => {
     process.env.MASTRA_DEV = 'true';
     process.env.MASTRA_DISABLE_GATEWAY_REGISTRY_SYNC = 'true';
 
-    // Reset singleton to pick up new env
-    // @ts-expect-error - accessing private property for testing
-    GatewayRegistry['instance'] = undefined;
+    Reflect.set(GatewayRegistry, 'instance', undefined);
 
     const registry = GatewayRegistry.getInstance();
     GatewayRegistry.getInstance({ useDynamicLoading: true });
 
-    // @ts-expect-error - accessing private property for testing
-    expect(registry.refreshInterval).toBeNull();
-    // @ts-expect-error - accessing private property for testing
-    expect(registry.useDynamicLoading).toBe(false);
+    expect(Reflect.get(registry, 'refreshInterval')).toBeNull();
+    expect(Reflect.get(registry, 'useDynamicLoading')).toBe(false);
   });
 
   it('should skip syncGateways writes when gateway registry sync is disabled', async () => {
     process.env.MASTRA_DEV = 'true';
     process.env.MASTRA_DISABLE_GATEWAY_REGISTRY_SYNC = 'true';
 
-    // Reset singleton to pick up new env
-    // @ts-expect-error - accessing private property for testing
-    GatewayRegistry['instance'] = undefined;
+    Reflect.set(GatewayRegistry, 'instance', undefined);
 
     const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
     const writeSpy = vi.spyOn(fs.promises, 'writeFile');

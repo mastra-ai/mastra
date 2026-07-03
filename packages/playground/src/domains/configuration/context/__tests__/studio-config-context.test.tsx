@@ -151,4 +151,37 @@ describe('StudioConfigProvider desktop shell connection', () => {
       });
     });
   });
+
+  describe('when Electron loads an older embedded Studio without the desktop endpoint injection', () => {
+    it('keeps using the shell endpoint and replaces a blank persisted config', async () => {
+      server.use(http.get(DESKTOP_SHELL_URL, () => HttpResponse.text('starting', { status: 503 })));
+      vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mastra Studio Electron');
+      window.localStorage.setItem(
+        MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
+        JSON.stringify({
+          baseUrl: '',
+          headers: {},
+        }),
+      );
+
+      renderProvider(DESKTOP_SHELL_URL);
+
+      await waitFor(() => {
+        const config = JSON.parse(screen.getByTestId('config').textContent ?? '{}');
+        expect(config).toMatchObject({
+          baseUrl: DESKTOP_SHELL_URL,
+          headers: {},
+          apiPrefix: '/api',
+          isLoading: false,
+        });
+      });
+
+      const storedConfig = JSON.parse(window.localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY) ?? '{}');
+      expect(storedConfig).toMatchObject({
+        baseUrl: DESKTOP_SHELL_URL,
+        headers: {},
+        apiPrefix: '/api',
+      });
+    });
+  });
 });

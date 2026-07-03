@@ -38,7 +38,9 @@ const getPersistentConfig = (config: StudioConfig): StudioConfig => {
 
 const isDesktopShell = () => {
   if (typeof window === 'undefined') return false;
-  return Boolean(window.MASTRA_DESKTOP_ENDPOINT?.trim());
+  if (window.MASTRA_DESKTOP_ENDPOINT?.trim()) return true;
+  if (typeof navigator === 'undefined') return false;
+  return /\bElectron\b/.test(navigator.userAgent);
 };
 
 export const StudioConfigProvider = ({

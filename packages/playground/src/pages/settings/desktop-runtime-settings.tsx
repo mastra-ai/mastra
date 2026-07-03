@@ -98,9 +98,8 @@ function probeStatusLabel(probe: ProbeModelsResult | undefined, isPending: boole
 function modelOptionsFor(probe: ProbeModelsResult | undefined, modelId: string) {
   if (!probe?.ok || probe.models.length === 0) return [];
 
-  const detected = probe?.ok ? probe.models : [];
-  if (modelId.trim() && !detected.includes(modelId)) return [...detected, modelId];
-  return detected;
+  if (modelId.trim() && !probe.models.includes(modelId)) return [...probe.models, modelId];
+  return probe.models;
 }
 
 function ModelIdControl({
@@ -304,7 +303,7 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
   const detectedModelId = probeData?.ok ? probeData.models[0] : undefined;
   const shouldUseDetectedModel =
     Boolean(detectedModelId) && !modelIdEdited && (!modelId.trim() || modelId === selectedProvider.modelId);
-  const effectiveModelId = shouldUseDetectedModel ? detectedModelId! : modelId;
+  const effectiveModelId = shouldUseDetectedModel ? (detectedModelId ?? modelId) : modelId;
   const isModelApplied = modelMatchesSettings(state.settings, modelUrl, effectiveModelId, modelApiKey);
   const applyModelLabel = providerId === 'custom' ? 'Use custom provider' : `Use ${selectedProvider.name}`;
 
@@ -511,5 +510,11 @@ export function DesktopRuntimeSettingsSection() {
     );
   }
 
-  return <DesktopRuntimeSettingsForm key={desktopState.settings.modelUrl} endpoint={endpoint} state={desktopState} />;
+  const settingsKey = [
+    desktopState.settings.modelUrl,
+    desktopState.settings.modelId,
+    desktopState.settings.modelApiKey,
+  ].join('\n');
+
+  return <DesktopRuntimeSettingsForm key={settingsKey} endpoint={endpoint} state={desktopState} />;
 }

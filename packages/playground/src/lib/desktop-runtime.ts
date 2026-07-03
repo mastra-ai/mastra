@@ -75,9 +75,14 @@ export async function desktopRequest<TResponse>(
   path: string,
   init?: RequestInit,
 ): Promise<TResponse> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const response = await fetch(desktopUrl(endpoint, path), {
     ...init,
-    headers: init?.body ? { 'Content-Type': 'application/json' } : init?.headers,
+    headers,
   });
 
   const body = (await response.json()) as unknown;

@@ -757,7 +757,8 @@ export default function AppWrapper() {
   const currentOrigin = currentWindowOrigin();
   const isElectronDesktop = typeof navigator !== 'undefined' && /\bElectron\b/.test(navigator.userAgent);
   const shouldUseCurrentOrigin = Boolean(currentOrigin && (autoDetectUrl || desktopEndpoint || isElectronDesktop));
-  const endpoint = cloudApiEndpoint || (shouldUseCurrentOrigin ? currentOrigin! : `${protocol}://${host}:${port}`);
+  const endpoint =
+    cloudApiEndpoint || (shouldUseCurrentOrigin && currentOrigin ? currentOrigin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>
