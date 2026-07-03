@@ -43,7 +43,11 @@ export function isUnauthenticatedError(error: unknown): boolean {
  * }
  * ```
  */
-export function useCurrentUser() {
+export interface UseCurrentUserOptions {
+  enabled?: boolean;
+}
+
+export function useCurrentUser(options?: UseCurrentUserOptions) {
   const client = useMastraClient();
   const baseUrl = client.options?.baseUrl || '';
 
@@ -65,5 +69,6 @@ export function useCurrentUser() {
     },
     staleTime: 60 * 1000, // Cache for 1 minute
     retry: false,
+    enabled: options?.enabled ?? true,
   });
 }

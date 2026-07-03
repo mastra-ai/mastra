@@ -24,6 +24,11 @@ const unauthenticatedCapabilities = {
   enabled: true,
   login: { type: 'credentials' as const },
 } satisfies AuthCapabilities;
+
+const authDisabledCapabilities = {
+  enabled: false,
+  login: null,
+} satisfies AuthCapabilities;
 vi.mock('@mastra/playground-ui/store/playground-store', () => ({
   usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
@@ -108,9 +113,9 @@ const baseAgent = {
   updatedAt: new Date().toISOString(),
 };
 
-function defaultHandlers(onAvailableModels?: () => void) {
+function defaultHandlers(onAvailableModels?: () => void, capabilities: AuthCapabilities = unauthenticatedCapabilities) {
   return [
-    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(unauthenticatedCapabilities)),
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(capabilities)),
     http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderEnabled)),
     http.get(`${BASE_URL}/api/editor/builder/models/available`, () => {
       onAvailableModels?.();
@@ -183,6 +188,25 @@ describe('AgentBuilderAgentsPage', () => {
     await act(() => new Promise(resolve => setTimeout(resolve, 0)));
     expect(screen.queryByText('No agents yet')).toBeNull();
     expect(screen.queryByText('Create an agent')).toBeNull();
+  });
+
+  describe('when auth is disabled', () => {
+    it('loads agents without waiting for the current user request', async () => {
+      let requestCount = 0;
+      server.use(
+        ...defaultHandlers(undefined, authDisabledCapabilities),
+        pendingUserHandler(),
+        http.get(`${BASE_URL}/api/stored/agents`, () => {
+          requestCount += 1;
+          return HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false });
+        }),
+      );
+
+      renderPage();
+
+      expect(await screen.findByText('No agents yet')).toBeTruthy();
+      expect(requestCount).toBe(1);
+    });
   });
 
   it('renders the resolved author name returned by the API in each row', async () => {

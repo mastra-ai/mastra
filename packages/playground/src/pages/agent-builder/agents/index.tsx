@@ -19,11 +19,15 @@ import {
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useLinkComponent } from '@/lib/framework';
 
 export default function AgentBuilderAgentsPage() {
-  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
+  const { data: authCapabilities, isLoading: isAuthCapabilitiesLoading } = useAuthCapabilities();
+  const shouldFetchCurrentUser = authCapabilities?.enabled === true;
+  const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser({ enabled: shouldFetchCurrentUser });
+  const isWaitingForCurrentUser = isAuthCapabilitiesLoading || (shouldFetchCurrentUser && isCurrentUserLoading);
   const { canWrite, canUseFavorites } = useBuilderAgentAccess();
   const [search, setSearch] = useState('');
   // Prefetch and seed the ['builder-available-models'] cache (return value
@@ -41,11 +45,11 @@ export default function AgentBuilderAgentsPage() {
     return params;
   }, [currentUser?.id]);
 
-  const { data, isLoading, error } = useStoredAgents(listParams, { enabled: !isCurrentUserLoading });
+  const { data, isLoading, error } = useStoredAgents(listParams, { enabled: !isWaitingForCurrentUser });
   const agents = data?.agents ?? [];
 
   const body = (() => {
-    if (isCurrentUserLoading || isLoading) {
+    if (isWaitingForCurrentUser || isLoading) {
       return <AgentBuilderListSkeleton />;
     }
 
