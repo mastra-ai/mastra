@@ -619,7 +619,7 @@ describe('AgentChannels', () => {
           updatedAt: new Date(),
           metadata: {
             channel_platform: 'discord',
-            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalThreadId: 'test-agent:channel-1:thread-1',
             channel_externalChannelId: 'channel-1',
           },
         },
@@ -668,7 +668,7 @@ describe('AgentChannels', () => {
           updatedAt: new Date(),
           metadata: {
             channel_platform: 'discord',
-            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalThreadId: 'test-agent:channel-1:thread-1',
             channel_externalChannelId: 'channel-1',
           },
         },
