@@ -2723,6 +2723,10 @@ export interface UpdateDatasetParams {
   targetType?: string;
   targetIds?: string[];
   scorerIds?: string[] | null;
+  /** Restrict the lookup to a specific tenant organization. */
+  organizationId?: string;
+  /** Restrict the lookup to a specific tenant project. */
+  projectId?: string;
 }
 
 export interface AddDatasetItemParams {

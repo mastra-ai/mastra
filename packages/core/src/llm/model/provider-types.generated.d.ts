@@ -904,6 +904,7 @@ export type ProviderModelsMap = {
     'qwen3-coder-480b-a35b-instruct',
     'qwen3-max-2025-09-23',
   ];
+  readonly trustedrouter: readonly ['auto', 'cheap', 'e2e', 'fast', 'synth', 'synth-code', 'zdr'];
   readonly zhipuai: readonly [
     'glm-4.5',
     'glm-4.5-air',
@@ -1015,7 +1016,16 @@ export type ProviderModelsMap = {
     'minimax-m2-7-highspeed',
     'qwen-3.6-plus',
   ];
-  readonly 'stepfun-ai': readonly ['step-3.5-flash', 'step-3.5-flash-2603'];
+  readonly 'stepfun-ai': readonly [
+    'step-1-32k',
+    'step-2-16k',
+    'step-3.5-flash',
+    'step-3.5-flash-2603',
+    'step-3.7-flash',
+    'step-tts-2',
+    'stepaudio-2.5-asr',
+    'stepaudio-2.5-tts',
+  ];
   readonly vivgrid: readonly [
     'deepseek-v3.2',
     'deepseek-v4-pro',
@@ -1249,6 +1259,8 @@ export type ProviderModelsMap = {
     'anthropic/claude-sonnet-4',
     'anthropic/claude-sonnet-4.5',
     'anthropic/claude-sonnet-4.6',
+    'anthropic/claude-sonnet-5',
+    'anthropic/claude-sonnet-5-free',
     'baidu/ernie-5.0-thinking-preview',
     'deepseek/deepseek-chat',
     'deepseek/deepseek-v3.2',
@@ -1348,6 +1360,31 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.2',
     'z-ai/glm-5.2-free',
     'z-ai/glm-5v-turbo',
+  ];
+  readonly kenari: readonly [
+    'claude-opus-4-7',
+    'claude-opus-4-8',
+    'claude-sonnet-4-6',
+    'deepseek-v4-flash',
+    'deepseek-v4-flash:free',
+    'deepseek-v4-pro',
+    'deepseek-v4-pro:free',
+    'gemma-4-31b-it',
+    'glm-5-1',
+    'glm-5-2',
+    'gpt-5-4-mini',
+    'gpt-5-5',
+    'gpt-image-2',
+    'gpt-oss-120b',
+    'gpt-oss-20b',
+    'grok-4-3',
+    'grok-build-0-1',
+    'kimi-k2-6',
+    'kimi-k2-7-code',
+    'mimo-v2-5',
+    'mimo-v2-5-pro',
+    'minimax-m3',
+    'qwen3-7-plus',
   ];
   readonly openai: readonly [
     'chatgpt-image-latest',
@@ -2275,7 +2312,6 @@ export type ProviderModelsMap = {
     'stepfun-ai/step-3.5-flash',
     'stepfun-ai/step-3.7-flash',
     'upstage/solar-10_7b-instruct',
-    'z-ai/glm-5.1',
   ];
   readonly evroc: readonly [
     'KBLab/kb-whisper-large',
@@ -2420,7 +2456,16 @@ export type ProviderModelsMap = {
   ];
   readonly llmtr: readonly ['gemma-4', 'magibu-11b-v8', 'medgemma-4b', 'qwen3-6-35b', 'sincap', 'trendyol-7b'];
   readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
-  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash'];
+  readonly stepfun: readonly [
+    'step-1-32k',
+    'step-2-16k',
+    'step-3.5-flash',
+    'step-3.5-flash-2603',
+    'step-3.7-flash',
+    'step-tts-2',
+    'stepaudio-2.5-asr',
+    'stepaudio-2.5-tts',
+  ];
   readonly 'hpc-ai': readonly ['minimax/minimax-m2.5', 'moonshotai/kimi-k2.5', 'zai-org/glm-5.1'];
   readonly 'minimax-cn': readonly [
     'MiniMax-M2',
@@ -3432,6 +3477,8 @@ export type ProviderModelsMap = {
     'perplexity/sonar-reasoning-pro',
     'poolside/laguna-m.1',
     'poolside/laguna-m.1:free',
+    'poolside/laguna-xs-2.1',
+    'poolside/laguna-xs-2.1:free',
     'poolside/laguna-xs.2',
     'poolside/laguna-xs.2:free',
     'qwen/qwen-2.5-72b-instruct',
