@@ -1,3 +1,4 @@
+import type { RequestContext } from '@mastra/core/di';
 import type {
   CommandResult,
   ExecuteCommandOptions,
@@ -121,52 +122,56 @@ export class PlatformSandbox extends MastraSandbox {
   status: ProviderStatus = 'pending';
   declare readonly processes: PlatformProcessManager;
 
-  private readonly client: PlatformClient;
-  private readonly environmentId: string;
-  private sandboxId?: string;
-  private readonly idleTimeoutMinutes?: number;
-  private readonly networkIsolation?: PlatformSandboxNetworkIsolation;
-  private readonly env: Record<string, string>;
-  private readonly template?: PlatformSandboxTemplate;
-  private readonly timeout?: number;
-  private readonly instructionsOverride?: InstructionsOption;
-  private createdAt: Date | null = null;
+  private readonly _client: PlatformClient;
+  private readonly _environmentId: string;
+  private _sandboxId?: string;
+  private readonly _idleTimeoutMinutes?: number;
+  private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
+  private readonly _env: Record<string, string>;
+  private readonly _template?: PlatformSandboxTemplate;
+  private readonly _timeout?: number;
+  private readonly _instructionsOverride?: InstructionsOption;
+  private _createdAt: Date | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
-    this.id = options.id ?? `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    this.client = new PlatformClient(options);
-    this.environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
-    if (!this.environmentId && !options.sandboxId) throw new Error('environmentId is required');
-    this.sandboxId = options.sandboxId;
-    this.idleTimeoutMinutes = options.idleTimeoutMinutes;
-    this.networkIsolation = options.networkIsolation;
-    this.env = options.env ?? {};
-    this.template = options.template;
-    this.timeout = options.timeout;
-    this.instructionsOverride = options.instructions;
+    this.id = options.id ?? this.generateId();
+    this._client = new PlatformClient(options);
+    this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
+    if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
+    this._sandboxId = options.sandboxId;
+    this._idleTimeoutMinutes = options.idleTimeoutMinutes;
+    this._networkIsolation = options.networkIsolation;
+    this._env = options.env ?? {};
+    this._template = options.template;
+    this._timeout = options.timeout;
+    this._instructionsOverride = options.instructions;
+  }
+
+  private generateId(): string {
+    return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   async start(): Promise<void> {
-    if (this.sandboxId) {
-      this.createdAt = new Date();
+    if (this._sandboxId) {
+      this._createdAt = new Date();
       return;
     }
 
-    const response = await this.client.request('/sandbox', {
+    const response = await this._client.request('/sandbox', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        environmentId: this.environmentId,
-        idleTimeoutMinutes: this.idleTimeoutMinutes,
-        networkIsolation: this.networkIsolation,
-        env: this.env,
-        template: this.template,
+        environmentId: this._environmentId,
+        idleTimeoutMinutes: this._idleTimeoutMinutes,
+        networkIsolation: this._networkIsolation,
+        env: this._env,
+        template: this._template,
       }),
     });
     const json = (await response.json()) as CreateSandboxResponse;
-    this.sandboxId = json.id;
-    this.createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+    this._sandboxId = json.id;
+    this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
   }
 
   async stop(): Promise<void> {
@@ -174,23 +179,23 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async destroy(): Promise<void> {
-    if (!this.sandboxId) return;
-    await this.client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}`, { method: 'DELETE' });
+    if (!this._sandboxId) return;
+    await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`, { method: 'DELETE' });
   }
 
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     await this.ensureRunning();
-    if (!this.sandboxId) throw new SandboxNotReadyError(this.id);
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
-    const response = await this.client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}/exec`, {
+    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}/exec`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         command: fullCommand,
         timeoutSec:
-          (options?.timeout ?? this.timeout) ? Math.ceil((options?.timeout ?? this.timeout!) / 1000) : undefined,
+          (options?.timeout ?? this._timeout) ? Math.ceil((options?.timeout ?? this._timeout!) / 1000) : undefined,
         cwd: options?.cwd,
         env: options?.env,
       }),
@@ -209,23 +214,23 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async getInfo(): Promise<SandboxInfo> {
-    if (!this.sandboxId) {
+    if (!this._sandboxId) {
       return {
         id: this.id,
         name: this.name,
         provider: this.provider,
         status: this.status,
-        createdAt: this.createdAt ?? new Date(),
+        createdAt: this._createdAt ?? new Date(),
       };
     }
-    const response = await this.client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}`);
+    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {
       id: json.id,
       name: this.name,
       provider: this.provider,
       status: this.status,
-      createdAt: json.createdAt ? new Date(json.createdAt) : (this.createdAt ?? new Date()),
+      createdAt: json.createdAt ? new Date(json.createdAt) : (this._createdAt ?? new Date()),
       metadata: {
         providerResourceId: json.providerResourceId ?? undefined,
         platformStatus: json.status,
@@ -233,12 +238,12 @@ export class PlatformSandbox extends MastraSandbox {
     };
   }
 
-  getInstructions(): string {
-    const defaultInstructions = `Platform sandbox${this.sandboxId ? ` ${this.sandboxId}` : ''}. Execute commands with the sandbox command APIs.`;
-    if (typeof this.instructionsOverride === 'function') {
-      return this.instructionsOverride({ defaultInstructions });
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    const defaultInstructions = `Platform sandbox${this._sandboxId ? ` ${this._sandboxId}` : ''}. Execute commands with the sandbox command APIs.`;
+    if (typeof this._instructionsOverride === 'function') {
+      return this._instructionsOverride({ defaultInstructions, requestContext: opts?.requestContext });
     }
-    if (typeof this.instructionsOverride === 'string') return this.instructionsOverride;
+    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
     return defaultInstructions;
   }
 }

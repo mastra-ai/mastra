@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import nodePath from 'node:path';
+import type { RequestContext } from '@mastra/core/request-context';
 import type {
   CopyOptions,
   FileContent,
@@ -7,6 +8,7 @@ import type {
   FileStat,
   FilesystemIcon,
   FilesystemInfo,
+  InstructionsOption,
   ListOptions,
   MastraFilesystemOptions,
   ProviderStatus,
@@ -30,6 +32,7 @@ export interface PlatformFilesystemOptions extends PlatformClientOptions, Mastra
   displayName?: string;
   icon?: FilesystemIcon;
   description?: string;
+  instructions?: InstructionsOption;
 }
 
 function normalizePath(input: string): string {
@@ -79,24 +82,30 @@ export class PlatformFilesystem extends MastraFilesystem {
   readonly description?: string;
   status: ProviderStatus = 'pending';
 
-  private readonly client: PlatformClient;
-  private readonly bucketName: string;
+  private readonly _client: PlatformClient;
+  private readonly _bucketName: string;
+  private readonly _instructionsOverride?: InstructionsOption;
 
   constructor(options: PlatformFilesystemOptions = {}) {
     super({ ...options, name: 'PlatformFilesystem' });
-    this.id = options.id ?? `platform-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    this.bucketName = options.bucketName ?? process.env.MASTRA_PLATFORM_BUCKET_NAME ?? '';
-    if (!this.bucketName) throw new Error('bucketName is required');
+    this.id = options.id ?? this.generateId();
+    this._bucketName = options.bucketName ?? process.env.MASTRA_PLATFORM_BUCKET_NAME ?? '';
+    if (!this._bucketName) throw new Error('bucketName is required');
     this.readOnly = options.readOnly;
     this.displayName = options.displayName;
     this.icon = options.icon ?? 'cloud';
     this.description = options.description;
-    this.client = new PlatformClient(options);
+    this._instructionsOverride = options.instructions;
+    this._client = new PlatformClient(options);
+  }
+
+  private generateId(): string {
+    return `platform-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     await this.ensureReady();
-    const response = await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${keyFromPath(path)}`);
+    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`);
     const buffer = Buffer.from(await response.arrayBuffer());
     return options?.encoding ? buffer.toString(options.encoding) : buffer;
   }
@@ -108,7 +117,7 @@ export class PlatformFilesystem extends MastraFilesystem {
     if (options?.mimeType) headers['content-type'] = options.mimeType;
     if (options?.overwrite === false) headers['if-none-match'] = '*';
     try {
-      await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${keyFromPath(path)}`, {
+      await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
         method: 'PUT',
         headers,
         body: contentToBody(content),
@@ -133,7 +142,7 @@ export class PlatformFilesystem extends MastraFilesystem {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('deleteFile');
     try {
-      await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${keyFromPath(path)}`, {
+      await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
         method: 'DELETE',
         query: { recursive: options?.recursive },
       });
@@ -147,7 +156,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('copyFile');
-    await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${keyFromPath(src)}`, {
+    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(src)}`, {
       method: 'POST',
       query: { op: 'copy' },
       headers: { 'content-type': 'application/json' },
@@ -158,7 +167,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async moveFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('moveFile');
-    await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${keyFromPath(src)}`, {
+    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(src)}`, {
       method: 'POST',
       query: { op: 'rename' },
       headers: { 'content-type': 'application/json' },
@@ -169,7 +178,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('mkdir');
-    await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${keyFromPath(path)}`, {
+    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
       method: 'POST',
       query: { op: 'mkdir' },
     });
@@ -182,7 +191,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
     await this.ensureReady();
     const prefix = keyFromPath(path);
-    const response = await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${prefix}`, {
+    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${prefix}`, {
       query: {
         delimiter: options?.recursive ? undefined : '/',
         prefix: prefix ? `${prefix.replace(/\/$/, '')}/` : undefined,
@@ -222,7 +231,7 @@ export class PlatformFilesystem extends MastraFilesystem {
     if (normalized === '/') {
       return { name: '', path: '/', type: 'directory', size: 0, createdAt: new Date(0), modifiedAt: new Date(0) };
     }
-    const response = await this.client.request(`/fs/${encodeURIComponent(this.bucketName)}/${keyFromPath(path)}`, {
+    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
       method: 'HEAD',
     });
     return {
@@ -236,7 +245,20 @@ export class PlatformFilesystem extends MastraFilesystem {
     };
   }
 
-  getInfo(): FilesystemInfo {
+  realpath(path: string): Promise<string> {
+    return Promise.resolve(normalizePath(path));
+  }
+
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    const defaultInstructions = `Platform filesystem backed by Mastra Platform bucket ${this._bucketName}. Use absolute workspace paths.`;
+    if (typeof this._instructionsOverride === 'function') {
+      return this._instructionsOverride({ defaultInstructions, requestContext: opts?.requestContext });
+    }
+    if (typeof this._instructionsOverride === 'string') return this._instructionsOverride;
+    return defaultInstructions;
+  }
+
+  getInfo(): FilesystemInfo<{ bucketName: string; displayName?: string; description?: string }> {
     return {
       id: this.id,
       name: this.name,
@@ -245,7 +267,7 @@ export class PlatformFilesystem extends MastraFilesystem {
       readOnly: this.readOnly,
       icon: this.icon,
       metadata: {
-        bucketName: this.bucketName,
+        bucketName: this._bucketName,
         ...(this.displayName && { displayName: this.displayName }),
         ...(this.description && { description: this.description }),
       },
