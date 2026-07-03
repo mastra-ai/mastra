@@ -185,7 +185,7 @@ function EditLayoutWrapper() {
     versionId: selectedVersionId ?? '',
   });
 
-  const activeVersionId = agent?.activeVersionId;
+  const activeVersionId = agent?.activeVersionId ?? undefined;
   const latestVersion = versionsData?.versions?.[0];
   const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
 

@@ -53,7 +53,7 @@ function AgentPlayground() {
     versionId: selectedVersionId ?? '',
   });
 
-  const activeVersionId = storedAgent?.activeVersionId;
+  const activeVersionId = storedAgent?.activeVersionId ?? undefined;
   const latestVersion = versionsData?.versions?.[0];
   const hasDraft = !!(latestVersion && latestVersion.id !== activeVersionId);
 

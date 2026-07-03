@@ -22,7 +22,7 @@ await client.createStoredAgent({
 });
 
 // Publish explicitly
-await client.getStoredAgent('support-agent').activateVersion(versionId);
+await client.getStoredAgent('support-agent').activateVersion('version-123');
 
 // Revert to the code-defined configuration
 await client.getStoredAgent('support-agent').unpublishVersion();

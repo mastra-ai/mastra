@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Regenerated API route metadata to include the new stored agent unpublish endpoint and `publishOnSave` parameter.
+Added support for the stored-agent unpublish endpoint and `publishOnSave` parameter in the published API.
