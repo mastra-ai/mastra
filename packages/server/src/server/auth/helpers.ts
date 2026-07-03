@@ -1,7 +1,7 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ApiRoute, MastraAuthConfig, MastraAuthProvider, MastraAuthRequest } from '@mastra/core/server';
+import type { ApiRoute, IMastraAuthProvider, MastraAuthConfig, MastraAuthRequest } from '@mastra/core/server';
 
 import {
   MASTRA_RESOURCE_ID_KEY,
@@ -330,8 +330,8 @@ export const getAuthenticatedUser = async <TUser = unknown>({
  * Returns true if the auth provider implements the necessary ISessionProvider methods.
  */
 export function supportsSessionRefresh(
-  authConfig: MastraAuthConfig | MastraAuthProvider,
-): authConfig is (MastraAuthConfig | MastraAuthProvider) &
+  authConfig: MastraAuthConfig | IMastraAuthProvider,
+): authConfig is (MastraAuthConfig | IMastraAuthProvider) &
   Pick<ISessionProvider, 'refreshSession' | 'getSessionIdFromRequest' | 'getSessionHeaders'> {
   return (
     typeof (authConfig as any).getSessionIdFromRequest === 'function' &&

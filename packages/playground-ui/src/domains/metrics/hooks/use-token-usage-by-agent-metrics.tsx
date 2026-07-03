@@ -1,6 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { useMetricsFilters } from './use-metrics-filters';
+import { getOrCreate } from '@/lib/map';
 
 export interface TokenUsageByAgentRow {
   name: string;
@@ -34,12 +35,8 @@ export function useTokenUsageByAgentMetrics() {
 
       const agentMap = new Map<string, AgentEntry>();
 
-      const ensure = (name: string): AgentEntry => {
-        if (!agentMap.has(name)) {
-          agentMap.set(name, { input: 0, output: 0, cost: null, costUnit: null });
-        }
-        return agentMap.get(name)!;
-      };
+      const ensure = (name: string): AgentEntry =>
+        getOrCreate(agentMap, name, () => ({ input: 0, output: 0, cost: null, costUnit: null }));
 
       const addCost = (entry: AgentEntry, group: { estimatedCost?: number | null; costUnit?: string | null }) => {
         if (group.estimatedCost != null) {

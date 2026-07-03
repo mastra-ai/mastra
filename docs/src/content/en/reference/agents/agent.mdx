@@ -306,7 +306,7 @@ agent.sendMessage('Continue with the next step.', {
 })
 ```
 
-Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the message: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the message is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the message and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored message. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the message could not be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the message: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the message is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the message and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored message. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the message couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
 
 ### `queueMessage(message, options)`
 
@@ -426,7 +426,7 @@ Sends a signal to an active run or memory thread.
 ]}
 />
 
-Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored signal. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the signal could not be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
+Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`; for `persist`/`discard` use `result.signal.id` to correlate the stored signal. `accepted` resolves for routing — a generation error on a `wake` run surfaces through `output.consumeStream()` — and rejects only when the signal couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
 
 In serverless handlers, await `accepted` and pass the `wake` output to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
 
@@ -949,6 +949,34 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
 ]}
 />
+
+## `generate()` memory options
+
+Pass `memory` when you call `agent.generate()` to choose which conversation thread the run should read from and write to. The common shape is `memory: { resource: string, thread: string }`, where `resource` identifies the owner and `thread` identifies the conversation. See [Threads and resources](/docs/memory/storage#threads-and-resources) for the concept model.
+
+```typescript title="src/mastra/run.ts"
+const response = await agent.generate('What did we decide about retries?', {
+  memory: {
+    resource: 'user-123',
+    thread: 'support-thread-456',
+  },
+})
+```
+
+Use a thread object when you need to create or update thread metadata during the call:
+
+```typescript title="src/mastra/run.ts"
+const response = await agent.generate('Continue the support conversation.', {
+  memory: {
+    resource: 'user-123',
+    thread: {
+      id: 'support-thread-456',
+      title: 'Billing support',
+      metadata: { category: 'billing' },
+    },
+  },
+})
+```
 
 ## Tool hooks
 

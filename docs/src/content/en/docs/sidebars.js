@@ -403,6 +403,9 @@ const sidebars = {
               type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
+              customProps: {
+                tags: ['beta'],
+              },
             },
             {
               type: 'doc',
