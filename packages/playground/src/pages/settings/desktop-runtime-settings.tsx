@@ -70,15 +70,6 @@ function rowsFromEnvironmentVariables(envVars: Record<string, string>): Environm
   return rows.length ? rows : [{ key: '', value: '' }];
 }
 
-function collectEnvironmentVariables(rows: readonly EnvironmentVariableRow[]) {
-  const variables: Record<string, string> = {};
-  for (const row of rows) {
-    const key = row.key.trim();
-    if (key) variables[key] = row.value;
-  }
-  return variables;
-}
-
 function modelMatchesSettings(settings: DesktopRuntimeSettings, modelUrl: string, modelId: string, apiKey: string) {
   return (
     settings.modelUrl === modelUrl.trim() &&
@@ -156,31 +147,69 @@ function ModelIdControl({
 function RuntimeEnvironmentEditor({ endpoint, state }: { endpoint: string; state: DesktopRuntimeState }) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState(() => rowsFromEnvironmentVariables(state.settings.environmentVariables));
-  const [dirty, setDirty] = useState(false);
   const savedVariableCount = Object.keys(state.settings.environmentVariables).length;
   const editor = useEnvironmentVariablesEditor({
     rows,
     onRowsChange: nextRows => {
       setRows(nextRows);
-      setDirty(true);
     },
   });
+  const dirty = editor.isRowsDirty;
+
+  async function refreshEnvironment() {
+    return queryClient.fetchQuery({
+      queryFn: () => desktopRequest<DesktopRuntimeState>(endpoint, '/state'),
+      queryKey: ['desktop-runtime-state', endpoint],
+      staleTime: 0,
+    });
+  }
+
+  async function restartRuntimeAfterEnvironmentSave(savedState: DesktopRuntimeState) {
+    try {
+      const restartedState = await desktopRequest<DesktopRuntimeState>(endpoint, '/restart-runtime', {
+        method: 'POST',
+      });
+      queryClient.setQueryData(['desktop-runtime-state', endpoint], restartedState);
+    } catch (error) {
+      queryClient.setQueryData(['desktop-runtime-state', endpoint], savedState);
+      toast.error(error instanceof Error ? error.message : 'Runtime environment saved, but restart failed');
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] });
+      void queryClient.invalidateQueries({ queryKey: ['llm-providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['agents-model-providers'] });
+      void queryClient.invalidateQueries({ queryKey: ['builder-available-models'] });
+    }
+  }
 
   const saveEnvironment = useMutation({
     mutationFn: async () => {
-      await desktopRequest<UpdateSettingsResult>(endpoint, '/settings', {
-        body: JSON.stringify({ environmentVariables: collectEnvironmentVariables(editor.rows) }),
+      return desktopRequest<UpdateSettingsResult>(endpoint, '/settings', {
+        body: JSON.stringify({ environmentVariables: editor.getEnvironmentVariablesForSubmit() }),
         method: 'PATCH',
       });
-      return desktopRequest<DesktopRuntimeState>(endpoint, '/restart-runtime', { method: 'POST' });
     },
-    onSuccess: async () => {
-      setDirty(false);
-      await queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] });
+    onSuccess: result => {
+      const nextRows = rowsFromEnvironmentVariables(result.settings.environmentVariables);
+      editor.resetRows(nextRows);
+      queryClient.setQueryData(['desktop-runtime-state', endpoint], result.state);
       toast.success('Runtime environment saved');
+      void restartRuntimeAfterEnvironmentSave(result.state);
     },
     onError: error => {
       toast.error(error instanceof Error ? error.message : 'Unable to save runtime environment');
+    },
+  });
+
+  const refreshEnvironmentMutation = useMutation({
+    mutationFn: refreshEnvironment,
+    onSuccess: async nextState => {
+      const nextRows = rowsFromEnvironmentVariables(nextState.settings.environmentVariables);
+      editor.resetRows(nextRows);
+      await queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint], refetchType: 'none' });
+      toast.success('Runtime environment refreshed');
+    },
+    onError: error => {
+      toast.error(error instanceof Error ? error.message : 'Unable to refresh runtime environment');
     },
   });
 
@@ -192,24 +221,35 @@ function RuntimeEnvironmentEditor({ endpoint, state }: { endpoint: string; state
         </StatusBadge>
       </SettingsRow>
 
-      <ButtonsGroup spacing="default" aria-label="Environment variable presets" className="flex-wrap justify-start">
-        {ENVIRONMENT_VARIABLE_PRESETS.map(preset => (
-          <Button
-            key={preset.key}
-            type="button"
-            size="xs"
-            variant="outline"
-            onClick={() => {
-              if (!rows.some(row => row.key.trim() === preset.key)) {
-                setRows([...rows.filter(row => row.key.trim() || row.value), { key: preset.key, value: '' }]);
-                setDirty(true);
-              }
-            }}
-          >
-            {preset.label}
-          </Button>
-        ))}
-      </ButtonsGroup>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ButtonsGroup spacing="default" aria-label="Environment variable presets" className="flex-wrap justify-start">
+          {ENVIRONMENT_VARIABLE_PRESETS.map(preset => (
+            <Button
+              key={preset.key}
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() => {
+                if (!rows.some(row => row.key.trim() === preset.key)) {
+                  setRows([...rows.filter(row => row.key.trim() || row.value), { key: preset.key, value: '' }]);
+                }
+              }}
+            >
+              {preset.label}
+            </Button>
+          ))}
+        </ButtonsGroup>
+
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={refreshEnvironmentMutation.isPending || saveEnvironment.isPending}
+          onClick={() => refreshEnvironmentMutation.mutate()}
+        >
+          {refreshEnvironmentMutation.isPending ? 'Refreshing...' : 'Refresh env'}
+        </Button>
+      </div>
 
       <EnvironmentVariablesEditor
         editor={editor}
@@ -223,7 +263,7 @@ function RuntimeEnvironmentEditor({ endpoint, state }: { endpoint: string; state
             disabled={!dirty || editor.hasDuplicateKeys || saveEnvironment.isPending}
             onClick={() => saveEnvironment.mutate()}
           >
-            {saveEnvironment.isPending ? 'Saving...' : 'Save & restart'}
+            {saveEnvironment.isPending ? 'Saving...' : 'Save runtime env'}
           </Button>
         }
       />
@@ -266,6 +306,7 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
     Boolean(detectedModelId) && !modelIdEdited && (!modelId.trim() || modelId === selectedProvider.modelId);
   const effectiveModelId = shouldUseDetectedModel ? detectedModelId! : modelId;
   const isModelApplied = modelMatchesSettings(state.settings, modelUrl, effectiveModelId, modelApiKey);
+  const applyModelLabel = providerId === 'custom' ? 'Use custom provider' : `Use ${selectedProvider.name}`;
 
   async function refreshModels() {
     const result = await refetchProbeModels();
@@ -415,13 +456,19 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
             >
               {isProbeFetching ? 'Refreshing...' : 'Refresh models'}
             </Button>
-            <Button type="button" size="sm" onClick={() => applyModel.mutate()}>
-              {applyModel.isPending ? 'Applying...' : isModelApplied ? 'Restart runtime' : 'Apply & restart'}
-            </Button>
+            {!isModelApplied ? (
+              <Button type="button" size="sm" onClick={() => applyModel.mutate()}>
+                {applyModel.isPending ? 'Updating...' : applyModelLabel}
+              </Button>
+            ) : null}
           </ButtonsGroup>
         </div>
 
-        <RuntimeEnvironmentEditor endpoint={endpoint} state={state} />
+        <RuntimeEnvironmentEditor
+          key={JSON.stringify(state.settings.environmentVariables)}
+          endpoint={endpoint}
+          state={state}
+        />
       </div>
     </SectionCard>
   );

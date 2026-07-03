@@ -10,9 +10,9 @@ import { useAgentBuilderAllowedModels } from './use-agent-builder-allowed-models
  * applies the authoritative server-side allowlist (including the deny-all rule
  * for unknown providers), so no EE matcher runs in the browser.
  */
-const useAllowedModels = (): ModelInfo[] => {
-  const { models } = useAgentBuilderAllowedModels();
-  return useMemo(() => models, [models]);
+const useAllowedModelState = (): { isLoading: boolean; models: ModelInfo[] } => {
+  const { isLoading, models } = useAgentBuilderAllowedModels();
+  return useMemo(() => ({ isLoading, models }), [isLoading, models]);
 };
 
 const providersMatch = (provider: string, allowedProvider: string): boolean =>
@@ -27,9 +27,13 @@ const isAllowed = (allowedModels: ModelInfo[], provider: string, modelId: string
  * is unset / empty.
  */
 export const useBuilderFilteredProviders = (providers: Provider[], policy: BuilderModelPolicy): Provider[] => {
-  const allowedModels = useAllowedModels();
+  const { isLoading, models: allowedModels } = useAllowedModelState();
   return useMemo(() => {
     if (!policy.active || !policy.allowed || policy.allowed.length === 0) {
+      return providers;
+    }
+
+    if (isLoading) {
       return providers;
     }
 
@@ -39,7 +43,7 @@ export const useBuilderFilteredProviders = (providers: Provider[], policy: Build
         models: provider.models.filter(modelId => isAllowed(allowedModels, provider.id, modelId)),
       }))
       .filter(provider => provider.models.length > 0);
-  }, [providers, policy, allowedModels]);
+  }, [providers, policy, isLoading, allowedModels]);
 };
 
 /**
@@ -47,12 +51,16 @@ export const useBuilderFilteredProviders = (providers: Provider[], policy: Build
  * Pass-through when `policy.active === false` or `policy.allowed` is unset / empty.
  */
 export const useBuilderFilteredModels = (models: ModelInfo[], policy: BuilderModelPolicy): ModelInfo[] => {
-  const allowedModels = useAllowedModels();
+  const { isLoading, models: allowedModels } = useAllowedModelState();
   return useMemo(() => {
     if (!policy.active || !policy.allowed || policy.allowed.length === 0) {
       return models;
     }
 
+    if (isLoading) {
+      return models;
+    }
+
     return models.filter(m => isAllowed(allowedModels, m.provider, m.model));
-  }, [models, policy, allowedModels]);
+  }, [models, policy, isLoading, allowedModels]);
 };

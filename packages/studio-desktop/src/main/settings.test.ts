@@ -2,10 +2,15 @@ import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS } from './defaults';
+import { DEFAULT_DEV_SERVER_URL, DEFAULT_RUNTIME_PORT, DEFAULT_SETTINGS } from './defaults';
 import { normalizeSettings, readSettings, updateSettings, writeSettings } from './settings';
 
 describe('desktop settings', () => {
+  it('keeps the managed runtime default separate from the Mastra dev server default', () => {
+    expect(DEFAULT_RUNTIME_PORT).toBe(43111);
+    expect(DEFAULT_DEV_SERVER_URL).toBe('http://127.0.0.1:4111');
+  });
+
   it('returns defaults when no settings file exists', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-desktop-settings-'));
     await expect(readSettings(join(dir, 'settings.json'))).resolves.toEqual(DEFAULT_SETTINGS);

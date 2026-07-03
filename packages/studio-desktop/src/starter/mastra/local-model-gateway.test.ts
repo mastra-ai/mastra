@@ -1,9 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { getDesktopBuilderConfig } from './desktop-builder';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { desktopAgents } from './agents/template-agents';
+import { getDesktopBuilderConfig, getDesktopConfiguredExternalModelAllowlistEntries } from './desktop-builder';
 import { DesktopLocalModelGateway, getDesktopModelConfig } from './local-model-gateway';
-import { mastra } from './index';
+import { desktopRuntimeBundlerConfig, mastra } from './index';
 
 const originalEnv = { ...process.env };
+
+beforeEach(() => {
+  process.env = { ...originalEnv };
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+});
 
 afterEach(() => {
   process.env = { ...originalEnv };
@@ -82,8 +89,11 @@ describe('getDesktopBuilderConfig', () => {
         configuration: {
           agent: {
             models: {
-              allowed: [{ kind: 'custom', provider: 'ollama' }],
-              default: { kind: 'custom', provider: 'ollama', modelId: 'llama3.2' },
+              allowed: [
+                { kind: 'custom', provider: 'ollama' },
+                { kind: 'custom', provider: 'desktop-local/ollama' },
+              ],
+              default: { kind: 'custom', provider: 'desktop-local/ollama', modelId: 'llama3.2' },
             },
           },
         },
@@ -100,8 +110,34 @@ describe('getDesktopBuilderConfig', () => {
         configuration: {
           agent: {
             models: {
-              allowed: [{ kind: 'custom', provider: 'lmstudio' }],
-              default: { kind: 'custom', provider: 'lmstudio', modelId: 'loaded-model' },
+              allowed: [
+                { kind: 'custom', provider: 'lmstudio' },
+                { kind: 'custom', provider: 'desktop-local/lmstudio' },
+              ],
+              default: { kind: 'custom', provider: 'desktop-local/lmstudio', modelId: 'loaded-model' },
+            },
+          },
+        },
+      });
+    });
+  });
+
+  describe('when external provider keys are configured', () => {
+    it('allows Anthropic alongside the local desktop provider', () => {
+      process.env.MASTRA_DESKTOP_MODEL_URL = 'http://localhost:11434/v1';
+      process.env.MASTRA_DESKTOP_MODEL_ID = 'llama3.2';
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-local';
+
+      expect(getDesktopConfiguredExternalModelAllowlistEntries()).toEqual([{ provider: 'anthropic' }]);
+      expect(getDesktopBuilderConfig()).toMatchObject({
+        configuration: {
+          agent: {
+            models: {
+              allowed: [
+                { kind: 'custom', provider: 'ollama' },
+                { kind: 'custom', provider: 'desktop-local/ollama' },
+                { provider: 'anthropic' },
+              ],
             },
           },
         },
@@ -112,10 +148,64 @@ describe('getDesktopBuilderConfig', () => {
 
 describe('bundled desktop runtime agents', () => {
   describe('when the starter runtime is loaded', () => {
-    it('registers the desktop assistant and builder agent', () => {
+    it('externalizes native runtime dependencies for packaged desktop builds', () => {
+      expect(desktopRuntimeBundlerConfig).toEqual({ externals: true });
+    });
+
+    it('registers the desktop template agents and builder agent', () => {
       const agentIds = Object.values(mastra.listAgents()).map(agent => agent.id);
 
-      expect(agentIds).toEqual(expect.arrayContaining(['desktop-assistant', 'builder-agent']));
+      expect(agentIds).toEqual(
+        expect.arrayContaining([
+          'builder-agent',
+          'desktop-assistant',
+          'local-model-guide',
+          'workflow-planner',
+          'tool-designer',
+          'desktop-orchestrator',
+        ]),
+      );
+    });
+
+    it('enables memory for every bundled template agent', async () => {
+      for (const agent of Object.values(desktopAgents)) {
+        expect(agent.hasOwnMemory()).toBe(true);
+        await expect(agent.getMemory()).resolves.toMatchObject({
+          id: `${agent.id}-memory`,
+        });
+      }
+    });
+
+    it('registers desktop specialists as subagents on the orchestrator', async () => {
+      await expect(Promise.resolve(desktopAgents.desktopOrchestrator.listAgents())).resolves.toEqual({
+        localModelGuide: desktopAgents.localModelGuide,
+        workflowPlanner: desktopAgents.workflowPlanner,
+        toolDesigner: desktopAgents.toolDesigner,
+      });
+    });
+
+    it('wires persistent runtime memory alongside filesystem editor storage', async () => {
+      const storage = mastra.getStorage();
+      expect(storage).toBeDefined();
+      if (!storage) throw new Error('Expected desktop runtime storage to be configured');
+
+      await storage.init();
+      await expect(storage.getStore('memory')).resolves.toBeDefined();
+      await expect(storage.getStore('agents')).resolves.toBeDefined();
+
+      const memory = await desktopAgents.desktopOrchestrator.getMemory();
+      expect(memory).toBeDefined();
+      if (!memory) throw new Error('Expected desktop orchestrator memory to be configured');
+
+      await expect(
+        memory.createThread({
+          threadId: 'desktop-runtime-memory-test',
+          resourceId: 'desktop-user',
+        }),
+      ).resolves.toMatchObject({
+        id: 'desktop-runtime-memory-test',
+        resourceId: 'desktop-user',
+      });
     });
   });
 });

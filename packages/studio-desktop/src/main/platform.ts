@@ -44,14 +44,14 @@ export function hostedStudioOrigin(instanceUrl: string) {
   return new URL(normalizeServerUrl(instanceUrl)).origin;
 }
 
-export function isHostedStudioAuthNavigation(requestUrl: string, instanceUrl: string) {
+export function hostedStudioExternalNavigationUrl(requestUrl: string, instanceUrl: string) {
   try {
     const url = new URL(requestUrl);
-    if (url.origin !== hostedStudioOrigin(instanceUrl)) return false;
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return requestUrl;
 
-    return /(^|\/)(auth|login|sign-in|signin)(\/|$)|\/api\/auth\//i.test(url.pathname);
+    return url.origin === hostedStudioOrigin(instanceUrl) ? undefined : requestUrl;
   } catch {
-    return false;
+    return requestUrl;
   }
 }
 

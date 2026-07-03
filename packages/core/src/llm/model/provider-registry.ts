@@ -34,6 +34,11 @@ export function isOfflineMode(): boolean {
   return value === 'true' || value === '1';
 }
 
+function isGatewayRegistrySyncDisabled(): boolean {
+  const value = process.env.MASTRA_DISABLE_GATEWAY_REGISTRY_SYNC;
+  return value === 'true' || value === '1';
+}
+
 function getEnabledGatewayIds(gateways: MastraModelGatewayInterface[]): Set<string> {
   const enabledGatewayIds = new Set<string>();
 
@@ -617,7 +622,7 @@ export class GatewayRegistry {
 
   private constructor(options: GatewayRegistryOptions = {}) {
     const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
-    this.useDynamicLoading = options.useDynamicLoading ?? isDev;
+    this.useDynamicLoading = options.useDynamicLoading ?? (isDev && !isGatewayRegistrySyncDisabled());
   }
 
   /**
@@ -629,7 +634,7 @@ export class GatewayRegistry {
       return GatewayRegistry.instance;
     }
 
-    if (options?.useDynamicLoading === true) {
+    if (options?.useDynamicLoading === true && !isGatewayRegistrySyncDisabled()) {
       GatewayRegistry.instance.useDynamicLoading = true;
     }
 
@@ -658,6 +663,10 @@ export class GatewayRegistry {
    * @param writeToSrc - Write to src/ directory in addition to dist/ (useful for manual generation in repo)
    */
   async syncGateways(forceRefresh = false, writeToSrc = false): Promise<void> {
+    if (isGatewayRegistrySyncDisabled() && !writeToSrc) {
+      return;
+    }
+
     // Only allow sync when dynamic loading is enabled or when explicitly writing to src (build script)
     if (!this.useDynamicLoading && !writeToSrc) {
       // console.debug('[GatewayRegistry] Skipping sync (dynamic loading disabled, registry is static)');
@@ -886,6 +895,7 @@ export class GatewayRegistry {
 const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
 const autoRefreshEnabled =
   !isOfflineMode() &&
+  !isGatewayRegistrySyncDisabled() &&
   (process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
     (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev));
 

@@ -1,10 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../constants/default-request-context-schema';
 import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
@@ -14,9 +16,16 @@ import { resolveStarterModel, truncateName } from './utils';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
+import { ProviderLogo } from '@/domains/llm/components/provider-logo';
+import { providerMatches } from '@/domains/llm/hooks/use-filtered-models';
+
+const providersMatch = (provider: string, targetProvider: string) =>
+  providerMatches(provider, targetProvider) || providerMatches(targetProvider, provider);
 
 export const AgentBuilderStarter = () => {
   const [message, setMessage] = useState('');
+  const [selectedProviderId, setSelectedProviderId] = useState<string>();
+  const [selectedModelId, setSelectedModelId] = useState<string>();
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createStoredAgent } = useStoredAgentMutations(undefined);
@@ -26,6 +35,7 @@ export const AgentBuilderStarter = () => {
     desktopModelStatus,
     isLoading: isAllowedModelsLoading,
     models: allowedModels,
+    providers: allowedProviders,
   } = useAgentBuilderAllowedModels();
   const modelPolicy = useBuilderModelPolicy();
   // While builder settings are still loading, useBuilderModelPolicy falls back
@@ -36,6 +46,38 @@ export const AgentBuilderStarter = () => {
   const trimmed = message.trim();
   const isCreating = createStoredAgent.isPending;
   const isDesktopModelUnavailable = desktopModelStatus?.unavailable === true;
+  const starterModel = resolveStarterModel(allowedModels, modelPolicy);
+  const selectedProvider =
+    selectedProviderId ??
+    allowedProviders.find(provider => providersMatch(provider.id, starterModel.provider))?.id ??
+    starterModel.provider;
+  const selectedProviderModels = useMemo(
+    () => allowedModels.filter(model => providersMatch(model.provider, selectedProvider)),
+    [allowedModels, selectedProvider],
+  );
+  const selectedModel =
+    selectedModelId ??
+    selectedProviderModels.find(model => model.model === starterModel.name)?.model ??
+    selectedProviderModels[0]?.model ??
+    starterModel.name;
+  const providerOptions = useMemo<ComboboxOption[]>(
+    () =>
+      allowedProviders.map(provider => ({
+        label: provider.name,
+        value: provider.id,
+        start: <ProviderLogo providerId={provider.id} size={16} />,
+      })),
+    [allowedProviders],
+  );
+  const modelOptions = useMemo<ComboboxOption[]>(
+    () =>
+      selectedProviderModels.map(model => ({
+        label: model.model,
+        value: model.model,
+      })),
+    [selectedProviderModels],
+  );
+  const showModelPicker = !isAllowedModelsLoading && providerOptions.length > 0;
   const isSubmitBlocked =
     trimmed.length === 0 ||
     isCreating ||
@@ -59,7 +101,7 @@ export const AgentBuilderStarter = () => {
         workflows: {},
         skills: {},
         visibility: defaultVisibility,
-        model: resolveStarterModel(allowedModels, modelPolicy),
+        model: { provider: selectedProvider, name: selectedModel },
         ...(authCapabilities?.enabled ? { requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } : {}),
       });
 
@@ -85,6 +127,12 @@ export const AgentBuilderStarter = () => {
   const handleExampleClick = (prompt: string) => {
     setMessage(prompt);
     textareaRef.current?.focus();
+  };
+
+  const handleProviderChange = (providerId: string) => {
+    const firstModel = allowedModels.find(model => providersMatch(model.provider, providerId));
+    setSelectedProviderId(providerId);
+    setSelectedModelId(firstModel?.model);
   };
 
   return (
@@ -116,7 +164,35 @@ export const AgentBuilderStarter = () => {
             rows={3}
           />
 
-          <div className="flex items-center justify-end px-3 pb-2.5">
+          <div className="flex flex-col gap-2 px-3 pb-2.5 sm:flex-row sm:items-center sm:justify-between">
+            {showModelPicker ? (
+              <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
+                <Combobox
+                  options={providerOptions}
+                  value={selectedProvider}
+                  onValueChange={handleProviderChange}
+                  placeholder="Select provider..."
+                  searchPlaceholder="Search providers..."
+                  emptyText="No providers found"
+                  variant="ghost"
+                  size="sm"
+                  className="min-w-0 sm:max-w-48"
+                />
+                <Combobox
+                  options={modelOptions}
+                  value={selectedModel}
+                  onValueChange={setSelectedModelId}
+                  placeholder="Select model..."
+                  searchPlaceholder="Search models..."
+                  emptyText="No models found"
+                  variant="ghost"
+                  size="sm"
+                  className="min-w-0 sm:max-w-64"
+                />
+              </div>
+            ) : (
+              <div />
+            )}
             <Button
               type="submit"
               variant="default"

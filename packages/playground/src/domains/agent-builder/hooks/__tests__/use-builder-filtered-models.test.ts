@@ -79,6 +79,17 @@ describe('useBuilderFilteredProviders', () => {
     });
   });
 
+  describe('when the available set is still loading', () => {
+    it('keeps providers visible until the authoritative list resolves', () => {
+      server.use(http.get(`${BASE_URL}/api/editor/builder/models/available`, () => new Promise<never>(() => {})));
+      const policy: BuilderModelPolicy = { active: true, pickerVisible: true, allowed: [{ provider: 'openai' }] };
+
+      const { result } = renderHook(() => useBuilderFilteredProviders(providers, policy), { wrapper: createWrapper() });
+
+      expect(result.current).toEqual(providers);
+    });
+  });
+
   describe('when only specific models are in the available set', () => {
     it('narrows models within a provider to the available set', async () => {
       setAvailable([

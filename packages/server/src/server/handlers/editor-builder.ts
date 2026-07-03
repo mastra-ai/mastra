@@ -9,7 +9,11 @@ import {
 } from '../schemas/editor-builder';
 import type { AgentFeatures, InfrastructureStatus } from '../schemas/editor-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
+import {
+  resolveBuilderModelPolicy,
+  resolveBuilderModelPolicyFromBuilder,
+  resolvePickerVisibility,
+} from '../utils/resolve-builder-model-policy';
 import { buildProvidersList } from './agents';
 import { handleError } from './error';
 
@@ -129,12 +133,6 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
       const agentKeyMap = toResponseKey(agentAliases, 'id');
       const workflowKeyMap = toResponseKey(workflowAliases, 'key');
 
-      // Lazy-load the EE subpath so this module remains importable on
-      // `@mastra/core` versions that pre-date it (added in core 1.34.0).
-      // We only reach here after `builder.enabled` is true, which guarantees
-      // a compatible core.
-      const { builderToModelPolicy, resolvePickerVisibility } = await import('@mastra/core/agent-builder/ee');
-
       const picker = resolvePickerVisibility({
         config: configuration?.agent,
         registeredToolIds: toolAliases.flatMap(a => [a.id, a.key]),
@@ -162,7 +160,7 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
         enabled: true,
         features: builder.getFeatures(),
         configuration,
-        modelPolicy: builderToModelPolicy(builder),
+        modelPolicy: resolveBuilderModelPolicyFromBuilder(builder),
         picker: {
           visibleTools: normalize(picker.visibleTools, toolKeyMap),
           visibleAgents: normalize(picker.visibleAgents, agentKeyMap),

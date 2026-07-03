@@ -1,6 +1,7 @@
 import type { BuilderModelPolicy } from '@mastra/client-js';
 import { FALLBACK_MODEL } from './constants';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
+import { providerMatches } from '@/domains/llm/hooks/use-filtered-models';
 
 export type StarterModel = {
   provider: string;
@@ -23,7 +24,17 @@ export type StarterModel = {
  */
 export const resolveStarterModel = (allowedModels: ModelInfo[], policy?: BuilderModelPolicy): StarterModel => {
   if (policy?.active && policy.default) {
-    return { provider: policy.default.provider, name: policy.default.modelId };
+    const matchingAllowedModel = allowedModels.find(
+      model =>
+        model.model === policy.default?.modelId &&
+        (providerMatches(model.provider, policy.default.provider) ||
+          providerMatches(policy.default.provider, model.provider)),
+    );
+
+    return {
+      provider: matchingAllowedModel?.provider ?? policy.default.provider,
+      name: policy.default.modelId,
+    };
   }
 
   const first = allowedModels[0];

@@ -1,12 +1,15 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import { MastraModelGateway } from '../llm/model/gateways/base';
 import type { ProviderConfig } from '../llm/model/gateways/base';
+import { GatewayRegistry } from '../llm/model/provider-registry';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import { RequestContext } from '../request-context';
 import { Mastra } from './index';
+
+const originalEnv = { ...process.env };
 
 class Gateway1 extends MastraModelGateway {
   readonly id = 'g1';
@@ -139,7 +142,14 @@ class TestGateway extends MastraModelGateway {
 
 describe('Mastra Custom Gateway Integration', () => {
   beforeEach(() => {
+    process.env = { ...originalEnv };
     process.env.TEST_API_KEY = 'test-api-key-123';
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    vi.restoreAllMocks();
   });
 
   describe('Mastra Configuration', () => {
@@ -176,6 +186,18 @@ describe('Mastra Custom Gateway Integration', () => {
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
       expect(gateways?.test).toBe(testGateway);
+    });
+
+    it('should skip dev gateway registry sync when explicitly disabled', async () => {
+      process.env.MASTRA_DEV = 'true';
+      process.env.MASTRA_DISABLE_GATEWAY_REGISTRY_SYNC = 'true';
+      const syncSpy = vi.spyOn(GatewayRegistry.prototype, 'syncGateways').mockResolvedValue();
+      const mastra = new Mastra();
+
+      mastra.addGateway(new TestGateway(), 'test');
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(syncSpy).not.toHaveBeenCalled();
     });
 
     it('should support multiple gateways', () => {

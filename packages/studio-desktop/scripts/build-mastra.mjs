@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,6 +7,9 @@ const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = findWorkspaceRoot(packageRoot);
 const cliEntry = workspaceRoot ? join(workspaceRoot, 'packages/cli/dist/index.js') : undefined;
 const editorEntry = workspaceRoot ? join(workspaceRoot, 'packages/editor/dist/index.js') : undefined;
+const outputDir = join(packageRoot, '.mastra/output');
+const outputPackageJson = join(outputDir, 'package.json');
+const desktopRuntimeDependencies = ['p-retry'];
 const mastraBuildEnv = {
   ...process.env,
   MASTRA_TELEMETRY_DISABLED: process.env.MASTRA_TELEMETRY_DISABLED ?? '1',
@@ -42,6 +45,64 @@ function runPnpm(args) {
   });
 }
 
+function runPnpmInOutput(args) {
+  const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+  run(pnpmBin, args, {
+    cwd: outputDir,
+    env: process.env,
+    stdio: 'inherit',
+  });
+}
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+function getRuntimeDependencyVersion(dependencyName) {
+  const sourcePackageJsonPaths = [
+    workspaceRoot ? join(workspaceRoot, 'packages/core/package.json') : undefined,
+    join(packageRoot, 'package.json'),
+  ].filter(Boolean);
+
+  for (const packageJsonPath of sourcePackageJsonPaths) {
+    if (!existsSync(packageJsonPath)) continue;
+
+    const packageJson = readJson(packageJsonPath);
+    const version = packageJson.dependencies?.[dependencyName] ?? packageJson.devDependencies?.[dependencyName];
+    if (version) return version;
+  }
+
+  throw new Error(`Could not resolve version for desktop runtime dependency "${dependencyName}"`);
+}
+
+function ensureDesktopRuntimeDependencies() {
+  if (!existsSync(outputPackageJson)) {
+    throw new Error(`Mastra build did not create ${outputPackageJson}`);
+  }
+
+  const packageJson = readJson(outputPackageJson);
+  packageJson.dependencies ??= {};
+
+  let shouldInstall = false;
+
+  for (const dependencyName of desktopRuntimeDependencies) {
+    if (!packageJson.dependencies[dependencyName]) {
+      packageJson.dependencies[dependencyName] = getRuntimeDependencyVersion(dependencyName);
+      shouldInstall = true;
+    }
+
+    if (!existsSync(join(outputDir, 'node_modules', dependencyName, 'package.json'))) {
+      shouldInstall = true;
+    }
+  }
+
+  writeFileSync(outputPackageJson, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+  if (shouldInstall) {
+    runPnpmInOutput(['install', '--prod', '--ignore-scripts', '--no-frozen-lockfile']);
+  }
+}
+
 if (workspaceRoot && editorEntry && !existsSync(editorEntry)) {
   runPnpm(['--filter', '@mastra/editor', 'build']);
 }
@@ -64,3 +125,5 @@ if (cliEntry && existsSync(cliEntry)) {
     stdio: 'inherit',
   });
 }
+
+ensureDesktopRuntimeDependencies();

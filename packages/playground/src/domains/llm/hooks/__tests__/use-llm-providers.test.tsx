@@ -118,6 +118,57 @@ describe('useLLMProviders', () => {
       ]);
     });
 
+    it('keeps server providers after the local Ollama provider', async () => {
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+
+      server.use(
+        http.get(`${BASE_URL}/api/agents/providers`, () =>
+          HttpResponse.json({
+            providers: [
+              {
+                connected: false,
+                envVar: 'OPENAI_API_KEY',
+                id: 'openai',
+                models: ['gpt-4o-mini'],
+                name: 'OpenAI',
+              },
+              {
+                connected: false,
+                envVar: 'ANTHROPIC_API_KEY',
+                id: 'anthropic',
+                models: ['claude-opus-4-7'],
+                name: 'Anthropic',
+              },
+            ],
+          }),
+        ),
+        http.get('*/__desktop/state', () =>
+          HttpResponse.json({
+            runtime: { state: 'running', url: 'http://127.0.0.1:4111' },
+            settings: {
+              environmentVariables: {},
+              modelApiKey: 'ollama',
+              modelId: 'glm-ocr:latest',
+              modelUrl: 'http://localhost:11434/v1',
+            },
+          }),
+        ),
+        http.post('*/__desktop/probe-models', () =>
+          HttpResponse.json({
+            ok: true,
+            modelUrl: 'http://localhost:11434/v1',
+            models: ['glm-ocr:latest'],
+          }),
+        ),
+      );
+
+      const { result } = renderHook(() => useLLMProviders(), { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(result.current.data?.providers.map(provider => provider.id)).toEqual(['ollama', 'openai', 'anthropic']),
+      );
+    });
+
     it('replaces prefixed desktop gateway providers with the unprefixed local provider', async () => {
       window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
 

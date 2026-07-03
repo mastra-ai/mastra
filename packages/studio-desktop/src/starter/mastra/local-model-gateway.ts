@@ -66,10 +66,26 @@ export function getDesktopModelAllowlistEntry(config: DesktopModelConfig = getDe
   };
 }
 
+export function getDesktopGatewayProviderId(config: DesktopModelConfig = getDesktopModelConfig()) {
+  return `desktop-local/${config.providerId}`;
+}
+
+export function getDesktopModelAllowlistEntries(
+  config: DesktopModelConfig = getDesktopModelConfig(),
+): ProviderModelEntry[] {
+  return [
+    getDesktopModelAllowlistEntry(config),
+    {
+      kind: 'custom',
+      provider: getDesktopGatewayProviderId(config),
+    },
+  ];
+}
+
 export function getDesktopDefaultModelEntry(config: DesktopModelConfig = getDesktopModelConfig()): DefaultModelEntry {
   return {
     kind: 'custom',
-    provider: config.providerId,
+    provider: getDesktopGatewayProviderId(config),
     modelId: config.modelId,
   };
 }

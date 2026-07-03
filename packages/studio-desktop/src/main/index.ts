@@ -4,7 +4,8 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell, WebContentsView } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell, WebContentsView } from 'electron';
+import type { WebContents } from 'electron';
 import type {
   CreateDevTabInput,
   CreateManagedTabInput,
@@ -14,17 +15,19 @@ import type {
   PlatformState,
 } from '../shared/types';
 import { DEFAULT_RUNTIME_PORT, DEFAULT_STUDIO_PORT, LOCALHOST } from './defaults';
+import { buildEditableContextMenuTemplate, EDIT_MENU_TEMPLATE } from './edit-menu';
+import { buildFocusedTextInsertionScript } from './edit-paste';
+import { editCommandForKeyboardInput } from './edit-shortcuts';
 import { probeLmStudioModels, probeLocalModels } from './lmstudio';
 import { probeMastraServer } from './local-dev';
 import { LogBuffer } from './log-buffer';
 import { applyManagedStudioRoute } from './managed-route';
 import { resolveAppIconPath, resolveStarterOutputPath, resolveStudioDistPath } from './paths';
 import {
-  buildHostedStudioLoginUrl,
   buildPlatformCliLoginUrl,
   fetchPlatformProjects,
+  hostedStudioExternalNavigationUrl,
   hostedStudioOrigin,
-  isHostedStudioAuthNavigation,
   normalizePlatformBaseUrl,
   refreshPlatformAccessToken,
   shouldAttachPlatformAuthorization,
@@ -136,22 +139,49 @@ function externalNavigationUrl(tab: DesktopTab | undefined, requestUrl: string) 
   }
 
   if (tab?.kind !== 'platform' || !tab.sourceUrl) return undefined;
-
-  if (isHostedStudioAuthNavigation(requestUrl, tab.sourceUrl)) {
-    return buildHostedStudioLoginUrl(currentSettings.platformBaseUrl, tab.sourceUrl);
-  }
-
-  try {
-    const requestOrigin = new URL(requestUrl).origin;
-    const studioOrigin = hostedStudioOrigin(tab.sourceUrl);
-    return requestOrigin === studioOrigin ? undefined : requestUrl;
-  } catch {
-    return requestUrl;
-  }
+  return hostedStudioExternalNavigationUrl(requestUrl, tab.sourceUrl);
 }
 
 function isNavigationAbortError(error: unknown) {
   return error instanceof Error && error.message.includes('ERR_ABORTED');
+}
+
+function installEditableContextMenu(webContents: WebContents) {
+  webContents.on('before-input-event', (event, input) => {
+    const command = editCommandForKeyboardInput(input);
+    if (!command) return;
+
+    void pasteClipboardText(webContents);
+    event.preventDefault();
+  });
+
+  webContents.on('context-menu', (_event, params) => {
+    const template = buildEditableContextMenuTemplate({
+      ...params,
+      onPaste: () => {
+        void pasteClipboardText(webContents);
+      },
+      onPasteAndMatchStyle: () => {
+        void pasteClipboardText(webContents);
+      },
+    });
+    if (template.length === 0) return;
+
+    Menu.buildFromTemplate(template).popup({
+      ...(mainWindow && !mainWindow.isDestroyed() ? { window: mainWindow } : {}),
+    });
+  });
+}
+
+async function pasteClipboardText(webContents: WebContents) {
+  const text = clipboard.readText();
+  if (!text) {
+    webContents.paste();
+    return;
+  }
+
+  const inserted = await webContents.executeJavaScript(buildFocusedTextInsertionScript(text), true).catch(() => false);
+  if (!inserted) webContents.paste();
 }
 
 function createStudioContentView() {
@@ -164,10 +194,17 @@ function createStudioContentView() {
     },
   });
   view.setBackgroundColor('#101113');
+  installEditableContextMenu(view.webContents);
   installStudioWebRequestHandlers(view);
 
   view.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    const tab = tabForWebContents(view.webContents.id);
+    const externalUrl = externalNavigationUrl(tab, url);
+    if (tab?.kind === 'platform' && !externalUrl) {
+      void view.webContents.loadURL(url);
+    } else {
+      void shell.openExternal(externalUrl ?? url);
+    }
     return { action: 'deny' };
   });
   view.webContents.on('will-navigate', event => {
@@ -632,9 +669,6 @@ async function createPlatformTab(projectId: string) {
   }
 
   const studioUrl = normalizeServerUrl(project.instanceUrl);
-  const loginUrl = buildHostedStudioLoginUrl(currentSettings.platformBaseUrl, studioUrl);
-  await shell.openExternal(loginUrl);
-  logs.add(`Opened hosted Studio sign-in in the browser for ${studioUrl}`);
   platformStudioOrigins.add(hostedStudioOrigin(studioUrl));
   upsertTab({
     id: randomUUID(),
@@ -670,7 +704,7 @@ async function refreshPlatform() {
       result = await fetchPlatformProjects(platformSession);
     } catch (error) {
       platformSession = await refreshPlatformAccessToken(platformSession);
-      await writePlatformSession(platformSessionPath, platformSession, safeStorage);
+      await writePlatformSession(platformSessionPath, platformSession);
       result = await fetchPlatformProjects(platformSession);
       if (error instanceof Error) {
         logs.add(`Platform token refreshed after request failure: ${error.message}`);
@@ -681,7 +715,7 @@ async function refreshPlatform() {
       ...platformSession,
       organizationId: result.organizationId,
     };
-    await writePlatformSession(platformSessionPath, platformSession, safeStorage);
+    await writePlatformSession(platformSessionPath, platformSession);
     currentSettings = await updateSettings(settingsPath, {
       platformBaseUrl: platformSession.baseUrl,
       platformOrganizationId: result.organizationId,
@@ -781,7 +815,7 @@ async function startPlatformLogin() {
 
   await shell.openExternal(buildPlatformCliLoginUrl(currentSettings.platformBaseUrl, port, state));
   platformSession = await callback;
-  await writePlatformSession(platformSessionPath, platformSession, safeStorage);
+  await writePlatformSession(platformSessionPath, platformSession);
   return refreshPlatform();
 }
 
@@ -956,6 +990,7 @@ async function loadMainWindow() {
     void shell.openExternal(url);
     return { action: 'deny' };
   });
+  installEditableContextMenu(mainWindow.webContents);
 
   mainWindow.webContents.on('console-message', details => {
     const source = details.sourceId ? ` (${details.sourceId}:${details.lineNumber})` : '';
@@ -1019,6 +1054,7 @@ function installMenu() {
         { role: 'quit' },
       ],
     },
+    EDIT_MENU_TEMPLATE,
     {
       label: 'Model',
       submenu: [
@@ -1185,7 +1221,7 @@ async function boot() {
   currentSettings = await readSettings(settingsPath);
   currentSettings = await writeSettings(settingsPath, currentSettings);
   platformState = defaultPlatformState(currentSettings.platformBaseUrl);
-  platformSession = await readPlatformSession(platformSessionPath, safeStorage).catch(error => {
+  platformSession = await readPlatformSession(platformSessionPath).catch(error => {
     logs.add(`Unable to read saved Platform session: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   });

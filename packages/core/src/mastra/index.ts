@@ -5159,6 +5159,13 @@ export class Mastra<
         return;
       }
 
+      if (
+        process.env.MASTRA_DISABLE_GATEWAY_REGISTRY_SYNC === 'true' ||
+        process.env.MASTRA_DISABLE_GATEWAY_REGISTRY_SYNC === '1'
+      ) {
+        return;
+      }
+
       // Trigger sync immediately (non-blocking, but logs progress)
       import('../llm/model/provider-registry.js')
         .then(async ({ GatewayRegistry }) => {

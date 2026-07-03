@@ -4,7 +4,6 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useMemo } from 'react';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
 import { useLLMProviders } from '../hooks/use-llm-providers';
-import { useBuilderFilteredModels, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMModelsProps {
   value: string;
@@ -34,13 +33,10 @@ export const LLMModels = ({
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const providers = dataProviders?.providers || [];
 
-  // Get all models flattened, then drop any disallowed by admin policy
-  const policy = useBuilderModelPolicy();
   const allModels = useAllModels(providers);
-  const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
 
   // Filter models by provider
-  const filteredModels = useFilteredModels(policyAllowedModels, llmId, '', false);
+  const filteredModels = useFilteredModels(allModels, llmId, '', false);
 
   // Create model options
   const modelOptions: ComboboxOption[] = useMemo(() => {

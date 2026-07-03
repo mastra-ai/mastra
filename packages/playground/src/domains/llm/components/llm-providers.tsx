@@ -9,7 +9,6 @@ import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { cleanProviderId, findProviderById } from '../utils';
 import { ProviderLogo } from './provider-logo';
-import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMProvidersProps {
   value: string;
@@ -35,12 +34,7 @@ export const LLMProviders = ({
   disabled,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const allProviders = dataProviders?.providers || [];
-
-  // Apply admin model policy first (drops disallowed providers entirely),
-  // then sort: connected -> popular -> alphabetical
-  const policy = useBuilderModelPolicy();
-  const providers = useBuilderFilteredProviders(allProviders, policy);
+  const providers = dataProviders?.providers || [];
   const sortedProviders = useFilteredProviders(providers, '', false);
 
   // Create provider options with icons

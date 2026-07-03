@@ -157,6 +157,55 @@ describe('useAgentBuilderAllowedModels', () => {
       ]);
     });
 
+    it('adds configured Anthropic models alongside the local Ollama provider', async () => {
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+      server.use(
+        http.get(MODELS_URL, () =>
+          HttpResponse.json(
+            availableModelsResponse([
+              {
+                id: 'anthropic',
+                name: 'Anthropic',
+                envVar: 'ANTHROPIC_API_KEY',
+                connected: true,
+                models: ['claude-opus-4-7'],
+              },
+            ]),
+          ),
+        ),
+        http.get('*/__desktop/state', () =>
+          HttpResponse.json({
+            runtime: { state: 'running', url: 'http://127.0.0.1:4112' },
+            settings: {
+              environmentVariables: {
+                ANTHROPIC_API_KEY: 'sk-ant-local',
+              },
+              modelApiKey: 'ollama',
+              modelId: 'glm-ocr:latest',
+              modelUrl: 'http://localhost:11434/v1',
+            },
+          }),
+        ),
+        http.post('*/__desktop/probe-models', () =>
+          HttpResponse.json({
+            ok: true,
+            modelUrl: 'http://localhost:11434/v1',
+            models: ['glm-ocr:latest'],
+          }),
+        ),
+      );
+
+      const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(result.current.providers.map(provider => provider.id)).toEqual(['ollama', 'anthropic']),
+      );
+      expect(result.current.models).toEqual([
+        { provider: 'ollama', providerName: 'Ollama Local', model: 'glm-ocr:latest' },
+        { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-opus-4-7' },
+      ]);
+    });
+
     it('refreshes a cached LM Studio state before probing models', async () => {
       const stateRequests = vi.fn<() => void>();
       const probeRequests: unknown[] = [];

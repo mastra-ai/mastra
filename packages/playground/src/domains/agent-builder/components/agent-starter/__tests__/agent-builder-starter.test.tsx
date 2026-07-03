@@ -297,7 +297,12 @@ describe('AgentBuilderStarter', () => {
         }),
       );
 
-      const { getByTestId } = renderStarter();
+      const { findByText, getAllByRole, getByTestId } = renderStarter();
+
+      expect(await findByText('Ollama Local')).toBeTruthy();
+      expect(await findByText('llama3.2')).toBeTruthy();
+      expect(getAllByRole('combobox')).toHaveLength(2);
+
       fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'build a local helper' } });
       await waitFor(() =>
         expect((getByTestId('agent-builder-starter-submit') as HTMLButtonElement).disabled).toBe(false),

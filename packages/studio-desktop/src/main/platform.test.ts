@@ -3,8 +3,8 @@ import {
   buildHostedStudioLoginUrl,
   buildPlatformCliLoginUrl,
   fetchPlatformProjects,
+  hostedStudioExternalNavigationUrl,
   hostedStudioOrigin,
-  isHostedStudioAuthNavigation,
   isLaunchableStudioStatus,
   refreshPlatformAccessToken,
   shouldAttachPlatformAuthorization,
@@ -50,15 +50,17 @@ describe('Platform desktop helpers', () => {
     expect(hostedStudioOrigin('http://localhost:4111/agents')).toBe('http://localhost:4111');
   });
 
-  it('detects hosted Studio auth navigations that must leave the embedded view', () => {
+  it('keeps hosted Studio same-origin navigations inside the embedded view', () => {
     const studioUrl = 'https://demo.studio.mastra.cloud';
 
-    expect(isHostedStudioAuthNavigation('https://demo.studio.mastra.cloud/sign-in', studioUrl)).toBe(true);
-    expect(isHostedStudioAuthNavigation('https://demo.studio.mastra.cloud/api/auth/sso/callback', studioUrl)).toBe(
-      true,
+    expect(hostedStudioExternalNavigationUrl('https://demo.studio.mastra.cloud/sign-in', studioUrl)).toBeUndefined();
+    expect(
+      hostedStudioExternalNavigationUrl('https://demo.studio.mastra.cloud/api/auth/sso/callback', studioUrl),
+    ).toBeUndefined();
+    expect(hostedStudioExternalNavigationUrl('https://demo.studio.mastra.cloud/agents', studioUrl)).toBeUndefined();
+    expect(hostedStudioExternalNavigationUrl('https://platform.mastra.ai/v1/auth/login', studioUrl)).toBe(
+      'https://platform.mastra.ai/v1/auth/login',
     );
-    expect(isHostedStudioAuthNavigation('https://demo.studio.mastra.cloud/agents', studioUrl)).toBe(false);
-    expect(isHostedStudioAuthNavigation('https://platform.mastra.ai/v1/auth/login', studioUrl)).toBe(false);
   });
 
   it('only attaches Platform authorization to registered Studio origins', () => {
