@@ -221,7 +221,10 @@ async function selfClean(mastra: Mastra, scheduleId: string): Promise<void> {
   }
 }
 
-type LooseLogger = { error?: (message: string, ...args: any[]) => void };
+type LooseLogger = {
+  error?: (message: string, ...args: any[]) => void;
+  debug?: (message: string, ...args: any[]) => void;
+};
 
 /** Optional context the `AgentScheduleWorker` passes to `executeAgentSchedule`. */
 export interface ExecuteAgentScheduleContext {
@@ -278,9 +281,13 @@ export async function executeAgentSchedule(
     ).__getScheduleHooks?.() ?? undefined;
 
   // Build a partial `AgentSchedule` view for hook contexts. Best-effort —
-  // pulls from the live schedule row when available, otherwise from the
-  // event target. Either way the hook gets `id`, `agentId`, and `name`.
-  const scheduleRef = await loadScheduleRef(mastra, scheduleId, target);
+  // pulls from the live schedule row when hooks are configured (so they see
+  // fresh fields), otherwise a cheap projection from the event target. The
+  // ref is only ever passed to hooks, so hookless fires skip the extra
+  // storage round-trip entirely.
+  const scheduleRef = hooks
+    ? await loadScheduleRef(mastra, scheduleId, target, log)
+    : scheduleRefFromTarget(scheduleId, target);
 
   const rowDefaults: ScheduleEffective = buildEffectiveFromTarget(target);
 
@@ -633,13 +640,24 @@ async function loadScheduleRef(
   mastra: Mastra,
   scheduleId: string,
   target: Extract<ScheduleTarget, { type: 'agent' }>,
+  logger?: LooseLogger,
 ): Promise<{ id: string; agentId: string; name?: string; [key: string]: unknown }> {
   try {
     const schedule = await mastra.schedules.get(scheduleId);
     if (schedule && schedule.agentId !== undefined) return { ...schedule, agentId: schedule.agentId };
-  } catch {
-    // ignore — fall back to a minimal projection from the event target
+  } catch (err) {
+    // Fall back to a minimal projection from the event target, but surface
+    // the failure so a persistently-broken schedules store isn't invisible.
+    logger?.debug?.('AgentScheduleWorker: failed to load schedule row for hook context', { scheduleId, error: err });
   }
+  return scheduleRefFromTarget(scheduleId, target);
+}
+
+/** Minimal hook-context projection built from the fire event's target. */
+function scheduleRefFromTarget(
+  scheduleId: string,
+  target: Extract<ScheduleTarget, { type: 'agent' }>,
+): { id: string; agentId: string; name?: string } {
   return {
     id: scheduleId,
     agentId: target.agentId,

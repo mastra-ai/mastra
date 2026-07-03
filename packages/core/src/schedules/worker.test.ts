@@ -33,6 +33,8 @@ function makeMastra(
     agent?: any;
     storage?: ReturnType<typeof makeStorage>;
     agentThrows?: boolean;
+    hooks?: any;
+    scheduleGet?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
   const storage = opts.storage ?? makeStorage();
@@ -45,6 +47,8 @@ function makeMastra(
       return opts.agent;
     }),
     getLogger: () => ({ debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }),
+    ...(opts.hooks ? { __getScheduleHooks: () => opts.hooks } : {}),
+    ...(opts.scheduleGet ? { schedules: { get: opts.scheduleGet } } : {}),
   } as unknown as Mastra;
 }
 
@@ -95,6 +99,36 @@ describe('AgentScheduleWorker — executeAgentSchedule', () => {
 
     expect(result.status).toBe('invalid-input');
     expect(agent.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('skips the schedule-row lookup when no hooks are configured', async () => {
+    const scheduleGet = vi.fn(async () => null);
+    const agent = {
+      sendSignal: vi.fn(),
+      generate: vi.fn(async () => ({ text: 'ok' })),
+      getMemory: vi.fn(),
+    };
+    const mastra = makeMastra({ agent, scheduleGet });
+
+    await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(scheduleGet).not.toHaveBeenCalled();
+  });
+
+  it('loads the schedule row for hook context when hooks are configured', async () => {
+    const scheduleGet = vi.fn(async () => null);
+    const prepare = vi.fn(async () => undefined);
+    const agent = {
+      sendSignal: vi.fn(),
+      generate: vi.fn(async () => ({ text: 'ok' })),
+      getMemory: vi.fn(),
+    };
+    const mastra = makeMastra({ agent, scheduleGet, hooks: { prepare } });
+
+    await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
+
+    expect(scheduleGet).toHaveBeenCalledWith('agent_a1');
+    expect(prepare).toHaveBeenCalled();
   });
 
   it('calls sendSignal with defaults when threaded', async () => {
