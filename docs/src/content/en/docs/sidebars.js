@@ -182,7 +182,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workflows/agents-and-tools',
-              label: 'Agents & Tools',
+              label: 'Agents and Tools',
             },
             {
               type: 'doc',
@@ -192,7 +192,7 @@ const sidebars = {
             {
               type: 'doc',
               id: 'workflows/suspend-and-resume',
-              label: 'Suspend & Resume',
+              label: 'Suspend and Resume',
             },
             {
               type: 'doc',
