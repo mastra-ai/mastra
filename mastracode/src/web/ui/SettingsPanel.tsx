@@ -5,17 +5,9 @@ import type {
   PermissionRules,
   ToolCategory,
 } from '@mastra/client-js';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  Tab,
-  TabContent,
-  TabList,
-  Tabs,
-} from '@mastra/playground-ui';
-import type { Theme } from '@mastra/playground-ui';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Brain, Key, Layers, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
