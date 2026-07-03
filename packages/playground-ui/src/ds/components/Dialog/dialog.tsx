@@ -11,7 +11,7 @@ import './dialog.css';
 const Dialog = DialogPrimitive.Root;
 
 type DialogTriggerProps = DialogPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
@@ -29,7 +29,7 @@ DialogTrigger.displayName = 'DialogTrigger';
 const DialogPortal = DialogPrimitive.Portal;
 
 type DialogCloseProps = DialogPrimitive.Close.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
