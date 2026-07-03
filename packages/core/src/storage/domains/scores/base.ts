@@ -1,7 +1,15 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
-import type { StoragePagination } from '../../types';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData } from '../../../evals/types';
+import type {
+  ListScoresByEntityIdInput,
+  ListScoresByRunIdInput,
+  ListScoresByScorerIdInput,
+  ListScoresBySpanInput,
+  ScoreTenancyFilters,
+} from '../../types';
 import { StorageDomain } from '../base';
+
+export type { ScoreTenancyFilters };
 
 export abstract class ScoresStorage extends StorageDomain {
   constructor() {
@@ -19,47 +27,13 @@ export abstract class ScoresStorage extends StorageDomain {
 
   abstract saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }>;
 
-  abstract listScoresByScorerId({
-    scorerId,
-    pagination,
-    entityId,
-    entityType,
-    source,
-  }: {
-    scorerId: string;
-    pagination: StoragePagination;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-  }): Promise<ListScoresResponse>;
+  abstract listScoresByScorerId(input: ListScoresByScorerIdInput): Promise<ListScoresResponse>;
 
-  abstract listScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<ListScoresResponse>;
+  abstract listScoresByRunId(input: ListScoresByRunIdInput): Promise<ListScoresResponse>;
 
-  abstract listScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<ListScoresResponse>;
+  abstract listScoresByEntityId(input: ListScoresByEntityIdInput): Promise<ListScoresResponse>;
 
-  async listScoresBySpan({
-    traceId,
-    spanId,
-    pagination: _pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<ListScoresResponse> {
+  async listScoresBySpan({ traceId, spanId }: ListScoresBySpanInput): Promise<ListScoresResponse> {
     throw new MastraError({
       id: 'SCORES_STORAGE_GET_SCORES_BY_SPAN_NOT_IMPLEMENTED',
       domain: ErrorDomain.STORAGE,

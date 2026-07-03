@@ -129,7 +129,8 @@ export type EntityLearningLearningResponse = {
 };
 
 export type EntityLearningTopicsResponse = {
-  run: EntityLearningRunSummary;
+  /** Absent when the signal has no completed learning run yet. */
+  run?: EntityLearningRunSummary;
   topics: EntityLearningTopic[];
 };
 

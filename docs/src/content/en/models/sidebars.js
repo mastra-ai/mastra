@@ -363,6 +363,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kenari',
+          label: 'Kenari',
+        },
+        {
+          type: 'doc',
           id: 'providers/kilo',
           label: 'Kilo Gateway',
         },
@@ -648,6 +653,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-token-plan',
+          label: 'Tencent Token Plan',
+        },
+        {
+          type: 'doc',
           id: 'providers/tencent-tokenhub',
           label: 'Tencent TokenHub',
         },
@@ -665,6 +675,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/togetherai',
           label: 'Together AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/trustedrouter',
+          label: 'TrustedRouter',
         },
         {
           type: 'doc',

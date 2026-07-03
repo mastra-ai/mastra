@@ -1,4 +1,5 @@
 export * from './base';
+export * from './retention';
 export * from './types';
 export * from './constants';
 export * from './mock';

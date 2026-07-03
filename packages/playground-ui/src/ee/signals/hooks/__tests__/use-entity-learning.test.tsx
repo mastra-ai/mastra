@@ -10,7 +10,7 @@ import { entitiesResponse, pointsResponse, topicsResponse } from '../../services
 import { useEntities, useEntityPoints, useEntityTopics } from '../use-entity-learning';
 
 const BASE_URL = 'https://observability.test';
-const ROOT = `${BASE_URL}/entity-learning`;
+const ROOT = `${BASE_URL}/api/learning`;
 
 const server = setupServer();
 
@@ -30,7 +30,9 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
-  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
+  // The injected endpoint is the trace-ingest URL; the client must derive
+  // the query-service origin from it and call /api/learning on that origin.
+  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = `${BASE_URL}/v1/traces`;
   w.MASTRA_ORGANIZATION_ID = 'org-1';
   w.MASTRA_PLATFORM_PROJECT_ID = 'proj-1';
 });
@@ -78,18 +80,43 @@ describe('entity-learning hooks', () => {
   });
 
   describe('useEntityTopics', () => {
-    describe('when entityId, signalName and runId are all present', () => {
-      it('fetches the clusters for the signal run', async () => {
-        server.use(http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)));
+    describe('when a runId is provided', () => {
+      it('fetches the clusters for that run', async () => {
+        let capturedUrl: URL | undefined;
+        server.use(
+          http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+            capturedUrl = new URL(request.url);
+            return HttpResponse.json(topicsResponse);
+          }),
+        );
 
         const { result } = renderHook(() => useEntityTopics('entity_support', 'sentiment', '32'), { wrapper });
 
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(result.current.data).toEqual(topicsResponse);
+        expect(capturedUrl?.searchParams.get('runId')).toBe('32');
       });
     });
 
-    describe('when runId is missing', () => {
+    describe('when runId is omitted', () => {
+      it('fetches without a runId so the API resolves the latest run for the signal', async () => {
+        let capturedUrl: URL | undefined;
+        server.use(
+          http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+            capturedUrl = new URL(request.url);
+            return HttpResponse.json(topicsResponse);
+          }),
+        );
+
+        const { result } = renderHook(() => useEntityTopics('entity_support', 'sentiment'), { wrapper });
+
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(capturedUrl?.searchParams.get('signalName')).toBe('sentiment');
+        expect(capturedUrl?.searchParams.has('runId')).toBe(false);
+      });
+    });
+
+    describe('when entityId is missing', () => {
       it('stays disabled and does not fetch', async () => {
         const onTopics = vi.fn<() => void>();
         server.use(
@@ -99,7 +126,7 @@ describe('entity-learning hooks', () => {
           }),
         );
 
-        const { result } = renderHook(() => useEntityTopics('entity_support', 'sentiment', undefined), { wrapper });
+        const { result } = renderHook(() => useEntityTopics(undefined, 'sentiment'), { wrapper });
 
         await new Promise(resolve => setTimeout(resolve, 50));
         expect(result.current.fetchStatus).toBe('idle');
@@ -109,11 +136,13 @@ describe('entity-learning hooks', () => {
   });
 
   describe('useEntityPoints', () => {
-    it('forwards includeOutliers to the request', async () => {
+    it('forwards includeOutliers to the request and scopes via the project header', async () => {
       let capturedUrl: URL | undefined;
+      let capturedProjectHeader: string | null = null;
       server.use(
         http.get(`${ROOT}/entities/:entityId/points`, ({ request }) => {
           capturedUrl = new URL(request.url);
+          capturedProjectHeader = request.headers.get('X-Mastra-Project-Id');
           return HttpResponse.json(pointsResponse);
         }),
       );
@@ -125,7 +154,10 @@ describe('entity-learning hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(capturedUrl?.searchParams.get('includeOutliers')).toBe('true');
-      expect(capturedUrl?.searchParams.get('organizationId')).toBe('org-1');
+      // Scope comes from the session server-side; the client only narrows by
+      // project via the header, never query params.
+      expect(capturedUrl?.searchParams.has('organizationId')).toBe(false);
+      expect(capturedProjectHeader).toBe('proj-1');
     });
   });
 });

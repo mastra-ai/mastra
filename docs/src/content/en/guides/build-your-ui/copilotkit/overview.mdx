@@ -1,0 +1,327 @@
+---
+title: "Using CopilotKit | Frameworks"
+description: "Learn how to integrate CopilotKit with Mastra"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Using CopilotKit
+
+[CopilotKit](https://www.copilotkit.ai/) provides React components to quickly integrate customizable AI copilots into your application. Combined with Mastra, you can build sophisticated AI apps featuring bidirectional state synchronization and interactive UIs.
+
+CopilotKit talks to Mastra through the [AG-UI protocol](https://docs.ag-ui.com/). The `@ag-ui/mastra` package exposes your Mastra agents as an AG-UI endpoint, and CopilotKit's React hooks and components consume it. This unlocks a spectrum of experiences on top of ordinary chat: [generative UI, human-in-the-loop, and frontend tools](/guides/build-your-ui/copilotkit/generative-ui), plus deploying the same agent to [messaging channels like Slack](/guides/build-your-ui/copilotkit/channels).
+
+Visit the [CopilotKit documentation](https://docs.copilotkit.ai/) to learn more about CopilotKit concepts, components, and advanced usage patterns.
+
+:::info
+
+For a full-stack integration approach where Mastra runs directly in your Next.js API routes, see the [CopilotKit Quickstart](https://docs.copilotkit.ai/mastra/quickstart) guide.
+
+:::
+
+:::tip
+
+Visit Mastra's ["UI Dojo"](https://ui-dojo.mastra.ai/) to see real-world examples of CopilotKit integrated with Mastra.
+
+:::
+
+## Integration guide
+
+Run Mastra as a standalone server and connect your Next.js frontend (with CopilotKit) to its API endpoints.
+
+<Steps>
+  <StepItem>
+    Set up your directory structure. A possible directory structure could look like this:
+
+    ```bash
+    project-root
+    ├── mastra-server
+    │   ├── src
+    │   │   └── mastra
+    │   └── package.json
+    └── my-copilot-app
+        └── package.json
+    ```
+
+    Bootstrap your Mastra server:
+
+    ```bash npm2yarn
+    npx create-mastra@latest
+    ```
+
+    This command opens an interactive wizard that scaffolds a new Mastra project. Follow the prompts to create your server project.
+
+    Navigate to your newly created Mastra server directory:
+
+    ```bash
+    cd mastra-server # Replace with the actual directory name you provided
+    ```
+
+    You now have a basic Mastra server project ready.
+
+    :::note
+
+    Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
+
+    :::
+  </StepItem>
+
+  <StepItem>
+    Create a chat route for the CopilotKit frontend by using the `registerCopilotKit()` helper from `@ag-ui/mastra`. Add it to your Mastra project (and its peer dependencies):
+
+    ```bash npm2yarn
+    npm install @ag-ui/mastra @mastra/client-js @mastra/core @ag-ui/core @ag-ui/client @copilotkit/runtime
+    ```
+
+    In your `src/mastra/index.ts` file, register the chat route:
+
+    ```typescript title="src/mastra/index.ts" {2,7-19}
+    import { Mastra } from '@mastra/core/mastra'
+    import { registerCopilotKit } from '@ag-ui/mastra/copilotkit'
+    // Rest of the imports...
+
+    export const mastra = new Mastra({
+      // Rest of the configuration...
+      server: {
+        cors: {
+          origin: '*',
+          allowMethods: ['*'],
+          allowHeaders: ['*'],
+        },
+        apiRoutes: [
+          registerCopilotKit({
+            path: '/copilotkit',
+            resourceId: 'weatherAgent',
+          }),
+        ],
+      },
+    })
+    ```
+
+    This exposes the agents on your Mastra instance at `/copilotkit` in a CopilotKit-compatible format. The frontend selects which agent to talk to with the `agent` prop shown below. Add the CORS configuration so the CopilotKit frontend can access the Mastra server. For production deployments, restrict CORS origins to your frontend domain.
+  </StepItem>
+
+  <StepItem>
+    Run the Mastra server using the following command:
+
+    ```bash npm2yarn
+    npm run dev
+    ```
+
+    By default, the Mastra server runs on `http://localhost:4111`. Keep this server running while you set up the CopilotKit frontend.
+  </StepItem>
+
+  <StepItem>
+    Go up one directory to your project root.
+
+    ```bash
+    cd ..
+    ```
+
+    Create a new Next.js project with the name `my-copilot-app`:
+
+    ```bash npm2yarn
+    npx create-next-app@latest my-copilot-app
+    ```
+
+    Navigate to your newly created Next.js project directory:
+
+    ```bash
+    cd my-copilot-app
+    ```
+  </StepItem>
+
+  <StepItem>
+    Install the CopilotKit UI packages which you'll use to display a chat interface:
+
+    ```bash npm2yarn
+    npm install @copilotkit/react-ui @copilotkit/react-core
+    ```
+
+    Open the home route of the Next.js app (usually `app/page.tsx` or `src/app/page.tsx`) and replace the existing contents with the following code to set up a basic CopilotKit chat interface:
+
+    ```typescript title="app/page.tsx"
+    import { CopilotChat } from '@copilotkit/react-ui'
+    import { CopilotKit } from '@copilotkit/react-core'
+    import '@copilotkit/react-ui/styles.css'
+
+    export default function Home() {
+      return (
+        <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="weatherAgent">
+          <CopilotChat
+            labels={{
+              title: 'Weather Agent',
+              initial: 'Hi! 👋 Ask me about the weather, forecasts, and climate.',
+            }}
+          />
+        </CopilotKit>
+      )
+    }
+    ```
+
+    The `agent` prop names the Mastra agent to route to. It must match a key in your Mastra instance's `agents` map.
+  </StepItem>
+
+  <StepItem>
+    Ensure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
+
+    ```bash npm2yarn
+    npm run dev
+    ```
+
+    Open the app in your browser and chat with your agent.
+  </StepItem>
+</Steps>
+
+Your CopilotKit frontend now communicates with a standalone Mastra agent server.
+
+## Chat UI options
+
+`CopilotChat` renders an inline, full-height chat. CopilotKit ships two other drop-in surfaces that share the same props:
+
+- `CopilotSidebar`: a collapsible panel docked to the side of your app.
+- `CopilotPopup`: a floating button that opens a chat window.
+
+Swap the component to change the surface. All three connect through the same `CopilotKit` provider:
+
+```typescript title="app/page.tsx"
+import { CopilotSidebar } from '@copilotkit/react-ui'
+import { CopilotKit } from '@copilotkit/react-core'
+import '@copilotkit/react-ui/styles.css'
+
+export default function Home() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="weatherAgent">
+      <CopilotSidebar
+        labels={{
+          title: 'Weather Agent',
+          initial: 'Hi! 👋 Ask me about the weather.',
+        }}
+      />
+      {/* your app */}
+    </CopilotKit>
+  )
+}
+```
+
+For fully custom chat UIs (bring your own components), see [CopilotKit's headless UI guide](https://docs.copilotkit.ai/).
+
+## App control and interactivity
+
+Beyond rendering agent output as UI (see [generative UI](/guides/build-your-ui/copilotkit/generative-ui)), CopilotKit lets the agent act on your application and pause for the user. Both patterns run against the same Mastra setup.
+
+### Frontend tools
+
+Give the agent the ability to act on your app. Register the tool on the frontend with `useFrontendTool`; the `handler` runs in the browser when the agent calls it:
+
+```tsx title="app/page.tsx"
+import { CopilotChat } from '@copilotkit/react-ui'
+import { CopilotKit, useFrontendTool } from '@copilotkit/react-core'
+
+function Chat() {
+  useFrontendTool({
+    name: 'colorChangeTool',
+    description: 'Changes the background color',
+    parameters: [
+      { name: 'color', type: 'string', description: 'The color to change to', required: true },
+    ],
+    handler: ({ color }) => {
+      document.body.style.setProperty('--background', color)
+    },
+  })
+
+  return <CopilotChat labels={{ title: 'Background Color Changer' }} />
+}
+
+export default function Page() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="bgColorAgent">
+      <Chat />
+    </CopilotKit>
+  )
+}
+```
+
+The matching Mastra agent is a normal agent instructed to call `colorChangeTool` with the requested color.
+
+### Human-in-the-loop
+
+Pause the agent mid-run and wait for the user to approve, edit, or reject before continuing. Use `useHumanInTheLoop`: its `render` function receives a `respond` callback, and the agent's run stays suspended until you call it.
+
+```tsx title="app/page.tsx"
+import { CopilotChat } from '@copilotkit/react-ui'
+import { CopilotKit, useHumanInTheLoop } from '@copilotkit/react-core'
+import { StepsFeedback } from '@/components/steps-feedback'
+
+function Chat() {
+  useHumanInTheLoop({
+    name: 'generate_task_steps',
+    description: 'Generates a list of steps for the user to perform',
+    parameters: [
+      {
+        name: 'steps',
+        type: 'object[]',
+        attributes: [
+          { name: 'description', type: 'string' },
+          { name: 'status', type: 'string', enum: ['enabled', 'disabled', 'executing'] },
+        ],
+      },
+    ],
+    available: 'enabled',
+    // `respond` resumes the agent with the user's edited selection.
+    render: ({ args, respond, status }) => (
+      <StepsFeedback args={args} respond={respond} status={status} />
+    ),
+  })
+
+  return <CopilotChat labels={{ title: 'Planning Agent' }} />
+}
+
+export default function Page() {
+  return (
+    <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="planningAgent">
+      <Chat />
+    </CopilotKit>
+  )
+}
+```
+
+Inside `StepsFeedback`, let the user toggle steps and then call `respond({ accepted: true, steps })` to resume the agent, or `respond({ accepted: false })` to reject. The agent reads the returned value and continues accordingly. See the full component in the [UI Dojo](https://ui-dojo.mastra.ai/).
+
+The example above uses a client tool: the agent calls `generate_task_steps` and the frontend fulfills it through `respond`. Mastra can also pause on the server, suspending a tool call before it executes so a human approves or supplies input. For that path, see Mastra's [Agent approval](/docs/agents/agent-approval) guide for the backend side and CopilotKit's [`useHumanInTheLoop`](https://docs.copilotkit.ai/reference/hooks/useHumanInTheLoop) reference for the frontend.
+
+## Configuration options
+
+Use these `registerCopilotKit()` options for the common integration points:
+
+| Option | Use it to |
+| - | - |
+| `path` | Set the route path, such as `/copilotkit`. |
+| `resourceId` | Scope Mastra memory for conversations. |
+| `cors` | Configure per-route CORS in addition to `server.cors`. |
+| `setContext` | Populate request context before agents run, such as auth or per-user resource IDs. |
+| `agents` | Provide pre-constructed AG-UI agents instead of the agents registered on the Mastra instance. |
+| `tracingOptions` | Forward Mastra tracing options to each agent run. |
+
+By default, the endpoint exposes every agent registered on the Mastra instance, and the frontend chooses one with the `agent` prop. Other CopilotKit runtime options are forwarded to the underlying runtime. For example, see [Open-ended generative UI](/guides/build-your-ui/copilotkit/generative-ui#open-ended) for `mcpApps`.
+
+## Deployment
+
+When deploying your Mastra server with CopilotKit, you must exclude `@copilotkit/runtime` from the bundle. This package contains dependencies that aren't compatible with bundling and will cause 500 errors if included.
+
+:::note
+
+This issue doesn't occur during development with `mastra dev` since it doesn't require bundling. However, anyone running `mastra build` for deployment will encounter this issue.
+
+:::
+
+Add the `@copilotkit/runtime` package to your bundler externals configuration:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    externals: ['@copilotkit/runtime'],
+  },
+})
+```

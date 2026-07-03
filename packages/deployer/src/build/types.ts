@@ -18,6 +18,11 @@ export interface DependencyMetadata {
    * The resolved version of the dependency (exact version from package.json)
    */
   version?: string;
+  /**
+   * The package.json dependency value to install when it differs from the resolved version.
+   * For npm aliases, this uses npm alias syntax (e.g. npm:actual-package@1.0.0).
+   */
+  packageSpec?: string;
 }
 
 export interface BundlerOptions {
@@ -35,4 +40,9 @@ export interface ExternalDependencyInfo {
    * The resolved version of the dependency (exact version from package.json)
    */
   version?: string;
+  /**
+   * The package.json dependency value to install when it differs from the resolved version.
+   * For npm aliases, this uses npm alias syntax (e.g. npm:actual-package@1.0.0).
+   */
+  packageSpec?: string;
 }

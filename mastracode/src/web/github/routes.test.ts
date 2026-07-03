@@ -181,7 +181,8 @@ vi.mock('../auth', async () => {
   };
 });
 
-import { mountGithubRoutes } from './routes';
+import { mountApiRoutes } from '../test-utils';
+import { buildGithubRoutes } from './routes';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -271,7 +272,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     }
     await next();
   });
-  mountGithubRoutes(app as any, { baseUrl: 'http://localhost:4111' });
+  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
   return app;
 }
 
@@ -302,7 +303,7 @@ afterEach(() => {
 describe('status route', () => {
   it('reports disabled without the feature', async () => {
     featureEnabled = false;
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/status');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
     expect(await res.json()).toMatchObject({ enabled: false, connected: false });
   });
 
@@ -314,7 +315,7 @@ describe('status route', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/status');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/status');
     const json = await res.json();
     expect(json.enabled).toBe(true);
     expect(json.connected).toBe(true);
@@ -324,7 +325,7 @@ describe('status route', () => {
 
 describe('auth scoping', () => {
   it('401s when no user is present', async () => {
-    const res = await buildApp(null).request('/api/web/github/repos');
+    const res = await buildApp(null).request('/web/github/repos');
     expect(res.status).toBe(401);
   });
 });
@@ -400,7 +401,7 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
@@ -420,7 +421,7 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'not-a-repo', repoId: 99, installationId: 7 }),
@@ -436,7 +437,7 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'octo/other-repo', installationId: 7 }),
@@ -452,7 +453,7 @@ describe('create project', () => {
       accountLogin: 'octo',
       accountType: 'User',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -466,7 +467,7 @@ describe('create project', () => {
   });
 
   it('404s when the installation is not owned by the user', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ repoFullName: 'octo/hello', repoId: 99, installationId: 7 }),
@@ -486,7 +487,7 @@ describe('ensure (materialize)', () => {
       repoFullName: 'octo/hello',
       sandboxWorkdir: '/workspace/hello',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects/p1/ensure', { method: 'POST' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(503);
     expect((await res.json()).error).toBe('sandbox_not_configured');
   });
@@ -501,7 +502,7 @@ describe('ensure (materialize)', () => {
       defaultBranch: 'main',
       sandboxWorkdir: '/workspace/hello',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects/p1/ensure', { method: 'POST' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ resourceId: 'p1', githubProjectId: 'p1' });
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
@@ -512,7 +513,7 @@ describe('ensure (materialize)', () => {
   });
 
   it('404s for a project the user does not own', async () => {
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects/missing/ensure', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/missing/ensure', {
       method: 'POST',
     });
     expect(res.status).toBe(404);
@@ -528,7 +529,7 @@ describe('ensure (materialize)', () => {
       defaultBranch: 'main',
       sandboxWorkdir: '/workspace/hello',
     });
-    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects/p1/ensure', {
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', {
       method: 'POST',
       headers: { Accept: 'text/event-stream' },
     });
@@ -579,14 +580,14 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp(null), '/api/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     expect(res.status).toBe(401);
   });
 
   it('503s when the sandbox is not configured', async () => {
     sandboxEnabled = false;
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(503);
@@ -594,7 +595,7 @@ describe('worktree route', () => {
 
   it('404s for a project owned by another org', async () => {
     seedMaterializedProject({ orgId: 'other-org' });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(404);
@@ -603,7 +604,7 @@ describe('worktree route', () => {
 
   it('400s on an invalid branch name', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
       branch: 'bad branch!',
     });
     expect(res.status).toBe(400);
@@ -612,7 +613,7 @@ describe('worktree route', () => {
 
   it('creates a worktree, persists a row, and returns the path', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/worktree', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -629,8 +630,8 @@ describe('worktree route', () => {
   it('upserts the worktree row on conflict instead of duplicating', async () => {
     seedMaterializedProject();
     const app = buildApp({ workosId: 'u1' });
-    await postJson(app, '/api/web/github/projects/p1/worktree', { branch: 'feat/x' });
-    await postJson(app, '/api/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     expect(tables.worktrees).toHaveLength(1);
   });
 });
@@ -638,7 +639,7 @@ describe('worktree route', () => {
 describe('commit route', () => {
   it('400s on an empty message', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
       message: '   ',
     });
     expect(res.status).toBe(400);
@@ -647,7 +648,7 @@ describe('commit route', () => {
 
   it('400s on an unknown worktreePath', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
       worktreePath: '/etc/passwd',
     });
@@ -657,7 +658,7 @@ describe('commit route', () => {
 
   it('commits on the base checkout when no worktreePath is given', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
     });
     expect(res.status).toBe(200);
@@ -677,7 +678,7 @@ describe('commit route', () => {
       baseBranch: 'main',
       worktreePath: '/workspace/worktrees/feat-x',
     });
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/commit', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/commit', {
       message: 'wip',
       worktreePath: '/workspace/worktrees/feat-x',
     });
@@ -689,7 +690,7 @@ describe('commit route', () => {
 describe('push route', () => {
   it('400s on an invalid branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/push', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'bad branch',
     });
     expect(res.status).toBe(400);
@@ -698,7 +699,7 @@ describe('push route', () => {
 
   it('mints a token and pushes the branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/push', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/push', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(200);
@@ -715,7 +716,7 @@ describe('push route', () => {
 describe('pr route', () => {
   it('400s on a missing title', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
     });
     expect(res.status).toBe(400);
@@ -724,7 +725,7 @@ describe('pr route', () => {
 
   it('400s on an invalid base branch', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       base: 'bad base',
       title: 'My PR',
@@ -735,7 +736,7 @@ describe('pr route', () => {
 
   it('opens a PR and returns its URL', async () => {
     seedMaterializedProject();
-    const res = await postJson(buildApp({ workosId: 'u1' }), '/api/web/github/projects/p1/pr', {
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/pr', {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',

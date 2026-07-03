@@ -89,4 +89,24 @@ const readableStream = await voice.speak(text, {
 })
 ```
 
-Check out the [Adding Voice to Agents](/docs/agents/adding-voice) documentation to learn how to use TTS in an agent.
+## Save speech output
+
+The `speak()` method returns an audio stream. Pipe the stream to a file when you need to save generated speech for later playback or processing:
+
+```typescript
+import { createWriteStream } from 'fs'
+import path from 'path'
+
+const audio = await agent.voice.speak('Hello, world!')
+const filePath = path.join(process.cwd(), 'agent.mp3')
+const writer = createWriteStream(filePath)
+
+audio.pipe(writer)
+
+await new Promise<void>((resolve, reject) => {
+  writer.on('finish', () => resolve())
+  writer.on('error', reject)
+})
+```
+
+For a broader overview of voice providers on agents, see [Voice in Mastra](/docs/voice/overview).

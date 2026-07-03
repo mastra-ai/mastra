@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  behaviorTopicsResponse,
   entitiesResponse,
   topicExamplesResponse,
   topicsResponse,
@@ -18,7 +19,7 @@ import { SignalDetailsPage } from '../signal-details-page';
 
 const BASE_URL = 'http://localhost:4111';
 const OBSERVABILITY_ENDPOINT = 'https://observability.test';
-const ROOT = `${OBSERVABILITY_ENDPOINT}/entity-learning`;
+const ROOT = `${OBSERVABILITY_ENDPOINT}/api/learning`;
 
 const server = setupServer();
 
@@ -286,6 +287,47 @@ describe('SignalDetailsPage', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Trace list' }));
       expect(await screen.findByRole('button', { name: /Search successes/, pressed: true })).not.toBeNull();
       expect(await screen.findByText('Example for search-1')).not.toBeNull();
+    });
+  });
+
+  describe('when the signal latest run differs from the entity-wide latestRunId', () => {
+    it('queries examples and points with the run resolved by /topics', async () => {
+      const capturedRunIds: { examples?: string | null; points?: string | null } = {};
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        // `behavior`'s latest run is '31'; entity_support.latestRunId is '32'.
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(behaviorTopicsResponse)),
+        http.get(`${ROOT}/entities/:entityId/topics/:topicId/examples`, ({ request }) => {
+          capturedRunIds.examples = new URL(request.url).searchParams.get('runId');
+          return HttpResponse.json({ ...topicExamplesResponse, runId: '31' });
+        }),
+        http.get(`${ROOT}/entities/:entityId/points`, ({ request }) => {
+          capturedRunIds.points = new URL(request.url).searchParams.get('runId');
+          return HttpResponse.json({ ...pointsResponse, runId: '31' });
+        }),
+      );
+
+      renderSignalDetailsPage({ signalId: 'behavior' });
+
+      expect(await screen.findByText('Repeated retries')).not.toBeNull();
+      await waitFor(() => expect(capturedRunIds.examples).toBe('31'));
+      await waitFor(() => expect(capturedRunIds.points).toBe('31'));
+    });
+  });
+
+  describe('when the signal has no completed learning run', () => {
+    it('shows the not-found fallback instead of crashing on the missing run', async () => {
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        // Matches the platform contract: no run for the signal → `{ topics: [] }`
+        // without a `run` field. Examples/points must stay disabled (any request
+        // to them would trip onUnhandledRequest: 'error').
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json({ topics: [] })),
+      );
+
+      renderSignalDetailsPage({ signalId: 'behavior' });
+
+      expect(await screen.findByText('Signal not found')).not.toBeNull();
     });
   });
 

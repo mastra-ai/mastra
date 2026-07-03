@@ -16,7 +16,7 @@ import {
 } from './fixtures/entity-learning';
 
 const BASE_URL = 'https://observability.test';
-const ROOT = `${BASE_URL}/entity-learning`;
+const ROOT = `${BASE_URL}/api/learning`;
 
 const server = setupServer();
 
@@ -25,10 +25,10 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 describe('createEntityLearningService', () => {
-  describe('when no org/project scoping is configured', () => {
+  describe('when no project scoping is configured', () => {
     const service = createEntityLearningService({ baseUrl: BASE_URL });
 
-    it('fetches typed entities from /entities', async () => {
+    it('fetches typed entities from /api/learning/entities', async () => {
       server.use(http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)));
 
       const result = await service.getEntities();
@@ -36,11 +36,13 @@ describe('createEntityLearningService', () => {
       expect(result).toEqual(entitiesResponse);
     });
 
-    it('does not append organizationId or projectId query params', async () => {
+    it('does not send scope query params or a project header', async () => {
       let capturedUrl: URL | undefined;
+      let capturedProjectHeader: string | null = null;
       server.use(
         http.get(`${ROOT}/entities`, ({ request }) => {
           capturedUrl = new URL(request.url);
+          capturedProjectHeader = request.headers.get('X-Mastra-Project-Id');
           return HttpResponse.json(entitiesResponse);
         }),
       );
@@ -49,31 +51,39 @@ describe('createEntityLearningService', () => {
 
       expect(capturedUrl?.searchParams.has('organizationId')).toBe(false);
       expect(capturedUrl?.searchParams.has('projectId')).toBe(false);
+      expect(capturedProjectHeader).toBeNull();
     });
   });
 
-  describe('when org and project scoping is configured', () => {
+  describe('when project scoping is configured', () => {
     const service = createEntityLearningService({
       baseUrl: `${BASE_URL}/`,
-      organizationId: 'org-1',
       projectId: 'proj-1',
     });
 
-    it('trims the trailing slash and scopes every request with org and project ids', async () => {
+    it('trims the trailing slash, sends the project header, and sends the session credentials', async () => {
       let capturedUrl: URL | undefined;
+      let capturedProjectHeader: string | null = null;
+      let capturedCredentials: RequestCredentials | undefined;
       server.use(
         http.get(`${ROOT}/entities`, ({ request }) => {
           capturedUrl = new URL(request.url);
+          capturedProjectHeader = request.headers.get('X-Mastra-Project-Id');
+          capturedCredentials = request.credentials;
           return HttpResponse.json(entitiesResponse);
         }),
       );
 
       await service.getEntities();
 
-      expect(capturedUrl?.pathname).toBe('/entity-learning/entities');
+      expect(capturedUrl?.pathname).toBe('/api/learning/entities');
       expect(capturedUrl?.origin).toBe(BASE_URL);
-      expect(capturedUrl?.searchParams.get('organizationId')).toBe('org-1');
-      expect(capturedUrl?.searchParams.get('projectId')).toBe('proj-1');
+      // Scope is resolved server-side from the session; only the project
+      // header narrows it. Query params must not carry scope.
+      expect(capturedUrl?.searchParams.has('organizationId')).toBe(false);
+      expect(capturedUrl?.searchParams.has('projectId')).toBe(false);
+      expect(capturedProjectHeader).toBe('proj-1');
+      expect(capturedCredentials).toBe('include');
     });
 
     it('passes signalName to /runs', async () => {
@@ -103,7 +113,7 @@ describe('createEntityLearningService', () => {
       const result = await service.getEntityRun('entity_support', '32', 'sentiment');
 
       expect(result).toEqual(runResponse);
-      expect(capturedUrl?.pathname).toBe('/entity-learning/entities/entity_support/runs/32');
+      expect(capturedUrl?.pathname).toBe('/api/learning/entities/entity_support/runs/32');
       expect(capturedUrl?.searchParams.get('signalName')).toBe('sentiment');
     });
 
@@ -151,6 +161,21 @@ describe('createEntityLearningService', () => {
       expect(capturedUrl?.searchParams.get('runId')).toBe('32');
     });
 
+    it('omits runId from /topics when not provided so the API resolves the latest run per signal', async () => {
+      let capturedUrl: URL | undefined;
+      server.use(
+        http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+          capturedUrl = new URL(request.url);
+          return HttpResponse.json(topicsResponse);
+        }),
+      );
+
+      await service.getEntityTopics('entity_support', 'sentiment');
+
+      expect(capturedUrl?.searchParams.get('signalName')).toBe('sentiment');
+      expect(capturedUrl?.searchParams.has('runId')).toBe(false);
+    });
+
     it('fetches a single topic by id', async () => {
       let capturedUrl: URL | undefined;
       server.use(
@@ -163,7 +188,7 @@ describe('createEntityLearningService', () => {
       const result = await service.getEntityTopic('entity_support', '89', 'sentiment', '32');
 
       expect(result).toEqual(topicResponse);
-      expect(capturedUrl?.pathname).toBe('/entity-learning/entities/entity_support/topics/89');
+      expect(capturedUrl?.pathname).toBe('/api/learning/entities/entity_support/topics/89');
     });
 
     it('passes limit to topic examples', async () => {
@@ -227,7 +252,7 @@ describe('createEntityLearningService', () => {
       });
 
       expect(result).toEqual(topicExamplesResponse);
-      expect(capturedUrl?.pathname).toBe('/entity-learning/entities/entity_support/outliers/examples');
+      expect(capturedUrl?.pathname).toBe('/api/learning/entities/entity_support/outliers/examples');
     });
   });
 

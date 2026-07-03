@@ -4,13 +4,12 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { readJSON } from 'fs-extra/esm';
 import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
-import { getPackageRootPath } from '../package-info';
+import { getPackageMetadata, getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
@@ -108,20 +107,14 @@ async function captureDependenciesToOptimize(
     let rootPath: string | null = null;
     let isWorkspace = false;
     let version: string | undefined;
+    let packageSpec: string | undefined;
 
     if (pkgName) {
-      rootPath = await getPackageRootPath(dependency, entryRootPath);
+      const metadata = await getPackageMetadata(dependency, entryRootPath);
+      rootPath = metadata.rootPath;
+      version = metadata.version;
+      packageSpec = metadata.packageSpec;
       isWorkspace = workspaceMap.has(pkgName);
-
-      // Read version from package.json when we have a valid rootPath
-      if (rootPath) {
-        try {
-          const pkgJson = await readJSON(`${rootPath}/package.json`);
-          version = pkgJson.version;
-        } catch {
-          // Failed to read package.json, version will remain undefined
-        }
-      }
     }
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
@@ -131,6 +124,7 @@ async function captureDependenciesToOptimize(
       rootPath: normalizedRootPath,
       isWorkspace,
       version,
+      packageSpec,
     });
   }
 
@@ -229,18 +223,14 @@ async function captureDependenciesToOptimize(
         // Try to resolve version for dynamic imports as well
         const pkgName = getPackageName(dynamicImport);
         let version: string | undefined;
+        let packageSpec: string | undefined;
         let rootPath: string | null = null;
 
         if (pkgName) {
-          rootPath = await getPackageRootPath(dynamicImport, entryRootPath);
-          if (rootPath) {
-            try {
-              const pkgJson = await readJSON(`${rootPath}/package.json`);
-              version = pkgJson.version;
-            } catch {
-              // Failed to read package.json
-            }
-          }
+          const metadata = await getPackageMetadata(dynamicImport, entryRootPath);
+          rootPath = metadata.rootPath;
+          version = metadata.version;
+          packageSpec = metadata.packageSpec;
         }
 
         depsToOptimize.set(dynamicImport, {
@@ -248,6 +238,7 @@ async function captureDependenciesToOptimize(
           rootPath: rootPath ? slash(rootPath) : null,
           isWorkspace: false,
           version,
+          packageSpec,
         });
       }
     }
