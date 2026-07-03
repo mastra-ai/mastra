@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createWorkflow as createDefaultWorkflow, createStep } from './index';
 
-describe('createWorkflow (default) — schedule promotion to evented', () => {
-  it('returns an evented workflow when a schedule is declared', () => {
+describe('createWorkflow (default) — schedules', () => {
+  it('retains default engine when a schedule is declared but exposes configs', () => {
     const step = createStep({
       id: 'noop',
       inputSchema: z.object({}),
@@ -20,13 +20,13 @@ describe('createWorkflow (default) — schedule promotion to evented', () => {
       .then(step)
       .commit();
 
-    expect(wf.engineType).toBe('evented');
+    expect(wf.engineType).toBe('default');
     // Sanity: the evented surface is reachable.
     expect(typeof (wf as any).getScheduleConfigs).toBe('function');
     expect((wf as any).getScheduleConfigs()).toHaveLength(1);
   });
 
-  it('preserves the default engine when no schedule is declared', () => {
+  it('preserves the default engine and returns empty schedule configs when no schedule is declared', () => {
     const step = createStep({
       id: 'noop',
       inputSchema: z.object({}),
@@ -42,11 +42,8 @@ describe('createWorkflow (default) — schedule promotion to evented', () => {
       .then(step)
       .commit();
 
-    // The default engineType is the empty-string default. The important assertion
-    // is that it is *not* 'evented'.
-    expect(wf.engineType).not.toBe('evented');
-    // Default workflows do not expose getScheduleConfigs.
-    expect((wf as any).getScheduleConfigs).toBeUndefined();
+    expect(wf.engineType).toBe('default');
+    expect(wf.getScheduleConfigs()).toEqual([]);
   });
 
   it('validates cron at construction time on the default factory', () => {
@@ -71,7 +68,34 @@ describe('createWorkflow (default) — schedule promotion to evented', () => {
       ],
     });
 
-    expect(wf.engineType).toBe('evented');
-    expect((wf as any).getScheduleConfigs()).toHaveLength(2);
+    expect(wf.engineType).toBe('default');
+    expect(wf.getScheduleConfigs()).toHaveLength(2);
+  });
+
+  it('executes in-process via DefaultExecutionEngine when started manually even with a schedule declared', async () => {
+    const step = createStep({
+      id: 'step1',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async () => ({ value: 'hello' }),
+    });
+
+    const wf = createDefaultWorkflow({
+      id: 'run-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      schedule: { cron: '*/5 * * * *' },
+    })
+      .then(step)
+      .commit();
+
+    expect(wf.engineType).toBe('default');
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: {} });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.result).toEqual({ value: 'hello' });
+    }
   });
 });
