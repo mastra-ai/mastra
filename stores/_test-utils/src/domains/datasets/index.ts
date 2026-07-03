@@ -79,7 +79,7 @@ export function createDatasetsTests({
 
       // -----------------------------------------------------------------------
       // Tenancy scoping — getDatasetById + deleteDataset MUST push tenancy
-      // predicates into the query. See MASTRA-4438.
+      // predicates into the query.
       // -----------------------------------------------------------------------
       describe('tenancy scoping', () => {
         it('getDatasetById returns null when organizationId does not match', async () => {

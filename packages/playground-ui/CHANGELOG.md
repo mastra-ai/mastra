@@ -1,5 +1,91 @@
 # @mastra/playground-ui
 
+## 39.0.0
+
+### Minor Changes
+
+- Removed named exports from the `@mastra/playground-ui` root entry. Import public APIs from exact package subpaths instead. ([#18791](https://github.com/mastra-ai/mastra/pull/18791))
+
+  **Before**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui';
+  ```
+
+  **After**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui/components/Button';
+  ```
+
+  `mastracode` now uses the exact subpath imports, and lint rules prevent new broad `@mastra/playground-ui` imports.
+
+- Removed the `Searchbar` component from `@mastra/playground-ui`. Compose search inputs with `InputGroup` instead so search remains a documented use case of the existing input composition primitive. ([#18727](https://github.com/mastra-ai/mastra/pull/18727))
+
+  **Before**
+
+  ```tsx
+  import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+
+  <Searchbar label="Search tools" placeholder="Search tools..." onSearch={setSearch} />;
+  ```
+
+  **After**
+
+  ```tsx
+  import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+  import { SearchIcon } from 'lucide-react';
+
+  <InputGroup variant="outline">
+    <InputGroupAddon align="inline-start">
+      <SearchIcon />
+    </InputGroupAddon>
+    <InputGroupInput
+      type="search"
+      aria-label="Search tools"
+      placeholder="Search tools..."
+      onChange={event => setSearch(event.target.value)}
+    />
+  </InputGroup>;
+  ```
+
+- **Signals now show live Entity-Learning data** ([#18699](https://github.com/mastra-ai/mastra/pull/18699))
+
+  The Signals page is no longer static. Select an agent reported by the platform and Signals fetches that agent's signals and their clusters live from the Entity-Learning API, replacing the previous hardcoded mock data. Each available signal loads its real clusters (topics) and traces, with a scatter-plot chart for the selected topics.
+
+  **What changed**
+  - Added an agent filter at the top of the Signals page, mirroring the traces filter, so you can inspect signals for any agent on the server.
+  - The Signals overview and details pages now render live Entity-Learning topics, examples, and points directly, with shape-matching skeletons while data loads, centered empty states, and explicit error states.
+  - Clicking a cluster card opens its topic by default, and the Signals breadcrumbs preserve the selected entity and topic query params on back-navigation.
+  - Signals detail navigation keeps selected clusters, trace examples, and chart filters in sync when moving between signals or entities.
+
+  **Gating**
+
+  Studio's served HTML exposes `MASTRA_ORGANIZATION_ID`, `MASTRA_PLATFORM_PROJECT_ID`, and `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT` to the browser so the Signals page can call the Entity-Learning API. The route is gated on the platform observability config, and the `MASTRA_SIGNALS_UI` flag guards the sidebar Signals nav link.
+
+### Patch Changes
+
+- Fixed the Signals page showing empty clusters for every signal except the most recently clustered one. Cluster queries no longer pin the entity-wide latest run id: the API resolves the latest run per signal, and the details page reuses the run resolved by the topics response for its examples and points queries. ([#18786](https://github.com/mastra-ai/mastra/pull/18786))
+
+- Fix the Signals (Agent Learning) client to call the platform query service's session-authenticated `/api/learning/*` routes instead of the internal `/entity-learning/*` output-service contract. The client now derives the query-service origin from the injected observability endpoint, sends the WorkOS session cookie via `credentials: 'include'`, and scopes reads with the `X-Mastra-Project-Id` header — matching the existing `/api/observability/*` auth pattern. Previously the Signals UI called an internal-only endpoint with no credentials, which 404'd on every hosted and local deployment. ([#18852](https://github.com/mastra-ai/mastra/pull/18852))
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb), [`9250acd`](https://github.com/mastra-ai/mastra/commit/9250acd1357f0f1f33d0dcca16f9655084c58eca), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`cc440a3`](https://github.com/mastra-ai/mastra/commit/cc440a39400d8ce06655462b26c1666a1b3d4320), [`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`ea6327b`](https://github.com/mastra-ai/mastra/commit/ea6327ba2d63ca647804bc97b347e03a58617162), [`3439fa8`](https://github.com/mastra-ai/mastra/commit/3439fa836ecfcaa257b40c20b30ac2a8be22e9ea), [`85107f2`](https://github.com/mastra-ai/mastra/commit/85107f2758b527147fccbedff962961927c2d3b8), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`06e2680`](https://github.com/mastra-ai/mastra/commit/06e26806b51d2cbd858afdc66daa2b86ff3ba64a), [`06ff9e0`](https://github.com/mastra-ai/mastra/commit/06ff9e0befd1d642ab87ff749285ee4091205c7e), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`7f5e1ff`](https://github.com/mastra-ai/mastra/commit/7f5e1ff695a92f672bb3976363925d1e9136b54a), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`b8375c1`](https://github.com/mastra-ai/mastra/commit/b8375c1f8fe905df8ae2ae9a893bb365f17aec4e), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`1240f05`](https://github.com/mastra-ai/mastra/commit/1240f051c8e5371f1c014448bf37b1a1b9a05e47), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`003f35d`](https://github.com/mastra-ai/mastra/commit/003f35d19e07b23b4bacc591c8bc0c59b42124ae), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b), [`1340fb7`](https://github.com/mastra-ai/mastra/commit/1340fb76262a3ca062130aa71859f07257a0a5a4)]:
+  - @mastra/core@1.49.0
+  - @mastra/client-js@1.30.0
+  - @mastra/memory@1.22.1
+  - @mastra/react@1.2.2
+
+## 39.0.0-alpha.5
+
+### Patch Changes
+
+- Fix the Signals (Agent Learning) client to call the platform query service's session-authenticated `/api/learning/*` routes instead of the internal `/entity-learning/*` output-service contract. The client now derives the query-service origin from the injected observability endpoint, sends the WorkOS session cookie via `credentials: 'include'`, and scopes reads with the `X-Mastra-Project-Id` header — matching the existing `/api/observability/*` auth pattern. Previously the Signals UI called an internal-only endpoint with no credentials, which 404'd on every hosted and local deployment. ([#18852](https://github.com/mastra-ai/mastra/pull/18852))
+
+- Updated dependencies [[`9250acd`](https://github.com/mastra-ai/mastra/commit/9250acd1357f0f1f33d0dcca16f9655084c58eca), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`06e2680`](https://github.com/mastra-ai/mastra/commit/06e26806b51d2cbd858afdc66daa2b86ff3ba64a), [`1240f05`](https://github.com/mastra-ai/mastra/commit/1240f051c8e5371f1c014448bf37b1a1b9a05e47), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748)]:
+  - @mastra/core@1.49.0-alpha.5
+  - @mastra/client-js@1.30.0-alpha.5
+  - @mastra/react@1.2.2-alpha.5
+
 ## 38.1.0-alpha.4
 
 ### Minor Changes
