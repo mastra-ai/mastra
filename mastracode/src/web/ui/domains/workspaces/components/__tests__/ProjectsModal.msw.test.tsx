@@ -10,7 +10,7 @@ import type { Project } from '../../index';
 import { ProjectsModal, useProjectsQuery } from '../../index';
 import { loadProjects, saveProjects } from '../../services/projects';
 
-const FS_URL = `${TEST_BASE_URL}/api/web/fs/list`;
+const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
 
 const alpha: Project = {
   id: 'p-alpha',

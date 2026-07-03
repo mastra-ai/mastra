@@ -2325,6 +2325,9 @@ importers:
       react-dom:
         specifier: ^19.2.5
         version: 19.2.6(react@19.2.6)
+      react-router:
+        specifier: ^7.13.1
+        version: 7.15.1(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       shiki:
         specifier: ^1.29.2
         version: 1.29.2

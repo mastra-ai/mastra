@@ -127,15 +127,33 @@ describe('mountWebAuth (disabled)', () => {
 describe('mountWebAuth gate (enabled)', () => {
   beforeEach(enableEnv);
 
-  it('redirects unauthenticated HTML navigation to login with returnTo', async () => {
+  it('redirects unauthenticated HTML navigation to /signin with returnTo', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
     const res = await app.request('/some/page', { headers: { Accept: 'text/html' } });
     expect(res.status).toBe(302);
     const location = res.headers.get('location') ?? '';
-    expect(location.startsWith('/auth/login?returnTo=')).toBe(true);
+    expect(location.startsWith('/signin?returnTo=')).toBe(true);
     expect(decodeURIComponent(location.split('returnTo=')[1]!)).toBe('/some/page');
+  });
+
+  it('lets unauthenticated HTML navigation reach /signin so the SPA can render the sign-in page', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/signin?returnTo=%2Fchat', { headers: { Accept: 'text/html' } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+  });
+
+  it('lets unauthenticated requests fetch static assets needed by the sign-in page', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/assets/app.js', { headers: { Accept: '*/*' } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
   });
 
   it('returns 401 JSON for unauthenticated /api requests', async () => {
