@@ -18,7 +18,7 @@ type ThreadRailPreviewState = {
   visible: boolean;
 };
 
-const PREVIEW_EXIT_DURATION_MS = 300;
+const PREVIEW_EXIT_DURATION_MS = 360;
 
 const DEFAULT_PREVIEW_STATE: ThreadRailPreviewState = {
   currentTurn: undefined,
@@ -266,11 +266,11 @@ function ThreadRailPreview({
   top: number;
 }) {
   const containerVisible = visible && (settled || Boolean(previousTurn));
-  const enteringLayerClassName = 'opacity-0 blur-sm';
-  const exitingLayerClassName = 'opacity-0 blur-sm';
-  const visibleLayerClassName = 'opacity-100 blur-none';
+  const enteringLayerClassName = 'scale-95 opacity-0 blur-sm';
+  const exitingLayerClassName = 'scale-95 opacity-0 blur-sm';
+  const visibleLayerClassName = 'scale-100 opacity-100 blur-none';
   const layerClassName =
-    'absolute inset-x-0 top-0 h-full transition-[opacity,filter] duration-slow ease-out-custom will-change-[opacity,filter] motion-reduce:blur-none motion-reduce:transition-none';
+    'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-[360ms] ease-out-custom will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
 
   return (
     <div
@@ -278,7 +278,7 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={visible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute left-full top-0 z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[translate,opacity] duration-slow ease-out-custom will-change-[translate,opacity] motion-reduce:transition-none',
+        'pointer-events-none absolute left-full top-0 z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[translate,opacity] duration-[360ms] ease-out-custom will-change-[translate,opacity] motion-reduce:transition-none',
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={{ translate: `0 calc(${top}px - 50%)` }}

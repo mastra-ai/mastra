@@ -194,13 +194,14 @@ describe('MessageScroller', () => {
     expect(firstTurn.getAttribute('aria-describedby')).toBe(previewId);
     expect(preview.className).toContain('overflow-hidden');
     expect(preview.className).toContain('transition-[translate,opacity]');
-    expect(preview.className).toContain('duration-slow');
+    expect(preview.className).toContain('duration-[360ms]');
     expect(preview.className).toContain('ease-out-custom');
     expect(preview.className).toContain('opacity-0');
     expect(preview.style.translate).toBe('0 calc(40px - 50%)');
     expect(viewport.className).not.toContain('overflow-hidden');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-slow');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-[360ms]');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('ease-out-custom');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-sm');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('First turn')).toBeTruthy();
 
@@ -210,6 +211,7 @@ describe('MessageScroller', () => {
     expect(secondTurn.getAttribute('aria-describedby')).toBe(previewId);
     expect(preview.style.translate).toBe('0 calc(100px - 50%)');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-sm');
     expect(within(screen.getByTestId('thread-rail-preview-current')).getByText('Second turn')).toBeTruthy();
 
@@ -218,6 +220,7 @@ describe('MessageScroller', () => {
     expect(screen.getByTestId('thread-rail-preview').getAttribute('data-visible')).toBeNull();
     expect(preview.className).toContain('opacity-0');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('opacity-0');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-sm');
   });
 });
