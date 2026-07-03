@@ -1388,9 +1388,7 @@ export class MessageList {
           modified = true;
           return {
             ...part,
-            output: normalizeModelOutput(
-              storedModelOutputs.get(part.toolCallId),
-            ) as AIV5Type.ToolResultPart["output"],
+            output: normalizeModelOutput(storedModelOutputs.get(part.toolCallId)) as AIV5Type.ToolResultPart['output'],
           };
         }
         return part;

@@ -1881,10 +1881,11 @@ describe('MessageList V5 Support', () => {
       const toolRole = prompt.find(m => m.role === 'tool');
       expect(toolRole).toBeDefined();
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
-      // normalizeModelOutput converts 'media' -> 'image-data' for Gemini inlineData compatibility
+      // v5 providers accept 'media' directly; the image-data/file-data
+      // conversion only happens for v6 providers, via aiV5PromptToAIV6Prompt.
       expect(toolResultPart.output).toEqual({
         type: 'content',
-        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+        value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
       });
 
       // Raw result should still be preserved in the stored messages

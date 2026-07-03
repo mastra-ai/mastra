@@ -5,7 +5,7 @@
  * of parts as needed.
  *
  * Parts inside `value` are normalized so that:
- * - `type: 'media'`     -> `type: 'image-data'` (images) or `type: 'file-data'` (other)
+ * - `type: 'media'`     -> kept as-is (converted to image-data/file-data only for v6 providers, see aiV5PromptToAIV6Prompt)
  * - `type: 'image-url'` -> `type: 'image-data'`
  * - `type: 'image-data'` / `type: 'file-data'` -> kept as-is
  *
@@ -48,13 +48,6 @@ export function normalizeModelOutput(output: unknown): unknown {
                 })()
               : 'image/jpeg';
         return { type: 'image-data', data: part.url, mediaType };
-      }
-
-      if (part.type === 'media' && typeof part.data === 'string') {
-        const mediaType = typeof part.mediaType === 'string' ? part.mediaType : 'application/octet-stream';
-        return (mediaType as string).startsWith('image/')
-          ? { type: 'image-data', data: part.data, mediaType }
-          : { type: 'file-data', data: part.data, mediaType };
       }
 
       if ((part.type === 'image-data' || part.type === 'file-data') && typeof part.data === 'string') {
