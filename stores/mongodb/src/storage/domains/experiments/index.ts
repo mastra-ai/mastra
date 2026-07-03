@@ -14,6 +14,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -23,10 +24,16 @@ import type {
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
   ExperimentReviewCounts,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { cutoffFor, DEFAULT_PRUNE_BATCH_SIZE, ensureAnchorIndex, runBatchedDelete } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+import { applyTenancyFilter } from '../utils';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,6 +115,16 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   static readonly MANAGED_COLLECTIONS = [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS] as const;
 
+  /**
+   * Experiments prune as whole units: an experiment and its results are only
+   * deleted together, once the experiment itself is old (anchored on the
+   * parent's `completedAt`, a BSON date that stays `null` while running).
+   * `results` is intentionally not an independent retention key.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    experiments: { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -119,6 +136,69 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
 
   private async getCollection(name: string) {
     return this.#connector.getCollection(name);
+  }
+
+  /**
+   * Prune whole experiments older than the `experiments` policy's `maxAge`.
+   *
+   * Each batch collects up to `batchSize` aged experiment ids
+   * (`completedAt < cutoff`; BSON type bracketing means `null` — still
+   * running — never matches), then deletes their `experiment_results` rows and
+   * the experiment rows for exactly that id set inside
+   * `connector.withTransaction()` — atomic on replica sets, sequential
+   * children-first on standalone — mirroring `deleteExperiment`. Hitting
+   * `maxBatches`/`maxRows` or the abort signal between batches therefore never
+   * leaves a run hollow (parent kept, results gone). Bounds count whole
+   * experiments, not rows.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const policy = policies['experiments'];
+    if (!policy || options?.signal?.aborted) {
+      return policy
+        ? [
+            { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: 0, done: false },
+            { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
+          ]
+        : [];
+    }
+
+    await ensureAnchorIndex(
+      this.#connector,
+      { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+      this.logger,
+    );
+
+    const cutoff = cutoffFor(policy, 'date');
+    const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
+
+    const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
+    const resultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+
+    let childDeleted = 0;
+    const parent = await runBatchedDelete({
+      deleteBatch: async limit => {
+        const docs = await experimentsCollection
+          .find({ completedAt: { $lt: cutoff } })
+          .project<{ id: string }>({ id: 1 })
+          .limit(limit)
+          .toArray();
+        if (docs.length === 0) return 0;
+        const ids = docs.map(doc => doc.id);
+        return this.#connector.withTransaction(async session => {
+          const children = await resultsCollection.deleteMany({ experimentId: { $in: ids } }, { session });
+          childDeleted += children.deletedCount;
+          const parents = await experimentsCollection.deleteMany({ id: { $in: ids } }, { session });
+          return parents.deletedCount;
+        });
+      },
+      batchSize,
+      options,
+    });
+
+    return [
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: childDeleted, done: parent.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
+    ];
   }
 
   // -------------------------------------------------------------------------
@@ -194,7 +274,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       succeededCount: 0,
       failedCount: 0,
       skippedCount: 0,
-      agentVersion: null,
+      agentVersion: input.agentVersion ?? null,
       startedAt: null,
       completedAt: null,
       createdAt: now,
@@ -221,7 +301,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         succeededCount: 0,
         failedCount: 0,
         skippedCount: 0,
-        agentVersion: null,
+        agentVersion: input.agentVersion ?? null,
         startedAt: null,
         completedAt: null,
         createdAt: now,
@@ -283,10 +363,18 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById({ id }: { id: string }): Promise<Experiment | null> {
+  async getExperimentById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<Experiment | null> {
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENTS);
-      const doc = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const doc = await collection.findOne(query);
       if (!doc) return null;
       return transformExperimentRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
@@ -377,14 +465,26 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment({ id }: { id: string }): Promise<void> {
+  async deleteExperiment({ id, filters }: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Delete results first (FK semantics)
-      const resultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      await resultsCollection.deleteMany({ experimentId: id });
-
+      // Tenancy predicate applied on every destructive query (not only the
+      // pre-check). Silent no-op on mismatch.
       const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
-      await experimentsCollection.deleteOne({ id });
+      const gateQuery: Record<string, any> = { id };
+      applyTenancyFilter(gateQuery, filters);
+      const existing = await experimentsCollection.findOne(gateQuery);
+      if (!existing) return;
+
+      // Delete results first (FK semantics). Scope on the results collection too
+      // — result rows carry organizationId/projectId of the owning experiment.
+      const resultsCollection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
+      const resultsQuery: Record<string, any> = { experimentId: id };
+      applyTenancyFilter(resultsQuery, filters);
+      await resultsCollection.deleteMany(resultsQuery);
+
+      const parentDeleteQuery: Record<string, any> = { id };
+      applyTenancyFilter(parentDeleteQuery, filters);
+      await experimentsCollection.deleteOne(parentDeleteQuery);
     } catch (error) {
       throw new MastraError(
         {
@@ -517,10 +617,18 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById({ id }: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      const doc = await collection.findOne({ id });
+      const query: Record<string, any> = { id };
+      applyTenancyFilter(query, filters);
+      const doc = await collection.findOne(query);
       if (!doc) return null;
       return transformExperimentResultRow(doc as unknown as Record<string, unknown>);
     } catch (error) {
@@ -598,10 +706,28 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults({ experimentId }: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults({
+    experimentId,
+    filters,
+  }: {
+    experimentId: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<void> {
     try {
+      // Tenancy predicate applied on the destructive deleteMany itself. Result
+      // rows carry organizationId/projectId of the owning experiment. Silent
+      // no-op on mismatch.
+      if (filters?.organizationId !== undefined || filters?.projectId !== undefined) {
+        const experimentsCollection = await this.getCollection(TABLE_EXPERIMENTS);
+        const gateQuery: Record<string, any> = { id: experimentId };
+        applyTenancyFilter(gateQuery, filters);
+        const parent = await experimentsCollection.findOne(gateQuery);
+        if (!parent) return;
+      }
       const collection = await this.getCollection(TABLE_EXPERIMENT_RESULTS);
-      await collection.deleteMany({ experimentId });
+      const deleteQuery: Record<string, any> = { experimentId };
+      applyTenancyFilter(deleteQuery, filters);
+      await collection.deleteMany(deleteQuery);
     } catch (error) {
       throw new MastraError(
         {

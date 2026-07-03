@@ -1,9 +1,16 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
-import { Badge, Button, Input, Txt } from '@mastra/playground-ui';
-import { ChevronsUpDown, Folder, MoreHorizontal, Plus, Settings } from 'lucide-react';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ChevronsUpDown, Circle, Folder, LogOut, MoreHorizontal, Plus, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { Project } from './projects';
+import type { WebAuthViewModel } from './AppLayout';
+import type { Project } from './domains/workspaces';
+import { WorkspacesSection } from './domains/workspaces';
+import { useKeyDown } from './lib/hooks';
 
 const MAX_THREADS = 5;
 
@@ -24,6 +31,11 @@ function relativeTime(iso: string): string {
 interface SidebarProps {
   projects: Project[];
   activeProjectId: string | null;
+  auth?: WebAuthViewModel;
+  session: {
+    setState: (updates: Record<string, unknown>) => Promise<unknown>;
+  };
+  resourceId?: string;
   onManageProjects: () => void;
   onOpenSettings: () => void;
   threads: AgentControllerThreadInfo[];
@@ -33,12 +45,17 @@ interface SidebarProps {
   onDeleteThread: (threadId: string) => void;
   onRenameThread: (threadId: string, title: string) => void;
   onCloneThread: (threadId: string) => void;
+  status?: string;
+  running?: boolean;
   open?: boolean;
 }
 
 export function Sidebar({
   projects,
   activeProjectId,
+  auth,
+  session,
+  resourceId,
   onManageProjects,
   onOpenSettings,
   threads,
@@ -48,15 +65,24 @@ export function Sidebar({
   onDeleteThread,
   onRenameThread,
   onCloneThread,
+  status = 'ready',
+  running = false,
   open = false,
 }: SidebarProps) {
   const activeProject = projects.find(p => p.id === activeProjectId);
 
   return (
     <div
-      className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-full md:max-w-none md:translate-x-0 md:border-r-0 md:bg-transparent md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
     >
       <ProjectSwitcher activeProject={activeProject} onManageProjects={onManageProjects} />
+
+      <WorkspacesSection
+        activeProject={activeProject}
+        session={session}
+        agentControllerId="code"
+        resourceId={resourceId}
+      />
 
       {activeProject && (
         <ThreadList
@@ -70,7 +96,7 @@ export function Sidebar({
         />
       )}
 
-      <SidebarFooter onOpenSettings={onOpenSettings} />
+      <SidebarFooter status={status} running={running} auth={auth} onOpenSettings={onOpenSettings} />
     </div>
   );
 }
@@ -150,16 +176,13 @@ function ThreadList({
     const onDown = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuFor(null);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuFor(null);
-    };
     document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
     };
   }, [menuFor]);
+
+  useKeyDown({ escape: () => setMenuFor(null) }, { target: 'document', enabled: !!menuFor });
 
   const startRename = (thread: AgentControllerThreadInfo) => {
     setMenuFor(null);
@@ -375,17 +398,92 @@ function ThreadActionsMenu({
   );
 }
 
-function SidebarFooter({ onOpenSettings }: { onOpenSettings: () => void }) {
+function statusLabel(status: string, running: boolean): string {
+  if (running) return 'Working…';
+  if (status === 'reconnecting') return 'Reconnecting…';
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function statusDotClass(status: string): string {
+  if (status === 'ready') return 'fill-accent1 text-accent1';
+  if (status === 'reconnecting') return 'animate-pulse fill-warning1 text-warning1';
+  if (status === 'error') return 'fill-error text-error';
+  return 'animate-pulse fill-icon2 text-icon2';
+}
+
+function SidebarFooter({
+  status = 'ready',
+  running = false,
+  auth,
+  onOpenSettings,
+}: Pick<SidebarProps, 'status' | 'running' | 'auth' | 'onOpenSettings'>) {
   return (
-    <div className="mt-auto border-t border-border1 pt-2">
+    <div className="mt-auto flex flex-col gap-2 border-t border-border1 pt-2">
+      <div
+        className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-ui-sm text-icon3"
+        role="status"
+        aria-live="polite"
+      >
+        <span className="flex items-center justify-center">
+          <Circle size={10} className={statusDotClass(status)} />
+        </span>
+        <span>{statusLabel(status, running)}</span>
+      </div>
+      <SidebarAuth auth={auth} />
       <Button
         variant="ghost"
         size="sm"
-        className="w-full justify-start gap-2"
+        className="grid h-10 w-full grid-cols-[2.75rem_1fr_auto] items-center justify-normal gap-0 px-0"
         onClick={onOpenSettings}
         aria-label="Open settings"
       >
-        <Settings size={15} /> Settings
+        <span className="flex items-center justify-center">
+          <Settings size={18} />
+        </span>
+        <span className="justify-self-start">Settings</span>
+      </Button>
+    </div>
+  );
+}
+
+function SidebarAuth({ auth }: { auth?: WebAuthViewModel }) {
+  if (!auth) return null;
+
+  if (auth.loading) {
+    return (
+      <Txt as="div" variant="ui-sm" className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-icon3">
+        <span className="col-start-2">Checking sign-in…</span>
+      </Txt>
+    );
+  }
+
+  if (!auth.state?.authEnabled) return null;
+
+  if (!auth.state.authenticated) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="grid h-10 w-full grid-cols-[2.75rem_1fr_auto] items-center justify-normal gap-0 px-0"
+        onClick={auth.onSignIn}
+      >
+        <span className="col-start-2 justify-self-start">Sign in</span>
+      </Button>
+    );
+  }
+
+  const identity = auth.state.user?.name ?? auth.state.user?.email ?? 'Signed in';
+
+  return (
+    <div className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center">
+      <span className="flex items-center justify-center">
+        <Avatar name={identity} size="sm" />
+      </span>
+      <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-icon6" title={identity}>
+        {identity}
+      </Txt>
+      <Button variant="ghost" size="icon-sm" onClick={auth.onSignOut} aria-label="Sign out">
+        <LogOut size={15} />
       </Button>
     </div>
   );

@@ -8,6 +8,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -16,7 +17,18 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '../../types';
+
+function matchesTenancy(
+  record: { organizationId?: string | null; projectId?: string | null },
+  filters: DatasetTenancyFilters | undefined,
+): boolean {
+  if (!filters) return true;
+  if (filters.organizationId !== undefined && record.organizationId !== filters.organizationId) return false;
+  if (filters.projectId !== undefined && record.projectId !== filters.projectId) return false;
+  return true;
+}
 import type { InMemoryDB } from '../inmemory-db';
 import { DatasetsStorage } from './base';
 
@@ -98,9 +110,17 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetRecord(dataset);
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     const record = this.db.datasets.get(id);
-    return record ? toDatasetRecord(record) : null;
+    if (!record) return null;
+    if (!matchesTenancy(record, filters)) return null;
+    return toDatasetRecord(record);
   }
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
@@ -129,7 +149,11 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetRecord(updated);
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+    const existing = this.db.datasets.get(id);
+    if (!existing) return;
+    if (!matchesTenancy(existing, filters)) return;
+
     // Cascade: delete items and versions
     for (const [itemId, rows] of this.db.datasetItems) {
       if (rows.length > 0 && rows[0]!.datasetId === id) {
@@ -156,12 +180,19 @@ export class DatasetsInMemory extends DatasetsStorage {
     let datasets = Array.from(this.db.datasets.values());
 
     if (args.filters) {
-      const { organizationId, projectId, candidateKey, candidateId } = args.filters;
+      const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+      const nameLower = name?.toLowerCase();
+      const targetIdsSet = targetIds && targetIds.length > 0 ? new Set(targetIds) : undefined;
       datasets = datasets.filter(d => {
         if (organizationId !== undefined && d.organizationId !== organizationId) return false;
         if (projectId !== undefined && d.projectId !== projectId) return false;
         if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;
         if (candidateId !== undefined && d.candidateId !== candidateId) return false;
+        if (targetType !== undefined && d.targetType !== targetType) return false;
+        if (targetIdsSet) {
+          if (!d.targetIds || !d.targetIds.some(id => targetIdsSet.has(id))) return false;
+        }
+        if (nameLower !== undefined && !d.name.toLowerCase().includes(nameLower)) return false;
         return true;
       });
     }
@@ -283,7 +314,7 @@ export class DatasetsInMemory extends DatasetsStorage {
     return toDatasetItem(newRow);
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     const rows = this.db.datasetItems.get(id);
     if (!rows || rows.length === 0) {
       return; // no-op if item doesn't exist

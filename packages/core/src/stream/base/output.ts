@@ -951,14 +951,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   // Cast needed because chunk.payload.response is typed with default OUTPUT=undefined
                   (chunk.payload as { response?: LLMStepResult<OUTPUT>['response'] }).response = response;
-                } else if (!self.#options.isLLMExecutionStep) {
-                  // No processor runner, not in LLM execution step - resolve with buffered text
+                } else if (!self.#options.isLLMExecutionStep || self.#options.resolveFinalPromises) {
+                  // No processor runner, not in LLM execution step - resolve with buffered text.
+                  // Durable agents set resolveFinalPromises to force resolution even when
+                  // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
                   this.resolvePromises({
                     text: self.#bufferedText.join(''),
                     finishReason: self.#finishReason,
                   });
                 }
-                // If isLLMExecutionStep is true, don't resolve text here - let the outer MastraModelOutput handle it
+                // If isLLMExecutionStep is true (without resolveFinalPromises), don't resolve
+                // text here - let the outer MastraModelOutput handle it
               } catch (error) {
                 if (error instanceof TripWire) {
                   self.#tripwire = {

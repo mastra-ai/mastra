@@ -309,6 +309,8 @@ export interface ObservabilityInstance {
 // ============================================================================
 
 export interface ObservabilityEntrypoint {
+  flush(): Promise<void>;
+
   shutdown(): Promise<void>;
 
   setMastraContext(options: { mastra: Mastra }): void;
