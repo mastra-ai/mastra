@@ -1,11 +1,11 @@
 # Documentation audit report format
 
-Use this format for every docs-audit report. Present the report to the user before generating any fix plan or editing docs.
+Use this format for every docs-audit report. Present the report before any fix plan or edits.
 
-## Required order
+## Required sections
 
 1. Header
-2. Scope and selected jobs-to-be-done
+2. Selected jobs-to-be-done
 3. Score table
 4. Findings summary
 5. Findings
@@ -73,6 +73,8 @@ These jobs were derived from the doc and selected by the user:
 
 ## Deterministic command output
 
+Raw output is in `$RUN_DIR/commands/` from `scripts/run-checks.sh`. Include relevant lines only.
+
 ### `$COMMAND`
 
 Verdict: `$pass_warn_fail`
@@ -80,88 +82,44 @@ Verdict: `$pass_warn_fail`
 ```text
 $RAW_RELEVANT_OUTPUT_OR_NO_RELEVANT_OUTPUT
 ```
-````
-
-Repeat for each command:
-
-- `pnpm validate`
-- `pnpm lint:remark`
-- `pnpm lint:vale:ai`
-- Prettier check
 
 ## Recommended fix strategy
 
-Do not implement yet. If the user approves, prepare a `submit_plan` fix plan that:
-
-1. Fixes blocker and major accuracy issues first.
-2. Fixes completeness gaps next.
-3. Fixes practicability gaps for the selected jobs-to-be-done.
-4. Fixes style and deterministic lint issues.
-5. Re-runs deterministic checks.
-6. Runs the mandatory agent-build eval for each selected job-to-be-done.
-7. Feeds eval friction into a follow-up audit report if needed.
+Do not implement yet. If approved, prepare a `submit_plan` fix plan that addresses blocker/major accuracy issues, completeness, practicability, style/lint issues, re-runs checks, and runs mandatory evals.
 
 ## Next step
 
 I can convert these findings into an implementation plan for approval.
-
 ````
 
-## Field rules
+## Rules
 
-### Header
+Header:
 
-- `Page path`: Use the repository-relative path.
-- `Page type`: Use one of `docs overview`, `docs standard`, `guide quickstart`, `guide tutorial`, `guide integration`, `guide deployment`, `reference`, or `other`.
-- `Packages covered`: Use the doc frontmatter `packages:` values and any package imports found in code blocks.
-- `Audit date`: Use the current date.
-- `Temporary artifact directory`: Use the actual `/tmp/mastra-docs-audit/<audit-slug>-<YYYYMMDD-HHMMSS>/` path, or the actual `$TMPDIR/mastra-docs-audit/...` fallback path. The slug must follow the SKILL.md slug rules.
-- `Source paths inspected`: Include every package source directory or specific source file used as evidence.
-- `Styleguides applied`: Always include STYLEGUIDE.md and exactly one page-type guide when applicable.
+- `Page path`: repository-relative path.
+- `Page type`: `docs overview`, `docs standard`, `guide quickstart`, `guide tutorial`, `guide integration`, `guide deployment`, `reference`, or `other`.
+- `Packages covered`: doc frontmatter `packages:` plus packages imported in code blocks.
+- `Temporary artifact directory`: exact script-printed `$RUN_DIR`.
+- `Source paths inspected`: every source directory/file used as evidence.
+- `Styleguides applied`: always STYLEGUIDE plus exactly one page-type guide when applicable.
 
-### Score table
+Scores and findings:
 
-- Use `pass`, `warn`, or `fail` only.
-- Count findings assigned to that dimension.
-- Keep deterministic linting separate from styleguide judgment even when both concern prose or formatting.
-- If a deterministic tool cannot run because of environment setup, use `warn` and explain `skipped — <reason>`.
+- Verdicts are only `pass`, `warn`, or `fail`.
+- Finding IDs use `STYLE-001`, `LINT-001`, `CODE-001`, `API-001`, or `PRAC-001` prefixes.
+- Every finding includes severity, dimension, evidence, problem, why it matters, and suggested fix.
+- Do not include vague findings like "improve clarity" without evidence and a concrete fix.
+- Keep deterministic lint separate from styleguide judgment.
 
-### Findings
+Deterministic output:
 
-Finding IDs must use stable prefixes:
-
-- `STYLE-001`, `STYLE-002`, ...
-- `LINT-001`, `LINT-002`, ...
-- `CODE-001`, `CODE-002`, ...
-- `API-001`, `API-002`, ...
-- `PRAC-001`, `PRAC-002`, ...
-
-Every finding must include:
-
-- `severity`
-- `dimension`
-- at least one evidence item with `file:line` or command output
-- a concrete problem statement
-- why the issue matters
-- a suggested fix that can be turned into an implementation plan
-
-Do not include vague findings such as "improve clarity" without evidence and a concrete fix.
-
-### Deterministic output
-
-- Raw command output is produced by `scripts/run-checks.sh` under `$RUN_DIR/commands/*.txt`; reference those files in the report.
-- Include raw output only for lines relevant to the audited files.
-- If a repo-wide command returns unrelated errors, say they are unrelated and do not count them against the audited page.
+- Reference `$RUN_DIR/commands/*.txt`.
+- Include only audited-file-relevant lines.
+- Report unrelated repo-wide failures without counting them against the audited page.
 - If a command passes, write `No relevant output`.
-- If a command cannot run, include the exact command and error message.
+- If a command cannot run, include the exact command and error.
 
-### Recommended fix strategy
-
-- Keep this high-level in the audit report.
-- Do not edit files during the audit-report step.
-- Use `submit_plan` only after the user has seen the report.
-
-### Agent-build eval reporting
+## Agent-build eval results
 
 After fixes and re-linting, append or produce a follow-up section:
 
@@ -169,23 +127,18 @@ After fixes and re-linting, append or produce a follow-up section:
 ## Agent-build eval results
 
 | Job-to-be-done | Result | Evidence | Follow-up findings |
-| --- | --- | --- | --- |
-| `$JOB_1` | `passed/blocked/failed` | `$SUMMARY` | `$FINDING_IDS_OR_NONE` |
+| -------------- | ------ | -------- | ------------------ |
+| `$JOB_1`       | passed/blocked/failed | `$SUMMARY` | `$FINDING_IDS_OR_NONE` |
 
 ### Eval notes
 
-- Eval input: improved doc + selected job-to-be-done only.
 - Eval artifact directory: `$RUN_DIR/evals/$JOB_SLUG/`
 - Eval project path: `$RUN_DIR/evals/$JOB_SLUG/project/`
-- Eval setup method: `$DOC_COMMANDS_OR_LOCAL_SCAFFOLD_OR_MINIMAL_PROJECT`
-- Local package linking method: `$SCAFFOLD_LINK_OR_FILE_DEPS_OR_PACKAGE_MANAGER_LINK_OR_PUBLISHED_LAST_RESORT`
-- Eval environment: `$ENVIRONMENT_SUMMARY`
+- Eval setup method: value from `setup-method.txt`
 - Commands log: `$RUN_DIR/evals/$JOB_SLUG/commands.log`
 - Result file: `$RUN_DIR/evals/$JOB_SLUG/result.md`
 - Doc friction observed: `$DOC_FRICTION_OR_NONE`
 - Harness/environment friction observed: `$HARNESS_FRICTION_OR_NONE`
-````
+```
 
-When an eval is rerun after a follow-up fix, the table must show the latest outcome and the notes must state where the original failure is preserved. If the latest result is `passed`, do not leave a stale failed result in `result.md`; keep the original failure in `commands.log` or a dated result snapshot.
-
-If the eval finds doc-caused friction, create additional `PRAC-*`, `CODE-*`, or `API-*` findings and return to the fix-plan loop. Do not create follow-up doc findings for package-manager, temp-directory, missing local binary, credential, or other harness/environment friction unless the doc itself caused that friction.
+Only doc-caused eval friction becomes follow-up findings. Preserve the original failure in `commands.log`; replace `result.md` with the latest outcome after re-runs.
