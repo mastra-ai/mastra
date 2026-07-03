@@ -640,6 +640,7 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #serverExplicit = false;
   #studio?: StudioConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
@@ -1517,6 +1518,7 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+      this.#serverExplicit = true;
     }
 
     if (config?.studio) {
@@ -2434,6 +2436,29 @@ export class Mastra<
     const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
     this.#observability.setLogger({ logger: rawLogger as any });
     this.#observability.setMastraContext({ mastra: this as any });
+  }
+
+  /**
+   * Registers a file-system routed server config (discovered from
+   * `server.ts`) into this Mastra instance.
+   *
+   * Code-registered server config wins on collision.
+   *
+   * @internal
+   */
+  public __registerFsServer(fsServer: ServerConfig): void {
+    if (!fsServer) {
+      return;
+    }
+
+    if (this.#serverExplicit) {
+      this.getLogger().warn(
+        `File-system routed server config conflicts with a code-registered server config. Keeping the code-registered server config.`,
+      );
+      return;
+    }
+
+    this.setServer(fsServer);
   }
 
   /**
