@@ -699,8 +699,8 @@ describe('generateFsAgentsModule with workflows', () => {
 
     const source = await generateFsAgentsModule('/project/src/mastra/index.ts', agents, { workflows });
 
-    expect(source).toContain(`import workflow_0_pipeline from`);
-    expect(source).toContain(`__fsWorkflows["pipeline"] = workflow_0_pipeline;`);
+    expect(source).toContain(`import * as workflow_0_pipeline from`);
+    expect(source).toContain(`__fsWorkflows["pipeline"] = __resolveDefault(workflow_0_pipeline);`);
     expect(source).toContain(`mastra.__registerFsWorkflows`);
   });
 
@@ -724,7 +724,7 @@ describe('generateFsAgentsModule with workflows', () => {
 
     const source = await generateFsAgentsModule('/project/src/mastra/index.ts', [], { workflows });
 
-    expect(source).toContain(`import workflow_0_onboarding from`);
+    expect(source).toContain(`import * as workflow_0_onboarding from`);
     expect(source).toContain(`__registerFsWorkflows`);
     expect(source).toContain(`export const mastra = __userEntry.mastra;`);
     // Agent registration still present but with empty entries
@@ -739,10 +739,10 @@ describe('generateFsAgentsModule with workflows', () => {
 
     const source = await generateFsAgentsModule('/project/src/mastra/index.ts', [], { workflows });
 
-    expect(source).toContain(`import workflow_0_data_pipeline from`);
-    expect(source).toContain(`import workflow_1_user_onboarding from`);
-    expect(source).toContain(`__fsWorkflows["data-pipeline"] = workflow_0_data_pipeline;`);
-    expect(source).toContain(`__fsWorkflows["user-onboarding"] = workflow_1_user_onboarding;`);
+    expect(source).toContain(`import * as workflow_0_data_pipeline from`);
+    expect(source).toContain(`import * as workflow_1_user_onboarding from`);
+    expect(source).toContain(`__fsWorkflows["data-pipeline"] = __resolveDefault(workflow_0_data_pipeline);`);
+    expect(source).toContain(`__fsWorkflows["user-onboarding"] = __resolveDefault(workflow_1_user_onboarding);`);
   });
 });
 

@@ -257,4 +257,52 @@ describe('generated module evaluation', () => {
     expect(mod.mastra.registeredWorkflows.pipeline).toMatchObject({ id: 'pipeline', name: 'Data Pipeline' });
     expect(mod.mastra.registeredWorkflows.onboarding).toMatchObject({ id: 'onboarding', name: 'Onboarding' });
   });
+
+  it('resolves named-exported workflows (no default export)', async () => {
+    const coreStub = join(dir, 'core-agent.mjs');
+    await writeFile(
+      coreStub,
+      `export function assembleAgentFromFsEntry(entry) {
+         return { id: entry.name, name: entry.name, __entry: entry };
+       }`,
+    );
+
+    const userEntry = join(dir, 'index.mjs');
+    await writeFile(
+      userEntry,
+      `const registeredWorkflows = {};
+       export const mastra = {
+         registeredWorkflows,
+         getLogger() { return { warn() {} }; },
+         __registerFsAgents() {},
+         __registerFsWorkflows(map) { Object.assign(registeredWorkflows, map); },
+       };`,
+    );
+
+    const workflowsDir = join(dir, 'workflows');
+    await mkdir(workflowsDir, { recursive: true });
+    // Named export instead of default export — the common createWorkflow pattern.
+    await writeFile(
+      join(workflowsDir, 'weather.mjs'),
+      `export const weatherWorkflow = { id: 'weather-workflow', name: 'Weather' };`,
+    );
+
+    const agents: DiscoveredFsAgent[] = [];
+    const workflows: DiscoveredFsWorkflow[] = [
+      { key: 'weather', path: join(workflowsDir, 'weather.mjs') },
+    ];
+
+    let source = await generateFsAgentsModule(userEntry, agents, { workflows });
+    source = source.replace(`'@mastra/core/agent'`, JSON.stringify(coreStub));
+
+    const generated = join(dir, 'wrapper-named-wf.mjs');
+    await writeFile(generated, source);
+
+    const mod = await import(pathToFileURL(generated).href);
+
+    expect(mod.mastra.registeredWorkflows.weather).toMatchObject({
+      id: 'weather-workflow',
+      name: 'Weather',
+    });
+  });
 });
