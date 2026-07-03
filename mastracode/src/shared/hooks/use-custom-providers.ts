@@ -14,7 +14,7 @@ export function useCustomProvidersQuery() {
   return useQuery<CustomProviderInfo[]>({
     queryKey: queryKeys.customProviders(),
     queryFn: async () => {
-      const body = await client.get<CustomProvidersResponse>('/api/web/config/custom-providers');
+      const body = await client.get<CustomProvidersResponse>('/web/config/custom-providers');
       return body.providers;
     },
   });
@@ -25,7 +25,7 @@ export function useSaveCustomProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: SaveCustomProviderBody) =>
-      client.post<{ ok: true; provider?: CustomProviderInfo }>('/api/web/config/custom-providers', body),
+      client.post<{ ok: true; provider?: CustomProviderInfo }>('/web/config/custom-providers', body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
   });
 }
@@ -39,7 +39,7 @@ export function useRemoveCustomProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: RemoveCustomProviderArgs) =>
-      client.del<OkResponse>(`/api/web/config/custom-providers/${encodeURIComponent(id)}`),
+      client.del<OkResponse>(`/web/config/custom-providers/${encodeURIComponent(id)}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.customProviders() }),
   });
 }

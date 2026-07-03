@@ -1,18 +1,34 @@
 /**
- * Hono routes for the GitHub App project feature.
+ * Mastra `apiRoutes` for the GitHub App project feature.
  *
- * Mounted alongside the other `/api/web/*` routes, behind the WorkOS auth gate.
+ * Registered alongside the other `/web/*` routes, behind the WorkOS auth gate.
  * Every route additionally re-checks the authenticated user (`getWebAuthUser`)
  * and scopes all rows by that user's stable WorkOS id, so a user can only ever
  * see and operate on their own installations and projects.
  *
- * When the feature is disabled (`isGithubFeatureEnabled()` false), `mountGithubRoutes`
- * is a no-op except for `GET /api/web/github/status`, which reports `enabled:false`
+ * When the feature is disabled (`isGithubFeatureEnabled()` false), `buildGithubRoutes`
+ * returns only `GET /web/github/status`, which reports `enabled:false`
  * so the SPA can cleanly hide all GitHub UI.
  */
 
+import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 import { and, eq } from 'drizzle-orm';
-import type { Context, Hono } from 'hono';
+import type { Context } from 'hono';
+
+/**
+ * Loose Hono context accepted by the shared GitHub route helpers. The
+ * `registerApiRoute` handlers receive a path-parameterized context whose
+ * `HonoRequest` literal-path generics are invariant and don't flow into a
+ * shared helper signature. The helpers only ever touch cookies/query/tenant, so
+ * we erase the path to a plain `Context` at the call boundary via `loose()`.
+ */
+type RouteContext = Context;
+
+/** Erase a route handler's path-parameterized context to a plain `Context`. */
+function loose(c: unknown): RouteContext {
+  return c as RouteContext;
+}
 import { streamSSE } from 'hono/streaming';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
@@ -81,7 +97,7 @@ function isValidGitRef(value: unknown): value is string {
  * non-null string) or a ready-to-return error response: 401 when unauthenticated,
  * 403 when the user has no organization (personal account).
  */
-function resolveOrgTenant(c: Context): { tenant: WebAuthTenant & { orgId: string } } | { response: Response } {
+function resolveOrgTenant(c: RouteContext): { tenant: WebAuthTenant & { orgId: string } } | { response: Response } {
   const tenant = webAuthTenant(c);
   if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
   if (!tenant.orgId) {
@@ -112,262 +128,304 @@ function toProjectPayload(row: GithubProjectRow) {
 }
 
 /**
- * Mount the GitHub routes. Returns whether the feature is enabled.
+ * Build the GitHub routes as Mastra `apiRoutes`. When the feature is disabled,
+ * returns only the `status` route so the SPA can detect the disabled state.
  */
-export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOptions = {}): boolean {
-  // The status route is always mounted so the SPA can detect the disabled state.
-  app.get('/api/web/github/status', async c => {
-    if (!isGithubFeatureEnabled()) {
-      return c.json({ enabled: false, connected: false, installations: [] });
-    }
-    const tenant = webAuthTenant(c);
-    if (!tenant) return c.json({ error: 'unauthorized' }, 401);
+export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRoute[] {
+  const routes: ApiRoute[] = [];
 
-    // Org-scoped: personal (no-org) users have GitHub projects disabled. Report
-    // enabled (so the SPA can show the org-required hint) but never connected.
-    if (!tenant.orgId) {
-      return c.json({
-        enabled: true,
-        sandboxEnabled: isSandboxEnabled(),
-        organizationRequired: true,
-        connected: false,
-        installations: [],
-      });
-    }
+  // The status route is always registered so the SPA can detect the disabled state.
+  routes.push(
+    registerApiRoute('/web/github/status', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        if (!isGithubFeatureEnabled()) {
+          return c.json({ enabled: false, connected: false, installations: [] });
+        }
+        const tenant = webAuthTenant(loose(c));
+        if (!tenant) return c.json({ error: 'unauthorized' }, 401);
 
-    const rows = await getAppDb().select().from(githubInstallations).where(eq(githubInstallations.orgId, tenant.orgId));
+        // Org-scoped: personal (no-org) users have GitHub projects disabled. Report
+        // enabled (so the SPA can show the org-required hint) but never connected.
+        if (!tenant.orgId) {
+          return c.json({
+            enabled: true,
+            sandboxEnabled: isSandboxEnabled(),
+            organizationRequired: true,
+            connected: false,
+            installations: [],
+          });
+        }
 
-    return c.json({
-      enabled: true,
-      sandboxEnabled: isSandboxEnabled(),
-      connected: rows.length > 0,
-      installations: rows.map(r => ({
-        installationId: r.installationId,
-        accountLogin: r.accountLogin,
-        accountType: r.accountType,
-      })),
-    });
-  });
+        const rows = await getAppDb()
+          .select()
+          .from(githubInstallations)
+          .where(eq(githubInstallations.orgId, tenant.orgId));
+
+        return c.json({
+          enabled: true,
+          sandboxEnabled: isSandboxEnabled(),
+          connected: rows.length > 0,
+          installations: rows.map(r => ({
+            installationId: r.installationId,
+            accountLogin: r.accountLogin,
+            accountType: r.accountType,
+          })),
+        });
+      },
+    }),
+  );
 
   if (!isGithubFeatureEnabled()) {
-    return false;
+    return routes;
   }
 
   const redirectUri = options.redirectUri ?? `${(options.baseUrl ?? '').replace(/\/$/, '')}/auth/github/callback`;
 
   // ── Connect: redirect to the GitHub App install URL ─────────────────────
-  app.get('/auth/github/connect', async c => {
-    // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
-    // the session from the request cookie before scoping the tenant.
-    await ensureWebAuthUser(c);
-    const resolved = resolveOrgTenant(c);
-    if ('response' in resolved) return resolved.response;
-    const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
-    return c.redirect(buildInstallUrl(state));
-  });
+  routes.push(
+    registerApiRoute('/auth/github/connect', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
+        // the session from the request cookie before scoping the tenant.
+        await ensureWebAuthUser(loose(c));
+        const resolved = resolveOrgTenant(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
+        return c.redirect(buildInstallUrl(state));
+      },
+    }),
+  );
 
   // ── Callback: confirm identity, persist the installation against the org ──
-  app.get('/auth/github/callback', async c => {
-    // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
-    // the session from the request cookie before scoping the tenant.
-    await ensureWebAuthUser(c);
-    const resolved = resolveOrgTenant(c);
-    if ('response' in resolved) return resolved.response;
-    const { orgId, userId } = resolved.tenant;
+  routes.push(
+    registerApiRoute('/auth/github/callback', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
+        // the session from the request cookie before scoping the tenant.
+        await ensureWebAuthUser(loose(c));
+        const resolved = resolveOrgTenant(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
 
-    const state = c.req.query('state');
-    const stateTenant = verifyState(state);
-    if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
-      // CSRF / cross-user/org linking protection: the signed state must belong
-      // to the same logged-in user *and* their current org.
-      console.warn(
-        '[GitHub] Install callback rejected: state/tenant mismatch.',
-        JSON.stringify({
-          stateValid: Boolean(stateTenant),
-          stateOrgId: stateTenant?.orgId,
-          stateUserId: stateTenant?.userId,
-          sessionOrgId: orgId,
-          sessionUserId: userId,
-        }),
-      );
-      return c.redirect('/?github=error');
-    }
+        const state = c.req.query('state');
+        const stateTenant = verifyState(state);
+        if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
+          // CSRF / cross-user/org linking protection: the signed state must belong
+          // to the same logged-in user *and* their current org.
+          console.warn(
+            '[GitHub] Install callback rejected: state/tenant mismatch.',
+            JSON.stringify({
+              stateValid: Boolean(stateTenant),
+              stateOrgId: stateTenant?.orgId,
+              stateUserId: stateTenant?.userId,
+              sessionOrgId: orgId,
+              sessionUserId: userId,
+            }),
+          );
+          return c.redirect('/?github=error');
+        }
 
-    const code = c.req.query('code');
-    // We only ever persist installations that GitHub confirms belong to *this*
-    // user via the OAuth code path. The raw `installation_id` from the install
-    // redirect is not trusted on its own — anyone with a valid state could pass
-    // an arbitrary id — so when no code is present we bounce through the OAuth
-    // identify flow to obtain a verified user token first.
-    if (!code) {
-      return c.redirect(buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
-    }
+        const code = c.req.query('code');
+        // We only ever persist installations that GitHub confirms belong to *this*
+        // user via the OAuth code path. The raw `installation_id` from the install
+        // redirect is not trusted on its own — anyone with a valid state could pass
+        // an arbitrary id — so when no code is present we bounce through the OAuth
+        // identify flow to obtain a verified user token first.
+        if (!code) {
+          return c.redirect(buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+        }
 
-    try {
-      const userToken = await exchangeOAuthCode(code, redirectUri);
-      const installations = await listUserInstallations(userToken);
-      const db = getAppDb();
-      for (const inst of installations) {
-        // The installation is org-owned; `userId` records who connected it.
-        await db
-          .insert(githubInstallations)
+        try {
+          const userToken = await exchangeOAuthCode(code, redirectUri);
+          const installations = await listUserInstallations(userToken);
+          const db = getAppDb();
+          for (const inst of installations) {
+            // The installation is org-owned; `userId` records who connected it.
+            await db
+              .insert(githubInstallations)
+              .values({
+                orgId,
+                userId,
+                installationId: inst.installationId,
+                accountLogin: inst.accountLogin,
+                accountType: inst.accountType,
+              })
+              .onConflictDoNothing({
+                target: [githubInstallations.orgId, githubInstallations.installationId],
+              });
+          }
+        } catch (error) {
+          console.warn(
+            `[GitHub] Install callback failed to persist installations for org ${orgId} / user ${userId}.`,
+            error,
+          );
+          return c.redirect('/?github=error');
+        }
+
+        return c.redirect('/?github=connected');
+      },
+    }),
+  );
+
+  // ── List repos across the org's installations ───────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/repos', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = resolveOrgTenant(loose(c));
+        if ('response' in resolved) return resolved.response;
+
+        const installs = await getAppDb()
+          .select()
+          .from(githubInstallations)
+          .where(eq(githubInstallations.orgId, resolved.tenant.orgId));
+
+        const query = (c.req.query('q') ?? '').toLowerCase();
+        const repos = [];
+        for (const inst of installs) {
+          const list = await listInstallationRepos(inst.installationId);
+          for (const repo of list) {
+            if (query && !repo.fullName.toLowerCase().includes(query)) continue;
+            repos.push(repo);
+          }
+        }
+        return c.json({ repos });
+      },
+    }),
+  );
+
+  // ── Create a project from a repo (no sandbox, no clone yet) ──────────────
+  routes.push(
+    registerApiRoute('/web/github/projects', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = resolveOrgTenant(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
+
+        let body: { repoFullName?: unknown; installationId?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+
+        if (!isValidRepoFullName(body.repoFullName)) {
+          return c.json({ error: 'Invalid repoFullName' }, 400);
+        }
+        const installationId = Number(body.installationId);
+        if (!Number.isFinite(installationId)) {
+          return c.json({ error: 'Invalid installationId' }, 400);
+        }
+
+        // The installation must belong to this org.
+        const owned = await getAppDb()
+          .select()
+          .from(githubInstallations)
+          .where(and(eq(githubInstallations.orgId, orgId), eq(githubInstallations.installationId, installationId)));
+        if (owned.length === 0) {
+          return c.json({ error: 'Installation not found for organization' }, 404);
+        }
+
+        // Verify the repo is actually accessible to the installation and use the
+        // server-returned metadata rather than trusting the client's repoId /
+        // defaultBranch. This prevents creating a project for an arbitrary repo.
+        const repo = await getInstallationRepo(installationId, body.repoFullName);
+        if (!repo) {
+          return c.json({ error: 'Repository not accessible to installation' }, 404);
+        }
+        const defaultBranch = isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main';
+        const sandboxWorkdir = computeSandboxWorkdir(repo.fullName);
+
+        const [row] = await getAppDb()
+          .insert(githubProjects)
           .values({
             orgId,
             userId,
-            installationId: inst.installationId,
-            accountLogin: inst.accountLogin,
-            accountType: inst.accountType,
+            installationId,
+            repoFullName: repo.fullName,
+            repoId: repo.id,
+            defaultBranch,
+            sandboxProvider: getSandboxProvider(),
+            sandboxWorkdir,
           })
-          .onConflictDoNothing({
-            target: [githubInstallations.orgId, githubInstallations.installationId],
-          });
-      }
-    } catch (error) {
-      console.warn(
-        `[GitHub] Install callback failed to persist installations for org ${orgId} / user ${userId}.`,
-        error,
-      );
-      return c.redirect('/?github=error');
-    }
+          .onConflictDoUpdate({
+            target: [githubProjects.orgId, githubProjects.repoId],
+            set: { installationId, repoFullName: repo.fullName, defaultBranch, sandboxWorkdir },
+          })
+          .returning();
 
-    return c.redirect('/?github=connected');
-  });
-
-  // ── List repos across the org's installations ───────────────────────────
-  app.get('/api/web/github/repos', async c => {
-    const resolved = resolveOrgTenant(c);
-    if ('response' in resolved) return resolved.response;
-
-    const installs = await getAppDb()
-      .select()
-      .from(githubInstallations)
-      .where(eq(githubInstallations.orgId, resolved.tenant.orgId));
-
-    const query = (c.req.query('q') ?? '').toLowerCase();
-    const repos = [];
-    for (const inst of installs) {
-      const list = await listInstallationRepos(inst.installationId);
-      for (const repo of list) {
-        if (query && !repo.fullName.toLowerCase().includes(query)) continue;
-        repos.push(repo);
-      }
-    }
-    return c.json({ repos });
-  });
-
-  // ── Create a project from a repo (no sandbox, no clone yet) ──────────────
-  app.post('/api/web/github/projects', async c => {
-    const resolved = resolveOrgTenant(c);
-    if ('response' in resolved) return resolved.response;
-    const { orgId, userId } = resolved.tenant;
-
-    let body: { repoFullName?: unknown; installationId?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-
-    if (!isValidRepoFullName(body.repoFullName)) {
-      return c.json({ error: 'Invalid repoFullName' }, 400);
-    }
-    const installationId = Number(body.installationId);
-    if (!Number.isFinite(installationId)) {
-      return c.json({ error: 'Invalid installationId' }, 400);
-    }
-
-    // The installation must belong to this org.
-    const owned = await getAppDb()
-      .select()
-      .from(githubInstallations)
-      .where(and(eq(githubInstallations.orgId, orgId), eq(githubInstallations.installationId, installationId)));
-    if (owned.length === 0) {
-      return c.json({ error: 'Installation not found for organization' }, 404);
-    }
-
-    // Verify the repo is actually accessible to the installation and use the
-    // server-returned metadata rather than trusting the client's repoId /
-    // defaultBranch. This prevents creating a project for an arbitrary repo.
-    const repo = await getInstallationRepo(installationId, body.repoFullName);
-    if (!repo) {
-      return c.json({ error: 'Repository not accessible to installation' }, 404);
-    }
-    const defaultBranch = isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main';
-    const sandboxWorkdir = computeSandboxWorkdir(repo.fullName);
-
-    const [row] = await getAppDb()
-      .insert(githubProjects)
-      .values({
-        orgId,
-        userId,
-        installationId,
-        repoFullName: repo.fullName,
-        repoId: repo.id,
-        defaultBranch,
-        sandboxProvider: getSandboxProvider(),
-        sandboxWorkdir,
-      })
-      .onConflictDoUpdate({
-        target: [githubProjects.orgId, githubProjects.repoId],
-        set: { installationId, repoFullName: repo.fullName, defaultBranch, sandboxWorkdir },
-      })
-      .returning();
-
-    return c.json({ project: toProjectPayload(row!) });
-  });
+        return c.json({ project: toProjectPayload(row!) });
+      },
+    }),
+  );
 
   // ── Materialize a project into the caller's per-user sandbox ─────────────
-  app.post('/api/web/github/projects/:id/ensure', async c => {
-    const resolved = resolveOrgTenant(c);
-    if ('response' in resolved) return resolved.response;
-    const { orgId, userId } = resolved.tenant;
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/ensure', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = resolveOrgTenant(loose(c));
+        if ('response' in resolved) return resolved.response;
+        const { orgId, userId } = resolved.tenant;
 
-    if (!isSandboxEnabled()) {
-      return c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503);
-    }
-
-    const projectId = c.req.param('id');
-    if (!projectId) return c.json({ error: 'Project not found' }, 404);
-    const [project] = await getAppDb()
-      .select()
-      .from(githubProjects)
-      .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, orgId)));
-    if (!project) {
-      return c.json({ error: 'Project not found' }, 404);
-    }
-
-    // Stream live server-side progress when the client asks for it (EventSource
-    // / fetch with `Accept: text/event-stream`); otherwise fall back to a single
-    // JSON response so non-streaming callers and tests keep working unchanged.
-    const wantsStream = (c.req.header('accept') ?? '').includes('text/event-stream');
-    if (wantsStream) {
-      return streamSSE(c, async stream => {
-        try {
-          const result = await prepareProject(
-            project,
-            userId,
-            ev => void stream.writeSSE({ event: 'progress', data: JSON.stringify(ev) }),
-          );
-          await stream.writeSSE({ event: 'done', data: JSON.stringify(result) });
-        } catch (err) {
-          await stream.writeSSE({ event: 'error', data: JSON.stringify(ensureErrorPayload(err).body) });
+        if (!isSandboxEnabled()) {
+          return c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503);
         }
-      });
-    }
 
-    try {
-      const result = await prepareProject(project, userId);
-      return c.json(result);
-    } catch (err) {
-      const { status, body } = ensureErrorPayload(err);
-      return c.json(body, status);
-    }
-  });
+        const projectId = c.req.param('id');
+        if (!projectId) return c.json({ error: 'Project not found' }, 404);
+        const [project] = await getAppDb()
+          .select()
+          .from(githubProjects)
+          .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, orgId)));
+        if (!project) {
+          return c.json({ error: 'Project not found' }, 404);
+        }
+
+        // Stream live server-side progress when the client asks for it (EventSource
+        // / fetch with `Accept: text/event-stream`); otherwise fall back to a single
+        // JSON response so non-streaming callers and tests keep working unchanged.
+        const wantsStream = (c.req.header('accept') ?? '').includes('text/event-stream');
+        if (wantsStream) {
+          return streamSSE(loose(c), async stream => {
+            try {
+              const result = await prepareProject(
+                project,
+                userId,
+                ev => void stream.writeSSE({ event: 'progress', data: JSON.stringify(ev) }),
+              );
+              await stream.writeSSE({ event: 'done', data: JSON.stringify(result) });
+            } catch (err) {
+              await stream.writeSSE({ event: 'error', data: JSON.stringify(ensureErrorPayload(err).body) });
+            }
+          });
+        }
+
+        try {
+          const result = await prepareProject(project, userId);
+          return c.json(result);
+        } catch (err) {
+          const { status, body } = ensureErrorPayload(err);
+          return c.json(body, status);
+        }
+      },
+    }),
+  );
 
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
-  mountProjectGitRoutes(app);
+  routes.push(...buildProjectGitRoutes());
 
-  return true;
+  return routes;
 }
 
 /** Derive a commit/author identity from the authenticated WorkOS user. */
@@ -499,7 +557,7 @@ function gitErrorResponse(c: Context, err: unknown) {
  * a ready-to-return error response.
  */
 async function loadOwnedProject(
-  c: Context,
+  c: RouteContext,
 ): Promise<
   | { orgId: string; userId: string; project: GithubProjectRow; sandboxRow: GithubProjectSandboxRow }
   | { response: Response }
@@ -529,193 +587,220 @@ async function loadOwnedProject(
   return { orgId, userId, project, sandboxRow };
 }
 
-function mountProjectGitRoutes(app: Hono<any>): void {
-  // ── Create / reuse a worktree + feature branch ──────────────────────────
-  app.post('/api/web/github/projects/:id/worktree', async c => {
-    const owned = await loadOwnedProject(c);
-    if ('response' in owned) return owned.response;
-    const { orgId, userId, project, sandboxRow } = owned;
+function buildProjectGitRoutes(): ApiRoute[] {
+  return [
+    // ── Create / reuse a worktree + feature branch ──────────────────────────
+    registerApiRoute('/web/github/projects/:id/worktree', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { orgId, userId, project, sandboxRow } = owned;
 
-    let body: { branch?: unknown; baseBranch?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    if (!isValidGitRefSandbox(body.branch)) {
-      return c.json({ error: 'Invalid branch' }, 400);
-    }
-    const baseBranch = body.baseBranch === undefined ? project.defaultBranch : body.baseBranch;
-    if (!isValidGitRefSandbox(baseBranch)) {
-      return c.json({ error: 'Invalid baseBranch' }, 400);
-    }
-    const branch = body.branch;
+        let body: { branch?: unknown; baseBranch?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (!isValidGitRefSandbox(body.branch)) {
+          return c.json({ error: 'Invalid branch' }, 400);
+        }
+        const baseBranch = body.baseBranch === undefined ? project.defaultBranch : body.baseBranch;
+        if (!isValidGitRefSandbox(baseBranch)) {
+          return c.json({ error: 'Invalid baseBranch' }, 400);
+        }
+        const branch = body.branch;
 
-    try {
-      return await withProjectLock(`${project.id}:${userId}`, async () => {
-        const sandbox = await resolveProjectSandbox(sandboxRow);
-        const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, { branch, baseBranch });
+        try {
+          return await withProjectLock(`${project.id}:${userId}`, async () => {
+            const sandbox = await resolveProjectSandbox(sandboxRow);
+            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, { branch, baseBranch });
 
-        await getAppDb()
-          .insert(githubWorktrees)
-          .values({
-            orgId,
-            userId,
-            githubProjectId: project.id,
-            branch: result.branch,
-            baseBranch: result.baseBranch,
-            worktreePath: result.worktreePath,
-          })
-          .onConflictDoUpdate({
-            target: [githubWorktrees.githubProjectId, githubWorktrees.userId, githubWorktrees.branch],
-            set: { baseBranch: result.baseBranch, worktreePath: result.worktreePath },
+            await getAppDb()
+              .insert(githubWorktrees)
+              .values({
+                orgId,
+                userId,
+                githubProjectId: project.id,
+                branch: result.branch,
+                baseBranch: result.baseBranch,
+                worktreePath: result.worktreePath,
+              })
+              .onConflictDoUpdate({
+                target: [githubWorktrees.githubProjectId, githubWorktrees.userId, githubWorktrees.branch],
+                set: { baseBranch: result.baseBranch, worktreePath: result.worktreePath },
+              });
+
+            return c.json({
+              worktreePath: result.worktreePath,
+              branch: result.branch,
+              baseBranch: result.baseBranch,
+              resourceId: project.id,
+            });
           });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
 
-        return c.json({
-          worktreePath: result.worktreePath,
-          branch: result.branch,
-          baseBranch: result.baseBranch,
-          resourceId: project.id,
-        });
-      });
-    } catch (err) {
-      return gitErrorResponse(c, err);
-    }
-  });
+    // ── Stage all + commit inside a worktree ────────────────────────────────
+    registerApiRoute('/web/github/projects/:id/commit', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { userId, project, sandboxRow } = owned;
 
-  // ── Stage all + commit inside a worktree ────────────────────────────────
-  app.post('/api/web/github/projects/:id/commit', async c => {
-    const owned = await loadOwnedProject(c);
-    if ('response' in owned) return owned.response;
-    const { userId, project, sandboxRow } = owned;
+        let body: { message?: unknown; worktreePath?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (typeof body.message !== 'string' || body.message.trim().length === 0 || body.message.length > 5000) {
+          return c.json({ error: 'Invalid message' }, 400);
+        }
+        const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
+        if (!workdir) {
+          return c.json({ error: 'Invalid worktreePath' }, 400);
+        }
 
-    let body: { message?: unknown; worktreePath?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    if (typeof body.message !== 'string' || body.message.trim().length === 0 || body.message.length > 5000) {
-      return c.json({ error: 'Invalid message' }, 400);
-    }
-    const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
-    if (!workdir) {
-      return c.json({ error: 'Invalid worktreePath' }, 400);
-    }
+        try {
+          return await withProjectLock(`${project.id}:${userId}`, async () => {
+            const sandbox = await resolveProjectSandbox(sandboxRow);
+            const result = await commitAll(
+              sandbox,
+              workdir,
+              body.message as string,
+              identityFromUser(getWebAuthUser(loose(c))),
+            );
+            return c.json({ committed: result.committed });
+          });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
 
-    try {
-      return await withProjectLock(`${project.id}:${userId}`, async () => {
-        const sandbox = await resolveProjectSandbox(sandboxRow);
-        const result = await commitAll(sandbox, workdir, body.message as string, identityFromUser(getWebAuthUser(c)));
-        return c.json({ committed: result.committed });
-      });
-    } catch (err) {
-      return gitErrorResponse(c, err);
-    }
-  });
+    // ── Push a branch back to GitHub ────────────────────────────────────────
+    registerApiRoute('/web/github/projects/:id/push', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { userId, project, sandboxRow } = owned;
 
-  // ── Push a branch back to GitHub ────────────────────────────────────────
-  app.post('/api/web/github/projects/:id/push', async c => {
-    const owned = await loadOwnedProject(c);
-    if ('response' in owned) return owned.response;
-    const { userId, project, sandboxRow } = owned;
+        let body: { branch?: unknown; worktreePath?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (!isValidGitRefSandbox(body.branch)) {
+          return c.json({ error: 'Invalid branch' }, 400);
+        }
+        const branch = body.branch;
+        const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
+        if (!workdir) {
+          return c.json({ error: 'Invalid worktreePath' }, 400);
+        }
 
-    let body: { branch?: unknown; worktreePath?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    if (!isValidGitRefSandbox(body.branch)) {
-      return c.json({ error: 'Invalid branch' }, 400);
-    }
-    const branch = body.branch;
-    const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
-    if (!workdir) {
-      return c.json({ error: 'Invalid worktreePath' }, 400);
-    }
+        try {
+          return await withProjectLock(`${project.id}:${userId}`, async () => {
+            const sandbox = await resolveProjectSandbox(sandboxRow);
+            const token = await mintInstallationToken(project.installationId);
+            await pushBranch(sandbox, workdir, branch, token, project.repoFullName);
+            return c.json({ pushed: true, branch });
+          });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
 
-    try {
-      return await withProjectLock(`${project.id}:${userId}`, async () => {
-        const sandbox = await resolveProjectSandbox(sandboxRow);
-        const token = await mintInstallationToken(project.installationId);
-        await pushBranch(sandbox, workdir, branch, token, project.repoFullName);
-        return c.json({ pushed: true, branch });
-      });
-    } catch (err) {
-      return gitErrorResponse(c, err);
-    }
-  });
+    // ── Open a pull request via the gh CLI ──────────────────────────────────
+    registerApiRoute('/web/github/projects/:id/pr', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { userId, project, sandboxRow } = owned;
 
-  // ── Open a pull request via the gh CLI ──────────────────────────────────
-  app.post('/api/web/github/projects/:id/pr', async c => {
-    const owned = await loadOwnedProject(c);
-    if ('response' in owned) return owned.response;
-    const { userId, project, sandboxRow } = owned;
+        let body: { branch?: unknown; base?: unknown; title?: unknown; body?: unknown; worktreePath?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (!isValidGitRefSandbox(body.branch)) {
+          return c.json({ error: 'Invalid branch' }, 400);
+        }
+        const base = body.base === undefined ? project.defaultBranch : body.base;
+        if (!isValidGitRefSandbox(base)) {
+          return c.json({ error: 'Invalid base' }, 400);
+        }
+        if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 256) {
+          return c.json({ error: 'Invalid title' }, 400);
+        }
+        if (body.body !== undefined && (typeof body.body !== 'string' || body.body.length > 65536)) {
+          return c.json({ error: 'Invalid body' }, 400);
+        }
+        const head = body.branch;
+        const title = body.title;
+        const prBody = body.body as string | undefined;
+        const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
+        if (!workdir) {
+          return c.json({ error: 'Invalid worktreePath' }, 400);
+        }
 
-    let body: { branch?: unknown; base?: unknown; title?: unknown; body?: unknown; worktreePath?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    if (!isValidGitRefSandbox(body.branch)) {
-      return c.json({ error: 'Invalid branch' }, 400);
-    }
-    const base = body.base === undefined ? project.defaultBranch : body.base;
-    if (!isValidGitRefSandbox(base)) {
-      return c.json({ error: 'Invalid base' }, 400);
-    }
-    if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 256) {
-      return c.json({ error: 'Invalid title' }, 400);
-    }
-    if (body.body !== undefined && (typeof body.body !== 'string' || body.body.length > 65536)) {
-      return c.json({ error: 'Invalid body' }, 400);
-    }
-    const head = body.branch;
-    const title = body.title;
-    const prBody = body.body as string | undefined;
-    const workdir = await resolveWorktreePath(project.id, userId, body.worktreePath, sandboxRow.sandboxWorkdir);
-    if (!workdir) {
-      return c.json({ error: 'Invalid worktreePath' }, 400);
-    }
+        try {
+          return await withProjectLock(`${project.id}:${userId}`, async () => {
+            const sandbox = await resolveProjectSandbox(sandboxRow);
+            const token = await mintInstallationToken(project.installationId);
+            const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            return c.json({ url: result.url });
+          });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
 
-    try {
-      return await withProjectLock(`${project.id}:${userId}`, async () => {
-        const sandbox = await resolveProjectSandbox(sandboxRow);
-        const token = await mintInstallationToken(project.installationId);
-        const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
-        return c.json({ url: result.url });
-      });
-    } catch (err) {
-      return gitErrorResponse(c, err);
-    }
-  });
+    // ── Tear down the caller's sandbox for a project ────────────────────────
+    // Per-user teardown only: drops the caller's `(project, user)` sandbox
+    // binding and stops the VM, freeing a slot in the per-replica budget. Project
+    // deletion at the org level is out of scope (org admin model is later).
+    registerApiRoute('/web/github/projects/:id/sandbox', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { userId, project, sandboxRow } = owned;
 
-  // ── Tear down the caller's sandbox for a project ────────────────────────
-  // Per-user teardown only: drops the caller's `(project, user)` sandbox
-  // binding and stops the VM, freeing a slot in the per-replica budget. Project
-  // deletion at the org level is out of scope (org admin model is later).
-  app.delete('/api/web/github/projects/:id/sandbox', async c => {
-    const owned = await loadOwnedProject(c);
-    if ('response' in owned) return owned.response;
-    const { userId, project, sandboxRow } = owned;
+        if (!sandboxRow.sandboxId) {
+          // Nothing provisioned for this user — idempotent success.
+          return c.json({ tornDown: false });
+        }
 
-    if (!sandboxRow.sandboxId) {
-      // Nothing provisioned for this user — idempotent success.
-      return c.json({ tornDown: false });
-    }
-
-    try {
-      return await withProjectLock(`${project.id}:${userId}`, async () => {
-        const sandbox = await reattachProjectSandbox(sandboxRow.sandboxId!);
-        await teardownProjectSandbox(sandboxRow, sandbox);
-        return c.json({ tornDown: true });
-      });
-    } catch (err) {
-      return gitErrorResponse(c, err);
-    }
-  });
+        try {
+          return await withProjectLock(`${project.id}:${userId}`, async () => {
+            const sandbox = await reattachProjectSandbox(sandboxRow.sandboxId!);
+            await teardownProjectSandbox(sandboxRow, sandbox);
+            return c.json({ tornDown: true });
+          });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
+  ];
 }
 
 /**

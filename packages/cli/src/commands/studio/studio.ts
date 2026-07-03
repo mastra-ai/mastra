@@ -3,10 +3,11 @@ import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { escapeStudioHtmlValue } from '@mastra/deployer/build';
 import { config } from 'dotenv';
 import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
-import { loadAndValidatePresets, escapeJsonForHtml } from '../../utils/validate-presets.js';
+import { loadAndValidatePresets } from '../../utils/validate-presets.js';
 
 interface StudioOptions {
   env?: string;
@@ -118,14 +119,18 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_TEMPLATES%%', templatesEnabled)
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
-    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
-    .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))
+    .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', () =>
+      escapeStudioHtmlValue(process.env.MASTRA_TELEMETRY_DISABLED ?? ''),
+    )
+    .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', () => escapeStudioHtmlValue(requestContextPresetsJson))
     .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', experimentalUI)
     .replaceAll('%%MASTRA_AGENT_SIGNALS%%', agentSignals)
     .replaceAll('%%MASTRA_SIGNALS_UI%%', signalsUI)
-    .replaceAll('%%MASTRA_ORGANIZATION_ID%%', organizationId)
-    .replaceAll('%%MASTRA_PLATFORM_PROJECT_ID%%', platformProjectId)
-    .replaceAll('%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%', platformObservabilityEndpoint)
+    .replaceAll('%%MASTRA_ORGANIZATION_ID%%', () => escapeStudioHtmlValue(organizationId))
+    .replaceAll('%%MASTRA_PLATFORM_PROJECT_ID%%', () => escapeStudioHtmlValue(platformProjectId))
+    .replaceAll('%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%', () =>
+      escapeStudioHtmlValue(platformObservabilityEndpoint),
+    )
     .replaceAll('%%MASTRA_DESKTOP_ENDPOINT%%', '');
 
   // Pre-compress the HTML shell since it's served for every non-asset request
