@@ -11,7 +11,6 @@ import { cn } from '@/lib/utils';
 type ThreadRailPreviewState = {
   currentTurn: ThreadRailTurn | undefined;
   previousTurn: ThreadRailTurn | undefined;
-  direction: -1 | 1;
   index: number | null;
   settled: boolean;
   top: number;
@@ -24,7 +23,6 @@ const PREVIEW_EXIT_DURATION_MS = 200;
 const DEFAULT_PREVIEW_STATE: ThreadRailPreviewState = {
   currentTurn: undefined,
   previousTurn: undefined,
-  direction: 1,
   index: null,
   settled: true,
   top: 0,
@@ -80,7 +78,6 @@ export function ThreadRail({
       return {
         currentTurn: nextTurn,
         previousTurn: current.visible ? current.currentTurn : undefined,
-        direction: current.index === null || index >= current.index ? 1 : -1,
         index,
         settled: false,
         top: nextTop,
@@ -180,7 +177,6 @@ export function ThreadRail({
           id={previewId}
           currentTurn={previewState.currentTurn}
           previousTurn={previewState.previousTurn}
-          direction={previewState.direction}
           settled={previewState.settled}
           visible={previewState.visible}
           style={{ top: previewState.top }}
@@ -258,7 +254,6 @@ function ThreadRailPreview({
   id,
   currentTurn,
   previousTurn,
-  direction,
   settled,
   visible,
   style,
@@ -266,19 +261,16 @@ function ThreadRailPreview({
   id: string;
   currentTurn: ThreadRailTurn;
   previousTurn: ThreadRailTurn | undefined;
-  direction: -1 | 1;
   settled: boolean;
   visible: boolean;
   style?: React.CSSProperties;
 }) {
   const containerVisible = visible && (settled || Boolean(previousTurn));
-  const incomingOffset = direction === 1 ? 'translate-y-8' : '-translate-y-8';
-  const outgoingOffset = direction === 1 ? '-translate-y-8' : 'translate-y-8';
-  const enteringLayerClassName = `${incomingOffset} opacity-0`;
-  const exitingLayerClassName = `${outgoingOffset} opacity-0`;
-  const visibleLayerClassName = 'translate-y-0 opacity-100';
+  const enteringLayerClassName = 'opacity-0 blur-sm';
+  const exitingLayerClassName = 'opacity-0 blur-sm';
+  const visibleLayerClassName = 'opacity-100 blur-none';
   const layerClassName =
-    'absolute inset-x-0 top-0 h-full transition-[opacity,translate] duration-normal ease-out will-change-[opacity,translate] motion-reduce:translate-y-0 motion-reduce:transition-none';
+    'absolute inset-x-0 top-0 h-full transition-[opacity,filter] duration-normal ease-out will-change-[opacity,filter] motion-reduce:blur-none motion-reduce:transition-none';
 
   return (
     <div
@@ -286,7 +278,7 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={visible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute left-full z-30 ml-3 w-72 -translate-y-1/2 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[top,opacity] duration-normal ease-out motion-reduce:transition-none',
+        'pointer-events-none absolute left-full z-30 ml-3 w-72 -translate-y-1/2 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-opacity duration-normal ease-out motion-reduce:transition-none',
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
       style={style}
