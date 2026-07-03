@@ -5,7 +5,7 @@ import { commitChanges, createWorktree, openPullRequest, pushBranch } from '../s
 
 /**
  * Mutation hooks for the per-project git write operations
- * (`/api/web/github/projects/:id/{worktree,commit,push,pr}`).
+ * (`/web/github/projects/:id/{worktree,commit,push,pr}`).
  *
  * Thin wrappers over the services: callers get `isPending`/`error` for UI
  * state, and failures surface as `GitOpError` (with `code`, `status`, and

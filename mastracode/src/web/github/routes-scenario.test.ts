@@ -153,7 +153,8 @@ vi.mock('./config', () => ({
   },
 }));
 
-import { mountGithubRoutes } from './routes';
+import { mountApiRoutes } from '../test-utils';
+import { buildGithubRoutes } from './routes';
 
 // ── Fake table helpers (mirrors routes.test.ts) ─────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -238,7 +239,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     if (user) c.set('webAuthUser' as never, user as never);
     await next();
   });
-  mountGithubRoutes(app as any, { baseUrl: 'http://localhost:4111' });
+  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
   return app;
 }
 
@@ -293,7 +294,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
     // 1. Create the project from an owned installation.
-    const createRes = await postJson(app, '/api/web/github/projects', {
+    const createRes = await postJson(app, '/web/github/projects', {
       repoFullName: 'octo/hello',
       installationId: 7,
     });
@@ -314,13 +315,13 @@ describe('S1: full write-back journey through the real route handlers', () => {
     });
 
     // 2. Ensure → provisions the sandbox + materialises the repo.
-    const ensureRes = await postJson(app, `/api/web/github/projects/${projectId}/ensure`, {});
+    const ensureRes = await postJson(app, `/web/github/projects/${projectId}/ensure`, {});
     expect(ensureRes.status).toBe(200);
     expect(ensureProjectSandbox).toHaveBeenCalledOnce();
     expect(materializeRepo).toHaveBeenCalledOnce();
 
     // 3. Worktree → persists a github_worktrees row for feat/x.
-    const wtRes = await postJson(app, `/api/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
+    const wtRes = await postJson(app, `/web/github/projects/${projectId}/worktree`, { branch: 'feat/x' });
     expect(wtRes.status).toBe(200);
     const wtJson = await wtRes.json();
     expect(wtJson.branch).toBe('feat/x');
@@ -337,7 +338,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
     // 4. Commit in that exact worktree path → the round-trip is honoured:
     // a path that only exists because step 3 persisted it now passes
     // resolveWorktreePath (no client-path injection possible).
-    const commitRes = await postJson(app, `/api/web/github/projects/${projectId}/commit`, {
+    const commitRes = await postJson(app, `/web/github/projects/${projectId}/commit`, {
       message: 'wip',
       worktreePath: persistedWorktreePath,
     });
@@ -347,7 +348,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
     // 5. Push that worktree → a fresh token is minted for *this* op.
     const mintBeforePush = mint.mock.calls.length;
-    const pushRes = await postJson(app, `/api/web/github/projects/${projectId}/push`, {
+    const pushRes = await postJson(app, `/web/github/projects/${projectId}/push`, {
       branch: 'feat/x',
       worktreePath: persistedWorktreePath,
     });
@@ -363,7 +364,7 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
     // 6. Open a PR → another fresh token is minted (per-op, not reused).
     const mintBeforePr = mint.mock.calls.length;
-    const prRes = await postJson(app, `/api/web/github/projects/${projectId}/pr`, {
+    const prRes = await postJson(app, `/web/github/projects/${projectId}/pr`, {
       branch: 'feat/x',
       title: 'My PR',
       body: 'Adds a thing',
@@ -421,8 +422,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       order.push('end');
     };
 
-    const first = postJson(app, '/api/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/api/web/github/projects/p1/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b' });
 
     // Let microtasks flush; only the first push body should have begun.
     await new Promise(r => setTimeout(r, 10));
@@ -455,8 +456,8 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
       active--;
     };
 
-    const first = postJson(app, '/api/web/github/projects/p1/push', { branch: 'feat/a' });
-    const second = postJson(app, '/api/web/github/projects/p2/push', { branch: 'feat/b' });
+    const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a' });
+    const second = postJson(app, '/web/github/projects/p2/push', { branch: 'feat/b' });
 
     await new Promise(r => setTimeout(r, 10));
     // Distinct project ids → distinct locks → both bodies run concurrently.

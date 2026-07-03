@@ -6,7 +6,7 @@ import { fetchGithubStatus } from '../services/github';
 
 /**
  * GitHub feature/connection status through the shared React Query cache, so
- * every consumer dedupes to one `/api/web/github/status` request. The service
+ * every consumer dedupes to one `/web/github/status` request. The service
  * degrades to a disabled status (or `authRequired`) instead of throwing, so
  * consumers read `data`, never `error`. Pass `enabled: false` to gate the
  * request (e.g. until web auth has resolved).

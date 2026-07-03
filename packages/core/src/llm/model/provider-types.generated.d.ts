@@ -159,6 +159,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-pro',
     'glm-5',
     'glm-5.1',
+    'glm-5.2',
     'kimi-k2-thinking',
     'kimi-k2.5',
     'kimi-k2.6',
@@ -1469,6 +1470,7 @@ export type ProviderModelsMap = {
     'openai-gpt-5.5',
     'snowflake-llama3.3-70b',
   ];
+  readonly 'tencent-token-plan': readonly ['hy3'];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',
@@ -2781,11 +2783,10 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'deepseek-ai/DeepSeek-V3.2',
     'google/gemma-4-31B-it',
-    'zai-org/GLM-5',
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly 'tencent-tokenhub': readonly ['hy3-preview'];
+  readonly 'tencent-tokenhub': readonly ['hy3', 'hy3-preview'];
   readonly wandb: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'OpenPipe/Qwen3-14B-Instruct',

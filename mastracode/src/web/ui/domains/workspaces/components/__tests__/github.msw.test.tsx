@@ -12,7 +12,7 @@ const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'proj-1';
 
 function gitOpUrl(action: string): string {
-  return `${ORIGIN}/api/web/github/projects/${PROJECT}/${action}`;
+  return `${ORIGIN}/web/github/projects/${PROJECT}/${action}`;
 }
 
 describe('github git-op helpers', () => {

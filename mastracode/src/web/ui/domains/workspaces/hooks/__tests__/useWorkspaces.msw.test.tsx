@@ -88,7 +88,7 @@ describe('workspaces query hooks', () => {
     let received: unknown;
 
     server.use(
-      http.post(`${ORIGIN}/api/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
         received = await request.json();
         return HttpResponse.json({
           branch: 'feat-new',
@@ -130,7 +130,7 @@ describe('workspaces query hooks', () => {
     const session = sessionStub();
 
     server.use(
-      http.post(`${ORIGIN}/api/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
         HttpResponse.json({ error: 'Invalid branch', message: 'branch name is invalid' }, { status: 400 }),
       ),
     );

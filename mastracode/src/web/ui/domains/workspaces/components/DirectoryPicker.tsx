@@ -8,7 +8,7 @@ import { useDirectoryListing } from '../../../../../shared/hooks/use-fs';
 
 /**
  * Server-driven directory browser. The browser can't read absolute filesystem
- * paths, so this navigates the server's filesystem via `GET /api/web/fs/list`
+ * paths, so this navigates the server's filesystem via `GET /web/fs/list`
  * (confined to the server's configured root). The user drills into folders and
  * picks one — yielding a real absolute path with no typing.
  *

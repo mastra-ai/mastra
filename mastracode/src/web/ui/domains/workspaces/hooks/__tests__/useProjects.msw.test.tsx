@@ -49,7 +49,7 @@ describe('projects query hooks', () => {
   it('adds a project, persists it, and refreshes project query consumers', async () => {
     saveProjects([localProject]);
     server.use(
-      http.get(`${ORIGIN}/api/web/project/resolve`, ({ request }) => {
+      http.get(`${ORIGIN}/web/project/resolve`, ({ request }) => {
         expect(new URL(request.url).searchParams.get('path')).toBe('/repo/new-app');
         return HttpResponse.json({
           resourceId: 'resource-new',
@@ -104,7 +104,7 @@ describe('projects query hooks', () => {
   it('backfills a missing resourceId and refreshes the projects query', async () => {
     saveProjects([legacyProject]);
     server.use(
-      http.get(`${ORIGIN}/api/web/project/resolve`, () =>
+      http.get(`${ORIGIN}/web/project/resolve`, () =>
         HttpResponse.json({
           resourceId: 'resource-legacy',
           name: 'Legacy',
@@ -134,7 +134,7 @@ describe('projects query hooks', () => {
   it('leaves the projects cache unchanged when resourceId resolution fails', async () => {
     saveProjects([legacyProject]);
     server.use(
-      http.get(`${ORIGIN}/api/web/project/resolve`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+      http.get(`${ORIGIN}/web/project/resolve`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
     );
 
     const { result } = renderHookWithProviders(() => {
@@ -174,7 +174,7 @@ describe('projects query hooks', () => {
   it('selects a legacy project after resolving its resource id through the project query cache', async () => {
     saveProjects([legacyProject]);
     server.use(
-      http.get(`${ORIGIN}/api/web/project/resolve`, () =>
+      http.get(`${ORIGIN}/web/project/resolve`, () =>
         HttpResponse.json({
           resourceId: 'resource-legacy',
           name: 'Legacy',

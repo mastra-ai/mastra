@@ -228,6 +228,47 @@ describe('studio base path support', () => {
     }
   });
 
+  it('delivers hostile platform env values to window.* intact without executing them', async () => {
+    process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
+    const organizationId = "org'; window.pwned = true; //";
+    const platformProjectId = 'proj-$&-dollar';
+    const observabilityEndpoint = 'https://x.example</script><script>window.pwned = true</script>';
+    process.env.MASTRA_ORGANIZATION_ID = organizationId;
+    process.env.MASTRA_PLATFORM_PROJECT_ID = platformProjectId;
+    process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = observabilityEndpoint;
+    const studioDir = createStudioFixture();
+    const server = createServer(studioDir, {}, '');
+
+    await new Promise<void>(resolve => server.listen(0, resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const htmlResponse = await request(`http://127.0.0.1:${port}/agents`);
+
+      expect(htmlResponse.status).toBe(200);
+
+      // Browsers close an inline script at the first `</script>`, wherever it
+      // appears. If a value could smuggle one in, the page would grow a second
+      // script block containing the injected payload.
+      const scripts = [...htmlResponse.body.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
+      expect(scripts).toHaveLength(1);
+
+      // Execute the served config script the way a browser would: it must
+      // assign the raw env values verbatim and nothing else. A breakout would
+      // throw a SyntaxError or set `window.pwned`.
+      const windowStub: Record<string, unknown> = {};
+
+      new Function('window', scripts[0]![1]!)(windowStub);
+      expect(windowStub.pwned).toBeUndefined();
+      expect(windowStub.MASTRA_ORGANIZATION_ID).toBe(organizationId);
+      expect(windowStub.MASTRA_PLATFORM_PROJECT_ID).toBe(platformProjectId);
+      expect(windowStub.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT).toBe(observabilityEndpoint);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    }
+  });
+
   it('preserves the full query string when rewriting asset requests', async () => {
     process.env.MASTRA_STUDIO_BASE_PATH = '/agents';
     const studioDir = createStudioFixture();

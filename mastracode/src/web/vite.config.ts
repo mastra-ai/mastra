@@ -9,13 +9,12 @@ import type { Plugin } from 'vite';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Dev-only equivalent of the server-side `injectRuntimeConfig` (html-config.ts):
- * in dev, Vite serves index.html instead of the Mastra server, so this plugin
- * injects `window.__MASTRACODE_CONFIG__` from the same WORKOS env vars the
- * server reads (`isWebAuthEnabled()` in auth.ts). `web:dev` only passes
- * `src/web/.env` to tsx, so the plugin loads that file itself via `loadEnv`.
- * Production builds are untouched (`apply: 'serve'`) — the server injects the
- * flag at runtime there.
+ * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html, from
+ * the same WORKOS env vars the server reads (`isWebAuthEnabled()` in auth.ts).
+ * `web:dev` only passes `src/web/.env` to the API server, so the plugin loads
+ * that file itself via `loadEnv`. Production builds are untouched
+ * (`apply: 'serve'`) — the statically hosted SPA has no flag and falls back to
+ * probing `/auth/me` (see ui/runtime-config.ts).
  */
 function runtimeConfigPlugin(mode: string): Plugin {
   return {
@@ -38,14 +37,13 @@ function runtimeConfigPlugin(mode: string): Plugin {
 /**
  * Vite config for the MastraCode web UI.
  *
- * In dev, `pnpm web:dev` runs `mastracode web` (the API server on :4111) and
- * Vite (:5173) side by side; `/api` is proxied to the server so the browser
- * uses same-origin streaming requests without CORS.
+ * In dev, `pnpm web:dev` runs `mastra dev` (the API server from
+ * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
+ * proxied to that server so the browser uses same-origin requests in dev.
  *
- * The production build outputs to `dist/web/ui`, which `mastracode web` serves
- * as static files alongside the controller routes. It lives in its own `ui`
- * subdirectory so the Vite build (emptyOutDir) doesn't clobber the compiled
- * server entry that tsup emits at `dist/web/server.js`.
+ * The production build outputs the static SPA to `dist/web/ui`. It is hosted
+ * separately (static host / CDN) and talks to the deployed API cross-origin —
+ * the Mastra server no longer serves the SPA itself.
  */
 export default defineConfig(({ mode }) => ({
   root: resolve(here, 'ui'),
@@ -61,6 +59,13 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:4111',
         changeOrigin: true,
       },
+      // Web surface routes (fs/config/github) live under `/web/*` on the API
+      // server after the `/api/web` → `/web` path migration. Proxy them so the
+      // dev UI (:5173) can reach them on :4111.
+      '/web': {
+        target: 'http://localhost:4111',
+        changeOrigin: true,
+      },
       // Optional WorkOS auth routes live on the API server too; proxy them so
       // the dev UI (:5173) can reach login/callback/logout/me on :4111.
       //
@@ -69,7 +74,7 @@ export default defineConfig(({ mode }) => ({
       // `/auth.ts` (the client auth module) and wrongly proxies them to the
       // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
       // module imports on Vite while still forwarding real auth routes.
-      '/auth': {
+      '^/auth/': {
         target: 'http://localhost:4111',
         changeOrigin: true,
       },

@@ -15,7 +15,7 @@ import type { GithubStatus } from '../../services/github';
 import { useGithubStatusQuery } from '../useGithubStatus';
 
 const ORIGIN = TEST_BASE_URL;
-const STATUS_URL = `${ORIGIN}/api/web/github/status`;
+const STATUS_URL = `${ORIGIN}/web/github/status`;
 
 const connectedStatus: GithubStatus = {
   enabled: true,

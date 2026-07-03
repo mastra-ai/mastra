@@ -9,7 +9,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web
 import type { ModelPackInfo } from '../../../../../../shared/api/types';
 import { ModelPacksSection } from '../ModelPacksSection';
 
-const PACKS_URL = `${TEST_BASE_URL}/api/web/config/model-packs`;
+const PACKS_URL = `${TEST_BASE_URL}/web/config/model-packs`;
 const activateUrl = (id: string) => `${PACKS_URL}/${encodeURIComponent(id)}/activate`;
 const itemUrl = (id: string) => `${PACKS_URL}/${encodeURIComponent(id)}`;
 

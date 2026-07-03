@@ -65,7 +65,87 @@ const micStream = getMicrophoneStream()
 await agent.voice.send(micStream)
 ```
 
-For integrating Speech-to-Speech capabilities with agents, refer to the [Adding Voice to Agents](/docs/agents/adding-voice) documentation.
+For a broader overview of voice providers on agents, see [Voice in Mastra](/docs/voice/overview).
+
+## Use tools in realtime sessions
+
+Realtime voice providers can use tools configured on the agent. Add the tools to the `Agent` definition, then connect and send audio through the voice provider:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+import { calculate, search } from '../tools'
+
+export const agent = new Agent({
+  id: 'speech-to-speech-agent',
+  name: 'Speech-to-Speech Agent',
+  instructions: 'You are a helpful assistant with speech-to-speech capabilities.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    search,
+    calculate,
+  },
+  voice: new OpenAIRealtimeVoice(),
+})
+```
+
+## Listen for realtime events
+
+Realtime voice providers emit events you can use to update your UI, play assistant audio, log transcriptions, and handle errors:
+
+```typescript
+agent.voice.on('speaking', ({ audio }) => {
+  playAudio(audio)
+})
+
+agent.voice.on('writing', ({ text, role }) => {
+  console.log(`${role}: ${text}`)
+})
+
+agent.voice.on('error', error => {
+  console.error('Voice error:', error)
+})
+```
+
+Event names and payloads vary by provider. Check the provider section below or the provider reference for the full event list.
+
+## Per-session voice instances
+
+A static `voice` instance is shared across every request. This works for one-shot text-to-speech, but real-time and speech-to-speech providers store session state such as the WebSocket connection, tools, instructions, and request context. If one agent handles several live sessions at once, a shared instance can let one session overwrite another session's state.
+
+Provide `voice` as a resolver when each live session needs its own voice instance. Mastra runs the resolver on each `getVoice()` call and returns a fresh instance for that request context:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { RequestContext } from '@mastra/core/request-context'
+import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
+
+export const agent = new Agent({
+  id: 'support-line',
+  name: 'Support Line',
+  instructions: ({ requestContext }) => `Help user ${requestContext.get('user')}.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  voice: ({ requestContext }) =>
+    new OpenAIRealtimeVoice({
+      apiKey: requestContext.get('apiKey'),
+    }),
+})
+
+const requestContext = new RequestContext()
+requestContext.set('user', 'user-123')
+requestContext.set('apiKey', process.env.OPENAI_API_KEY)
+
+const voice = await agent.getVoice({ requestContext })
+await voice.connect()
+```
+
+When you use a resolver:
+
+- Each call to `getVoice()` returns a new instance, so concurrent sessions don't share state.
+- Mastra doesn't add tools or instructions to a resolver instance. Configure them inside the resolver or on the provider.
+- You own the returned instance lifecycle, so call `disconnect()` or `close()` when the session ends.
+
+The `agent.voice` getter has no request context, so it throws when `voice` is a resolver. Use `agent.getVoice({ requestContext })` instead.
 
 ## Google Gemini Live (Realtime)
 

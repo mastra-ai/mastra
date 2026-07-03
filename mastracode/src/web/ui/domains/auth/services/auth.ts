@@ -53,7 +53,7 @@ export function redirectToLogout(baseUrl: string): void {
  */
 export async function fetchAuthState(baseUrl: string): Promise<WebAuthState> {
   try {
-    const res = await fetch(`${baseUrl}/auth/me`, { headers: { Accept: 'application/json' } });
+    const res = await fetch(`${baseUrl}/auth/me`, { headers: { Accept: 'application/json' }, credentials: 'include' });
     if (res.status === 404) {
       return { authEnabled: false, authenticated: false };
     }

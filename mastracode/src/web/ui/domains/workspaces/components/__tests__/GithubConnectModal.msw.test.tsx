@@ -61,7 +61,7 @@ describe('GithubConnectModal', () => {
   it('loads connected repositories and re-queries when filtering', async () => {
     const requestedQueries: Array<string | null> = [];
     server.use(
-      http.get(`${ORIGIN}/api/web/github/repos`, ({ request }) => {
+      http.get(`${ORIGIN}/web/github/repos`, ({ request }) => {
         const url = new URL(request.url);
         requestedQueries.push(url.searchParams.get('q'));
         return HttpResponse.json({ repos: [repo] });
@@ -78,7 +78,7 @@ describe('GithubConnectModal', () => {
 
   it('shows the repo loading error state', async () => {
     server.use(
-      http.get(`${ORIGIN}/api/web/github/repos`, () => HttpResponse.json({ error: 'unavailable' }, { status: 500 })),
+      http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ error: 'unavailable' }, { status: 500 })),
     );
 
     renderModal();
@@ -89,8 +89,8 @@ describe('GithubConnectModal', () => {
   it('creates a GitHub project, persists it, notifies the caller, and refreshes projects query consumers', async () => {
     saveProjects([]);
     server.use(
-      http.get(`${ORIGIN}/api/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/api/web/github/projects`, () => HttpResponse.json({ project: createdProject })),
+      http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ project: createdProject })),
     );
     const projectsHook = renderHookWithProviders(() => useProjectsQuery());
     const { onProjectCreated } = renderModal(undefined, projectsHook.client);
@@ -106,8 +106,8 @@ describe('GithubConnectModal', () => {
   it('shows create errors and does not persist the repo', async () => {
     saveProjects([]);
     server.use(
-      http.get(`${ORIGIN}/api/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-      http.post(`${ORIGIN}/api/web/github/projects`, () => HttpResponse.json({ error: 'failed' }, { status: 500 })),
+      http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
+      http.post(`${ORIGIN}/web/github/projects`, () => HttpResponse.json({ error: 'failed' }, { status: 500 })),
     );
 
     renderModal();

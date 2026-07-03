@@ -172,6 +172,7 @@
         "deepseek-v4-pro",
         "glm-5",
         "glm-5.1",
+        "glm-5.2",
         "kimi-k2-thinking",
         "kimi-k2.5",
         "kimi-k2.6",
@@ -1779,6 +1780,15 @@
         "snowflake-llama3.3-70b"
       ],
       "docUrl": "https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api",
+      "gateway": "models.dev"
+    },
+    "tencent-token-plan": {
+      "url": "https://api.lkeap.cloud.tencent.com/plan/v3",
+      "apiKeyEnvVar": "TENCENT_TOKEN_PLAN_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Tencent Token Plan",
+      "models": ["hy3"],
+      "docUrl": "https://cloud.tencent.com/document/product/1823/130060",
       "gateway": "models.dev"
     },
     "github-models": {
@@ -3516,7 +3526,6 @@
         "Qwen/Qwen3-235B-A22B-Instruct-2507",
         "deepseek-ai/DeepSeek-V3.2",
         "google/gemma-4-31B-it",
-        "zai-org/GLM-5",
         "zai-org/GLM-5.1",
         "zai-org/GLM-5.2"
       ],
@@ -3528,7 +3537,7 @@
       "apiKeyEnvVar": "TENCENT_TOKENHUB_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Tencent TokenHub",
-      "models": ["hy3-preview"],
+      "models": ["hy3", "hy3-preview"],
       "docUrl": "https://cloud.tencent.com/document/product/1823/130050",
       "gateway": "models.dev"
     },
@@ -5915,6 +5924,7 @@
       "deepseek-v4-pro",
       "glm-5",
       "glm-5.1",
+      "glm-5.2",
       "kimi-k2-thinking",
       "kimi-k2.5",
       "kimi-k2.6",
@@ -7219,6 +7229,7 @@
       "openai-gpt-5.5",
       "snowflake-llama3.3-70b"
     ],
+    "tencent-token-plan": ["hy3"],
     "github-models": [
       "ai21-labs/ai21-jamba-1.5-large",
       "ai21-labs/ai21-jamba-1.5-mini",
@@ -8531,11 +8542,10 @@
       "Qwen/Qwen3-235B-A22B-Instruct-2507",
       "deepseek-ai/DeepSeek-V3.2",
       "google/gemma-4-31B-it",
-      "zai-org/GLM-5",
       "zai-org/GLM-5.1",
       "zai-org/GLM-5.2"
     ],
-    "tencent-tokenhub": ["hy3-preview"],
+    "tencent-tokenhub": ["hy3", "hy3-preview"],
     "wandb": [
       "MiniMaxAI/MiniMax-M2.5",
       "OpenPipe/Qwen3-14B-Instruct",

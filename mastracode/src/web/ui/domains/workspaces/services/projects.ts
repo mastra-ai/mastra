@@ -97,7 +97,9 @@ interface ResolvedProject {
  * for an absolute path.
  */
 export async function resolveProjectPath(baseUrl: string, path: string): Promise<ResolvedProject> {
-  const res = await fetch(`${baseUrl}/api/web/project/resolve?path=${encodeURIComponent(path)}`);
+  const res = await fetch(`${baseUrl}/web/project/resolve?path=${encodeURIComponent(path)}`, {
+    credentials: 'include',
+  });
   if (!res.ok) throw new Error(`Failed to resolve project (${res.status})`);
   return (await res.json()) as ResolvedProject;
 }

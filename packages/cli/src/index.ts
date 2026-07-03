@@ -22,6 +22,8 @@ import { loginAction, logoutAction } from './commands/auth/login';
 import { listOrgsAction, switchOrgAction } from './commands/auth/orgs';
 import { createTokenAction, listTokensAction, revokeTokenAction } from './commands/auth/tokens';
 import { whoamiAction } from './commands/auth/whoami';
+import { unifiedDeployAction } from './commands/deploy/index.js';
+import { registerEnvCommands } from './commands/env/index.js';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
@@ -249,6 +251,25 @@ program
   )
   .action(startProject);
 
+// ---- Unified deploy command (new entry point) ----
+
+program
+  .command('deploy [dir]')
+  .description('Deploy your Mastra application to an environment')
+  .option('--env <name>', 'Target environment (default: production)', 'production')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID, slug, or name (creates new project if not found)')
+  .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
+  .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
+  .option('--region <region>', 'Region for new environments (e.g., us, eu)')
+  .option('--debug', 'Enable debug logs', false)
+  .action(wrapAction(unifiedDeployAction));
+
+// ---- Studio commands ----
+
 const studioCommand = program
   .command('studio')
   .description('Manage Mastra Studio')
@@ -342,6 +363,10 @@ const authTokens = authCommand.command('tokens').description('Manage API tokens'
 authTokens.command('create <name>').description('Create a new API token').action(wrapAction(createTokenAction));
 
 authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
+
+// ---- Environment commands ----
+
+registerEnvCommands(program);
 
 // ---- Server commands ----
 
