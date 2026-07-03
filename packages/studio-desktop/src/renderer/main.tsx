@@ -3,9 +3,10 @@ import './styles.css';
 
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { createRoot } from 'react-dom/client';
 
-import type { DesktopState, DesktopTab, MastraDesktopApi } from '../shared/types';
+import type { DesktopState, MastraDesktopApi } from '../shared/types';
 
 import { Launcher } from './launcher';
 import type { LauncherActions } from './launcher';
@@ -18,12 +19,11 @@ declare global {
 
 const api = window.mastraDesktop;
 const tabStrip = document.querySelector<HTMLDivElement>('#tab-strip');
-const newTabButton = document.querySelector<HTMLButtonElement>('#new-tab-button');
 const launcher = document.querySelector<HTMLElement>('#launcher');
 const webviews = document.querySelector<HTMLElement>('#webviews');
 const bootLoader = document.querySelector<HTMLElement>('#boot-loader');
 
-if (!tabStrip || !newTabButton || !launcher || !webviews || !bootLoader) {
+if (!tabStrip || !launcher || !webviews || !bootLoader) {
   throw new Error('Mastra Studio shell failed to mount');
 }
 
@@ -60,13 +60,6 @@ function activeTab() {
   return state?.tabs.find(tab => tab.id === state?.activeTabId);
 }
 
-function tabKindLabel(tab: DesktopTab) {
-  if (tab.kind === 'launcher') return '+';
-  if (tab.kind === 'managed') return 'T';
-  if (tab.kind === 'dev') return 'L';
-  return 'P';
-}
-
 function Tabs({ current }: { current: DesktopState }) {
   return (
     <>
@@ -80,12 +73,10 @@ function Tabs({ current }: { current: DesktopState }) {
               aria-pressed={isActive}
               className={`tab-button status-${tab.status}`}
               onClick={() => void runAction(`activate-${tab.id}`, () => api.activateTab(tab.id))}
+              size="sm"
               type="button"
               variant={isActive ? 'primary' : 'ghost'}
             >
-              <span className="tab-kind" aria-hidden="true">
-                {tabKindLabel(tab)}
-              </span>
               <span className="tab-title">{tab.title}</span>
             </Button>
             <Button
@@ -104,6 +95,17 @@ function Tabs({ current }: { current: DesktopState }) {
           </span>
         );
       })}
+      <Button
+        aria-label="New tab"
+        className="new-tab-button"
+        onClick={() => void runAction('new-tab', () => api.createLauncherTab())}
+        size="sm"
+        title="New tab"
+        type="button"
+        variant="ghost"
+      >
+        +
+      </Button>
     </>
   );
 }
@@ -115,7 +117,11 @@ function renderTabs() {
     return;
   }
 
-  tabsRoot.render(<Tabs current={current} />);
+  tabsRoot.render(
+    <ThemeProvider defaultTheme="system">
+      <Tabs current={current} />
+    </ThemeProvider>,
+  );
 }
 
 function renderStudioHost() {
@@ -220,10 +226,6 @@ function render() {
   renderLauncher();
   renderBootLoader();
 }
-
-newTabButton.addEventListener('click', () => {
-  void runAction('new-tab', () => api.createLauncherTab());
-});
 
 void api.getState().then(initialState => {
   state = initialState;

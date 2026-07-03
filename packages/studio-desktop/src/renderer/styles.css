@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  --bg: var(--surface1, #111111);
+  --bg: var(--surface1, #000000);
   --line: var(--border1, rgba(255, 255, 255, 0.07));
   --line-strong: var(--border2, rgba(255, 255, 255, 0.11));
   --text: var(--neutral6, #f4f0ea);
@@ -18,6 +18,14 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
+}
+
+html.light {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 * {
@@ -79,7 +87,7 @@ input {
 
 .tab-button,
 .tab-close-button,
-.icon-button,
+.new-tab-button,
 .studio-source-row,
 .manual-server-row button,
 .source-header button,
@@ -90,7 +98,7 @@ input {
 .tab-shell {
   position: relative;
   display: flex;
-  flex: 0 1 clamp(128px, 22vw, 232px);
+  flex: 0 1 clamp(112px, 18vw, 210px);
   min-width: 0;
 }
 
@@ -101,48 +109,9 @@ input {
   padding-right: 34px;
 }
 
-.tab-button.status-loading .tab-kind {
-  position: relative;
-  color: transparent;
-}
-
-.tab-button.status-loading .tab-kind::after {
-  position: absolute;
-  inset: 4px;
-  border: 1.5px solid rgba(255, 255, 255, 0.22);
-  border-top-color: rgba(255, 255, 255, 0.82);
-  border-radius: 999px;
-  content: '';
-  animation: tab-loading-spin 720ms linear infinite;
-}
-
-@keyframes tab-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.icon-button:focus-visible,
 .studio-source-row:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 36%, transparent);
   outline-offset: 2px;
-}
-
-.tab-kind {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.tab-shell.active .tab-kind {
-  background: color-mix(in srgb, var(--surface1, #111111) 11%, transparent);
-  color: var(--surface1, #111111);
 }
 
 .tab-title {
@@ -175,26 +144,10 @@ input {
   color: var(--surface1, #111111);
 }
 
-.icon-button {
-  width: 30px;
-  height: 30px;
-  margin-right: 8px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    color 140ms ease;
-}
-
-.icon-button:hover {
-  border-color: var(--line);
-  background: var(--chrome-hover);
-  color: var(--text);
+.new-tab-button {
+  flex: 0 0 auto;
+  min-width: 30px;
+  padding-inline: 10px;
 }
 
 .surface {
@@ -495,13 +448,8 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tab-close-button,
-  .icon-button {
+  .tab-close-button {
     transition: none;
-  }
-
-  .tab-button.status-loading .tab-kind::after {
-    animation: none;
   }
 }
 

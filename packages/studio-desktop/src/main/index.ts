@@ -150,6 +150,10 @@ function externalNavigationUrl(tab: DesktopTab | undefined, requestUrl: string) 
   }
 }
 
+function isNavigationAbortError(error: unknown) {
+  return error instanceof Error && error.message.includes('ERR_ABORTED');
+}
+
 function createStudioContentView() {
   const view = new WebContentsView({
     webPreferences: {
@@ -174,9 +178,11 @@ function createStudioContentView() {
     }
   });
   view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (errorCode === -3) return;
+
     const frame = isMainFrame ? 'main frame' : 'subframe';
     addAppLog(`Studio view failed to load ${frame} ${validatedURL}: ${errorCode} ${errorDescription}`);
-    if (isMainFrame && errorCode !== -3) {
+    if (isMainFrame) {
       markStudioWebContentsLoadError(
         view.webContents.id,
         `Studio failed to load ${validatedURL}: ${errorDescription} (${errorCode})`,
@@ -288,6 +294,8 @@ function syncStudioContentViews() {
     if (entry.url !== tab.url) {
       entry.url = tab.url;
       void entry.view.webContents.loadURL(tab.url).catch(error => {
+        if (isNavigationAbortError(error)) return;
+
         markStudioWebContentsLoadError(
           entry.view.webContents.id,
           `Studio failed to load ${tab.url}: ${error instanceof Error ? error.message : String(error)}`,
