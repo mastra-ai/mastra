@@ -221,5 +221,9 @@ describeForAllEngines(
       });
     });
   },
+  // Durable: sendMessage-wake test hangs because DurableAgent.stream()
+  // doesn't complete through the AgentThreadStreamRuntime subscribe path.
+  // The sendStateSignal test (persist, no wake) passes on durable.
+  // Signal drain within a run works — this is a separate integration gap.
   { skip: ['durable'] },
 );

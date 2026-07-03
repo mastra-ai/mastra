@@ -51,6 +51,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: true,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -161,6 +162,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: false,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -215,10 +217,8 @@ describeForAllEngines(
       expect(toolExecuted).toBe(false);
     });
   },
-  // TODO(durable-parity): unskip 'durable' after Phase 3 fixes the auto-resume
-  // output wrapper shape across iterations (durable's `output` is undefined on
-  // the second `runLoopScenario` call when sharedAgent is re-used). The Phase 2
-  // system-message rewrite itself works — verified by the unit test for
-  // `applyAutoResumeSystemMessage`.
+  // TODO(durable-parity): auto-resume requires suspended-tool metadata in
+  // memory messages; durable agent does not persist tool-call-approval
+  // metadata the same way the regular agent does.
   { skip: ['durable', 'fs'] },
 );

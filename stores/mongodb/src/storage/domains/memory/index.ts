@@ -22,6 +22,10 @@ import {
  */
 const OM_TABLE = 'mastra_observational_memory' as const;
 import type {
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesByResourceIdInput,
@@ -46,6 +50,7 @@ import type {
 } from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { formatDateForMongoDB } from '../utils';
 
@@ -58,6 +63,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   /** Collections managed by this domain */
   static readonly MANAGED_COLLECTIONS = [TABLE_THREADS, TABLE_MESSAGES, TABLE_RESOURCES, OM_TABLE] as const;
+
+  /**
+   * Retention-eligible collections. The observational-memory collection is
+   * excluded: it has no timestamp anchor to age on. All anchors are BSON dates.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    messages: { table: TABLE_MESSAGES, column: 'createdAt', indexed: true },
+    resources: { table: TABLE_RESOURCES, column: 'createdAt', indexed: true },
+    threads: { table: TABLE_THREADS, column: 'createdAt', indexed: true },
+  };
 
   constructor(config: MongoDBDomainConfig) {
     super();
@@ -76,6 +91,22 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async init(): Promise<void> {
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Delete memory rows older than each table's `maxAge`, batched. Order is
+   * messages → resources → threads so child rows never outlive the delete of
+   * their thread. Like `deleteThread()`, this does not sweep vector-store
+   * embeddings — semantic-recall vectors live in a separate vector store the
+   * memory domain cannot reach; cleaning those up is the operator's concern.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: MemoryStorageMongoDB.retentionTables,
+      order: ['messages', 'resources', 'threads'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'memory', targets, options, logger: this.logger });
   }
 
   /**

@@ -216,7 +216,16 @@ export default agentConfig({
 
 Subagents are isolated. A subagent inherits nothing from its parent. Its tools, skills, and workspace come only from its own directory, and any absent slot falls back to the same framework defaults as a top-level agent.
 
-Subagents are one level deep. A `subagents/` directory nested inside a subagent is ignored with a warning.
+Subagents can declare their own `subagents/` directories, nesting up to three levels below the top-level agent. A `subagents/` directory deeper than that is ignored with a warning.
+
+```text
+src/mastra/agents/
+  supervisor/            # depth 0
+    subagents/
+      researcher/        # depth 1
+        subagents/
+          summarizer/    # depth 2
+```
 
 Naming rules:
 

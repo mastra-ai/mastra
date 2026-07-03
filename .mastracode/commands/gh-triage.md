@@ -68,6 +68,9 @@ Action items:
   - `🟡 medium` — real issue with limited surface area, workaround, or meaningful docs/behavior confusion.
   - `🟢 low` — minor bug, typo, small docs gap, support/question, duplicate, invalid, unsupported, spam, unrelated, or low-risk test/coverage work.
 - Evaluate issue summary, PR relevance, evidence checked, changed areas, checks/local verification, and unresolved risks.
+- For merge confidence, weigh code correctness, integration with existing patterns, unresolved review comments, local verification, approved/required remote checks that actually ran, and release/user impact.
+- Treat unapproved remote CI checks as neutral for merge confidence; do not count them as missing verification or as failures. Prefer narrow local checks/lint/typecheck/tests for confidence evidence.
+- In `Why not higher`, name the specific gap/risk, its merge impact, and whether it is blocking. Avoid generic limits like "needs maintainer review" or "tests not run" unless tied to specific missing evidence and impact.
 - Identify maintainer fix-up candidates from the old triage path, such as conflicts, relevant check/lint/CI failures, or inline suggestions.
 - Prepare maintainer notes using this structure:
 

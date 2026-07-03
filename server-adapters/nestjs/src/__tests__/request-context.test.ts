@@ -1,5 +1,10 @@
 import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
+import {
+  MASTRA_CLIENT_TYPE_HEADER,
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_STUDIO_CLIENT_TYPE,
+} from '@mastra/server/server-adapter';
 import type { INestApplication } from '@nestjs/common';
 import { REQUEST, ContextIdFactory } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
@@ -51,6 +56,7 @@ describe('NestJS Adapter - RequestContext parsing', () => {
     const request = {
       method: 'GET',
       query: { requestContext: encoded },
+      headers: {},
       res: undefined,
     };
 
@@ -65,12 +71,27 @@ describe('NestJS Adapter - RequestContext parsing', () => {
     const request = {
       method: 'POST',
       body: { requestContext: { sessionId: 'session-9' } },
+      headers: {},
       res: undefined,
     };
 
     const service = await createService(context, request);
 
     expect(service.requestContext.get('sessionId')).toBe('session-9');
+  });
+
+  it('marks the context as Studio when the client type header is set', async () => {
+    const context = await createDefaultTestContext();
+    const request = {
+      method: 'GET',
+      query: {},
+      headers: { [MASTRA_CLIENT_TYPE_HEADER]: MASTRA_STUDIO_CLIENT_TYPE },
+      res: undefined,
+    };
+
+    const service = await createService(context, request);
+
+    expect(service.requestContext.get(MASTRA_IS_STUDIO_KEY)).toBe(true);
   });
 
   it('passes body requestContext through to Mastra route execution', async () => {

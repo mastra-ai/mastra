@@ -141,7 +141,7 @@ export function DatasetDetailView({
   const datasetVersions = datasetVersionsQuery.data ?? [];
 
   const isAgentTarget = !datasetTargetType || datasetTargetType === 'agent';
-  const agentVersionsQuery = useAgentVersions({ agentId: isAgentTarget ? agentId : '' });
+  const agentVersionsQuery = useAgentVersions({ agentId, enabled: isAgentTarget });
   const agentVersions = agentVersionsQuery.data?.versions ?? [];
 
   useEffect(() => {

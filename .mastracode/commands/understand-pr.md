@@ -232,6 +232,8 @@ Iterate until the user is happy or decides not to post. Do not post unless the u
 
 ### Posting
 
+When posting/updating comments from a file, pass the file contents as the body (as below), not `@file` as the literal body.
+
 When posting, use the REST API to avoid GraphQL rate limits:
 
 ```bash
