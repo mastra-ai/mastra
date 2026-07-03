@@ -363,6 +363,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kenari',
+          label: 'Kenari',
+        },
+        {
+          type: 'doc',
           id: 'providers/kilo',
           label: 'Kilo Gateway',
         },
