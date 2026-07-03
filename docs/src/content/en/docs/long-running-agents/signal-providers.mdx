@@ -1,5 +1,5 @@
 ---
-title: "Signal providers | Agents"
+title: "Signal providers | Long-running agents"
 description: "Learn what signal providers are and how to build one that monitors an external source and pushes notifications into agent threads."
 packages:
   - "@mastra/core"
@@ -15,7 +15,7 @@ This feature is in beta. Breaking changes may occur without a major version bump
 
 :::
 
-A signal provider monitors an external source, such as GitHub, Slack, continuous integration (CI), or your own API, and pushes [notification signals](/docs/agents/signals#notification-signals) into subscribed agent threads.
+A signal provider monitors an external source, such as GitHub, Slack, continuous integration (CI), or your own API, and pushes [notification signals](/docs/long-running-agents/signals#notification-signals) into subscribed agent threads.
 
 ## When to use a signal provider
 
@@ -29,7 +29,7 @@ If you only need to push a one-off event into a thread, call [`agent.sendNotific
 
 ## How signal providers work
 
-A signal provider is the producing side of the [signals](/docs/agents/signals) system. It brings external events into a thread, while the signal APIs control how the thread consumes them.
+A signal provider is the producing side of the [signals](/docs/long-running-agents/signals) system. It brings external events into a thread, while the signal APIs control how the thread consumes them.
 
 A signal provider combines three capabilities:
 
@@ -233,7 +233,7 @@ export const devAgent = new Agent({
 ## Related
 
 - [Guide: Building a signal provider](/guides/guide/signal-provider)
-- [Signals](/docs/agents/signals)
-- [Notification signals](/docs/agents/signals#notification-signals)
+- [Signals](/docs/long-running-agents/signals)
+- [Notification signals](/docs/long-running-agents/signals#notification-signals)
 - [`SignalProvider` reference](/reference/signals/signal-provider)
 - [`WebhookSignalProvider` reference](/reference/signals/webhook-signal-provider)
