@@ -601,11 +601,10 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     }
   }, 30000);
 
-  async function createSuspendedRunWithSeededTracing(
-    spy: ReturnType<typeof vi.spyOn>,
-    agentRunCalls: any[],
-    seed: { tracingMetadata: Record<string, any>; tracingTags: string[] },
-  ) {
+  async function createSuspendedRunWithSeededTracing(seed: {
+    tracingMetadata: Record<string, any>;
+    tracingTags: string[];
+  }) {
     const findUserTool = createFindUserTool();
     const userAgent = new Agent({
       id: 'user-agent',
@@ -641,14 +640,14 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       },
     });
 
-    return { agent, stream, agentRunCalls };
+    return { agent, stream };
   }
 
   it('restores persisted tracingOptions.metadata and tags on resume when caller does not re-supply them', async () => {
     const { spy, agentRunCalls } = await spyOnAgentRunSpans();
 
     try {
-      const { agent, stream } = await createSuspendedRunWithSeededTracing(spy, agentRunCalls, {
+      const { agent, stream } = await createSuspendedRunWithSeededTracing({
         tracingMetadata: { sessionId: 'session-abc', userId: 'user-xyz', custom: 'value' },
         tracingTags: ['production', 'experiment-v2'],
       });
@@ -673,7 +672,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
     const { spy, agentRunCalls } = await spyOnAgentRunSpans();
 
     try {
-      const { agent, stream } = await createSuspendedRunWithSeededTracing(spy, agentRunCalls, {
+      const { agent, stream } = await createSuspendedRunWithSeededTracing({
         tracingMetadata: { sessionId: 'original-session', userId: 'original-user' },
         tracingTags: ['original-tag'],
       });
