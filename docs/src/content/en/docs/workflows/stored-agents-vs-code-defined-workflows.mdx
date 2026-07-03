@@ -1,0 +1,105 @@
+---
+title: "Stored agents vs code-defined workflows"
+description: "How DB-backed agents and code-defined workflows differ, and the recommended architecture for multi-tenant agent and workflow creation."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Stored agents vs code-defined workflows
+
+A common point of confusion is how Mastra handles **agents** versus **workflows** when created at runtime — for example, from a natural-language builder UI. The two have intentionally different storage and lifecycle models. This page clarifies the difference and the recommended architecture for multi-tenant scenarios.
+
+:::note
+The Agent Builder (stored agents) is part of the Mastra Enterprise Edition. Production deployments require a valid EE license.
+:::
+
+## TL;DR
+
+| Capability | Agents | Workflows |
+| --- | --- | --- |
+| **Storage model** | DB-backed (persisted to `Mastra.storage`) | Code-defined (TypeScript source files) |
+| **Created via** | Agent Builder / Editor (`createBuilderAgent`) | `createWorkflow()` in code |
+| **Versioning** | Versioned in storage, editable at runtime | Versioned via source control / deploys |
+| **Runtime definition CRUD** | Yes | No — workflows are registered, not stored as definitions |
+
+## Stored agents (DB-backed)
+
+The Agent Builder lets users create, configure, and operate Mastra agents from a browser. Everything persists to `Mastra.storage`, including the agent definition, memory, workspace state, tools, and scorers. Stored agents are versioned and editable at runtime without redeploying your server.
+
+```typescript
+import { Mastra } from '@mastra/core';
+import { createBuilderAgent } from '@mastra/editor/ee';
+
+const mastra = new Mastra({
+  agents: {
+    builderAgent: createBuilderAgent(),
+  },
+  editor: {
+    builder: { enabled: true },
+  },
+});
+```
+
+The chat-based editor invokes the builder agent through the same `Mastra.getAgent(id)` lookup as any other agent. See the [Agent Builder overview](/docs/agent-builder/overview) for the full feature set.
+
+## Code-defined workflows
+
+Workflows definitions live in your codebase as TypeScript files. You define them with `createWorkflow()`, register them on the `Mastra` instance, and Mastra picks them up at boot. **There is no DB-backed workflow-definition layer equivalent to stored agents** — workflow source files are the source of truth.
+
+```typescript title="src/mastra/workflows/daily-report.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+const sendReport = createStep({
+  id: 'send-report',
+  inputSchema: z.object({ userId: z.string() }),
+  outputSchema: z.object({ ok: z.boolean() }),
+  execute: async ({ inputData }) => ({ ok: true }),
+});
+
+export const dailyReport = createWorkflow({
+  id: 'daily-report',
+  inputSchema: z.object({ userId: z.string() }),
+  outputSchema: z.object({ ok: z.boolean() }),
+})
+  .then(sendReport)
+  .commit();
+```
+
+The storage layer persists **workflow run snapshots** (state, suspension payloads, results) — not the workflow definition itself. See [Workflow snapshots](/docs/workflows/snapshots).
+
+## NL-to-workflow through the Agent Builder
+
+The Agent Builder exposes a `workflows` feature that lets a stored agent **call** code-defined workflows you have already registered. It does **not** create new workflow definitions or store workflow graphs. When a stored agent needs to run a workflow, it invokes one of the workflows registered on the `Mastra` instance, and the run is tracked like any other workflow run.
+
+```typescript
+const mastra = new Mastra({
+  workflows: { dailyReport },
+  editor: {
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: { workflows: { allowed: ['daily-report'] } },
+      },
+    },
+  },
+});
+```
+
+The allowlist controls which registered workflows a stored agent may invoke — entries match on `workflow.id`, the string the entity reports at runtime.
+
+## Recommended architecture for multi-tenant creation
+
+For **multi-tenant scenarios where end users create their own agents and workflows:**
+
+1. **Agent creation**: Use the Agent Builder. It is DB-backed, versioned, multi-tenant, and RBAC-aware by design.
+2. **Workflow execution**: Register your workflow definitions in code and let stored agents invoke them through the `workflows` allowlist. The run state is durable and stored per-run.
+3. **Custom workflow definitions**: If you need end users to author entirely new workflow graphs at runtime (a custom DSL/graph editor), build your own definition + versioning layer and compile it to Mastra workflows at runtime. Mastra does not provide this out of the box.
+
+## Related
+
+- [Agent Builder overview](/docs/agent-builder/overview)
+- [Workflows overview](/docs/workflows/overview)
+- [Workflow snapshots](/docs/workflows/snapshots)
+- [Scheduled workflows](/docs/workflows/scheduled-workflows)
