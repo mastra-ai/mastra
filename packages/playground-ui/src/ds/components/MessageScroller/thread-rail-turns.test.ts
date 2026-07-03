@@ -18,14 +18,13 @@ const assistantMessage = (id: string, text: string): MastraDBMessage => ({
   content: { format: 2, parts: [{ type: 'text', text }] },
 });
 
-const signalMessage = (id: string, signalType: string, text: string): MastraDBMessage =>
-  ({
-    id,
-    role: 'signal',
-    type: signalType,
-    createdAt: new Date(),
-    content: { format: 2, parts: [{ type: 'text', text }], metadata: { signal: { type: signalType } } },
-  }) as MastraDBMessage;
+const signalMessage = (id: string, signalType: string, text: string): MastraDBMessage => ({
+  id,
+  role: 'signal',
+  type: signalType,
+  createdAt: new Date(),
+  content: { format: 2, parts: [{ type: 'text', text }], metadata: { signal: { type: signalType } } },
+});
 
 describe('buildThreadRailTurns', () => {
   it('creates one turn per displayable user message with stable client keys and assistant previews', () => {
@@ -78,7 +77,7 @@ describe('buildThreadRailTurns', () => {
             { type: 'image', data: 'data:image/png;base64,abc' },
           ],
         },
-      } as MastraDBMessage,
+      },
     ]);
 
     expect(turns[0]).toMatchObject({

@@ -50,14 +50,18 @@ export type MessageScrollerItemRenderProps = {
   'data-message-scroll-anchor'?: 'true';
 };
 
-export type MessageScrollerItemProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> & {
+export type MessageScrollerItemProps = {
   messageId: string;
   scrollAnchor?: boolean;
-  children?: React.ReactNode | ((props: MessageScrollerItemRenderProps) => React.ReactNode);
+  /**
+   * Render prop: receives the ref and data attributes to spread onto the tracked
+   * element, so the message row itself is the observed node (no wrapper div).
+   */
+  children: (props: MessageScrollerItemRenderProps) => React.ReactNode;
 };
 
 export const MessageScrollerItem = React.forwardRef<HTMLDivElement, MessageScrollerItemProps>(
-  ({ children, className, messageId, scrollAnchor = true, ...props }, ref) => {
+  ({ children, messageId, scrollAnchor = true }, ref) => {
     const { registerItem } = useMessageScrollerContext();
     const unregisterRef = React.useRef<(() => void) | undefined>(undefined);
     const itemRef = React.useCallback(
@@ -72,27 +76,11 @@ export const MessageScrollerItem = React.forwardRef<HTMLDivElement, MessageScrol
       [messageId, ref, registerItem, scrollAnchor],
     );
 
-    const itemProps: MessageScrollerItemRenderProps = {
+    return children({
       ref: itemRef,
       'data-message-scroller-id': messageId,
       'data-message-scroll-anchor': scrollAnchor ? 'true' : undefined,
-    };
-
-    if (typeof children === 'function') {
-      return <>{children(itemProps)}</>;
-    }
-
-    return (
-      <div
-        ref={itemRef}
-        data-message-scroller-id={messageId}
-        data-message-scroll-anchor={scrollAnchor ? 'true' : undefined}
-        className={cn(className)}
-        {...props}
-      >
-        {children}
-      </div>
-    );
+    });
   },
 );
 MessageScrollerItem.displayName = 'MessageScrollerItem';

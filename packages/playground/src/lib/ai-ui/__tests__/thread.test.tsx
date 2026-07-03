@@ -16,6 +16,12 @@ import { BrowserSessionProvider } from '@/domains/agents/context/browser-session
 import { ThreadInputProvider } from '@/domains/conversation';
 import { server } from '@/test/msw-server';
 
+declare global {
+  interface Window {
+    MASTRA_AGENT_SIGNALS?: string;
+  }
+}
+
 const BASE_URL = 'http://localhost:4111';
 
 type CapturedBody = Record<string, unknown>;
@@ -157,13 +163,13 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
 });
 
 afterEach(() => {
-  delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
+  delete window.MASTRA_AGENT_SIGNALS;
   cleanup();
 });
 
 describe('Thread', () => {
   beforeEach(() => {
-    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+    window.MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
   });
 
@@ -319,7 +325,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'hello from composer' } });
     });
@@ -332,7 +338,7 @@ describe('Thread', () => {
     expect(captured).toHaveLength(1);
     expect(JSON.stringify(captured[0].body.messages ?? [])).toContain('hello from composer');
     // Composer clears after sending.
-    expect((textarea as HTMLTextAreaElement).value).toBe('');
+    expect(textarea.value).toBe('');
   });
 
   it('restores unsent composer drafts when switching threads', async () => {
@@ -343,7 +349,7 @@ describe('Thread', () => {
       rendered = render(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    const firstThreadTextarea = screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement;
+    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(firstThreadTextarea, { target: { value: 'first thread draft' } });
     });
@@ -353,7 +359,7 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    const secondThreadTextarea = screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement;
+    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     expect(secondThreadTextarea.value).toBe('');
 
     await act(async () => {
@@ -365,17 +371,13 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    expect((screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement).value).toBe(
-      'first thread draft',
-    );
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('first thread draft');
 
     await act(async () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    expect((screen.getByPlaceholderText('Enter your message...') as HTMLTextAreaElement).value).toBe(
-      'second thread draft',
-    );
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('second thread draft');
   });
 
   it('does not send when the composer is empty', async () => {
@@ -392,7 +394,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.keyDown(textarea, { key: 'Enter' });
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -428,8 +430,10 @@ describe('Thread', () => {
       fireEvent.change(urlInput, { target: { value: 'https://files.example.com/pic.png' } });
     });
 
+    const composerForm = urlInput.closest<HTMLFormElement>('form');
+    if (!composerForm) throw new Error('composer form not found');
     await act(async () => {
-      fireEvent.submit(urlInput.closest('form') as HTMLFormElement);
+      fireEvent.submit(composerForm);
       await new Promise(resolve => setTimeout(resolve, 80));
     });
 
@@ -466,7 +470,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'long running' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -520,7 +524,7 @@ const taskCook: TaskItem = {
 
 describe('TaskPanel', () => {
   beforeEach(() => {
-    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'true';
+    window.MASTRA_AGENT_SIGNALS = 'true';
     server.resetHandlers();
   });
 
@@ -554,7 +558,7 @@ describe('TaskPanel', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'track these tasks' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -664,7 +668,7 @@ describe('TaskPanel', () => {
 
 describe('Thread signal-path user-message reconciliation', () => {
   beforeEach(() => {
-    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'true';
+    window.MASTRA_AGENT_SIGNALS = 'true';
     server.resetHandlers();
   });
 
@@ -704,9 +708,7 @@ describe('Thread signal-path user-message reconciliation', () => {
           }),
       ),
       http.post(`${BASE_URL}/api/agents/agent-1/send-message`, async ({ request }) => {
-        const body = (await request.json()) as {
-          message?: { metadata?: { clientMessageId?: string } };
-        };
+        const body: { message?: { metadata?: { clientMessageId?: string } } } = await request.json();
         capturedClientMessageId = body.message?.metadata?.clientMessageId;
         return HttpResponse.json({ accepted: true, runId: 'run-1', signal: { id: serverSignalId } });
       }),
@@ -721,7 +723,7 @@ describe('Thread signal-path user-message reconciliation', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'echo reconciliation' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -731,9 +733,9 @@ describe('Thread signal-path user-message reconciliation', () => {
     // The optimistic pending bubble is rendered. Capture its DOM node and the
     // client-generated correlation id sent to the server.
     const userRow = await waitFor(() => {
-      const el = document.querySelector('[data-message-pending="true"]');
+      const el = document.querySelector<HTMLElement>('[data-message-pending="true"]');
       if (!el) throw new Error('pending user row not yet rendered');
-      return el as HTMLElement;
+      return el;
     });
     expect(capturedClientMessageId).toBeTruthy();
     const optimisticId = userRow.getAttribute('data-message-id');

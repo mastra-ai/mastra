@@ -17,9 +17,12 @@ type MockIntersectionObserverEntry = {
   isIntersecting: boolean;
 };
 
-class MockIntersectionObserver {
+class MockIntersectionObserver implements IntersectionObserver {
   static instances: MockIntersectionObserver[] = [];
 
+  readonly root: Element | Document | null = null;
+  readonly rootMargin = '';
+  readonly thresholds: ReadonlyArray<number> = [];
   readonly observed = new Set<Element>();
   readonly callback: IntersectionObserverCallback;
 
@@ -38,24 +41,19 @@ class MockIntersectionObserver {
 
   disconnect = vi.fn();
 
-  takeRecords = () => [];
+  takeRecords = (): IntersectionObserverEntry[] => [];
 
   trigger(entries: MockIntersectionObserverEntry[]) {
-    this.callback(
-      entries.map(
-        entry =>
-          ({
-            target: entry.target,
-            isIntersecting: entry.isIntersecting,
-            boundingClientRect: entry.target.getBoundingClientRect(),
-            intersectionRatio: entry.isIntersecting ? 1 : 0,
-            intersectionRect: entry.target.getBoundingClientRect(),
-            rootBounds: null,
-            time: Date.now(),
-          }) as IntersectionObserverEntry,
-      ),
-      this as unknown as IntersectionObserver,
-    );
+    const observerEntries: IntersectionObserverEntry[] = entries.map(entry => ({
+      target: entry.target,
+      isIntersecting: entry.isIntersecting,
+      boundingClientRect: entry.target.getBoundingClientRect(),
+      intersectionRatio: entry.isIntersecting ? 1 : 0,
+      intersectionRect: entry.target.getBoundingClientRect(),
+      rootBounds: null,
+      time: Date.now(),
+    }));
+    this.callback(observerEntries, this);
   }
 }
 
@@ -65,10 +63,10 @@ const renderScroller = () =>
       <MessageScrollerViewport data-testid="viewport">
         <MessageScrollerContent>
           <MessageScrollerItem messageId="message-1" scrollAnchor>
-            <div>First message</div>
+            {itemProps => <div {...itemProps}>First message</div>}
           </MessageScrollerItem>
           <MessageScrollerItem messageId="message-2" scrollAnchor>
-            <div>Second message</div>
+            {itemProps => <div {...itemProps}>Second message</div>}
           </MessageScrollerItem>
         </MessageScrollerContent>
       </MessageScrollerViewport>
@@ -87,6 +85,12 @@ const createRect = ({ top = 0, height = 40, width = 100 }: { top?: number; heigh
   y: top,
   toJSON: () => ({}),
 });
+
+const getItem = (messageId: string): HTMLElement => {
+  const element = document.querySelector<HTMLElement>(`[data-message-scroller-id="${messageId}"]`);
+  if (!element) throw new Error(`No scroller item for ${messageId}`);
+  return element;
+};
 
 const setTop = (element: Element, top: number) => {
   Object.defineProperty(element, 'getBoundingClientRect', {
@@ -155,15 +159,12 @@ describe('MessageScroller', () => {
       renderScroller();
 
       const viewport = screen.getByTestId('viewport');
-      const firstMessage = document.querySelector('[data-message-scroller-id="message-1"]');
-      const secondMessage = document.querySelector('[data-message-scroller-id="message-2"]');
-
-      expect(firstMessage).toBeTruthy();
-      expect(secondMessage).toBeTruthy();
+      const firstMessage = getItem('message-1');
+      const secondMessage = getItem('message-2');
 
       setTop(viewport, 100);
-      setTop(firstMessage as Element, 90);
-      setTop(secondMessage as Element, 140);
+      setTop(firstMessage, 90);
+      setTop(secondMessage, 140);
 
       await waitFor(() => {
         expect(MockIntersectionObserver.instances[0]?.observed.size).toBe(2);
@@ -171,8 +172,8 @@ describe('MessageScroller', () => {
 
       await act(async () => {
         MockIntersectionObserver.instances[0]?.trigger([
-          { target: firstMessage as Element, isIntersecting: false },
-          { target: secondMessage as Element, isIntersecting: true },
+          { target: firstMessage, isIntersecting: false },
+          { target: secondMessage, isIntersecting: true },
         ]);
       });
 
