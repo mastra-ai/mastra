@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
+import { formatStatusDuration } from './status-duration.js';
 import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
@@ -271,6 +272,27 @@ export function updateStatusLine(state: TUIState): void {
     shortModeBadgeWidth = shortName.length + 2;
   }
 
+  const now = Date.now();
+  const activeTimingLabel =
+    state.agentRunStartedAt !== undefined
+      ? formatStatusDuration(now - state.agentRunStartedAt, { includeSeconds: true })
+      : '';
+  const activeTimingIsStale =
+    state.agentRunStartedAt !== undefined &&
+    state.agentRunLastStreamPartAt !== undefined &&
+    now - state.agentRunLastStreamPartAt > 3 * 60_000;
+  const completedTimingLabel =
+    !activeTimingLabel && state.lastAgentRunDurationMs !== undefined
+      ? formatStatusDuration(state.lastAgentRunDurationMs, { includeSeconds: true })
+      : '';
+  const completedTimingIcon =
+    state.lastAgentRunEndReason === 'error'
+      ? '×'
+      : completedTimingLabel && state.lastAgentRunEndReason !== 'aborted'
+        ? '✓'
+        : '';
+  const timingLabel = activeTimingLabel || completedTimingLabel;
+
   const buildLine = (opts: {
     modelId: string;
     memCompact?: 'percentOnly' | 'noBuffer' | 'full';
@@ -283,9 +305,30 @@ export function updateStatusLine(state: TUIState): void {
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
+    const timingPlain = timingLabel ? ` ${timingLabel}${completedTimingIcon ? ` ${completedTimingIcon}` : ''}` : '';
+    const timingColor = activeTimingIsStale
+      ? theme.fg('error', timingLabel)
+      : activeTimingLabel
+        ? modeColor
+          ? chalk.hex(modeColor)(timingLabel)
+          : theme.fg('dim', timingLabel)
+        : state.lastAgentRunEndReason === 'aborted'
+          ? theme.fg('warning', timingLabel)
+          : state.lastAgentRunEndReason === 'error'
+            ? theme.fg('error', timingLabel)
+            : theme.fg('success', timingLabel);
+    const timingIconColor =
+      state.lastAgentRunEndReason === 'aborted'
+        ? 'warning'
+        : state.lastAgentRunEndReason === 'error'
+          ? 'error'
+          : 'success';
+    const timingStyled = timingLabel
+      ? ` ${timingColor}${completedTimingIcon ? ` ${theme.fg(timingIconColor, completedTimingIcon)}` : ''}`
+      : '';
     parts.push({
-      plain: `${opts.modelId}${tintBg ? ' ' : ''}`,
-      styled: styleModelId(opts.modelId),
+      plain: `${opts.modelId}${tintBg ? ' ' : ''}${timingPlain}`,
+      styled: styleModelId(opts.modelId) + timingStyled,
     });
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;

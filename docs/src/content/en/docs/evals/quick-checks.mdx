@@ -107,6 +107,7 @@ import { Agent } from '@mastra/core/agent'
 import { checks } from '@mastra/evals/checks'
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: 'Answer weather questions using the get_weather tool.',
   model: '__GATEWAY_OPENAI_MODEL__',

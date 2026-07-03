@@ -1,6 +1,6 @@
-import { transitions } from '@mastra/playground-ui';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useToolkits } from '../hooks/use-toolkits';
 

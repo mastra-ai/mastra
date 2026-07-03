@@ -1,3 +1,5 @@
+import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, renderHook, waitFor } from '@testing-library/react';
 import type { RenderHookOptions } from '@testing-library/react';
@@ -23,9 +25,13 @@ function makeQueryClient(): QueryClient {
 
 function Wrapper({ client, children }: { client: QueryClient; children: ReactNode }) {
   return (
-    <QueryClientProvider client={client}>
-      <ApiConfigProvider baseUrl={TEST_BASE_URL}>{children}</ApiConfigProvider>
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="dark" storageKey="mastracode.theme">
+      <TooltipProvider delayDuration={0}>
+        <QueryClientProvider client={client}>
+          <ApiConfigProvider baseUrl={TEST_BASE_URL}>{children}</ApiConfigProvider>
+        </QueryClientProvider>
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }
 

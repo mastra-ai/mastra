@@ -68,43 +68,48 @@ describeForAllEngines(
       expect(onErrorFired).toBe(true);
     });
 
-    it('onError does not fire for tool execution errors (those are sent back to model)', async () => {
-      let onErrorFired = false;
-      const { createTool } = await import('../../../../tools');
+    // Durable: tool-error text is not re-emitted in the final MastraModelOutput text stream
+    // because the error flows through the workflow step boundary as a result, not a pubsub chunk.
+    it.skipIf(engine === 'durable')(
+      'onError does not fire for tool execution errors (those are sent back to model)',
+      async () => {
+        let onErrorFired = false;
+        const { createTool } = await import('../../../../tools');
 
-      const failingTool = createTool({
-        id: 'failing-tool',
-        description: 'A tool that always fails',
-        inputSchema: { type: 'object', properties: {}, required: [] },
-        execute: async () => {
-          throw new Error('Tool failure');
-        },
-      });
+        const failingTool = createTool({
+          id: 'failing-tool',
+          description: 'A tool that always fails',
+          inputSchema: { type: 'object', properties: {}, required: [] },
+          execute: async () => {
+            throw new Error('Tool failure');
+          },
+        });
 
-      const { output } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Use the failing tool',
-        tools: { failingTool },
-        onError: async () => {
-          onErrorFired = true;
-        },
-        fixtures: llm => {
-          llm.on(
-            { endpoint: 'chat', hasToolResult: false },
-            {
-              toolCalls: [{ id: 'call_fail', name: 'failing-tool', arguments: {} }],
-            },
-          );
-          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Handled tool error' });
-        },
-      });
+        const { output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Use the failing tool',
+          tools: { failingTool },
+          onError: async () => {
+            onErrorFired = true;
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              {
+                toolCalls: [{ id: 'call_fail', name: 'failing-tool', arguments: {} }],
+              },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Handled tool error' });
+          },
+        });
 
-      // Tool errors are NOT surfaced via onError - they're sent back to the model as tool-result messages
-      // so the model can self-correct. Only API errors trigger onError.
-      expect(onErrorFired).toBe(false);
-      expect(await output.text).toContain('Handled tool error');
-    });
+        // Tool errors are NOT surfaced via onError - they're sent back to the model as tool-result messages
+        // so the model can self-correct. Only API errors trigger onError.
+        expect(onErrorFired).toBe(false);
+        expect(await output.text).toContain('Handled tool error');
+      },
+    );
   },
-  { skip: ['durable'] },
+  {},
 );

@@ -7,6 +7,32 @@
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.5",
-    "moonshotai/Kimi-K2.6"
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code"
+  ],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
+    "Qwen/Qwen3.5-35B-A3B",
+    "Qwen/Qwen3.5-397B-A17B",
+    "Qwen/Qwen3.6-35B-A3B",
+    "XiaomiMiMo/MiMo-V2.5",
+    "XiaomiMiMo/MiMo-V2.5-Pro",
+    "deepseek-ai/DeepSeek-R1-0528",
+    "deepseek-ai/DeepSeek-V3.2",
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "google/gemma-4-26B-A4B-it",
+    "google/gemma-4-31B-it",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2.6",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "zai-org/GLM-4.6",
+    "zai-org/GLM-4.7",
+    "zai-org/GLM-4.7-Flash",
+    "zai-org/GLM-5",
+    "zai-org/GLM-5.1",
+    "zai-org/GLM-5.2"
   ]
 }

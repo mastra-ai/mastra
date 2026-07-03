@@ -51,6 +51,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: true,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -161,6 +162,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: false,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -215,5 +217,8 @@ describeForAllEngines(
       expect(toolExecuted).toBe(false);
     });
   },
-  { skip: ['durable'] },
+  // TODO(durable-parity): auto-resume requires suspended-tool metadata in
+  // memory messages; durable agent does not persist tool-call-approval
+  // metadata the same way the regular agent does.
+  { skip: ['durable', 'fs'] },
 );

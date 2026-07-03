@@ -256,6 +256,11 @@ export const paginationQuerySchema = z.object({
   perPage: z.coerce.number().optional().default(10),
 });
 
+export const tenancyQuerySchema = z.object({
+  organizationId: z.string().optional().describe('Restrict lookup to the given organization'),
+  projectId: z.string().optional().describe('Restrict lookup to the given project'),
+});
+
 export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),

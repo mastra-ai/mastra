@@ -189,6 +189,11 @@ export async function handleSandboxAccessRequest(
 ): Promise<void> {
   const { state } = ctx;
   return new Promise(resolve => {
+    const firePermissionResult = (decision: 'approved' | 'declined' | 'dismissed') => {
+      state.hookManager
+        ?.runPermissionResult('sandbox_access', toolCallId, 'request_access', decision, { path: requestedPath, reason })
+        .catch(() => {});
+    };
     const activate = () => {
       const questionComponent = new AskQuestionInlineComponent(
         {
@@ -199,12 +204,14 @@ export async function handleSandboxAccessRequest(
           ],
           onSubmit: answer => {
             state.activeInlineQuestion = undefined;
+            firePermissionResult(answer.toLowerCase().startsWith('y') ? 'approved' : 'declined');
             state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
             resolve();
             processNextInlineQuestion(state);
           },
           onCancel: () => {
             state.activeInlineQuestion = undefined;
+            firePermissionResult('dismissed');
             state.session.respondToToolSuspension({ toolCallId, resumeData: 'No' });
             resolve();
             processNextInlineQuestion(state);
@@ -333,6 +340,11 @@ export async function handlePlanApproval(
 
   return new Promise(resolve => {
     const planFilename = snapshotKey;
+    const firePermissionResult = (decision: 'approved' | 'declined') => {
+      state.hookManager
+        ?.runPermissionResult('plan_approval', toolCallId, 'submit_plan', decision, { path: snapshotKey })
+        .catch(() => {});
+    };
     const approvalOptions = {
       toolCallId,
       title: resolvedTitle,
@@ -342,12 +354,14 @@ export async function handlePlanApproval(
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
+        firePermissionResult('approved');
         await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
         resolve();
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
+        firePermissionResult('approved');
         await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
@@ -365,6 +379,7 @@ export async function handlePlanApproval(
       onReject: () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
+        firePermissionResult('declined');
         // Resume the tool with a rejection so the rejection result is persisted
         // in thread history (the next run sees it for context). For submit_plan,
         // respondToToolSuspension resolves at the resumed tool's `tool_end`

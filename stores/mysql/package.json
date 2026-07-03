@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mysql",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "description": "MySQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -48,7 +48,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.42.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.49.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

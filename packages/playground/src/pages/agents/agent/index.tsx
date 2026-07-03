@@ -7,7 +7,10 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentChatShell } from '@/domains/agents/components/agent-chat-shell';
-import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import {
+  AgentSidebarLoadingSkeleton,
+  AgentViewLoadingSkeleton,
+} from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
@@ -34,7 +37,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId!);
+  const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isSettingsView = view === 'settings';
   const isNewThread = threadId === 'new';
@@ -133,14 +136,11 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                         view={view}
                         leftDrawerLabel="Open threads and memory"
                         leftSlot={
-                          <AgentSidebar
-                            agentId={agentId!}
-                            threadId={actualThreadId!}
-                            threads={sidebarThreads}
-                            isLoading={isMemoryLoading || isThreadsLoading}
-                            memoryType={memory?.memoryType}
-                            hasMemory={isMemoryLoading || hasMemory}
-                          />
+                          isThreadsLoading ? (
+                            <AgentSidebarLoadingSkeleton />
+                          ) : (
+                            <AgentSidebar agentId={agentId!} threadId={actualThreadId!} threads={sidebarThreads} />
+                          )
                         }
                         browserOverlay={<BrowserViewPanel />}
                       >

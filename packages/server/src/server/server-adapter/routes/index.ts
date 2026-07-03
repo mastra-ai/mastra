@@ -17,6 +17,7 @@ import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
+import { HEARTBEATS_ROUTES } from './heartbeats';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -192,6 +193,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...EDITOR_BUILDER_ROUTES,
   ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
+  ...HEARTBEATS_ROUTES,
   ...CHANNELS_ROUTES,
   ...AGENT_CONTROLLER_ROUTES,
 ];

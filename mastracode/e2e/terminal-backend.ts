@@ -371,6 +371,7 @@ async function startMastraCodeApp(
     hookManager: result.hookManager,
     authStorage: result.authStorage,
     mcpManager: result.mcpManager,
+    pluginManager: result.pluginManager,
     appName: 'Mastra Code',
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,
@@ -378,6 +379,7 @@ async function startMastraCodeApp(
     terminal,
     ...(options?.tui ?? {}),
   });
+  await options?.onTuiCreated?.(tui);
 
   void tui.run().catch(error => {
     process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
@@ -398,7 +400,7 @@ async function startMastraCodeApp(
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
-        result.controller.stopHeartbeats(),
+        result.controller.stopIntervals(),
         closeSignalsPubSub?.(),
       ]);
     },

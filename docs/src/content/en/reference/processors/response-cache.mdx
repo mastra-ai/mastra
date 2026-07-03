@@ -23,6 +23,7 @@ import { ResponseCache } from '@mastra/core/processors'
 const cache = new InMemoryServerCache()
 
 const agent = new Agent({
+  id: 'search-agent',
   name: 'Search Agent',
   instructions: 'You answer questions concisely.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',

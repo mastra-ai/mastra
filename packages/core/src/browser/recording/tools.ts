@@ -59,6 +59,12 @@ interface BufferedFrame {
 export interface BrowserRecordingOptions {
   /** Directory where browser recordings are written. */
   outputDir: string;
+  /** Default maximum recording duration in ms (default 30 000, hard cap 120 000). */
+  maxDurationMs?: number;
+  /** Default max frame width in pixels (default 1024). */
+  maxWidth?: number;
+  /** Default max frame height in pixels (default 720). */
+  maxHeight?: number;
 }
 
 interface RecordingState {
@@ -542,6 +548,9 @@ export function createBrowserRecordingTools(browser: MastraBrowser, options: Bro
         try {
           if (input.action === 'start') {
             const { id, outputPath, maxDurationMs } = await startRecording(browser, {
+              maxDurationMs: options.maxDurationMs,
+              maxWidth: options.maxWidth,
+              maxHeight: options.maxHeight,
               ...input,
               threadId: agent?.threadId,
               outputDir,

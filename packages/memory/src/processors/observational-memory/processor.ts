@@ -234,6 +234,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
           messageList,
+          agent: args.agent,
           observabilityContext: getOmObservabilityContext(args),
           hooks: {
             onBufferChunkSealed: rotateResponseMessageId,
@@ -242,6 +243,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
         this.turn.writer = writer;
         this.turn.sendSignal = args.sendSignal;
+        this.turn.agent = args.agent;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
         if (stepNumber === 0 && this.temporalMarkers) {
