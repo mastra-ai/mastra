@@ -157,7 +157,7 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -916,6 +916,11 @@
       "permanent": true
     },
     {
+      "source": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
       "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
@@ -1027,7 +1032,7 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit/llms.txt",
-      "destination": "/guides/build-your-ui/copilotkit/llms.txt",
+      "destination": "/guides/build-your-ui/copilotkit/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1548,6 +1553,11 @@
     {
       "source": "/reference/workspace/vercel-microvm-sandbox/llms.txt",
       "destination": "/reference/workspace/vercel-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit/llms.txt",
+      "destination": "/guides/build-your-ui/copilotkit/overview/llms.txt",
       "permanent": true
     }
   ]
