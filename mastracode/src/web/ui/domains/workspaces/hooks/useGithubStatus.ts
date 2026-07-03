@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { fetchGithubStatus } from '../services/github';
 
@@ -11,9 +12,10 @@ import { fetchGithubStatus } from '../services/github';
  * request (e.g. until web auth has resolved).
  */
 export function useGithubStatusQuery(enabled: boolean = true) {
+  const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.githubStatus(),
-    queryFn: fetchGithubStatus,
+    queryFn: () => fetchGithubStatus(baseUrl),
     enabled,
   });
 }

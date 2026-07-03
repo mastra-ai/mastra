@@ -5,12 +5,12 @@ import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../services/projects';
 import { loadProjects, saveProjects } from '../../services/projects';
 import { WorkspacesSection } from '../WorkspacesSection';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
 
 interface SessionStub {

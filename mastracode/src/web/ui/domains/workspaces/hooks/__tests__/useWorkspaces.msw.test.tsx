@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
+import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../services/projects';
 import { loadProjects, saveProjects } from '../../services/projects';
 import { useProjectsQuery } from '../useProjects';
@@ -14,7 +14,7 @@ import {
   useWorkspacesQuery,
 } from '../useWorkspaces';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 const PROJECT_ID = 'project-gh';
 const GITHUB_PROJECT_ID = 'github-project-1';
 

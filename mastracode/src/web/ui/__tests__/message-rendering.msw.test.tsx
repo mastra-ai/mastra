@@ -96,7 +96,7 @@ function useAgentControllerHandlers({
     ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get('/auth/me', () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
@@ -107,7 +107,7 @@ function useAgentControllerHandlers({
 }
 
 function useAuthMe(response: Response) {
-  server.use(http.get('/auth/me', () => response));
+  server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => response));
 }
 
 function renderSeededApp(authResponse: Response = new Response(null, { status: 404 })) {
@@ -154,15 +154,19 @@ describe('MastraCode sidebar auth actions', () => {
   it('given an unauthenticated user, when the login URL is generated, then it preserves the current route', () => {
     window.history.replaceState(null, '', '/projects?thread=abc');
 
-    expect(loginUrl()).toBe('/auth/login?returnTo=%2Fprojects%3Fthread%3Dabc');
+    expect(loginUrl(TEST_BASE_URL)).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fprojects%3Fthread%3Dabc`);
   });
 
   it('given an explicit returnTo, when the login URL is generated, then it targets that destination', () => {
-    expect(loginUrl('/chat')).toBe('/auth/login?returnTo=%2Fchat');
+    expect(loginUrl(TEST_BASE_URL, '/chat')).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fchat`);
+  });
+
+  it('given a same-origin deployment, when the login URL is generated with an empty base, then it stays relative', () => {
+    expect(loginUrl('', '/chat')).toBe('/auth/login?returnTo=%2Fchat');
   });
 
   it('given an authenticated user, when the logout URL is generated, then it targets the logout route', () => {
-    expect(logoutUrl()).toBe('/auth/logout');
+    expect(logoutUrl(TEST_BASE_URL)).toBe(`${TEST_BASE_URL}/auth/logout`);
   });
 });
 

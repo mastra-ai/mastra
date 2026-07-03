@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useSearchParams } from 'react-router';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { Wordmark } from '../../../ui';
 import { redirectToLogin } from '../services/auth';
 
@@ -22,6 +23,7 @@ function safeReturnTo(raw: string | null): string {
  * was headed via `?returnTo=`.
  */
 export function SignInPage() {
+  const { baseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
   const returnTo = safeReturnTo(searchParams.get('returnTo'));
 
@@ -32,7 +34,7 @@ export function SignInPage() {
         <Txt as="p" variant="ui-sm" className="text-icon3">
           Sign in to continue
         </Txt>
-        <Button variant="ghost" size="sm" onClick={() => redirectToLogin(returnTo)}>
+        <Button variant="ghost" size="sm" onClick={() => redirectToLogin(baseUrl, returnTo)}>
           Sign in
         </Button>
       </div>

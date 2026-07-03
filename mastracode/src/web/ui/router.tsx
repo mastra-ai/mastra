@@ -23,21 +23,21 @@ import { fetchAuthState, SignInPage } from './domains/auth';
  */
 const AUTH_STALE_TIME_MS = 30_000;
 
-function loadAuthState(queryClient: QueryClient) {
+function loadAuthState(queryClient: QueryClient, baseUrl: string) {
   return queryClient.fetchQuery({
     queryKey: queryKeys.webAuth(),
-    queryFn: fetchAuthState,
+    queryFn: () => fetchAuthState(baseUrl),
     staleTime: AUTH_STALE_TIME_MS,
   });
 }
 
-export function createAppRoutes(queryClient: QueryClient): RouteObject[] {
+export function createAppRoutes(queryClient: QueryClient, baseUrl: string): RouteObject[] {
   return [
     {
       path: '/',
       element: <Outlet />,
       loader: async () => {
-        const state = await loadAuthState(queryClient);
+        const state = await loadAuthState(queryClient, baseUrl);
         if (state.authEnabled && !state.authenticated) throw redirect('/signin');
         return state;
       },
@@ -54,7 +54,7 @@ export function createAppRoutes(queryClient: QueryClient): RouteObject[] {
       path: '/signin',
       element: <SignInPage />,
       loader: async () => {
-        const state = await loadAuthState(queryClient);
+        const state = await loadAuthState(queryClient, baseUrl);
         if (!state.authEnabled || state.authenticated) throw redirect('/chat');
         return state;
       },
@@ -62,6 +62,6 @@ export function createAppRoutes(queryClient: QueryClient): RouteObject[] {
   ];
 }
 
-export function createAppRouter(queryClient: QueryClient) {
-  return createBrowserRouter(createAppRoutes(queryClient));
+export function createAppRouter(queryClient: QueryClient, baseUrl: string) {
+  return createBrowserRouter(createAppRoutes(queryClient, baseUrl));
 }

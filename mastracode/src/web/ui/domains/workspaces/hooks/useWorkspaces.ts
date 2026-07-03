@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useToast } from '../../../ui/toast';
 import { createWorktree } from '../services/github';
@@ -82,6 +83,7 @@ export function useCreateWorkspaceMutation(
   session: SessionLike | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
+  const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -89,7 +91,7 @@ export function useCreateWorkspaceMutation(
     mutationFn: async (branch: string) => {
       const trimmedBranch = branch.trim();
       if (!project?.githubProjectId) throw new Error('No GitHub project selected');
-      const result = await createWorktree(project.githubProjectId, trimmedBranch);
+      const result = await createWorktree(baseUrl, project.githubProjectId, trimmedBranch);
       const worktree: Worktree = {
         branch: result.branch,
         worktreePath: result.worktreePath,

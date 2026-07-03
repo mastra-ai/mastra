@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import type { PrepareProgress } from '../services/github';
 import { ensureRepoMaterialized } from '../services/github';
 
@@ -19,8 +20,9 @@ export interface EnsureRepoMaterializedVariables {
  * `sandbox_not_configured`) for distinct UI handling.
  */
 export function useEnsureRepoMaterializedMutation() {
+  const { baseUrl } = useApiConfig();
   return useMutation({
     mutationFn: ({ githubProjectId, onProgress }: EnsureRepoMaterializedVariables) =>
-      ensureRepoMaterialized(githubProjectId, onProgress),
+      ensureRepoMaterialized(baseUrl, githubProjectId, onProgress),
   });
 }

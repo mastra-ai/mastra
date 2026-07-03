@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
+import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../services/projects';
 import { loadActiveProjectId, loadProjects, saveActiveProjectId, saveProjects } from '../../services/projects';
 import { useActiveProject } from '../useActiveProject';
@@ -14,7 +14,7 @@ import {
   useRemoveProjectMutation,
 } from '../useProjects';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 
 const localProject: Project = {
   id: 'project-local',

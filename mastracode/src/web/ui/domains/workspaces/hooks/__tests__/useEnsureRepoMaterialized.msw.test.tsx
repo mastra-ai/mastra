@@ -10,11 +10,11 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
+import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { MaterializeResult, PrepareProgress } from '../../services/github';
 import { useEnsureRepoMaterializedMutation } from '../useEnsureRepoMaterialized';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 const ENSURE_URL = `${ORIGIN}/api/web/github/projects/ghp_1/ensure`;
 
 const materialized: MaterializeResult = {

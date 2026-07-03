@@ -5,14 +5,14 @@ import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
+import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { useProjectsQuery } from '../../hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../../services/github';
 import { loadProjects, saveProjects } from '../../services/projects';
 import type { Project } from '../../services/projects';
 import { GithubConnectModal } from '../GithubConnectModal';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 
 const connectedStatus: GithubStatus = {
   enabled: true,

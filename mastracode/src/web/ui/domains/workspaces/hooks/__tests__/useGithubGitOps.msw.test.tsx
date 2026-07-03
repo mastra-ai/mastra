@@ -10,7 +10,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
+import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { CommitResult, GitOpError, PullRequestResult, PushResult, WorktreeResult } from '../../services/github';
 import {
   useCommitChangesMutation,
@@ -19,7 +19,7 @@ import {
   usePushBranchMutation,
 } from '../useGithubGitOps';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'ghp_1';
 const PROJECT_URL = `${ORIGIN}/api/web/github/projects/${PROJECT}`;
 

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { createProjectFromRepo } from '../services/github';
 import type { GithubRepo } from '../services/github';
@@ -19,9 +20,10 @@ export function useProjectsQuery() {
 }
 
 export function useAddProjectMutation() {
+  const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, path }: { name: string; path: string }) => addProject(name, path),
+    mutationFn: ({ name, path }: { name: string; path: string }) => addProject(baseUrl, name, path),
     onSuccess: () => invalidateProjects(queryClient),
   });
 }
@@ -37,17 +39,19 @@ export function useRemoveProjectMutation() {
 }
 
 export function useEnsureResourceIdMutation() {
+  const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (project: Project) => ensureResourceId(project),
+    mutationFn: (project: Project) => ensureResourceId(baseUrl, project),
     onSuccess: () => invalidateProjects(queryClient),
   });
 }
 
 export function useCreateGithubProjectMutation() {
+  const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (repo: GithubRepo) => addGithubProject(await createProjectFromRepo(repo)),
+    mutationFn: async (repo: GithubRepo) => addGithubProject(await createProjectFromRepo(baseUrl, repo)),
     onSuccess: () => invalidateProjects(queryClient),
   });
 }

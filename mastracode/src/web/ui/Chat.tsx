@@ -70,10 +70,11 @@ export default function Chat() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
 
+  const onSignOut = useCallback(() => redirectToLogout(baseUrl), [baseUrl]);
   const auth = {
     state: webAuth.data,
     loading: webAuth.isLoading,
-    onSignOut: redirectToLogout,
+    onSignOut,
   };
 
   useProjectModalAutoOpen(projects.length, setProjectsOpen);

@@ -2,19 +2,19 @@
  * BDD coverage for the GitHub status query hook.
  *
  * Drives the real `fetchGithubStatus` service + React Query cache; only the
- * network is mocked (MSW). Handlers register on the jsdom origin
- * (`http://localhost:3000`) because the service fetches relative URLs.
+ * network is mocked (MSW). Handlers register on the ApiConfig base URL the
+ * test providers inject (`TEST_BASE_URL`), matching how the app wires it.
  */
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders } from '../../../../../../../e2e/web-ui/render';
+import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { GithubStatus } from '../../services/github';
 import { useGithubStatusQuery } from '../useGithubStatus';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 const STATUS_URL = `${ORIGIN}/api/web/github/status`;
 
 const connectedStatus: GithubStatus = {

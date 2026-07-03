@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { commitChanges, createWorktree, openPullRequest, pushBranch } from '../services/github';
 
 /**
@@ -20,9 +21,10 @@ export interface CreateWorktreeVariables {
 
 /** Create (or reuse) a git worktree + feature branch inside the project's sandbox. */
 export function useCreateWorktreeMutation() {
+  const { baseUrl } = useApiConfig();
   return useMutation({
     mutationFn: ({ githubProjectId, branch, baseBranch }: CreateWorktreeVariables) =>
-      createWorktree(githubProjectId, branch, baseBranch),
+      createWorktree(baseUrl, githubProjectId, branch, baseBranch),
   });
 }
 
@@ -34,9 +36,10 @@ export interface CommitChangesVariables {
 
 /** Stage and commit all changes in a worktree; resolves `committed: false` on no-op. */
 export function useCommitChangesMutation() {
+  const { baseUrl } = useApiConfig();
   return useMutation({
     mutationFn: ({ githubProjectId, message, worktreePath }: CommitChangesVariables) =>
-      commitChanges(githubProjectId, message, worktreePath),
+      commitChanges(baseUrl, githubProjectId, message, worktreePath),
   });
 }
 
@@ -48,9 +51,10 @@ export interface PushBranchVariables {
 
 /** Push a branch back to GitHub from inside the sandbox. */
 export function usePushBranchMutation() {
+  const { baseUrl } = useApiConfig();
   return useMutation({
     mutationFn: ({ githubProjectId, branch, worktreePath }: PushBranchVariables) =>
-      pushBranch(githubProjectId, branch, worktreePath),
+      pushBranch(baseUrl, githubProjectId, branch, worktreePath),
   });
 }
 
@@ -65,7 +69,9 @@ export interface OpenPullRequestVariables {
 
 /** Open a pull request via the sandbox `gh` CLI; resolves with the PR url. */
 export function useOpenPullRequestMutation() {
+  const { baseUrl } = useApiConfig();
   return useMutation({
-    mutationFn: ({ githubProjectId, ...args }: OpenPullRequestVariables) => openPullRequest(githubProjectId, args),
+    mutationFn: ({ githubProjectId, ...args }: OpenPullRequestVariables) =>
+      openPullRequest(baseUrl, githubProjectId, args),
   });
 }

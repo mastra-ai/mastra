@@ -97,10 +97,10 @@ const AUTHENTICATED = () =>
 function renderRoutes(initialEntry: string, authMe: () => Response) {
   seedProject();
   useAgentControllerHandlers();
-  server.use(http.get('/auth/me', authMe));
+  server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(client), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(client, TEST_BASE_URL), { initialEntries: [initialEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }
@@ -146,8 +146,8 @@ describe('MastraCode web routing', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /sign in/i }));
 
-    expect(redirectToLogin).toHaveBeenCalledWith('/chat');
-    expect(loginUrl('/chat')).toBe('/auth/login?returnTo=%2Fchat');
+    expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/chat');
+    expect(loginUrl(TEST_BASE_URL, '/chat')).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fchat`);
   });
 
   it('given an unauthenticated user on /signin with an unsafe returnTo, when they click Sign in, then it falls back to /chat', async () => {
@@ -155,7 +155,7 @@ describe('MastraCode web routing', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /sign in/i }));
 
-    expect(redirectToLogin).toHaveBeenCalledWith('/chat');
+    expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/chat');
   });
 
   it('given auth is enabled and the session is authenticated, when visiting /chat, then chat renders with identity and sign-out only', async () => {
