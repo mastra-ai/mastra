@@ -2,7 +2,7 @@
  * Note: This function is meant to be used at build-time only.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,25 +10,19 @@ import { readJSON } from 'fs-extra/esm';
 import { getPackageName } from './utils';
 
 /**
- * Walk up from a resolved file to the directory whose package.json `name` matches `packageName`.
- * Matching on `name` (not mere existence) skips nested internal package.json files when a
- * package's entry points deep into e.g. `dist/`, and handles scoped packages and subpath
- * specifiers correctly (where `packageName` is the base name of the requested specifier).
+ * Walk up from a resolved entry file to the nearest enclosing directory that contains a
+ * `package.json` — that directory is the package root. We match on existence rather than on the
+ * `package.json` `name` so that npm alias installs (e.g. `"ai-v5": "npm:ai@5"`, where the specifier
+ * differs from the installed package's real name) resolve correctly. A deep entry such as
+ * `dist/index.js` has no `package.json` in its subdirectories, so the first one found walking up is
+ * always the true package root.
  */
-function findPackageRoot(entryPath: string, packageName: string): string | null {
+function findPackageRoot(entryPath: string): string | null {
   let dir = dirname(entryPath);
 
   while (true) {
-    const packageJsonPath = join(dir, 'package.json');
-    if (existsSync(packageJsonPath)) {
-      try {
-        const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as { name?: string };
-        if (pkg.name === packageName) {
-          return dir;
-        }
-      } catch {
-        // Unreadable or partial package.json — keep walking up.
-      }
+    if (existsSync(join(dir, 'package.json'))) {
+      return dir;
     }
 
     const parent = dirname(dir);
@@ -68,7 +62,7 @@ export async function getPackageRootPath(packageName: string, parentPath?: strin
       return null;
     }
 
-    return findPackageRoot(entryPath, getPackageName(packageName) ?? packageName);
+    return findPackageRoot(entryPath);
   } catch {
     return null;
   }

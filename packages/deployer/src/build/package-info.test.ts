@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getPackageMetadata, getPackageRootPath } from './package-info';
 
@@ -18,7 +18,7 @@ async function writePackage(
   packageJson: Record<string, unknown>,
   entryRelPath = 'index.js',
 ): Promise<void> {
-  await mkdir(join(dir, entryRelPath, '..'), { recursive: true });
+  await mkdir(dirname(join(dir, entryRelPath)), { recursive: true });
   await writeFile(join(dir, 'package.json'), JSON.stringify(packageJson));
   await writeFile(join(dir, entryRelPath), 'export const value = 1;');
 }
@@ -113,6 +113,15 @@ describe('getPackageRootPath', () => {
     );
 
     await expect(getPackageRootPath('deep-pkg', tempDir)).resolves.toBe(packageDir);
+  });
+
+  it('resolves an npm alias install whose package name differs from the specifier', async () => {
+    // e.g. `"ai-v5": "npm:ai@5"` — the specifier is `ai-v5` but the installed package is named `ai`.
+    const tempDir = await makeTempDir('package-root-alias');
+    const packageDir = join(tempDir, 'node_modules', 'ai-v5');
+    await writePackage(packageDir, { name: 'ai', version: '5.0.93', main: './index.js' });
+
+    await expect(getPackageRootPath('ai-v5', tempDir)).resolves.toBe(packageDir);
   });
 
   it('returns null for a package that cannot be resolved', async () => {
