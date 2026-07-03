@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { createMastraCode } from '../../mastracode/core/src/index.js';
-import { runHeadless } from '../../mastracode/core/src/headless/index.js';
+import { runMC, createHumanFormatState, formatHuman } from '../../mastracode/core/src/headless/index.js';
 import { processSlashCommand } from '../../mastracode/core/src/utils/slash-command-processor.js';
 import type { SlashCommandMetadata } from '../../mastracode/core/src/utils/slash-command-loader.js';
 import { releaseAllThreadLocks } from '../../mastracode/core/src/utils/thread-lock.js';
@@ -111,14 +111,23 @@ async function main(): Promise<never> {
 
   setupDebugLogging();
 
-  // Run headless with a 10 minute timeout
-  const exitCode = await runHeadless(controller, session, {
-    prompt,
-    format: 'default',
-    continue_: false,
-    cloneThread: false,
-    timeout: 600,
-  });
+  // Run headless with a 10 minute timeout, streaming human-readable output
+  const run = runMC({ controller, session, prompt, timeoutMs: 600_000 });
+
+  const humanState = createHumanFormatState();
+  for await (const event of run) {
+    const out = formatHuman(event, humanState);
+    if (out.stdout) process.stdout.write(out.stdout);
+    if (out.stderr) process.stderr.write(out.stderr);
+  }
+
+  const runResult = await run.result;
+  if (runResult.status === 'timeout') {
+    process.stderr.write('\nTimeout elapsed. Aborted.\n');
+  } else if (runResult.error) {
+    process.stderr.write(`Error: ${runResult.error.message}\n`);
+  }
+  const exitCode = runResult.exitCode;
 
   // Cleanup
   releaseAllThreadLocks();
