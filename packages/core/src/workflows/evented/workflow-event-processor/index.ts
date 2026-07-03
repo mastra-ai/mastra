@@ -285,9 +285,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * `default.ts`'s `persistTracingContext`; the evented engine holds the live span on
    * Mastra (since it can't ride pubsub events), so we resolve it via runId here.
    */
-  private resolveSuspendTracingContext(
-    runId: string,
-  ):
+  private resolveSuspendTracingContext(runId: string):
     | {
         traceId?: string;
         spanId?: string;
