@@ -41,6 +41,7 @@ Identify everyone involved and gauge their context depth:
 ### Issue summary
 
 Note (internally, don't pause here):
+
 - What's the reported problem?
 - Reproduction steps (if any)
 - Expected vs actual behavior
@@ -75,9 +76,10 @@ Now trace from the symptom into the codebase. Start from what the issue describe
 
 ### Deep context on each area
 
-For each contributing area you identify, build real understanding *now* — don't defer it to Phase 4. You need to answer three questions per area before presenting it:
+For each contributing area you identify, build real understanding _now_ — don't defer it to Phase 4. You need to answer three questions per area before presenting it:
 
 **1. Why does this code exist?** What problem was it originally written to solve? What was the codebase like before it was added?
+
 - `git log --oneline -20 -- <file>` — recent commit history
 - `git log --oneline --all -20 -- <file>` — cross-branch activity
 - `git blame` on the specific relevant lines — who wrote this, when, and what commit message explains why
@@ -85,12 +87,14 @@ For each contributing area you identify, build real understanding *now* — don'
 - Look at the PR descriptions and discussions, not just commit titles
 
 **2. How does it fit architecturally?** What are its relationships with other code?
+
 - What calls it? What does it call? Trace callers and callees.
 - What data flows through it and where does that data come from?
 - What contracts or interfaces does it depend on or expose?
 - Are there other features or systems that share the same underlying primitives (config, state, instances)?
 
 **3. How do the areas relate to each other?** The contributing areas aren't isolated — understand how they interact:
+
 - Do they share state, config objects, or instances?
 - Does one area's design assume something about another area's behavior?
 - Did changes in one area break assumptions in another?
@@ -184,6 +188,7 @@ Repeat until the cause is clear and agreed upon.
 Before wrapping up, check that the investigation actually produced understanding — not just a surface-level guess.
 
 Present a concise summary of what you've learned:
+
 - The likely root cause (or top candidates if uncertain)
 - The evidence supporting each hypothesis
 - What's still unknown or uncertain

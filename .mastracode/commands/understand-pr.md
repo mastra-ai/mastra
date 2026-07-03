@@ -42,7 +42,7 @@ If the PR description or commits reference any issues (e.g. "fixes #1234", "clos
 - Understand what was originally reported, by whom, and what the expected fix looks like
 - Check if the issue discussion contains context that the PR description doesn't mention
 
-This is critical context for the PR Goal — the linked issues often explain *why* this PR exists better than the PR description itself.
+This is critical context for the PR Goal — the linked issues often explain _why_ this PR exists better than the PR description itself.
 
 Do not begin analysis yet. Move to the PR Goal phase.
 
