@@ -6,7 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
@@ -15,27 +15,6 @@ import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-me
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
 import { server } from '@/test/msw-server';
-
-vi.mock('@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages', () => ({
-  memoryThreadMessagesQueryKey: (threadId: string | undefined, page?: number) => [
-    'memory',
-    'thread',
-    threadId,
-    'messages',
-    page ?? 0,
-  ],
-  useMemoryThreadMessages: () => ({ data: undefined, isLoading: false }),
-}));
-
-vi.mock('@mastra/playground-ui/domains/memory/hooks/use-observational-memory', () => ({
-  observationalMemoryQueryKey: (agentId: string | undefined, threadId: string | undefined) => [
-    'memory',
-    'observational-memory',
-    agentId,
-    threadId,
-  ],
-  useObservationalMemory: () => ({ data: undefined, isLoading: false }),
-}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -75,6 +54,9 @@ const baseHandlers = () => [
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
   http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
+  // Drive the real memory hooks; the sidebar consumers aren't rendered here, so empty payloads suffice.
+  http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+  http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json({ record: null })),
   http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/agents/:agentId`, () => HttpResponse.json(v2Agent)),
