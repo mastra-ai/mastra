@@ -149,6 +149,7 @@ Do not include vague findings such as "improve clarity" without evidence and a c
 
 ### Deterministic output
 
+- Raw command output is produced by `scripts/run-checks.sh` under `$RUN_DIR/commands/*.txt`; reference those files in the report.
 - Include raw output only for lines relevant to the audited files.
 - If a repo-wide command returns unrelated errors, say they are unrelated and do not count them against the audited page.
 - If a command passes, write `No relevant output`.

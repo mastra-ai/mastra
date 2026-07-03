@@ -24,6 +24,23 @@ Load these files during the audit:
   - `GUIDE_DEPLOYMENT.md`
   - `REFERENCE.md`
 
+## Scripts
+
+Use these scripts for deterministic mechanics. Invoke them from anywhere as `bash .claude/skills/docs-audit/scripts/<name>.sh ...`; each script resolves the worktree root from its own location.
+
+- `scripts/init-run.sh`: create the run directory and print `RUN_DIR=...`.
+  - Example: `bash .claude/skills/docs-audit/scripts/init-run.sh --docs docs/src/content/en/reference/core/getAgentById.mdx`
+- `scripts/snapshot.sh`: copy audited docs into `snapshots/original-docs/` or `snapshots/improved-docs/`.
+  - Example: `bash .claude/skills/docs-audit/scripts/snapshot.sh --run-dir "$RUN_DIR" --stage original --docs docs/src/content/en/reference/core/getAgentById.mdx`
+- `scripts/run-checks.sh`: run `pnpm validate`, `pnpm lint:remark`, `pnpm lint:vale:ai`, and file-scoped Prettier, writing raw output to `$RUN_DIR/commands/`.
+  - Example: `bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs docs/src/content/en/reference/core/getAgentById.mdx`
+- `scripts/eval-setup.sh`: create an eval job directory, minimal TypeScript project, copy `doc-under-test.mdx`, resolve local workspace packages, and record the linking method.
+  - Example: `bash .claude/skills/docs-audit/scripts/eval-setup.sh --run-dir "$RUN_DIR" --job "Retrieve an agent by ID" --doc docs/src/content/en/reference/core/getAgentById.mdx --pkg @mastra/core`
+- `scripts/eval-typecheck.sh`: typecheck the eval project and append output to `commands.log`.
+  - Example: `bash .claude/skills/docs-audit/scripts/eval-typecheck.sh --job-dir "$JOB_DIR"`
+
+Use the scripts for these steps; do not hand-roll the run dir, lint capture, snapshots, eval project scaffold, or local package linking.
+
 ## Artifact and eval workspace policy
 
 Store all intermediate audit artifacts outside the repository worktree unless the user explicitly asks to keep them. Use a temporary run directory with this shape:
@@ -51,16 +68,13 @@ Store all intermediate audit artifacts outside the repository worktree unless th
 
 Rules:
 
-- Create the temporary run directory before deterministic checks.
-- Generate `<audit-slug>` from the first audited doc path by replacing non-alphanumeric characters with `-`, trimming repeated separators, and lowercasing. For category audits, use the category path. Use local time for `<YYYYMMDD-HHMMSS>`.
-- Copy audited doc files into `snapshots/original-docs/` immediately after scope confirmation, before edits.
-- Copy changed audited doc files into `snapshots/improved-docs/` after approved fixes and before the agent-build eval.
-- Save raw command output under `commands/`.
-- Run commands that change directories in subshells or with explicit `cwd` so the shell does not remain in `docs/` or an eval project for later artifact-copy commands.
+- Create the temporary run directory by running `scripts/init-run.sh --docs <audited-files>` before deterministic checks. Capture the printed `RUN_DIR=...` value and use that exact path in reports.
+- Let `init-run.sh` generate `<audit-slug>` and `<YYYYMMDD-HHMMSS>`. If the environment uses `$TMPDIR` instead of `/tmp`, report the actual printed path.
+- Copy audited doc files into `snapshots/original-docs/` immediately after scope confirmation by running `scripts/snapshot.sh --run-dir "$RUN_DIR" --stage original --docs <audited-files>`.
+- Copy changed audited doc files into `snapshots/improved-docs/` after approved fixes and before the agent-build eval by running `scripts/snapshot.sh --run-dir "$RUN_DIR" --stage improved --docs <audited-files>`.
 - Save `audit-report.md`, `fix-plan.md`, and any follow-up eval report under the run directory, then summarize key findings in chat.
 - Do not commit or stage files from `/tmp/mastra-docs-audit/`.
 - Keep the temporary directory until the final response so the user can inspect it if needed. Mention the path in the final response.
-- If the environment does not allow `/tmp`, use the system temp directory returned by the shell, such as `$TMPDIR/mastra-docs-audit/...`, and report the actual path.
 
 ## Required workflow
 
@@ -141,20 +155,22 @@ Source is the source of truth for code example accuracy and API/property complet
 
 ### 4. Run deterministic checks
 
-Create the temporary run directory described in the artifact policy. Run deterministic checks from `docs/` and capture raw output into `commands/`:
+Create the temporary run directory described in the artifact policy if it does not already exist. Run deterministic checks with the script:
 
-```text
-pnpm validate                 > <run-dir>/commands/validate.txt 2>&1
-pnpm lint:remark              > <run-dir>/commands/lint-remark.txt 2>&1
-pnpm lint:vale:ai             > <run-dir>/commands/lint-vale-ai.txt 2>&1
-pnpm exec prettier --check <audited-files> > <run-dir>/commands/prettier-check.txt 2>&1
+```sh
+bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs <audited-files>
 ```
 
-Prefer file-scoped checks when a tool supports them. When a command is repo-wide, filter output to the audited file(s). If unrelated files fail, report them as unrelated and do not count them against the audited page.
+Raw output lands in `$RUN_DIR/commands/`:
 
-If Vale is not installed or synced, report `lint:vale:ai` as `warn` with the exact error and suggest `pnpm vale:download` or `pnpm vale:sync`. Do not treat missing local Vale setup as a doc failure.
+- `validate.txt`
+- `lint-remark.txt`
+- `lint-vale-ai.txt`
+- `prettier-check.txt`
 
-Do not run `pnpm run format` during the audit phase because it writes files. Use a Prettier check instead. Formatting changes can be part of the later approved fix plan.
+The script runs docs commands in subshells, captures combined stdout/stderr, file-scopes Prettier, and treats a missing local Vale binary as `warn` with setup guidance. When a repo-wide command returns output, filter it to the audited file(s) in the report. If unrelated files fail, report them as unrelated and do not count them against the audited page.
+
+Do not run `pnpm run format` during the audit phase because it writes files. Use the scripted Prettier check instead. Formatting changes can be part of the later approved fix plan.
 
 ### 5. Run judgment checks against the rubric
 
@@ -239,13 +255,10 @@ Do not modify examples or unrelated files unless the approved plan explicitly re
 
 ### 9. Re-run deterministic checks
 
-After fixes, re-run the deterministic checks relevant to changed files:
+After fixes, re-run deterministic checks with the script:
 
-```text
-pnpm validate
-pnpm lint:remark
-pnpm lint:vale:ai
-pnpm exec prettier --check <changed-files>
+```sh
+bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs <changed-audited-files>
 ```
 
 If checks fail, fix the approved docs changes and re-run. If failures are unrelated to changed files, report them clearly.
@@ -254,38 +267,41 @@ If checks fail, fix the approved docs changes and re-run. If failures are unrela
 
 Always run the agent-build eval after approved fixes and re-linting.
 
-Run each eval in its own temporary project under `<run-dir>/evals/<job-slug>/project/`. Do not run eval builds directly in the main repository worktree.
+For each selected job-to-be-done, run the setup script in its own temporary job directory under `$RUN_DIR/evals/<job-slug>/`:
 
-Set up the eval project as follows:
+```sh
+bash .claude/skills/docs-audit/scripts/eval-setup.sh \
+  --run-dir "$RUN_DIR" \
+  --job "<selected job-to-be-done>" \
+  --doc <improved-doc> \
+  --pkg @mastra/core
+```
 
-1. Create `<run-dir>/evals/<job-slug>/`. Generate `<job-slug>` from the selected job text by replacing non-alphanumeric characters with `-`, trimming repeated separators, lowercasing, and limiting to 60 characters.
-2. Write `<run-dir>/evals/<job-slug>/instructions.md` containing only the selected job-to-be-done, the eval rules, and the path to `doc-under-test.mdx`.
-3. Write `<run-dir>/evals/<job-slug>/doc-under-test.mdx` with the full improved audited doc when auditing one page. For multi-page audits, include the page(s) directly needed for the selected job plus a short index of the other audited pages and their paths.
-4. Create `<run-dir>/evals/<job-slug>/project/` as a fresh test project.
-5. Use this project setup order:
-   1. If the doc gives exact scaffold/setup commands, run those commands inside `project/`.
-   2. Else if the repo has a local Mastra smoke-test or create-mastra pattern, use that documented local pattern.
-   3. Else create a minimal Node/TypeScript project with `package.json`, `tsconfig.json`, and only the files needed by the doc.
-6. Use this local package linking order so the eval tests the current branch:
-   1. If the doc or scaffold supports local workspace linking, use it.
-   2. Else add absolute `file:` dependencies in the eval project's `package.json` pointing to resolved local workspace package directories. Do not use relative `file:` paths from `/tmp` because macOS may resolve `/tmp` through `/private/tmp`.
-   3. If the linked package has `workspace:*` dependencies, create a temporary `pnpm-workspace.yaml` that includes the eval project and the relevant repository package globs, then run `pnpm install` without `--ignore-workspace`. Do not combine `--ignore-workspace` with workspace dependency resolution.
-   4. If install reports success, verify the expected executable exists, such as `node_modules/.bin/tsc`, before running checks.
-   5. If package-manager linking remains blocked but the job only needs typechecking, use explicit local symlinks for the package(s) plus the repository's installed TypeScript/tooling binary. Record this as harness/environment friction, not doc friction.
-   6. Else run the package manager's link command from the local package into the eval project.
-   7. If a package cannot be linked locally, record the reason and install the published package only as a last resort.
-7. Do not use credentials, external paid services, or production deploy targets unless the doc's selected job requires them and the user has explicitly provided safe test credentials. If credentials are missing, continue until the first credential boundary and report whether the docs got the eval to that boundary cleanly.
-8. Bound the eval to the selected job. Do not add extra features, refactors, or tests that the job does not require.
-9. Record every command, failed attempt, workaround, and result in `<run-dir>/evals/<job-slug>/commands.log`.
-10. Build the eval from the documented code as closely as possible. For reference pages, extract or recreate the exact relevant snippet first, then add only the minimal surrounding setup needed to typecheck or run it. Do not silently simplify away registry keys, literal IDs, overload arguments, or version selectors that the doc is trying to teach.
-11. Write the eval outcome to `<run-dir>/evals/<job-slug>/result.md`. Separate `Doc friction` from `Harness/environment friction`. Only doc-caused friction becomes follow-up audit findings.
+Pass each local package the doc imports with repeatable `--pkg` flags. The script prints `JOB_DIR=...`, copies `doc-under-test.mdx`, creates `project/`, writes a minimal strict TypeScript config, resolves workspace packages, installs or symlinks local packages, and records the setup method in `setup-method.txt`. Do not hand-roll package linking.
+
+The agent still writes judgment artifacts and eval code:
+
+- Write `$JOB_DIR/instructions.md` containing only the selected job-to-be-done, the eval rules, and the path to `doc-under-test.mdx`.
+- Write the minimal files needed under `$JOB_DIR/project/src/` to complete the selected job. Build the eval from the documented code as closely as possible. For reference pages, extract or recreate the exact relevant snippet first, then add only the minimal surrounding setup needed to typecheck or run it. Do not silently simplify away registry keys, literal IDs, overload arguments, or version selectors that the doc is trying to teach.
+- Do not use credentials, external paid services, or production deploy targets unless the doc's selected job requires them and the user has explicitly provided safe test credentials. If credentials are missing, continue until the first credential boundary and report whether the docs got the eval to that boundary cleanly.
+- Bound the eval to the selected job. Do not add extra features, refactors, or tests that the job does not require.
+
+For TypeScript eval verification, run:
+
+```sh
+bash .claude/skills/docs-audit/scripts/eval-typecheck.sh --job-dir "$JOB_DIR"
+```
+
+The script appends every typecheck command and output to `$JOB_DIR/commands.log` and prints `RESULT=passed` or `RESULT=failed`. A failing typecheck is an eval result, not a script error.
+
+Write the eval outcome to `$JOB_DIR/result.md`. Separate `Doc friction` from `Harness/environment friction`. Only doc-caused friction becomes follow-up audit findings.
 
 For each selected job-to-be-done, spawn a focused build task using a subagent or fresh isolated turn. The eval agent receives only:
 
 - the selected job-to-be-done,
-- `<run-dir>/evals/<job-slug>/doc-under-test.mdx`,
-- `<run-dir>/evals/<job-slug>/project/` as its workspace,
-- `<run-dir>/evals/<job-slug>/commands.log` and `result.md` output paths.
+- `$JOB_DIR/doc-under-test.mdx`,
+- `$JOB_DIR/project/` as its workspace,
+- `$JOB_DIR/commands.log` and `$JOB_DIR/result.md` output paths.
 
 The eval agent should attempt to complete the job end-to-end in that temporary project. It must record:
 

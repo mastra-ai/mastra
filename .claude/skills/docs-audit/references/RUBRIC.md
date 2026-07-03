@@ -51,7 +51,7 @@ Verdict guidance:
 
 Type: deterministic.
 
-Run from `docs/` unless a command explicitly supports file arguments:
+Run via `scripts/run-checks.sh`, which executes from `docs/`, captures raw output in `$RUN_DIR/commands/`, file-scopes Prettier, and handles missing local Vale setup as a warning:
 
 - `pnpm validate`
 - `pnpm lint:remark`
