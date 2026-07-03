@@ -185,7 +185,7 @@ describe('WorkflowsList', () => {
   describe('when runs are active or suspended', () => {
     it('shows running and pending-input counts and hides zeros', async () => {
       const onRunsRequest = useRunsHandler();
-      renderList();
+      const { queryClient } = renderList();
 
       const runnerRow = rowFor('eng-runner');
       expect(await runnerRow.findByLabelText('3 runs in progress')).not.toBeNull();
@@ -205,6 +205,8 @@ describe('WorkflowsList', () => {
       for (const url of urls) {
         expect(url.searchParams.get('perPage')).toBe('1');
       }
+
+      await waitForMutationsIdle(queryClient);
     });
   });
 
