@@ -1469,6 +1469,7 @@ export type ProviderModelsMap = {
     'openai-gpt-5.5',
     'snowflake-llama3.3-70b',
   ];
+  readonly 'tencent-token-plan': readonly ['hy3'];
   readonly 'github-models': readonly [
     'ai21-labs/ai21-jamba-1.5-large',
     'ai21-labs/ai21-jamba-1.5-mini',
@@ -2785,7 +2786,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
   ];
-  readonly 'tencent-tokenhub': readonly ['hy3-preview'];
+  readonly 'tencent-tokenhub': readonly ['hy3', 'hy3-preview'];
   readonly wandb: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'OpenPipe/Qwen3-14B-Instruct',
