@@ -930,6 +930,12 @@ async function loadMainWindow() {
     title: 'Mastra Studio',
     icon,
     backgroundColor: '#111111',
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 13 },
+        }
+      : {}),
     webPreferences: {
       preload: join(thisDir, '../preload/index.js'),
       nodeIntegration: false,

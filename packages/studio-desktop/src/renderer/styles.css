@@ -72,12 +72,13 @@ input {
   min-width: 0;
   height: 100%;
   flex: 1;
-  padding: 0 8px;
+  padding: 0 8px 0 86px;
   gap: 6px;
   overflow: hidden;
 }
 
-.tab,
+.tab-button,
+.tab-close-button,
 .icon-button,
 .studio-source-row,
 .manual-server-row button,
@@ -86,47 +87,26 @@ input {
   -webkit-app-region: no-drag;
 }
 
-.tab {
-  display: inline-grid;
-  grid-template-columns: 18px minmax(28px, 1fr) 18px;
-  align-items: center;
-  gap: 7px;
-  width: clamp(116px, 22vw, 220px);
-  height: 30px;
-  padding: 0 7px 0 8px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--muted);
-  cursor: default;
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    color 140ms ease;
+.tab-shell {
+  position: relative;
+  display: flex;
+  flex: 0 1 clamp(128px, 22vw, 232px);
+  min-width: 0;
 }
 
-.tab:hover {
-  border-color: var(--line);
-  background: var(--chrome-hover);
-  color: var(--text);
+.tab-button {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
+  padding-right: 34px;
 }
 
-.tab.active {
-  border-color: var(--chrome-active-border);
-  background: var(--chrome-active);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.04),
-    0 1px 1px rgba(0, 0, 0, 0.18);
-  color: var(--text);
-}
-
-.tab.status-loading .tab-kind {
+.tab-button.status-loading .tab-kind {
   position: relative;
   color: transparent;
 }
 
-.tab.status-loading .tab-kind::after {
+.tab-button.status-loading .tab-kind::after {
   position: absolute;
   inset: 4px;
   border: 1.5px solid rgba(255, 255, 255, 0.22);
@@ -142,7 +122,6 @@ input {
   }
 }
 
-.tab:focus-visible,
 .icon-button:focus-visible,
 .studio-source-row:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 36%, transparent);
@@ -161,9 +140,9 @@ input {
   font-weight: 650;
 }
 
-.tab.active .tab-kind {
-  background: rgba(255, 255, 255, 0.095);
-  color: var(--text);
+.tab-shell.active .tab-kind {
+  background: color-mix(in srgb, var(--surface1, #111111) 11%, transparent);
+  color: var(--surface1, #111111);
 }
 
 .tab-title {
@@ -174,29 +153,26 @@ input {
   text-align: left;
 }
 
-.tab-close {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  color: var(--faint);
+.tab-close-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  transform: translateY(-50%);
   opacity: 0;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease,
-    opacity 140ms ease;
+  transition: opacity 140ms ease;
 }
 
-.tab:hover .tab-close,
-.tab.active .tab-close,
-.tab:focus-visible .tab-close {
+.tab-shell:hover .tab-close-button,
+.tab-shell.active .tab-close-button,
+.tab-shell:focus-within .tab-close-button {
   opacity: 1;
 }
 
-.tab-close:hover {
-  background: rgba(255, 255, 255, 0.085);
-  color: var(--text);
+.tab-shell.active .tab-close-button {
+  color: var(--surface1, #111111);
 }
 
 .icon-button {
@@ -519,13 +495,12 @@ input {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tab,
-  .tab-close,
+  .tab-close-button,
   .icon-button {
     transition: none;
   }
 
-  .tab.status-loading .tab-kind::after {
+  .tab-button.status-loading .tab-kind::after {
     animation: none;
   }
 }

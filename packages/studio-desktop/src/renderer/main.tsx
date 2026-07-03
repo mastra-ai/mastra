@@ -2,6 +2,7 @@ import '@mastra/playground-ui/style.css';
 import './styles.css';
 
 import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { createRoot } from 'react-dom/client';
 
 import type { DesktopState, DesktopTab, MastraDesktopApi } from '../shared/types';
@@ -28,6 +29,7 @@ if (!tabStrip || !newTabButton || !launcher || !webviews || !bootLoader) {
 
 const launcherRoot = createRoot(launcher);
 const bootLoaderRoot = createRoot(bootLoader);
+const tabsRoot = createRoot(tabStrip);
 
 bootLoaderRoot.render(<BrandLoader aria-label="Loading Mastra Studio" size="lg" />);
 
@@ -36,14 +38,6 @@ let manualServerUrl = '4111';
 let platformBaseUrl = '';
 let busyAction: string | undefined;
 let lastError: string | undefined;
-
-function escapeHtml(value: string | undefined) {
-  return (value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-}
 
 async function runAction(action: string, task: () => Promise<DesktopState | void>) {
   busyAction = action;
@@ -73,24 +67,55 @@ function tabKindLabel(tab: DesktopTab) {
   return 'P';
 }
 
+function Tabs({ current }: { current: DesktopState }) {
+  return (
+    <>
+      {current.tabs.map(tab => {
+        const isActive = tab.id === current.activeTabId;
+
+        return (
+          <span className={`tab-shell ${isActive ? 'active' : ''}`} key={tab.id}>
+            <Button
+              aria-busy={tab.status === 'loading' ? true : undefined}
+              aria-pressed={isActive}
+              className={`tab-button status-${tab.status}`}
+              onClick={() => void runAction(`activate-${tab.id}`, () => api.activateTab(tab.id))}
+              type="button"
+              variant={isActive ? 'primary' : 'ghost'}
+            >
+              <span className="tab-kind" aria-hidden="true">
+                {tabKindLabel(tab)}
+              </span>
+              <span className="tab-title">{tab.title}</span>
+            </Button>
+            <Button
+              aria-label={`Close ${tab.title}`}
+              className="tab-close-button"
+              onClick={event => {
+                event.stopPropagation();
+                void runAction(`close-${tab.id}`, () => api.closeTab(tab.id));
+              }}
+              size="xs"
+              type="button"
+              variant="ghost"
+            >
+              ×
+            </Button>
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 function renderTabs() {
   const current = state;
   if (!current) {
-    tabStrip.innerHTML = '';
+    tabsRoot.render(null);
     return;
   }
 
-  tabStrip.innerHTML = current.tabs
-    .map(
-      tab => `
-        <button class="tab status-${tab.status} ${tab.id === current.activeTabId ? 'active' : ''}" type="button" data-tab-id="${tab.id}" aria-pressed="${tab.id === current.activeTabId}" ${tab.status === 'loading' ? 'aria-busy="true"' : ''}>
-          <span class="tab-kind" aria-hidden="true">${tabKindLabel(tab)}</span>
-          <span class="tab-title">${escapeHtml(tab.title)}</span>
-          <span class="tab-close" data-close-tab-id="${tab.id}" title="Close tab" aria-hidden="true">×</span>
-        </button>
-      `,
-    )
-    .join('');
+  tabsRoot.render(<Tabs current={current} />);
 }
 
 function renderStudioHost() {
@@ -195,21 +220,6 @@ function render() {
   renderLauncher();
   renderBootLoader();
 }
-
-tabStrip.addEventListener('click', event => {
-  const target = event.target as HTMLElement;
-  const closeTabId = target.dataset.closeTabId;
-  if (closeTabId) {
-    event.stopPropagation();
-    void runAction(`close-${closeTabId}`, () => api.closeTab(closeTabId));
-    return;
-  }
-
-  const tabButton = target.closest<HTMLButtonElement>('[data-tab-id]');
-  if (tabButton?.dataset.tabId) {
-    void runAction(`activate-${tabButton.dataset.tabId}`, () => api.activateTab(tabButton.dataset.tabId!));
-  }
-});
 
 newTabButton.addEventListener('click', () => {
   void runAction('new-tab', () => api.createLauncherTab());
