@@ -82,12 +82,7 @@ const mockApprovalModel = new MastraLanguageModelV2Mock({
       stream: new ReadableStream({
         start(controller) {
           controller.enqueue({ type: 'stream-start', warnings: [] });
-          controller.enqueue({
-            type: 'response-metadata',
-            id: 'id-1',
-            modelId: 'mock-approval',
-            timestamp: new Date(),
-          });
+          controller.enqueue({ type: 'response-metadata', id: 'id-1', modelId: 'mock-approval', timestamp: new Date() });
           controller.enqueue({ type: 'text-start', id: 'text-0' });
           controller.enqueue({
             type: 'text-delta',

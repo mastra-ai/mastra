@@ -43,17 +43,17 @@ weather-fs/
 
 ## How it maps
 
-| File / dir                            | Becomes                                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------- |
-| `config.ts`                           | merged agent config; `id`/`name` default to `weather-fs`.                       |
-| `instructions.md`                     | the agent `instructions`.                                                       |
-| `memory.ts`                           | the agent `memory` (default export).                                            |
-| `tools/get_weather.ts`                | a tool keyed `get_weather`.                                                     |
-| `skills/units.md`                     | a flat skill named `units`.                                                     |
-| `skills/severe-weather/SKILL.md`      | a packaged skill; frontmatter supplies name/description, `references/` inlined. |
-| `workspace/`                          | seed files copied into the agent's default workspace.                           |
-| `subagents/forecaster/`               | a subagent the parent can delegate to via a tool named `forecaster`.            |
-| `.../forecaster/subagents/historian/` | a nested subagent `forecaster` can delegate to via a tool named `historian`.    |
+| File / dir                       | Becomes                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| `config.ts`                      | merged agent config; `id`/`name` default to `weather-fs`.                       |
+| `instructions.md`                | the agent `instructions`.                                                       |
+| `memory.ts`                      | the agent `memory` (default export).                                            |
+| `tools/get_weather.ts`           | a tool keyed `get_weather`.                                                     |
+| `skills/units.md`                | a flat skill named `units`.                                                     |
+| `skills/severe-weather/SKILL.md` | a packaged skill; frontmatter supplies name/description, `references/` inlined. |
+| `workspace/`                     | seed files copied into the agent's default workspace.                           |
+| `subagents/forecaster/`          | a subagent the parent can delegate to via a tool named `forecaster`.            |
+| `.../forecaster/subagents/historian/` | a nested subagent `forecaster` can delegate to via a tool named `historian`. |
 
 Subagents can nest up to **`MAX_FS_SUBAGENT_DEPTH` (3) levels** below the
 top-level agent — deeper nesting is ignored with a warning. Each subagent's
