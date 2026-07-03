@@ -390,7 +390,9 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
 
   let rawResult: any;
   if (isDurable) {
-    rawResult = await agent.stream(prompt, streamOptions);
+    rawResult = streamUntilIdle
+      ? await agent.streamUntilIdle(prompt, streamOptions)
+      : await agent.stream(prompt, streamOptions);
   } else {
     rawResult = streamUntilIdle
       ? await agent.streamUntilIdle(prompt, streamOptions)
@@ -443,9 +445,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     await output.consumeStream();
   }
 
-  // Clean up durable resources — but NOT when the stream was suspended,
-  // because the test may still need to call resumeStream()/approveToolCall().
-  if (isDurable && rawResult.cleanup && !suspendedDuringDrain) {
+  // Clean up durable resources — but NOT when the stream was suspended or
+  // the test wants to consume the stream manually (e.g. streamUntilIdle tests
+  // that publish bg-task events after runLoopScenario returns).
+  if (isDurable && rawResult.cleanup && !suspendedDuringDrain && !manualStreamConsumption) {
     try {
       rawResult.cleanup();
     } catch {

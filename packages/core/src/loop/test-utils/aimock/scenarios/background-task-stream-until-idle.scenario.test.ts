@@ -17,10 +17,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 describeForAllEngines('AIMock loop scenario: streamUntilIdle re-invokes on background task completion', engine => {
   const getMock = useLoopScenarioAimock();
 
-  // Durable: streamUntilIdle is not implemented — requires keeping the stream
-  // open past the workflow finish event and re-entering the agentic loop on
-  // background task completion. This is a feature gap.
-  it.skipIf(engine === 'durable')('re-invokes the model after a background task completes', async () => {
+  it('re-invokes the model after a background task completes', async () => {
     const memory = new MockMemory();
 
     const {

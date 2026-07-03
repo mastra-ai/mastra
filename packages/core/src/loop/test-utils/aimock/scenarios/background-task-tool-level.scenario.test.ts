@@ -19,62 +19,55 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 describeForAllEngines('background-task-tool-level scenario', engine => {
   const getMock = useLoopScenarioAimock();
 
-  // Durable: bg-task-check step never waits (retryCount always 0), so onChunk
-  // fires after the workflow emits finish and pubsub is cleaned up → tool-result
-  // chunk is lost. Needs bg-task wait infrastructure in the durable loop.
+  it('emits background-task-started/completed when tool opts in at tool level', async () => {
+    // Track whether the tool executed
+    let toolExecuted = false;
 
-  it.skipIf(engine === 'durable')(
-    'emits background-task-started/completed when tool opts in at tool level',
-    async () => {
-      // Track whether the tool executed
-      let toolExecuted = false;
+    const backgroundTool = createTool({
+      id: 'background-work',
+      description: 'Performs long-running work in the background',
+      inputSchema: z.object({ duration: z.number() }),
+      outputSchema: z.object({ result: z.string() }),
+      background: { enabled: true, timeoutMs: 5000 },
+      execute: async ({ duration }) => {
+        toolExecuted = true;
+        // Simulate some async work
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return { result: `Completed ${duration}ms work` };
+      },
+    });
 
-      const backgroundTool = createTool({
-        id: 'background-work',
-        description: 'Performs long-running work in the background',
-        inputSchema: z.object({ duration: z.number() }),
-        outputSchema: z.object({ result: z.string() }),
-        background: { enabled: true, timeoutMs: 5000 },
-        execute: async ({ duration }) => {
-          toolExecuted = true;
-          // Simulate some async work
-          await new Promise(resolve => setTimeout(resolve, 10));
-          return { result: `Completed ${duration}ms work` };
-        },
-      });
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Run the background work with duration 100',
+      tools: { 'background-work': backgroundTool },
+      agentBackgroundTasks: { tools: { 'background-work': true } },
+      stopWhen: stepCountIs(3),
+      backgroundTasks: { enabled: true },
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          { toolCalls: [{ id: 'call_bg', name: 'background-work', arguments: { duration: 100 } }] },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Background task dispatched.' });
+      },
+    });
 
-      const { chunks } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Run the background work with duration 100',
-        tools: { 'background-work': backgroundTool },
-        agentBackgroundTasks: { tools: { 'background-work': true } },
-        stopWhen: stepCountIs(3),
-        backgroundTasks: { enabled: true },
-        collectChunks: true,
-        fixtures: llm => {
-          llm.on(
-            { endpoint: 'chat', sequenceIndex: 0 },
-            { toolCalls: [{ id: 'call_bg', name: 'background-work', arguments: { duration: 100 } }] },
-          );
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Background task dispatched.' });
-        },
-      });
+    // The tool executed (background tasks still execute, just asynchronously)
+    expect(toolExecuted).toBe(true);
 
-      // The tool executed (background tasks still execute, just asynchronously)
-      expect(toolExecuted).toBe(true);
+    // Verify background-task-started chunk was emitted
+    const startedChunk = chunks?.find(c => c.type === 'background-task-started');
+    expect(startedChunk).toBeDefined();
+    expect(startedChunk?.payload).toMatchObject({
+      toolName: 'background-work',
+    });
 
-      // Verify background-task-started chunk was emitted
-      const startedChunk = chunks?.find(c => c.type === 'background-task-started');
-      expect(startedChunk).toBeDefined();
-      expect(startedChunk?.payload).toMatchObject({
-        toolName: 'background-work',
-      });
-
-      // The tool-result chunk should be emitted
-      const toolResultChunk = chunks?.find(c => c.type === 'tool-result');
-      expect(toolResultChunk).toBeDefined();
-      expect(toolResultChunk?.payload?.toolName).toBe('background-work');
-    },
-  );
+    // The tool-result chunk should be emitted
+    const toolResultChunk = chunks?.find(c => c.type === 'tool-result');
+    expect(toolResultChunk).toBeDefined();
+    expect(toolResultChunk?.payload?.toolName).toBe('background-work');
+  });
 });

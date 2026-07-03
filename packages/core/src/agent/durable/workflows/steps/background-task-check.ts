@@ -33,13 +33,14 @@ export function createDurableBackgroundTaskCheckStep() {
     inputSchema: bgCheckInputSchema,
     outputSchema: bgCheckOutputSchema,
     execute: async params => {
-      const { inputData, retryCount, getInitData } = params;
+      const { inputData, getInitData } = params;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const typedInput = inputData as Record<string, any>;
 
       const initData = getInitData<{
         runId: string;
         agentId: string;
+        iterationCount: number;
         options?: { skipBgTaskWait?: boolean };
         state?: { threadId?: string; resourceId?: string };
       }>();
@@ -65,7 +66,7 @@ export function createDurableBackgroundTaskCheckStep() {
       }
 
       // When the outer caller drives continuation externally (e.g. streamUntilIdle),
-      // skip the in-loop wait. We still mark pending so downstream knows.
+      // skip the in-loop wait. We still mark pending so ownstream knows.
       if (initData.options?.skipBgTaskWait) {
         return { ...typedInput, backgroundTaskPending: true };
       }
@@ -76,10 +77,30 @@ export function createDurableBackgroundTaskCheckStep() {
       const managerConfig = bgManager.config;
       const waitTimeoutMs = bgConfig?.waitTimeoutMs ?? managerConfig?.waitTimeoutMs;
 
-      // First invocation: signal pending but don't block
-      if (retryCount === 0 || !waitTimeoutMs) {
+      // In the regular agent, the workflow engine's DefaultExecutionEngine
+      // maintains a persistent retryCounts map, so the same step ID gets
+      // retryCount=0 on iteration 0 and retryCount=1+ on subsequent
+      // iterations of the dowhile loop.  The durable agent's dowhile loop
+      // gives every step a fresh context (retryCount always 0), so we use
+      // iterationCount from the loop state instead — it tracks the same
+      // concept: "how many times has this step been invoked."
+      //
+      // The regular agent gates on `retryCount === 0 || !waitTimeoutMs`:
+      // it can afford to skip waiting because tool-result chunks from bg
+      // tasks are pushed directly into the ReadableStream controller via
+      // safeEnqueue, which works even after this step returns.  The durable
+      // agent emits tool-result chunks via pubsub, which closes when the
+      // workflow ends.  So when waitTimeoutMs is not configured we still
+      // need to wait (with a sensible default) to keep the workflow alive.
+
+      // First invocation — signal pending but don't block
+      if (initData.iterationCount === 0) {
         return { ...typedInput, backgroundTaskPending: true };
       }
+
+      // Use configured timeout, or default to 30 s so tool-result chunks
+      // from bg tasks reach the stream before the workflow ends.
+      const effectiveWaitMs = waitTimeoutMs ?? 30_000;
 
       // Emit initial progress chunk
       if (pubsub) {
@@ -98,7 +119,7 @@ export function createDurableBackgroundTaskCheckStep() {
       // Wait for the next task to complete (or until timeout)
       try {
         await bgManager.waitForNextTask(taskIds, {
-          timeoutMs: waitTimeoutMs,
+          timeoutMs: effectiveWaitMs,
           onProgress: (elapsedMs: number) => {
             if (!pubsub) return;
             void emitChunkEvent(pubsub, runId, {

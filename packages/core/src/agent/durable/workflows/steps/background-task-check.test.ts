@@ -49,12 +49,15 @@ function setupRegistry({
     model: {} as any,
   } as any);
 
-  const getInitData = () => ({
-    runId,
-    agentId,
-    options: skipBgTaskWait ? { skipBgTaskWait } : undefined,
-    state: { threadId: 'thread-1', resourceId: 'user-1' },
-  });
+  const getInitData =
+    (iterationCount = 0) =>
+    () => ({
+      runId,
+      agentId,
+      iterationCount,
+      options: skipBgTaskWait ? { skipBgTaskWait } : undefined,
+      state: { threadId: 'thread-1', resourceId: 'user-1' },
+    });
 
   return { listTasks, waitForNextTask, getInitData, runId };
 }
@@ -88,7 +91,7 @@ describe('createDurableBackgroundTaskCheckStep', () => {
     const result = await (step as any).execute({
       inputData: input,
       retryCount: 0,
-      getInitData,
+      getInitData: getInitData(),
     });
 
     expect(result).toBe(input);
@@ -104,36 +107,52 @@ describe('createDurableBackgroundTaskCheckStep', () => {
 
     const result = await (step as any).execute({
       inputData: baseInput(),
-      retryCount: 1,
-      getInitData,
+      retryCount: 0,
+      getInitData: getInitData(1),
     });
 
     expect(waitForNextTask).not.toHaveBeenCalled();
     expect(result.backgroundTaskPending).toBe(true);
   });
 
-  it('flags pending without waiting on first invocation (retryCount=0)', async () => {
+  it('flags pending without waiting on first iteration (iterationCount === 0)', async () => {
     const { waitForNextTask, getInitData } = setupRegistry({ waitTimeoutMs: 60_000 });
     const step = createDurableBackgroundTaskCheckStep();
 
     const result = await (step as any).execute({
       inputData: baseInput(),
       retryCount: 0,
-      getInitData,
+      getInitData: getInitData(0),
     });
 
     expect(waitForNextTask).not.toHaveBeenCalled();
     expect(result.backgroundTaskPending).toBe(true);
   });
 
-  it('waits for next task when retryCount > 0 and a wait timeout is configured', async () => {
+  it('defaults to 30 s wait when no waitTimeoutMs is configured (iterationCount > 0)', async () => {
+    const { waitForNextTask, getInitData } = setupRegistry({});
+    const step = createDurableBackgroundTaskCheckStep();
+
+    const result = await (step as any).execute({
+      inputData: baseInput(),
+      retryCount: 0,
+      getInitData: getInitData(1),
+    });
+
+    expect(waitForNextTask).toHaveBeenCalledTimes(1);
+    expect(waitForNextTask).toHaveBeenCalledWith(['t1'], expect.objectContaining({ timeoutMs: 30_000 }));
+    expect(result.backgroundTaskPending).toBe(true);
+    expect(result.stepResult.isContinued).toBe(true);
+  });
+
+  it('waits for bg task on subsequent iterations when waitTimeoutMs is configured', async () => {
     const { waitForNextTask, getInitData } = setupRegistry({ waitTimeoutMs: 60_000 });
     const step = createDurableBackgroundTaskCheckStep();
 
     const result = await (step as any).execute({
       inputData: baseInput(),
-      retryCount: 1,
-      getInitData,
+      retryCount: 0,
+      getInitData: getInitData(1),
     });
 
     expect(waitForNextTask).toHaveBeenCalledTimes(1);

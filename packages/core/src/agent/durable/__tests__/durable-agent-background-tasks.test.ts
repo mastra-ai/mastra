@@ -482,12 +482,13 @@ describe('DurableAgent background tasks via stream()', () => {
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    new Mastra({
+    const localMastra = new Mastra({
       logger: false,
       storage,
       backgroundTasks: { enabled: true },
       agents: { 'bg-loop-agent': durableAgent as any },
     });
+    await localMastra.startWorkers();
 
     const chunks: any[] = [];
     let finished = false;
@@ -498,15 +499,35 @@ describe('DurableAgent background tasks via stream()', () => {
       },
     });
 
-    await new Promise(r => setTimeout(r, 2000));
+    // Wait a bit for the workflow to progress
+    await new Promise(r => setTimeout(r, 3000));
 
+    // Debug: check bg task state
+    const bgMgr = localMastra.backgroundTaskManager;
+    if (bgMgr) {
+      const allTasks = await bgMgr.listTasks({ agentId: 'bg-loop-agent' });
+      console.log(
+        '[TEST] bg tasks:',
+        JSON.stringify(allTasks?.tasks?.map((t: any) => ({ id: t.id, status: t.status })) ?? 'none'),
+      );
+    }
+    console.log(
+      '[TEST] finished:',
+      finished,
+      'callCount:',
+      callCount,
+      'chunks:',
+      chunks.map(c => c.type),
+    );
     expect(finished).toBe(true);
 
     const textDeltas = chunks.filter(c => c.type === 'text-delta');
     expect(textDeltas.length).toBeGreaterThanOrEqual(1);
 
     cleanup();
-  });
+    await localMastra.backgroundTaskManager?.shutdown();
+    await localMastra.stopWorkers();
+  }, 15_000);
 });
 
 // ============================================================================
