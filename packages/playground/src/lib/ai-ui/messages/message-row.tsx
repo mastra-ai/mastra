@@ -5,7 +5,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageFactory } from '@mastra/react';
 import type { MessageRenderers } from '@mastra/react';
 import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
-import { useMemo } from 'react';
+import { forwardRef, useMemo } from 'react';
 
 import type { DataMessagePart } from '../tools/tool-card';
 import { DatasetSaveAction } from './dataset-save-action';
@@ -21,7 +21,7 @@ import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
 import { getSignalType, isSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
 import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 
-export interface MessageRowProps {
+export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
   message: MastraDBMessage;
   hasModelList?: boolean;
   /** Whether the read-aloud voice is currently speaking this message. */
@@ -190,83 +190,88 @@ const AssistantActionBar = ({
   </div>
 );
 
-export const MessageRow = ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking }: MessageRowProps) => {
-  const dbMessage = toDisplayMessage(message);
-  const metadata = getMessageMetadata(message);
-  const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
-  const dataParts = useMemo(() => getDataParts(message), [message]);
+export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
+  ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking, className, ...rootProps }, ref) => {
+    const dbMessage = toDisplayMessage(message);
+    const metadata = getMessageMetadata(message);
+    const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
+    const dataParts = useMemo(() => getDataParts(message), [message]);
 
-  const sharedRenderers = useMemo<MessageRenderers>(
-    () => ({
-      Reasoning: part => <ReasoningPartRenderer part={part} />,
-      Data: part => <DataPartRenderer part={part} />,
-      ToolInvocation: part => <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
-      DynamicTool: part => <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
-    }),
-    [metadata, dataParts],
-  );
+    const sharedRenderers = useMemo<MessageRenderers>(
+      () => ({
+        Reasoning: part => <ReasoningPartRenderer part={part} />,
+        Data: part => <DataPartRenderer part={part} />,
+        ToolInvocation: part => <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
+        DynamicTool: part => <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
+      }),
+      [metadata, dataParts],
+    );
 
-  const userRenderers = useMemo<MessageRenderers>(
-    () => ({
-      ...sharedRenderers,
-      Text: part => <UserTextPartRenderer part={part} metadata={metadata} />,
-      File: part => <UserFilePartRenderer part={part} />,
-    }),
-    [sharedRenderers, metadata],
-  );
+    const userRenderers = useMemo<MessageRenderers>(
+      () => ({
+        ...sharedRenderers,
+        Text: part => <UserTextPartRenderer part={part} metadata={metadata} />,
+        File: part => <UserFilePartRenderer part={part} />,
+      }),
+      [sharedRenderers, metadata],
+    );
 
-  const assistantRenderers = useMemo<MessageRenderers>(
-    () => ({
-      ...sharedRenderers,
-      Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} />,
-    }),
-    [sharedRenderers, metadata],
-  );
+    const assistantRenderers = useMemo<MessageRenderers>(
+      () => ({
+        ...sharedRenderers,
+        Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} />,
+      }),
+      [sharedRenderers, metadata],
+    );
 
-  if (dbMessage === null) return null;
+    if (dbMessage === null) return null;
 
-  const displayRole = dbMessage.role;
+    const displayRole = dbMessage.role;
 
-  if (displayRole === 'user') {
-    const isPending = isPendingMessage(message);
+    if (displayRole === 'user') {
+      const isPending = isPendingMessage(message);
+
+      return (
+        <div
+          ref={ref}
+          className={cn('w-full flex items-end pb-4 pt-2 flex-col', className)}
+          {...rootProps}
+          data-message-id={message.id}
+          data-message-pending={isPending ? 'true' : undefined}
+        >
+          <DatasetSaveAction messageText={getTextFromParts(message)} />
+          <div
+            className={cn(
+              'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
+              isPending && 'opacity-60 animate-pulse',
+            )}
+          >
+            <MessageFactory message={dbMessage} {...userRenderers} status={messageStatusRenderers} />
+          </div>
+        </div>
+      );
+    }
+
+    const showActionBar = hasVisibleAssistantText(message, metadata);
 
     return (
-      <div
-        className="w-full flex items-end pb-4 pt-2 flex-col"
-        data-message-id={message.id}
-        data-message-pending={isPending ? 'true' : undefined}
-      >
-        <DatasetSaveAction messageText={getTextFromParts(message)} />
-        <div
-          className={cn(
-            'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
-            isPending && 'opacity-60 animate-pulse',
-          )}
-        >
-          <MessageFactory message={dbMessage} {...userRenderers} status={messageStatusRenderers} />
+      <div ref={ref} className={cn('max-w-full', className)} {...rootProps} data-message-id={message.id}>
+        <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
+          <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
+        {showActionBar && (
+          <div className="h-6 pt-4 flex gap-2 items-center">
+            <AssistantActionBar
+              text={getTextFromParts(message)}
+              modelMetadata={modelMetadata}
+              isSpeaking={isSpeaking}
+              onReadAloud={onReadAloud}
+              onStopSpeaking={onStopSpeaking}
+            />
+          </div>
+        )}
       </div>
     );
-  }
-
-  const showActionBar = hasVisibleAssistantText(message, metadata);
-
-  return (
-    <div className="max-w-full" data-message-id={message.id}>
-      <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
-        <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
-      </div>
-      {showActionBar && (
-        <div className="h-6 pt-4 flex gap-2 items-center">
-          <AssistantActionBar
-            text={getTextFromParts(message)}
-            modelMetadata={modelMetadata}
-            isSpeaking={isSpeaking}
-            onReadAloud={onReadAloud}
-            onStopSpeaking={onStopSpeaking}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
+  },
+);
+MessageRow.displayName = 'MessageRow';

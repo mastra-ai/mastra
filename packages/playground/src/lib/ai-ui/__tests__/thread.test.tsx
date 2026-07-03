@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -15,6 +15,27 @@ import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-me
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
 import { server } from '@/test/msw-server';
+
+vi.mock('@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages', () => ({
+  memoryThreadMessagesQueryKey: (threadId: string | undefined, page?: number) => [
+    'memory',
+    'thread',
+    threadId,
+    'messages',
+    page ?? 0,
+  ],
+  useMemoryThreadMessages: () => ({ data: undefined, isLoading: false }),
+}));
+
+vi.mock('@mastra/playground-ui/domains/memory/hooks/use-observational-memory', () => ({
+  observationalMemoryQueryKey: (agentId: string | undefined, threadId: string | undefined) => [
+    'memory',
+    'observational-memory',
+    agentId,
+    threadId,
+  ],
+  useObservationalMemory: () => ({ data: undefined, isLoading: false }),
+}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -128,6 +149,24 @@ const userMessage = (text: string): MastraDBMessage => ({
   content: { format: 2, parts: [{ type: 'text', text }] },
 });
 
+const userMessageWithFiles = (text: string, filenames: string[]): MastraDBMessage => ({
+  id: `m-${text}`,
+  role: 'user',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [
+      { type: 'text', text },
+      ...filenames.map(filename => ({
+        type: 'file' as const,
+        filename,
+        mimeType: 'application/pdf',
+        data: `https://files.example.com/${filename}`,
+      })),
+    ],
+  },
+});
+
 const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['metadata']): MastraDBMessage => ({
   id: `a-${text}`,
   role: 'assistant',
@@ -163,8 +202,92 @@ describe('Thread', () => {
       renderThread([userMessage('previous question')]);
     });
 
-    expect(screen.getByText('previous question')).toBeTruthy();
+    expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+  });
+
+  describe('when rendering the thread rail', () => {
+    it('does not render for the empty welcome state', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      expect(screen.queryByTestId('thread-rail')).toBeFalsy();
+    });
+
+    it('renders one tick per user turn with preview labels and the latest turn marked in view', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([
+          userMessageWithFiles('first question', ['plan.md', 'notes.pdf', 'trace.json']),
+          assistantMessage('first answer'),
+          userMessage('second question'),
+        ]);
+      });
+
+      expect(screen.getByRole('navigation', { name: 'Conversation timeline' })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name: /Jump to/ })).toHaveLength(2);
+      const rail = screen.getByTestId('thread-rail');
+      expect(screen.getByTestId('thread-rail-container').className).toContain('thread-rail-container');
+      expect(screen.getByTestId('thread-rail-layer').className).toContain('thread-rail-layer');
+      expect(screen.getByTestId('thread-rail-layer').className).toContain('left-4');
+      expect(screen.getByTestId('thread-rail-layer').className).not.toContain('xl:block');
+      expect(screen.getByTestId('thread-rail-scroll-area')).toBeTruthy();
+      expect(screen.getByTestId('thread-message-column').contains(rail)).toBe(false);
+
+      const firstTurn = screen.getByRole('button', { name: 'Jump to first question' });
+      const secondTurn = screen.getByRole('button', { name: 'Jump to second question' });
+
+      fireEvent.mouseEnter(firstTurn);
+
+      const previewCurrent = within(screen.getByTestId('thread-rail-preview-current'));
+      expect(previewCurrent.getByText('first answer')).toBeTruthy();
+      expect(previewCurrent.getByText('plan.md')).toBeTruthy();
+      expect(previewCurrent.getByText('notes.pdf')).toBeTruthy();
+      expect(previewCurrent.getByText('+1')).toBeTruthy();
+
+      expect(firstTurn.getAttribute('aria-current')).toBeNull();
+      expect(firstTurn.getAttribute('data-in-view')).toBeNull();
+      expect(secondTurn.getAttribute('aria-current')).toBe('location');
+      expect(secondTurn.getAttribute('data-in-view')).toBe('true');
+      expect(secondTurn.getAttribute('data-active')).toBe('true');
+    });
+
+    it('scrolls to the selected user message', async () => {
+      const scrollIntoView = vi.fn();
+      const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
+      Object.defineProperty(Element.prototype, 'scrollIntoView', {
+        configurable: true,
+        writable: true,
+        value: scrollIntoView,
+      });
+      server.use(...baseHandlers());
+
+      try {
+        await act(async () => {
+          renderThread([
+            userMessage('first question'),
+            assistantMessage('first answer'),
+            userMessage('second question'),
+          ]);
+        });
+
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Jump to first question' }));
+        });
+
+        expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+      } finally {
+        if (originalDescriptor) {
+          Object.defineProperty(Element.prototype, 'scrollIntoView', originalDescriptor);
+        } else {
+          delete Element.prototype.scrollIntoView;
+        }
+      }
+    });
   });
 
   it('shows assistant model attribution when model-list metadata is available', async () => {
@@ -660,7 +783,7 @@ describe('Thread signal-path user-message reconciliation', () => {
     expect(userRow.isConnected).toBe(true);
     expect(userRow.getAttribute('data-message-pending')).toBeNull();
     // Still exactly one user bubble for this turn (no duplicate from reconciliation).
-    expect(screen.getByText('echo reconciliation')).toBeTruthy();
+    expect(screen.getAllByText('echo reconciliation', { selector: 'p' })).toHaveLength(1);
 
     await act(async () => {
       subscribeController?.close();
