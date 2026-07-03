@@ -73,7 +73,7 @@ These jobs were derived from the doc and selected by the user:
 
 ## Deterministic command output
 
-Raw output is in `$RUN_DIR/commands/` from `scripts/run-checks.sh`. Include relevant lines only.
+Raw output is in `$RUN_DIR/commands/` from `scripts/run-checks.sh`. Start with `$RUN_DIR/commands/summary.txt`: `*-target` lines are the audited-page signal, and `repo-wide-failures` lists unrelated repo noise. Include relevant lines only.
 
 ### `$COMMAND`
 
@@ -113,9 +113,10 @@ Scores and findings:
 
 Deterministic output:
 
-- Reference `$RUN_DIR/commands/*.txt`.
+- Reference `$RUN_DIR/commands/summary.txt` first, then `$RUN_DIR/commands/*.txt` as needed.
+- Treat `*-target` summary lines as the audited-page signal.
 - Include only audited-file-relevant lines.
-- Report unrelated repo-wide failures without counting them against the audited page.
+- Report `repo-wide-failures` separately without counting them against the audited page.
 - If a command passes, write `No relevant output`.
 - If a command cannot run, include the exact command and error.
 
@@ -126,8 +127,8 @@ After fixes and re-linting, append or produce a follow-up section:
 ```md
 ## Agent-build eval results
 
-| Job-to-be-done | Result | Evidence | Follow-up findings |
-| -------------- | ------ | -------- | ------------------ |
+| Job-to-be-done | Result                | Evidence   | Follow-up findings     |
+| -------------- | --------------------- | ---------- | ---------------------- |
 | `$JOB_1`       | passed/blocked/failed | `$SUMMARY` | `$FINDING_IDS_OR_NONE` |
 
 ### Eval notes

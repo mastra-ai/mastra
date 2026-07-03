@@ -24,7 +24,8 @@ Use scripts for deterministic mechanics; do not hand-roll run dirs, snapshots, l
 
 - `init-run.sh --docs <files>`: create the temp run directory and print `RUN_DIR=...`.
 - `snapshot.sh --run-dir "$RUN_DIR" --stage original|improved --docs <files>`: copy audited docs into the run dir.
-- `run-checks.sh --run-dir "$RUN_DIR" --docs <files>`: run validation, remark, Vale, and file-scoped Prettier; write raw output to `$RUN_DIR/commands/`.
+- `run-checks.sh --run-dir "$RUN_DIR" --docs <files>`: run validation, repo-wide and target-scoped remark/Vale, file-scoped Prettier, and write raw output plus `$RUN_DIR/commands/summary.txt`.
+- `format-doc.sh --docs <files>`: format changed docs from the docs package cwd so `docs/.prettierrc` and `docs/.prettierignore` apply.
 - `eval-setup.sh --run-dir "$RUN_DIR" --job "..." --doc <file> --pkg @mastra/...`: create an eval job/project, copy `doc-under-test.mdx`, resolve local packages, and print `JOB_DIR=...`.
 - `eval-typecheck.sh --job-dir "$JOB_DIR"`: run TypeScript verification and append output to `commands.log`.
 
@@ -40,11 +41,25 @@ Use scripts for deterministic mechanics; do not hand-roll run dirs, snapshots, l
 
 ### 1. Scope interactively
 
-Use `ask_user` to ask which doc page, URL/path, topic, category, or multi-page scope to audit. For free-text prompts, omit `options` and `selectionMode`; only pass `selectionMode` with explicit options.
+Use `ask_user` to ask which doc page, URL/path, topic, category, or multi-page scope to audit.
+
+DO free-text scope prompt with only `question`:
+
+```ts
+ask_user({ question: 'Which doc page should I audit? Paste a path, URL, or topic.' });
+```
+
+DON'T pass `options` or `selectionMode` for free text. If a free-text prompt errors with `selectionMode requires options`, you passed `selectionMode` without `options` — drop both keys and retry; do not fall back to plain chat.
 
 Resolve to docs files under `docs/src/content/en/docs/`, `docs/src/content/en/guides/`, or `docs/src/content/en/reference/`. If ambiguous, present plausible matches. Prefer one page unless the user asks for a category. Treat more than five pages as too broad unless the user approves a narrowed scope or representative sample.
 
-After reading scoped pages, derive 2–4 concrete jobs-to-be-done from each doc's title, intro, headings, examples, page type, and promise. Do not ask the user to invent jobs. Ask the user to select jobs with multi-select; selected jobs seed practicability checks and mandatory eval. Confirm multi-page scope before auditing.
+After reading scoped pages, derive 2–4 concrete jobs-to-be-done from each doc's title, intro, headings, examples, page type, and promise. Do not ask the user to invent jobs. Ask the user to select jobs with multi-select and explicit options:
+
+```ts
+ask_user({ question, options: [...], selectionMode: "multi_select" })
+```
+
+Only use `selectionMode` with `options`. Selected jobs seed practicability checks and mandatory eval. Confirm multi-page scope before auditing.
 
 ### 2. Classify page type and styleguide
 
@@ -65,11 +80,11 @@ If classification overlaps, prefer the matching frontmatter title pattern; other
 
 Read docs and collect frontmatter `packages:`, `@mastra/<name>` imports, mentioned APIs, `<PropertiesTable>` entries, and code-block file paths.
 
-Resolve package source paths from real workspace files: `@mastra/core` usually maps to `packages/core/src`; `@mastra/<name>` first tries `packages/<name>/src`; otherwise find the workspace `package.json` whose `name` matches. Do not guess paths.
+Resolve each `@mastra/<pkg>` import to the matching workspace `package.json`, then inspect its `exports` and `src/index.ts` before any repo-wide search. For the exact exported symbol/type, use `lsp_inspect` or `view` on the narrow export/type file first. Only broaden to `search_content` if the narrow export/type read is ambiguous.
 
-Inspect narrow source first: package export files, API-specific subdirectories, and type definitions. Avoid package-wide regex searches for common names until narrow inspection fails. Use `find_files`, `search_content`, and `lsp_inspect` to confirm real exports and types.
+Do not guess paths. `@mastra/core` usually maps to `packages/core/src`; `@mastra/<name>` often maps to `packages/<name>/src`, but the package `name` field is authoritative. For symbols like `cloneThread` that are noisy across tests, controllers, and docs, start from the package export surface such as `packages/memory/src/index.ts`.
 
-Source is the source of truth for code accuracy and API completeness; never trust doc snippets at face value.
+Source is the source of truth for code accuracy and API completeness; never trust doc snippets at face value. If activated skill text conflicts with the on-disk skill files, trust the on-disk files.
 
 ### 4. Run deterministic checks
 
@@ -79,7 +94,7 @@ Run:
 bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs <audited-files>
 ```
 
-The script handles cwd, capture, file-scoped Prettier, and missing local Vale as a warning. In the report, include only audited-file-relevant output; call out unrelated repo-wide failures separately. Do not run formatting commands that write files during the audit phase.
+The script handles cwd, capture, target-scoped lint summaries, file-scoped Prettier, and missing local Vale as a warning. Read `$RUN_DIR/commands/summary.txt` first: `*-target` lines are the audit signal, and `repo-wide-failures` is unrelated noise to list separately. Do not run formatting commands that write files during the audit phase.
 
 ### 5. Apply the rubric
 
@@ -115,13 +130,19 @@ Implement only approved fixes. Keep changes focused, follow docs styleguides and
 
 ### 9. Re-run checks and snapshot improved docs
 
-After fixes, run:
+After fixes, format changed docs with the docs package config:
+
+```sh
+bash .claude/skills/docs-audit/scripts/format-doc.sh --docs <changed-audited-files>
+```
+
+Then run:
 
 ```sh
 bash .claude/skills/docs-audit/scripts/run-checks.sh --run-dir "$RUN_DIR" --docs <changed-audited-files>
 ```
 
-Fix failures caused by approved changes; report unrelated failures clearly. Then snapshot improved docs with `snapshot.sh --stage improved`.
+Fix failures caused by approved changes; use `commands/summary.txt` to separate target-page failures from repo-wide noise. Then snapshot improved docs with `snapshot.sh --stage improved`.
 
 ### 10. Run mandatory eval
 
