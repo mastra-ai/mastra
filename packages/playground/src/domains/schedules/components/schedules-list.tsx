@@ -32,7 +32,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
   return (
     <DataList columns={COLUMNS} variant="striped" className="min-w-0">
       <DataList.Top>
-        <DataList.TopCell>Workflow</DataList.TopCell>
+        <DataList.TopCell>Target</DataList.TopCell>
         <DataList.TopCell>Schedule ID</DataList.TopCell>
         <DataList.TopCell>Cron</DataList.TopCell>
         <DataList.TopCell>Status</DataList.TopCell>
