@@ -21,11 +21,17 @@ const bgCheckOutputSchema = z.any();
  *
  * Mirrors the regular agent's backgroundTaskCheckStep pattern:
  * - After tool calls complete, checks if any background tasks are still running
- * - First invocation (retryCount === 0): returns immediately with backgroundTaskPending=true
- *   so the loop can re-enter without blocking
- * - Subsequent invocations: waits with timeout for the next task to complete,
+ * - First iteration (iterationCount === 0) or no waitTimeoutMs configured:
+ *   returns immediately with backgroundTaskPending=true so the loop can
+ *   re-enter without blocking
+ * - Later iterations with waitTimeoutMs: waits for the next task to complete,
  *   then sets isContinued=true so the LLM processes the result
  * - If no running tasks: passes through unchanged
+ *
+ * Note: uses iterationCount instead of retryCount because the durable
+ * dowhile loop gives every step a fresh execution context (retryCount
+ * always 0), unlike the regular agent's DefaultExecutionEngine which
+ * maintains a persistent retryCounts map.
  */
 export function createDurableBackgroundTaskCheckStep() {
   return createStep({
@@ -77,30 +83,24 @@ export function createDurableBackgroundTaskCheckStep() {
       const managerConfig = bgManager.config;
       const waitTimeoutMs = bgConfig?.waitTimeoutMs ?? managerConfig?.waitTimeoutMs;
 
-      // In the regular agent, the workflow engine's DefaultExecutionEngine
-      // maintains a persistent retryCounts map, so the same step ID gets
-      // retryCount=0 on iteration 0 and retryCount=1+ on subsequent
-      // iterations of the dowhile loop.  The durable agent's dowhile loop
-      // gives every step a fresh context (retryCount always 0), so we use
-      // iterationCount from the loop state instead — it tracks the same
-      // concept: "how many times has this step been invoked."
+      // The regular agent's DefaultExecutionEngine maintains a persistent
+      // retryCounts map across loop iterations, so the same step ID gets
+      // retryCount=0 on the first invocation and retryCount=1+ on later
+      // ones.  The durable agent's dowhile loop gives every step a fresh
+      // context (retryCount always 0), so we use iterationCount from the
+      // loop state instead — it tracks the same concept: "how many times
+      // has the agentic loop iterated."
       //
-      // The regular agent gates on `retryCount === 0 || !waitTimeoutMs`:
-      // it can afford to skip waiting because tool-result chunks from bg
-      // tasks are pushed directly into the ReadableStream controller via
-      // safeEnqueue, which works even after this step returns.  The durable
-      // agent emits tool-result chunks via pubsub, which closes when the
-      // workflow ends.  So when waitTimeoutMs is not configured we still
-      // need to wait (with a sensible default) to keep the workflow alive.
+      // Matches the regular agent's gating: iterationCount === 0 (first
+      // pass) or no waitTimeoutMs configured → return immediately with
+      // backgroundTaskPending=true so the loop can re-enter without
+      // blocking.  On subsequent iterations, wait for the next task to
+      // complete so the LLM can process the result.
 
-      // First invocation — signal pending but don't block
-      if (initData.iterationCount === 0) {
+      // First invocation or no timeout configured — signal pending but don't block
+      if (initData.iterationCount === 0 || !waitTimeoutMs) {
         return { ...typedInput, backgroundTaskPending: true };
       }
-
-      // Use configured timeout, or default to 30 s so tool-result chunks
-      // from bg tasks reach the stream before the workflow ends.
-      const effectiveWaitMs = waitTimeoutMs ?? 30_000;
 
       // Emit initial progress chunk
       if (pubsub) {
@@ -119,7 +119,7 @@ export function createDurableBackgroundTaskCheckStep() {
       // Wait for the next task to complete (or until timeout)
       try {
         await bgManager.waitForNextTask(taskIds, {
-          timeoutMs: effectiveWaitMs,
+          timeoutMs: waitTimeoutMs,
           onProgress: (elapsedMs: number) => {
             if (!pubsub) return;
             void emitChunkEvent(pubsub, runId, {
