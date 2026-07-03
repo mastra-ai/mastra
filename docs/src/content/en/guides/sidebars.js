@@ -105,22 +105,23 @@ const sidebars = {
           label: 'AI SDK UI',
         },
         {
+          type: 'doc',
+          id: 'build-your-ui/assistant-ui',
+          label: 'Assistant UI',
+        },
+        {
           type: 'category',
           label: 'CopilotKit',
-          link: {
-            type: 'doc',
-            id: 'build-your-ui/copilotkit/get-started',
-          },
           items: [
             {
               type: 'doc',
-              id: 'build-your-ui/copilotkit/get-started',
-              label: 'Get started',
+              id: 'build-your-ui/copilotkit/overview',
+              label: 'Overview',
             },
             {
               type: 'doc',
               id: 'build-your-ui/copilotkit/generative-ui',
-              label: 'Generative UI spectrum',
+              label: 'Generative UI',
             },
             {
               type: 'doc',
@@ -128,11 +129,6 @@ const sidebars = {
               label: 'Channels',
             },
           ],
-        },
-        {
-          type: 'doc',
-          id: 'build-your-ui/assistant-ui',
-          label: 'Assistant UI',
         },
         {
           type: 'doc',

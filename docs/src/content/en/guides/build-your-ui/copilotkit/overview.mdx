@@ -1,7 +1,6 @@
 ---
 title: "Using CopilotKit | Frameworks"
 description: "Learn how to integrate CopilotKit with Mastra"
-slug: /build-your-ui/copilotkit
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -23,7 +22,7 @@ For a full-stack integration approach where Mastra runs directly in your Next.js
 
 :::tip
 
-Visit Mastra's [**"UI Dojo"**](https://ui-dojo.mastra.ai/) to see real-world examples of CopilotKit integrated with Mastra.
+Visit Mastra's ["UI Dojo"](https://ui-dojo.mastra.ai/) to see real-world examples of CopilotKit integrated with Mastra.
 
 :::
 
@@ -51,7 +50,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
     npx create-mastra@latest
     ```
 
-    This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations. Follow the prompts to create your server project.
+    This command opens an interactive wizard that scaffolds a new Mastra project. Follow the prompts to create your server project.
 
     Navigate to your newly created Mastra server directory:
 
@@ -59,21 +58,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
     cd mastra-server # Replace with the actual directory name you provided
     ```
 
-    You now have a basic Mastra server project ready. You should have the following files and folders:
-
-    ```bash
-    src
-    └── mastra
-        ├── agents
-        │   └── weather-agent.ts
-        ├── scorers
-        │   └── weather-scorer.ts
-        ├── tools
-        │   └── weather-tool.ts
-        ├── workflows
-        │   └── weather-workflow.ts
-        └── index.ts
-    ```
+    You now have a basic Mastra server project ready.
 
     :::note
 
@@ -114,7 +99,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
     })
     ```
 
-    This exposes the agents on your Mastra instance at `/copilotkit` in a CopilotKit-compatible format. The frontend selects which agent to talk to with the `agent` prop (shown below). You have to add the CORS configuration to allow the CopilotKit frontend to access the Mastra server. For production deployments, make sure to restrict the CORS origins to only your frontend domain.
+    This exposes the agents on your Mastra instance at `/copilotkit` in a CopilotKit-compatible format. The frontend selects which agent to talk to with the `agent` prop shown below. Add the CORS configuration so the CopilotKit frontend can access the Mastra server. For production deployments, restrict CORS origins to your frontend domain.
   </StepItem>
 
   <StepItem>
@@ -124,7 +109,7 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
     npm run dev
     ```
 
-    By default, the Mastra server will run on `http://localhost:4111`. Keep this server running for the next steps where we'll set up the CopilotKit frontend to connect to it.
+    By default, the Mastra server runs on `http://localhost:4111`. Keep this server running while you set up the CopilotKit frontend.
   </StepItem>
 
   <StepItem>
@@ -179,17 +164,17 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
   </StepItem>
 
   <StepItem>
-    You're ready to connect the pieces! Make sure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
+    Ensure both the Mastra server and the CopilotKit frontend are running. Start the Next.js development server:
 
     ```bash npm2yarn
     npm run dev
     ```
 
-    You should now be able to chat with your agent in the browser.
+    Open the app in your browser and chat with your agent.
   </StepItem>
 </Steps>
 
-Congratulations! You have successfully integrated Mastra with CopilotKit using a separate server approach. Your CopilotKit frontend now communicates with a standalone Mastra agent server.
+Your CopilotKit frontend now communicates with a standalone Mastra agent server.
 
 ## Chat UI options
 
@@ -224,7 +209,7 @@ For fully custom chat UIs (bring your own components), see [CopilotKit's headles
 
 ## App control and interactivity
 
-Beyond rendering agent output as UI (see the [generative UI spectrum](/guides/build-your-ui/copilotkit/generative-ui)), CopilotKit lets the agent act on your application and pause for the user. Both patterns run against the same Mastra setup.
+Beyond rendering agent output as UI (see [generative UI](/guides/build-your-ui/copilotkit/generative-ui)), CopilotKit lets the agent act on your application and pause for the user. Both patterns run against the same Mastra setup.
 
 ### Frontend tools
 
@@ -308,18 +293,18 @@ The example above uses a client tool: the agent calls `generate_task_steps` and 
 
 ## Configuration options
 
-`registerCopilotKit()` accepts the following options:
+Use these `registerCopilotKit()` options for the common integration points:
 
-| Option | Type | Description |
-| --- | --- | --- |
-| `path` | `string` | The route the endpoint is mounted at (for example `/copilotkit`). |
-| `resourceId` | `string` | The Mastra memory resource id used to scope conversation memory. |
-| `cors` | `boolean \| CopilotCorsConfig` | Per-route CORS handling, in addition to the Mastra `server.cors` setting. |
-| `setContext` | `(c, requestContext) => void \| Promise<void>` | Hook to populate the request context before agents run (for example to thread auth or a per-user resource id). |
-| `agents` | `AgentsConfig` | Provide pre-constructed AG-UI agents instead of using the ones on the Mastra instance. |
-| `tracingOptions` | `MastraTracingOptions` | Mastra tracing options forwarded to each agent run. |
+| Option | Use it to |
+| - | - |
+| `path` | Set the route path, such as `/copilotkit`. |
+| `resourceId` | Scope Mastra memory for conversations. |
+| `cors` | Configure per-route CORS in addition to `server.cors`. |
+| `setContext` | Populate request context before agents run, such as auth or per-user resource IDs. |
+| `agents` | Provide pre-constructed AG-UI agents instead of the agents registered on the Mastra instance. |
+| `tracingOptions` | Forward Mastra tracing options to each agent run. |
 
-By default the endpoint exposes every agent registered on the Mastra instance, and the frontend chooses one with the `agent` prop. Any other CopilotKit runtime option (for example `mcpApps`, see [Open-ended generative UI](/guides/build-your-ui/copilotkit/generative-ui#open-ended)) is forwarded to the underlying runtime.
+By default, the endpoint exposes every agent registered on the Mastra instance, and the frontend chooses one with the `agent` prop. Other CopilotKit runtime options are forwarded to the underlying runtime. For example, see [Open-ended generative UI](/guides/build-your-ui/copilotkit/generative-ui#open-ended) for `mcpApps`.
 
 ## Deployment
 

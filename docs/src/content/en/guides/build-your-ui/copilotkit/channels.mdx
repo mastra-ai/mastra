@@ -1,9 +1,9 @@
 ---
-title: "CopilotKit Channels | Frameworks"
+title: "CopilotKit channels | Frameworks"
 description: "Deploy the same Mastra agent to Slack, Discord, Telegram, and other messaging channels"
 ---
 
-# Channels
+# CopilotKit channels
 
 The same Mastra agent that powers your in-app copilot can also run as a bot in messaging platforms. CopilotKit's bot layer connects your agent to Slack, Discord, Telegram, WhatsApp, and Microsoft Teams, with threads, tool calls, and human-in-the-loop approvals handled in the channel.
 
@@ -15,7 +15,7 @@ The full setup lives in the [CopilotKit bot documentation](https://docs.copilotk
 
 ## How it fits together
 
-Your Mastra agent stays where it is, exposed through `registerCopilotKit()` as described in [Get started](/guides/build-your-ui/copilotkit). The bot is a separate process built with `@copilotkit/bot`: you attach one or more platform adapters and point the bot at your agent. `createBot` takes an array of adapters, so a single bot can serve several platforms at once.
+Your Mastra agent stays where it is, exposed through `registerCopilotKit()` as described in [CopilotKit overview](/guides/build-your-ui/copilotkit/overview). The bot is a separate process built with `@copilotkit/bot`: you attach one or more platform adapters and point the bot at your agent. `createBot` takes an array of adapters, so a single bot can serve several platforms at once.
 
 ```typescript title="bot.ts"
 import { createBot } from '@copilotkit/bot'
@@ -29,7 +29,7 @@ const bot = createBot({
     }),
   ],
   // Point the bot at your agent.
-  agent: (threadId) => {
+  agent: threadId => {
     // ...connect to your CopilotKit runtime / Mastra agent
   },
 })

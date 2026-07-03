@@ -889,6 +889,11 @@
       "source": "/docs/community/licensing",
       "destination": "/docs/license",
       "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "permanent": true
     }
   ]
 }

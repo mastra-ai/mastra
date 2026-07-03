@@ -1,25 +1,25 @@
 ---
-title: "CopilotKit Generative UI | Frameworks"
+title: "CopilotKit generative UI | Frameworks"
 description: "Render agent output as UI, from developer-controlled components to agent-invented surfaces"
 ---
 
-# Generative UI spectrum
+# CopilotKit generative UI
 
 Generative UI is the family of UI paradigms enabled by agents and useful for interacting with them. CopilotKit organizes these along a single axis, the **generative UI spectrum**, which runs from author-controlled (you decide every pixel) to agent-invented (the agent owns the rendered surface). Where you sit on the axis is a trade-off between predictability and breadth.
 
 The spectrum has three tiers:
 
 | Tier | Who controls the surface | Primitives |
-| --- | --- | --- |
+| - | - | - |
 | **Controlled** | You wrote the component; the agent picks which one and what data to pass. | Tool call rendering, state rendering, reasoning, components as tools |
 | **Declarative** | The agent emits a structured spec; the frontend composes it from a catalog you registered. | A2UI (fixed schema and dynamic) |
 | **Open-ended** | The UI is invented elsewhere (an MCP server) and you sandbox it. | MCP Apps |
 
-Each tier is a Mastra agent exposed through `registerCopilotKit()` (see [Get started](/guides/build-your-ui/copilotkit)) plus the matching CopilotKit hook on the frontend. For the full concept, see CopilotKit's [generative UI spectrum](https://www.copilotkit.ai/generative-ui-spectrum) and [generative UI overview](https://docs.copilotkit.ai/concepts/generative-ui-overview).
+Each tier is a Mastra agent exposed through `registerCopilotKit()` (see [CopilotKit overview](/guides/build-your-ui/copilotkit/overview)) plus the matching CopilotKit hook on the frontend. For the full concept, see CopilotKit's [generative UI spectrum](https://www.copilotkit.ai/generative-ui-spectrum) and [generative UI overview](https://docs.copilotkit.ai/concepts/generative-ui-overview).
 
 :::tip
 
-Mastra's [**UI Dojo**](https://ui-dojo.mastra.ai/) has working CopilotKit examples; browse the source under `src/pages/copilot-kit`.
+Mastra's [UI Dojo](https://ui-dojo.mastra.ai/) has working CopilotKit examples; browse the source under `src/pages/copilot-kit`.
 
 :::
 
@@ -36,9 +36,10 @@ import { Agent } from '@mastra/core/agent'
 import { weatherTool } from '../tools/weather-tool'
 
 export const weatherAgent = new Agent({
+  id: 'weather-agent',
   name: 'Weather Agent',
   instructions: 'Use the weatherTool to fetch current weather data.',
-  model: 'openai/gpt-4o',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool },
 })
 ```
@@ -116,7 +117,9 @@ function TaskBoard() {
   return (
     <ul>
       {tasks.map((task, i) => (
-        <li key={i}>{task.title}: {task.status}</li>
+        <li key={i}>
+          {task.title}: {task.status}
+        </li>
       ))}
     </ul>
   )
@@ -163,18 +166,16 @@ registerCopilotKit({
   path: '/copilotkit',
   resourceId: 'weatherAgent',
   mcpApps: {
-    servers: [
-      { type: 'http', url: 'http://localhost:3108/mcp', serverId: 'my-server' },
-    ],
+    servers: [{ type: 'http', url: 'http://localhost:3108/mcp', serverId: 'my-server' }],
   },
 })
 ```
 
 When the agent calls an MCP App tool, CopilotKit fetches and renders that tool's UI in the chat with no additional frontend code. See CopilotKit's [MCP Apps documentation](https://docs.copilotkit.ai/agno/generative-ui/mcp-apps).
 
-## Related: app control and interactivity
+## App control and interactivity
 
-Some capabilities sit next to the spectrum rather than on it: they control your app or gate a run instead of rendering agent output. Both are covered in [Get started](/guides/build-your-ui/copilotkit#app-control-and-interactivity):
+Some capabilities sit next to the spectrum rather than on it: they control your app or gate a run instead of rendering agent output. Both are covered in [Get started](/guides/build-your-ui/copilotkit/overview#app-control-and-interactivity):
 
 - **Frontend tools** (`useFrontendTool`): let the agent act on your application. This is part of CopilotKit's separate [App Control](https://docs.copilotkit.ai/) concept, alongside shared state and agent context.
 - **Human-in-the-loop**: pause a run and wait for user approval or edits. Backend side, see Mastra's [Agent approval](/docs/agents/agent-approval); frontend side, see CopilotKit's [`useHumanInTheLoop`](https://docs.copilotkit.ai/reference/hooks/useHumanInTheLoop).
