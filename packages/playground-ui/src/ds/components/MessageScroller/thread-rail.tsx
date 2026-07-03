@@ -18,7 +18,7 @@ type ThreadRailPreviewState = {
   visible: boolean;
 };
 
-const PREVIEW_EXIT_DURATION_MS = 200;
+const PREVIEW_EXIT_DURATION_MS = 300;
 
 const DEFAULT_PREVIEW_STATE: ThreadRailPreviewState = {
   currentTurn: undefined,
@@ -179,7 +179,7 @@ export function ThreadRail({
           previousTurn={previewState.previousTurn}
           settled={previewState.settled}
           visible={previewState.visible}
-          style={{ top: previewState.top }}
+          top={previewState.top}
         />
       )}
     </nav>
@@ -256,21 +256,21 @@ function ThreadRailPreview({
   previousTurn,
   settled,
   visible,
-  style,
+  top,
 }: {
   id: string;
   currentTurn: ThreadRailTurn;
   previousTurn: ThreadRailTurn | undefined;
   settled: boolean;
   visible: boolean;
-  style?: React.CSSProperties;
+  top: number;
 }) {
   const containerVisible = visible && (settled || Boolean(previousTurn));
   const enteringLayerClassName = 'opacity-0 blur-sm';
   const exitingLayerClassName = 'opacity-0 blur-sm';
   const visibleLayerClassName = 'opacity-100 blur-none';
   const layerClassName =
-    'absolute inset-x-0 top-0 h-full transition-[opacity,filter] duration-normal ease-out will-change-[opacity,filter] motion-reduce:blur-none motion-reduce:transition-none';
+    'absolute inset-x-0 top-0 h-full transition-[opacity,filter] duration-slow ease-out-custom will-change-[opacity,filter] motion-reduce:blur-none motion-reduce:transition-none';
 
   return (
     <div
@@ -278,10 +278,10 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={visible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute left-full z-30 ml-3 w-72 -translate-y-1/2 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-opacity duration-normal ease-out motion-reduce:transition-none',
+        'pointer-events-none absolute left-full top-0 z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[translate,opacity] duration-slow ease-out-custom will-change-[translate,opacity] motion-reduce:transition-none',
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
-      style={style}
+      style={{ translate: `0 calc(${top}px - 50%)` }}
     >
       <div data-testid="thread-rail-preview-viewport" className="relative">
         <div aria-hidden className="invisible grid">
