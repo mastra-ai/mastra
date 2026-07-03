@@ -43,7 +43,6 @@ async function readPackageMetadata(
     const pkgJson = await readJSON(`${rootPath}/package.json`);
     const version = pkgJson.version;
     const actualPackageName = pkgJson.name;
-
     const packageSpec =
       version && actualPackageName && requestedPackageName && requestedPackageName !== actualPackageName
         ? `npm:${actualPackageName}@${version}`
