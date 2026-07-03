@@ -307,6 +307,24 @@ describe('DatasetsManager', () => {
       expect(stillThere.id).toBe(created.id);
     });
 
+    it('delete calls storage deleteDataset unconditionally even when the probe finds no record', async () => {
+      // The manager derives its boolean from a pre-delete probe, but the
+      // adapter delete is still fired unconditionally so the scoped adapter's
+      // tenancy predicate remains the single source of truth (and concurrent
+      // recreate races resolve consistently).
+      const deleteSpy = vi.spyOn(datasetsStorage, 'deleteDataset');
+
+      // Nonexistent id under a scope — probe returns null, but delete must still run.
+      await expect(mgr.delete({ id: 'ds_never_existed', organizationId: 'org_a', projectId: 'proj_1' })).resolves.toBe(
+        false,
+      );
+
+      expect(deleteSpy).toHaveBeenCalledWith({
+        id: 'ds_never_existed',
+        filters: { organizationId: 'org_a', projectId: 'proj_1' },
+      });
+    });
+
     it('unscoped calls (no organizationId / projectId) forward no filters and preserve legacy behavior', async () => {
       const created = await mgr.create({ name: 'Legacy' });
       const spy = vi.spyOn(datasetsStorage, 'getDatasetById');

@@ -163,7 +163,7 @@ export class DatasetsManager {
     const record = await store.getDatasetById({ id: args.id, filters: scope });
     if (!record) {
       if (scope) {
-        this.#mastra.getLogger?.().debug?.('datasets: scoped get returned no record', {
+        this.#mastra.getLogger().debug('datasets: scoped get returned no record', {
           op: 'DatasetsManager.get',
           id: args.id,
           organizationId: args.organizationId,
@@ -261,7 +261,7 @@ export class DatasetsManager {
       filters: scope,
     });
     if (!record && scope) {
-      this.#mastra.getLogger?.().debug?.('experiments: scoped get returned no record', {
+      this.#mastra.getLogger().debug('experiments: scoped get returned no record', {
         op: 'DatasetsManager.getExperiment',
         id: args.experimentId,
         organizationId: args.organizationId,

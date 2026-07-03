@@ -121,7 +121,7 @@ export class Dataset {
     const store = await this.#getDatasetsStore();
     const record = await store.getDatasetById({ id: this.id, filters: this.#scope });
     if (!record) {
-      this.#mastra.getLogger?.().debug?.('datasets: scoped ownership check returned no record', {
+      this.#mastra.getLogger().debug('datasets: scoped ownership check returned no record', {
         op: 'Dataset.#assertScope',
         datasetId: this.id,
         organizationId: this.#scope.organizationId,
@@ -484,7 +484,7 @@ export class Dataset {
     });
     if (!experiment || experiment.datasetId !== this.id) {
       if (this.#scope) {
-        this.#mastra.getLogger?.().debug?.('experiments: scoped ownership check returned no record', {
+        this.#mastra.getLogger().debug('experiments: scoped ownership check returned no record', {
           op: 'Dataset.#assertExperimentOwnership',
           datasetId: this.id,
           experimentId,
@@ -513,7 +513,7 @@ export class Dataset {
     });
     if (!experiment || experiment.datasetId !== this.id) {
       if (this.#scope) {
-        this.#mastra.getLogger?.().debug?.('experiments: scoped get returned no record', {
+        this.#mastra.getLogger().debug('experiments: scoped get returned no record', {
           op: 'Dataset.getExperiment',
           datasetId: this.id,
           experimentId: args.experimentId,
