@@ -4,4 +4,4 @@
 'mastra': patch
 ---
 
-Fixed the Studio HTML injection of platform environment values: MASTRA_ORGANIZATION_ID, MASTRA_PLATFORM_PROJECT_ID, MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT and MASTRA_TELEMETRY_DISABLED are now escaped before being embedded in the served index.html, so values containing quotes, angle brackets or newlines can no longer corrupt the page. Also exported the new escapeStudioHtmlValue helper from @mastra/deployer/build.
+Fixed Studio HTML config injection so platform environment values are escaped before they are embedded in served or deployed `index.html` files. This keeps organization IDs, project IDs, observability endpoints and telemetry flags intact when they contain quotes, angle brackets, newlines or `$` sequences, and exposes `escapeStudioHtmlValue` from `@mastra/deployer/build` for the shared injection paths.
