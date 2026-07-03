@@ -1,5 +1,2272 @@
 # mastracode
 
+## 0.28.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666)]:
+  - @mastra/core@1.50.0-alpha.0
+  - @mastra/client-js@1.30.1-alpha.0
+  - @mastra/server@1.50.0-alpha.0
+  - @mastra/react@1.2.3-alpha.0
+  - @mastra/playground-ui@39.0.1-alpha.0
+  - @mastra/hono@1.5.5-alpha.0
+
+## 0.28.0
+
+### Minor Changes
+
+- Added lifecycle hook events and a per-run `run_id` field so external orchestrators can track agent lifecycle states directly instead of inferring them from coarse prompt, tool, and stop signals. ([#18607](https://github.com/mastra-ai/mastra/pull/18607))
+
+  **New events:** AgentStart, AgentEnd, PermissionRequest, PermissionResult, Interrupt, SubagentStart, and SubagentEnd. All new lifecycle events are non-blocking. Existing blocking events, including PreToolUse, Stop, and UserPromptSubmit, keep their current behavior.
+
+  Every hook stdin now includes a `run_id` during an active run. Permission decisions and interrupts only emit while a run is active, so consumers can reliably correlate them with the run that produced them.
+
+  PostToolUse continues to fire from the agent tool hook wrapper after a tool call completes. It is not emitted from the TUI lifecycle dispatcher.
+
+  **Why**
+
+  External orchestrators needed first-class signals for permission gates, interrupts, and subagent delegation. The previous hook surface only offered coarse prompt, tool, and stop events, forcing integrators to guess at lifecycle state.
+
+  ```json
+  {
+    "AgentStart": [{ "type": "command", "command": "echo started >> /tmp/lifecycle.log" }],
+    "AgentEnd": [{ "type": "command", "command": "echo ended >> /tmp/lifecycle.log" }],
+    "Interrupt": [{ "type": "command", "command": "echo interrupted >> /tmp/lifecycle.log" }]
+  }
+  ```
+
+  AgentStart stdin includes the shared `run_id`:
+
+  ```json
+  { "hook_event_name": "AgentStart", "run_id": "a1b2c3d4", "session_id": "...", "cwd": "/path/to/project" }
+  ```
+
+### Patch Changes
+
+- Removed named exports from the `@mastra/playground-ui` root entry. Import public APIs from exact package subpaths instead. ([#18791](https://github.com/mastra-ai/mastra/pull/18791))
+
+  **Before**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui';
+  ```
+
+  **After**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui/components/Button';
+  ```
+
+  `mastracode` now uses the exact subpath imports, and lint rules prevent new broad `@mastra/playground-ui` imports.
+
+- Hardened child-process invocations against shell command injection. Package installs and codemod runs now pass arguments as arrays instead of interpolating them into shell strings, the deployer's shared child-process logger rejects arguments containing shell metacharacters, and the login dialog validates auth URLs and opens the browser without a shell. As a side effect, `mastra codemod` now works on project paths containing spaces. ([#18804](https://github.com/mastra-ai/mastra/pull/18804))
+
+- Fixed thread search shortcut conflict where pressing 'c' in the thread list search triggered the clone dialog instead of typing in the search field. Changed the clone shortcut from 'c' to Tab. ([#18746](https://github.com/mastra-ai/mastra/pull/18746))
+
+- Security hardening from CodeQL review: MCP serverless 500 responses no longer echo internal error messages to clients (details are still logged server-side), and macOS system notifications now escape backslashes and run osascript without a shell so notification text can't inject commands. ([#18805](https://github.com/mastra-ai/mastra/pull/18805))
+
+- Fixed GitHub plugin installs so they use GitHub CLI auth and no longer prompt inside the TUI. ([#18764](https://github.com/mastra-ai/mastra/pull/18764))
+
+- Rebuilt the MastraCode web studio UI on the @mastra/playground-ui design system. Theme switching, settings, command palette, sidebar, and the conversation transcript now use shared design-system components for a consistent look and accessible controls, replacing the previous custom stylesheet, and the bespoke inline-SVG icon set was replaced with lucide-react icons (the decorative brand wordmark/logo was removed while preserving accessible labels). ([#18782](https://github.com/mastra-ai/mastra/pull/18782))
+
+  Cleaned up the studio chrome: removed the duplicate top-level project switcher, theme toggle, and mode switcher from the header (the sidebar switcher is the single project switcher, the theme is set only from Settings), moved the Settings button into the sidebar footer, and moved the session mode selector into a single unified status row below the composer. The header is now reduced to just the mobile sidebar toggle. The chat message column, composer, and status line share the same `max-w-[80ch] w-full` column with container border/background removed so they align cleanly.
+
+  Simplified the chat message UI to match the Studio playground: user messages are plain right-aligned rounded bubbles (no "YOU" label or avatar) rendered as markdown, and assistant messages render as label-free full-width markdown prose.
+
+  Improved tool-call rendering: tool arguments, results, and full-file writes render through the design-system `CodeBlock` component (shiki highlighting, built-in copy, softer rounded shape) instead of plain monospace `<pre>` blocks. Consecutive tool calls now merge into a single bordered, rounded container with divider-separated full-width collapsible rows (no per-item stacked-card look), and the collapse control uses a standard chevron instead of a rotating icon.
+
+  Improved the "Open a project" dialog: the current path uses the shared breadcrumb component and navigating up a folder is a single click on a parent crumb; removed the double-click-to-select behavior and hint text so a single click browses and "Use this folder" selects.
+
+  Improved web session caching and settings refresh behavior.
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb), [`9250acd`](https://github.com/mastra-ai/mastra/commit/9250acd1357f0f1f33d0dcca16f9655084c58eca), [`9fe9d2d`](https://github.com/mastra-ai/mastra/commit/9fe9d2d905a84409202fe222eab698216704e4e7), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`cc440a3`](https://github.com/mastra-ai/mastra/commit/cc440a39400d8ce06655462b26c1666a1b3d4320), [`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`ea6327b`](https://github.com/mastra-ai/mastra/commit/ea6327ba2d63ca647804bc97b347e03a58617162), [`3439fa8`](https://github.com/mastra-ai/mastra/commit/3439fa836ecfcaa257b40c20b30ac2a8be22e9ea), [`85107f2`](https://github.com/mastra-ai/mastra/commit/85107f2758b527147fccbedff962961927c2d3b8), [`7952b3d`](https://github.com/mastra-ai/mastra/commit/7952b3d90e2437093ee322585e361ea6e62ed497), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`06e2680`](https://github.com/mastra-ai/mastra/commit/06e26806b51d2cbd858afdc66daa2b86ff3ba64a), [`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8), [`06ff9e0`](https://github.com/mastra-ai/mastra/commit/06ff9e0befd1d642ab87ff749285ee4091205c7e), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`7f5e1ff`](https://github.com/mastra-ai/mastra/commit/7f5e1ff695a92f672bb3976363925d1e9136b54a), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`b8375c1`](https://github.com/mastra-ai/mastra/commit/b8375c1f8fe905df8ae2ae9a893bb365f17aec4e), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`1240f05`](https://github.com/mastra-ai/mastra/commit/1240f051c8e5371f1c014448bf37b1a1b9a05e47), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`df25635`](https://github.com/mastra-ai/mastra/commit/df25635b954e63b5dbf8f1636af953b95c631809), [`9ab5faa`](https://github.com/mastra-ai/mastra/commit/9ab5faaff673ee9953ab4604cec217ee57875cd5), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`c4f43f3`](https://github.com/mastra-ai/mastra/commit/c4f43f37a6720658810c91ef3435d59941691262), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`65b1833`](https://github.com/mastra-ai/mastra/commit/65b1833c803356b0a33c7c865be073a92d52d74f), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`27826bc`](https://github.com/mastra-ai/mastra/commit/27826bc8ec20d6b4597ba456e506d65f45656c8f), [`0f5ebf7`](https://github.com/mastra-ai/mastra/commit/0f5ebf761bca5bb34bd13a82513a65dede006bc7), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`e8eee50`](https://github.com/mastra-ai/mastra/commit/e8eee5087937c9db1a57167119813861328e22ce), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`003f35d`](https://github.com/mastra-ai/mastra/commit/003f35d19e07b23b4bacc591c8bc0c59b42124ae), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b), [`1340fb7`](https://github.com/mastra-ai/mastra/commit/1340fb76262a3ca062130aa71859f07257a0a5a4)]:
+  - @mastra/core@1.49.0
+  - @mastra/playground-ui@39.0.0
+  - @mastra/client-js@1.30.0
+  - @mastra/server@1.49.0
+  - @mastra/libsql@1.15.0
+  - @mastra/pg@1.15.0
+  - @mastra/schema-compat@1.3.3
+  - @mastra/mcp@1.13.0
+  - @mastra/hono@1.5.4
+  - @mastra/railway@0.3.0
+  - @mastra/memory@1.22.1
+  - @mastra/react@1.2.2
+  - @mastra/auth-workos@1.6.2
+
+## 0.28.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`0f5ebf7`](https://github.com/mastra-ai/mastra/commit/0f5ebf761bca5bb34bd13a82513a65dede006bc7)]:
+  - @mastra/libsql@1.15.0-alpha.2
+  - @mastra/pg@1.15.0-alpha.2
+  - @mastra/hono@1.5.4-alpha.5
+
+## 0.28.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`9250acd`](https://github.com/mastra-ai/mastra/commit/9250acd1357f0f1f33d0dcca16f9655084c58eca), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`06e2680`](https://github.com/mastra-ai/mastra/commit/06e26806b51d2cbd858afdc66daa2b86ff3ba64a), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`1240f05`](https://github.com/mastra-ai/mastra/commit/1240f051c8e5371f1c014448bf37b1a1b9a05e47), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`65b1833`](https://github.com/mastra-ai/mastra/commit/65b1833c803356b0a33c7c865be073a92d52d74f), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748)]:
+  - @mastra/core@1.49.0-alpha.5
+  - @mastra/client-js@1.30.0-alpha.5
+  - @mastra/server@1.49.0-alpha.5
+  - @mastra/libsql@1.15.0-alpha.1
+  - @mastra/pg@1.15.0-alpha.1
+  - @mastra/playground-ui@39.0.0-alpha.5
+  - @mastra/react@1.2.2-alpha.5
+  - @mastra/hono@1.5.4-alpha.5
+
+## 0.28.0-alpha.4
+
+### Patch Changes
+
+- Removed named exports from the `@mastra/playground-ui` root entry. Import public APIs from exact package subpaths instead. ([#18791](https://github.com/mastra-ai/mastra/pull/18791))
+
+  **Before**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui';
+  ```
+
+  **After**
+
+  ```ts
+  import { Button } from '@mastra/playground-ui/components/Button';
+  ```
+
+  `mastracode` now uses the exact subpath imports, and lint rules prevent new broad `@mastra/playground-ui` imports.
+
+- Updated dependencies [[`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44), [`7952b3d`](https://github.com/mastra-ai/mastra/commit/7952b3d90e2437093ee322585e361ea6e62ed497)]:
+  - @mastra/core@1.49.0-alpha.4
+  - @mastra/playground-ui@38.1.0-alpha.4
+  - @mastra/client-js@1.29.1-alpha.4
+  - @mastra/react@1.2.2-alpha.4
+  - @mastra/server@1.49.0-alpha.4
+  - @mastra/hono@1.5.4-alpha.4
+
+## 0.28.0-alpha.3
+
+### Minor Changes
+
+- Added lifecycle hook events and a per-run `run_id` field so external orchestrators can track agent lifecycle states directly instead of inferring them from coarse prompt, tool, and stop signals. ([#18607](https://github.com/mastra-ai/mastra/pull/18607))
+
+  **New events:** AgentStart, AgentEnd, PermissionRequest, PermissionResult, Interrupt, SubagentStart, and SubagentEnd. All new lifecycle events are non-blocking. Existing blocking events, including PreToolUse, Stop, and UserPromptSubmit, keep their current behavior.
+
+  Every hook stdin now includes a `run_id` during an active run. Permission decisions and interrupts only emit while a run is active, so consumers can reliably correlate them with the run that produced them.
+
+  PostToolUse continues to fire from the agent tool hook wrapper after a tool call completes. It is not emitted from the TUI lifecycle dispatcher.
+
+  **Why**
+
+  External orchestrators needed first-class signals for permission gates, interrupts, and subagent delegation. The previous hook surface only offered coarse prompt, tool, and stop events, forcing integrators to guess at lifecycle state.
+
+  ```json
+  {
+    "AgentStart": [{ "type": "command", "command": "echo started >> /tmp/lifecycle.log" }],
+    "AgentEnd": [{ "type": "command", "command": "echo ended >> /tmp/lifecycle.log" }],
+    "Interrupt": [{ "type": "command", "command": "echo interrupted >> /tmp/lifecycle.log" }]
+  }
+  ```
+
+  AgentStart stdin includes the shared `run_id`:
+
+  ```json
+  { "hook_event_name": "AgentStart", "run_id": "a1b2c3d4", "session_id": "...", "cwd": "/path/to/project" }
+  ```
+
+### Patch Changes
+
+- Hardened child-process invocations against shell command injection. Package installs and codemod runs now pass arguments as arrays instead of interpolating them into shell strings, the deployer's shared child-process logger rejects arguments containing shell metacharacters, and the login dialog validates auth URLs and opens the browser without a shell. As a side effect, `mastra codemod` now works on project paths containing spaces. ([#18804](https://github.com/mastra-ai/mastra/pull/18804))
+
+- Security hardening from CodeQL review: MCP serverless 500 responses no longer echo internal error messages to clients (details are still logged server-side), and macOS system notifications now escape backslashes and run osascript without a shell so notification text can't inject commands. ([#18805](https://github.com/mastra-ai/mastra/pull/18805))
+
+- Rebuilt the MastraCode web studio UI on the @mastra/playground-ui design system. Theme switching, settings, command palette, sidebar, and the conversation transcript now use shared design-system components for a consistent look and accessible controls, replacing the previous custom stylesheet, and the bespoke inline-SVG icon set was replaced with lucide-react icons (the decorative brand wordmark/logo was removed while preserving accessible labels). ([#18782](https://github.com/mastra-ai/mastra/pull/18782))
+
+  Cleaned up the studio chrome: removed the duplicate top-level project switcher, theme toggle, and mode switcher from the header (the sidebar switcher is the single project switcher, the theme is set only from Settings), moved the Settings button into the sidebar footer, and moved the session mode selector into a single unified status row below the composer. The header is now reduced to just the mobile sidebar toggle. The chat message column, composer, and status line share the same `max-w-[80ch] w-full` column with container border/background removed so they align cleanly.
+
+  Simplified the chat message UI to match the Studio playground: user messages are plain right-aligned rounded bubbles (no "YOU" label or avatar) rendered as markdown, and assistant messages render as label-free full-width markdown prose.
+
+  Improved tool-call rendering: tool arguments, results, and full-file writes render through the design-system `CodeBlock` component (shiki highlighting, built-in copy, softer rounded shape) instead of plain monospace `<pre>` blocks. Consecutive tool calls now merge into a single bordered, rounded container with divider-separated full-width collapsible rows (no per-item stacked-card look), and the collapse control uses a standard chevron instead of a rotating icon.
+
+  Improved the "Open a project" dialog: the current path uses the shared breadcrumb component and navigating up a folder is a single click on a parent crumb; removed the double-click-to-select behavior and hint text so a single click browses and "Use this folder" selects.
+
+  Improved web session caching and settings refresh behavior.
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`9fe9d2d`](https://github.com/mastra-ai/mastra/commit/9fe9d2d905a84409202fe222eab698216704e4e7), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`df25635`](https://github.com/mastra-ai/mastra/commit/df25635b954e63b5dbf8f1636af953b95c631809), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`27826bc`](https://github.com/mastra-ai/mastra/commit/27826bc8ec20d6b4597ba456e506d65f45656c8f), [`e8eee50`](https://github.com/mastra-ai/mastra/commit/e8eee5087937c9db1a57167119813861328e22ce), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b)]:
+  - @mastra/core@1.49.0-alpha.3
+  - @mastra/playground-ui@38.1.0-alpha.3
+  - @mastra/libsql@1.15.0-alpha.0
+  - @mastra/mcp@1.13.0-alpha.1
+  - @mastra/server@1.49.0-alpha.3
+  - @mastra/hono@1.5.4-alpha.3
+  - @mastra/pg@1.15.0-alpha.0
+  - @mastra/memory@1.22.1-alpha.1
+  - @mastra/client-js@1.29.1-alpha.3
+  - @mastra/auth-workos@1.6.2-alpha.0
+  - @mastra/react@1.2.2-alpha.3
+
+## 0.27.1-alpha.2
+
+### Patch Changes
+
+- Fixed GitHub plugin installs so they use GitHub CLI auth and no longer prompt inside the TUI. ([#18764](https://github.com/mastra-ai/mastra/pull/18764))
+
+- Updated dependencies [[`c4f43f3`](https://github.com/mastra-ai/mastra/commit/c4f43f37a6720658810c91ef3435d59941691262), [`1340fb7`](https://github.com/mastra-ai/mastra/commit/1340fb76262a3ca062130aa71859f07257a0a5a4)]:
+  - @mastra/railway@0.3.0-alpha.0
+  - @mastra/core@1.49.0-alpha.2
+  - @mastra/react@1.2.2-alpha.2
+  - @mastra/server@1.49.0-alpha.2
+  - @mastra/hono@1.5.4-alpha.2
+
+## 0.27.1-alpha.1
+
+### Patch Changes
+
+- Fixed thread search shortcut conflict where pressing 'c' in the thread list search triggered the clone dialog instead of typing in the search field. Changed the clone shortcut from 'c' to Tab. ([#18746](https://github.com/mastra-ai/mastra/pull/18746))
+
+- Updated dependencies [[`cc440a3`](https://github.com/mastra-ai/mastra/commit/cc440a39400d8ce06655462b26c1666a1b3d4320), [`ea6327b`](https://github.com/mastra-ai/mastra/commit/ea6327ba2d63ca647804bc97b347e03a58617162), [`3439fa8`](https://github.com/mastra-ai/mastra/commit/3439fa836ecfcaa257b40c20b30ac2a8be22e9ea), [`85107f2`](https://github.com/mastra-ai/mastra/commit/85107f2758b527147fccbedff962961927c2d3b8), [`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8), [`06ff9e0`](https://github.com/mastra-ai/mastra/commit/06ff9e0befd1d642ab87ff749285ee4091205c7e), [`7f5e1ff`](https://github.com/mastra-ai/mastra/commit/7f5e1ff695a92f672bb3976363925d1e9136b54a), [`b8375c1`](https://github.com/mastra-ai/mastra/commit/b8375c1f8fe905df8ae2ae9a893bb365f17aec4e), [`9ab5faa`](https://github.com/mastra-ai/mastra/commit/9ab5faaff673ee9953ab4604cec217ee57875cd5), [`003f35d`](https://github.com/mastra-ai/mastra/commit/003f35d19e07b23b4bacc591c8bc0c59b42124ae)]:
+  - @mastra/core@1.49.0-alpha.1
+  - @mastra/schema-compat@1.3.3-alpha.0
+  - @mastra/mcp@1.13.0-alpha.0
+  - @mastra/memory@1.22.1-alpha.0
+  - @mastra/server@1.49.0-alpha.1
+  - @mastra/react@1.2.2-alpha.1
+  - @mastra/hono@1.5.4-alpha.1
+
+## 0.27.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb)]:
+  - @mastra/core@1.48.1-alpha.0
+  - @mastra/react@1.2.2-alpha.0
+  - @mastra/server@1.48.1-alpha.0
+  - @mastra/hono@1.5.4-alpha.0
+
+## 0.27.0
+
+### Minor Changes
+
+- **Improved web settings data loading** ([#18518](https://github.com/mastra-ai/mastra/pull/18518))
+  - Settings panels now avoid duplicate requests and refresh lists after saves or removals.
+  - Provider keys, custom providers, model packs, observational memory, and the directory picker now stay in sync automatically.
+  - Streaming chat behavior is unchanged.
+
+- Improved push-to-talk voice input in the MastraCode TUI. Enable it with `/voice`, hold the spacebar to dictate, and release to finish — your speech streams into the input box in real time. ([#18624](https://github.com/mastra-ai/mastra/pull/18624))
+
+  **Choose how you dictate**
+
+  `/voice` is now an interactive settings menu. You can toggle voice on/off, pick a transcription engine, and (for cloud transcription) pick a provider and model. Run `/voice status` to see the current engine, provider/model, and whether it's ready to use. The quick toggles `/voice on` and `/voice off` still work.
+
+  **On-device transcription on macOS**
+
+  On macOS, voice now defaults to a native on-device engine (Apple's `SFSpeechRecognizer`). It's free, works offline, and streams words into the input box with low latency — no API key required.
+
+  When you turn voice on, the TUI checks the macOS Microphone and Speech Recognition permissions for you and guides you through whatever is needed: if access is blocked it offers to open the exact Privacy & Security pane (and tells you to enable "MastraCode Voice" there); if macOS simply hasn't asked yet, it explains that the first time you hold space it will prompt and you should click Allow. The same guidance appears in `/voice status` and, if dictation ever fails on a permission problem, alongside the error — so you're never left guessing what to do.
+
+  **Multiple cloud providers, not just OpenAI**
+
+  Cloud transcription is no longer locked to OpenAI Whisper. You can pick from several providers — OpenAI, Groq and other OpenAI-compatible Whisper hosts, plus Deepgram via its own SDK — and choose a model for each. Set the matching API key via the provider's environment variable or `/api-keys`; if a key is missing, `/voice` points you to `/api-keys`.
+
+  You still need a local audio recorder on your `PATH` for the cloud engine — `rec`/`sox` (recommended) or `ffmpeg` on macOS, and `pw-record`/`parecord`/`arecord`/`sox` on Linux. Non-macOS systems default to the cloud engine.
+
+  **Reliability fixes**
+
+  macOS native engine:
+  - It now triggers the permission prompt and works end-to-end. The on-device recognizer ships as a proper `.app` bundle — `Contents/MacOS/<binary>` plus a generated `Contents/Info.plist` with the Speech Recognition and Microphone usage descriptions — that is ad-hoc signed (`codesign -f -s -`) so the plist binds into the signature.
+  - The bundle is launched through macOS LaunchServices (`open`), the only launch path that makes macOS show the permission dialogs. A bare command-line executable — even one with an embedded, signed Info.plist — never fires `SFSpeechRecognizer.requestAuthorization`, so the Allow prompt never appeared and the recognizer was silently denied.
+  - Because a LaunchServices-launched app has no stdin/stdout pipe back to the CLI, the recognizer talks to the TUI over files: it appends newline-delimited JSON events to an events file the engine tails, and the engine asks it to flush a final result and quit by writing a stop sentinel file the recognizer polls for. The engine buffers partial lines so an event split across reads is never dropped, and it lets the recognizer see the stop sentinel before tearing the process down.
+  - `/voice status` does a real readiness check: it verifies the Swift toolchain and probes the actual Speech Recognition and Microphone permission state, naming exactly which one to enable in System Settings (and explaining the first-run prompt when permission hasn't been requested yet). The probe runs through the same `.app` bundle so it reads authorization under the bundle's TCC identity — probing the loose binary would query a different identity and wrongly report "not granted".
+  - If the recognizer exits before it can start (suppressed prompt or TCC kill), the engine surfaces a clear, actionable error with its captured output. A not-yet-determined permission state is no longer dressed up as the cause of a real crash, so you no longer see a misleading "macOS will prompt next time" message in red. The recognizer's Swift source and plist ship with the built CLI so the bundle can be built on first use.
+
+  Cloud engine:
+  - The live-partial loop is more robust: non-overlapping ticks and de-duplicated partials, and the terminal callback always fires on stop (final transcript, empty result, or error).
+  - First-dictation latency is reduced: the provider client is built once per dictation and reused across ticks so its HTTP connection stays warm (keep-alive), removing the DNS + TLS handshake cost that made the first dictation lag. The loop also polls at a short cadence until the recorder produces usable audio, so the opening partial fires as soon as there's something to transcribe.
+
+- Reworked headless mode into a real programmatic API. You can now run MastraCode from Node/CI code with `runMC({ controller, session, prompt })`, which returns a handle that streams live events as an async-iterable and resolves to a typed result with status, text, usage, tool calls, and an exit code — it never calls `process.exit` or writes to global streams. The CLI is now a thin adapter over the same runner. ([#18680](https://github.com/mastra-ai/mastra/pull/18680))
+
+  ```ts
+  import { createMastraCode, runMC } from 'mastracode';
+
+  const { controller, session } = await createMastraCode({ settingsPath });
+
+  const run = runMC({ controller, session, prompt: 'Fix the failing test' });
+  for await (const event of run) {
+    // optional: react to live progress events
+  }
+  const result = await run.result;
+  process.exitCode = result.exitCode; // 0 success, 1 error/aborted/max-turns, 2 timeout
+  ```
+
+  Approvals and suspensions are resolved by a pluggable policy (default keeps the previous auto-approve behavior); a built-in `denyPolicy` plus `permissionModeToPolicy` are exported, and a new `--permission-mode {auto|deny}` flag selects between them. A new `--max-turns` flag (and `maxTurns` option) caps assistant turns and reports a `max_turns` status with exit code 1 when the cap is hit mid-task.
+
+  Breaking changes / migration:
+  - Output flags consolidated: the `--format` and `--output-format` flags are replaced by a single `--output` flag with values `human`, `json`, or `jsonl`.
+    - Before: `mastracode --prompt "..." --output-format json`
+    - After: `mastracode --prompt "..." --output json`
+  - Programmatic entry point changed from the old `runHeadless`/`headlessMain` to `runMC` (pure runner) and `runMCCli` (CLI adapter). `runMC` takes an already-built `controller` + `session` from `createMastraCode` and returns a result object instead of only an exit code.
+
+- Added Amazon Bedrock as a model provider in Mastra Code. Bedrock models surfaced by models.dev are now selectable via `/models` and usable as build/plan/fast or subagent models with the `amazon-bedrock/<modelId>` form. Models are only offered when AWS credentials are detected. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+  Bedrock authenticates with AWS SigV4 through the standard AWS credential chain (`fromNodeProviderChain`), so environment variables, shared `~/.aws` profiles, SSO, and container/instance roles all work without extra configuration. Set `AWS_REGION` (defaults to `us-east-1`) to target a region, or `AWS_BEARER_TOKEN_BEDROCK` to use Bedrock API-key auth instead.
+
+  ```sh
+  # Pick a Bedrock model from the picker
+  /models
+
+  # Or set it directly via the build/plan/fast slots
+  /build amazon-bedrock/<modelId>
+  ```
+
+- Turned MastraCode Web into a multi-org cloud coding service. When WorkOS auth and a GitHub App are configured, a team can sign in, connect their repos, and run coding agents that branch, commit, push, and open pull requests — all from isolated cloud sandboxes. When the relevant environment variables are absent, the server and UI behave exactly as before (local-path projects, single shared store, no auth UI), so this is fully opt-in. ([#18567](https://github.com/mastra-ai/mastra/pull/18567))
+
+  **Authentication (WorkOS AuthKit).** Setting `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` protects every route: unauthenticated visitors are redirected to the WorkOS hosted login, signed-in users get an encrypted session, expired sessions bounce back to login, and the sidebar shows the signed-in email with a Sign out button. Users with no WorkOS organization get a personal org bootstrapped on first authenticated use (idempotent, with recovery from partial creations), so personal accounts can use org-scoped features without hand-creating an org.
+
+  **Org-owned GitHub projects.** With the GitHub App env vars set (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, `APP_DATABASE_URL`), users install/connect the app, pick repos they can access, and turn each into a project. The installation and connected repos belong to the WorkOS organization; the same repo can be connected independently by different orgs with no cross-visibility. Each repo is materialized into an isolated cloud sandbox on open — cloned (or pulled) inside the sandbox with a short-lived installation token that never reaches the browser and is scrubbed from the remote afterward.
+
+  **Cloud coding-agent write-back.** From a connected repo, each user gets their own sandbox, git worktrees, and feature branches. The agent runs against the selected worktree (file edits and commands bind to its path) and can commit, push, and open pull requests via the in-sandbox `gh` CLI, authenticated with short-lived per-operation installation tokens. The sidebar shows a nested project → worktree → conversations tree with a "+ New worktree" affordance; conversations scope per worktree.
+
+  **Sandbox providers.** A provider is selected automatically: Railway when `RAILWAY_API_TOKEN` is set, otherwise a local provider that runs git directly on the host (single-user local dev only — no tenant isolation). `MASTRACODE_SANDBOX_PROVIDER` overrides explicitly. Idle sandboxes are torn down and re-provisioned on the next open; a per-replica live-sandbox cap (`MASTRACODE_MAX_SANDBOXES`) and a per-user teardown route bound resource use.
+
+  **Per-(org,user) state isolation.** Agent state (threads, messages, memory, recall vectors) is isolated by the `(organization, user)` pair, each backed by a dedicated libSQL database whose location is derived server-side from a hash of `(orgId, userId)` — never a client-supplied path. By default each tenant gets local libSQL files under `MASTRACODE_TENANT_DB_ROOT`; for hosted deployments, point each tenant at a remote libSQL/Turso database via `MASTRACODE_TENANT_DB_URL_TEMPLATE` (plus optional vector template and auth tokens).
+
+  **Sandbox isolation hardening.** Commands run in the local sandbox receive only a sanitized allow-list of environment variables (PATH/HOME/locale/git config), so server secrets such as `GITHUB_APP_PRIVATE_KEY`, `WORKOS_API_KEY`, and `APP_DATABASE_URL` are never exposed to code running against an untrusted checkout. Sandbox filesystem write operations (write/append/copy/move/mkdir) now verify the destination's real path — including a symlinked parent directory — stays within the workspace root, preventing a malicious repo's symlink from redirecting writes outside the sandbox.
+
+  **Multi-replica deployment hardening.** Per-(project,user) git writes are serialized across replicas with Postgres advisory locks (`MASTRACODE_DISTRIBUTED_LOCK`, on by default; requires `APP_DATABASE_URL`). OAuth/install state signing requires a replica-stable secret in multi-replica setups, in-memory tenant stacks are evicted by idle timeout and an LRU cap (`MASTRACODE_TENANT_IDLE_MINUTES`, `MASTRACODE_TENANT_MAX_APPS`), and `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1` fails startup when no shared remote tenant DB is configured.
+
+  ```bash
+  # Auth + GitHub App (opt-in)
+  WORKOS_API_KEY=sk_xxxxxxxx
+  WORKOS_CLIENT_ID=client_xxxxxxxx
+  GITHUB_APP_ID=123456
+  GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+  GITHUB_APP_CLIENT_ID=Iv1.xxxxxxxx
+  GITHUB_APP_CLIENT_SECRET=xxxxxxxx
+  GITHUB_APP_SLUG=your-app-slug
+  APP_DATABASE_URL=postgres://user:pass@host:5432/mastracode_web
+
+  # Multi-replica hosted deployment
+  GITHUB_APP_WEBHOOK_SECRET=...                      # replica-stable state signing
+  MASTRACODE_DISTRIBUTED_LOCK=1                       # cross-replica git write locks
+  MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1              # require shared remote tenant DBs
+  MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io
+  MASTRACODE_TENANT_IDLE_MINUTES=30
+  MASTRACODE_TENANT_MAX_APPS=100
+  MASTRACODE_MAX_SANDBOXES=50
+  ```
+
+  Still deferred: collaboration within a project (multiple users sharing one worktree/sandbox/branch), org admin/roles and membership management, and org-level project deletion.
+
+- Auto-provision a per-tenant Turso database in deployed MastraCode Web environments. ([#18690](https://github.com/mastra-ai/mastra/pull/18690))
+
+  Previously, hosting per-`(org, user)` agent state on Turso required each tenant's database to already exist at the URL produced by `MASTRACODE_TENANT_DB_URL_TEMPLATE`. There was no way to create those databases on demand, so the only zero-setup option was server-local libSQL files — which are ephemeral and not shared across replicas.
+
+  Setting `MASTRACODE_TURSO_PLATFORM_TOKEN` and `MASTRACODE_TURSO_ORG` now enables a third tenant-storage mode: the first time a tenant is seen, its own Turso database is created via the Turso Platform API (idempotent — an "already exists" race recovers the hostname via `databases.get`), a scoped auth token is minted, and the stable database-name/hostname mapping is persisted in the app Postgres (`tenant_databases` table, requires `APP_DATABASE_URL`). All replicas converge on the same database and cold starts never re-create it. Only the durable mapping is stored; the auth token is minted fresh per resolution, so no long-lived credential is persisted.
+
+  Resolution priority is: explicit `MASTRACODE_TENANT_DB_URL_TEMPLATE` → Turso auto-provisioning → local libSQL files. Turso provisioning also satisfies `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1`. The `@tursodatabase/api` client is loaded dynamically, so deployments that don't use Turso never pull it in at runtime.
+
+  ```bash
+  MASTRACODE_TURSO_PLATFORM_TOKEN=...    # Turso Platform API token
+  MASTRACODE_TURSO_ORG=my-org            # org that owns provisioned databases
+  MASTRACODE_TURSO_GROUP=default         # optional group (default "default")
+  APP_DATABASE_URL=postgres://...        # required for the mapping table
+  ```
+
+### Patch Changes
+
+- Renamed the AgentController interval API. `heartbeatHandlers` is now `intervalHandlers`, the `HeartbeatHandler` type is now `IntervalHandler`, and the `removeHeartbeat()`/`stopHeartbeats()` methods are now `removeInterval()`/`stopIntervals()`. This better reflects that these are fixed-interval background tasks, not liveness pings, and is distinct from the unrelated `mastra.heartbeats` scheduled-agent feature. ([#18665](https://github.com/mastra-ai/mastra/pull/18665))
+
+  **Before**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    heartbeatHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeHeartbeat({ id: 'sync' });
+  await controller.stopHeartbeats();
+  ```
+
+  **After**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    intervalHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeInterval({ id: 'sync' });
+  await controller.stopIntervals();
+  ```
+
+- Set goal judge `maxSteps` to 1000 (matching the main agent) so the judge has ample budget for complex goals requiring heavy verification. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+- Amazon Bedrock models now appear under their own `amazon-bedrock/<model>` provider in the model picker instead of the `mastracode/amazon-bedrock/<model>` namespace. Bedrock is resolved through a dedicated Amazon Bedrock gateway that authenticates with the AWS credential chain (SigV4) and surfaces models from the public models.dev catalog. Saved model selections using the previous `mastracode/amazon-bedrock/...` IDs are still resolved at runtime, so existing config keeps working. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+- MastraCode now builds its code agent through the new `createCodingAgent` factory from `@mastra/core/coding-agent` instead of constructing the `Agent` inline. No user-facing behavior changes — the system prompt and agent configuration are unchanged. ([#18695](https://github.com/mastra-ai/mastra/pull/18695))
+
+- Fixed MCP HTTP server URLs so `${VAR}` references resolve from the environment, the same way header values already do. A server configured with `"url": "${MCP_SERVER_URL}"` is now connected instead of being silently skipped as an invalid URL. ([#18579](https://github.com/mastra-ai/mastra/pull/18579))
+
+- MCP stdio servers now resolve `${VAR}` references in their `env` values from the host environment, matching the existing behavior for HTTP server headers. You can reference secrets from the environment instead of hardcoding them in `mcp.json`: ([#18529](https://github.com/mastra-ai/mastra/pull/18529))
+
+  ```json
+  {
+    "mcpServers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+      }
+    }
+  }
+  ```
+
+- Improved the Mastra Code status area to show active work time, completed work duration, and idle time. ([#18656](https://github.com/mastra-ai/mastra/pull/18656))
+
+- Improved MastraCode web chat so hydrated and streaming messages render consistently, including tool cards, reasoning, and failed-tool states. ([#18620](https://github.com/mastra-ai/mastra/pull/18620))
+
+- Added Mastra Code plugin support: ([#18658](https://github.com/mastra-ai/mastra/pull/18658))
+  - Install, scaffold, configure, block, and auto-update plugins with local-change backups.
+  - Load plugin tools in all modes, including streaming progress and subagent-style rendering.
+  - Load bundled plugin commands, skills, and plugin-provided system instructions.
+
+  Example:
+
+  ```ts
+  import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';
+
+  export default defineMastraCodePlugin({
+    id: 'acme.tools',
+    tools: {
+      echo: {
+        tool: createTool({
+          id: 'echo',
+          inputSchema: z.object({ message: z.string() }),
+          execute: async ({ message }) => ({ message }),
+        }),
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866), [`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`0ac14ce`](https://github.com/mastra-ai/mastra/commit/0ac14cea48e1b0a7857782153c78f7242fdf7e1a), [`9566d27`](https://github.com/mastra-ai/mastra/commit/9566d27ead3d95bdbe5a69e5a082a68222829cf2), [`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`0969845`](https://github.com/mastra-ai/mastra/commit/09698454036771547961c6d0776e8ee5c6462d4f), [`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c), [`e05dade`](https://github.com/mastra-ai/mastra/commit/e05dade21c3e2551893ad939e6028cdafd84a1b2), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`c607ece`](https://github.com/mastra-ai/mastra/commit/c607eceeda028a80b24d00ee7dae376db73df526), [`65a66db`](https://github.com/mastra-ai/mastra/commit/65a66dbe249a0d92d828c605b955e73a983cf3b0), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c), [`e84e791`](https://github.com/mastra-ai/mastra/commit/e84e79174031d7bc8793ca6c805eb38b06e7cfb1), [`c2f0b7f`](https://github.com/mastra-ai/mastra/commit/c2f0b7f1370f4428d165f51f0d1d9a48331cc257), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b), [`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/core@1.48.0
+  - @mastra/schema-compat@1.3.2
+  - @mastra/railway@0.2.1
+  - @mastra/memory@1.22.0
+  - @mastra/server@1.48.0
+  - @mastra/mcp@1.12.1
+  - @mastra/libsql@1.14.3
+  - @mastra/pg@1.14.3
+  - @mastra/react@1.2.1
+  - @mastra/hono@1.5.3
+
+## 0.27.0-alpha.10
+
+### Patch Changes
+
+- Improved the Mastra Code status area to show active work time, completed work duration, and idle time. ([#18656](https://github.com/mastra-ai/mastra/pull/18656))
+
+- Added Mastra Code plugin support: ([#18658](https://github.com/mastra-ai/mastra/pull/18658))
+  - Install, scaffold, configure, block, and auto-update plugins with local-change backups.
+  - Load plugin tools in all modes, including streaming progress and subagent-style rendering.
+  - Load bundled plugin commands, skills, and plugin-provided system instructions.
+
+  Example:
+
+  ```ts
+  import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';
+
+  export default defineMastraCodePlugin({
+    id: 'acme.tools',
+    tools: {
+      echo: {
+        tool: createTool({
+          id: 'echo',
+          inputSchema: z.object({ message: z.string() }),
+          execute: async ({ message }) => ({ message }),
+        }),
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`6f578ac`](https://github.com/mastra-ai/mastra/commit/6f578acba84930b406b2a0700b17cfdfaf5aae56), [`c01012f`](https://github.com/mastra-ai/mastra/commit/c01012f50368d29eb3fc3764df42d48291973d23), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`be875ed`](https://github.com/mastra-ai/mastra/commit/be875ed43f856742ce58529f531b5ea0ae6911f3), [`9eefdc0`](https://github.com/mastra-ai/mastra/commit/9eefdc0ac03f989718c6d835334940a977938895), [`7d112ca`](https://github.com/mastra-ai/mastra/commit/7d112ca17078479b2659b88ba1c85b936cfc111c)]:
+  - @mastra/memory@1.22.0-alpha.3
+  - @mastra/core@1.48.0-alpha.10
+  - @mastra/server@1.48.0-alpha.10
+  - @mastra/libsql@1.14.3-alpha.0
+  - @mastra/pg@1.14.3-alpha.0
+  - @mastra/hono@1.5.3-alpha.10
+  - @mastra/react@1.2.1-alpha.10
+
+## 0.27.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`e84e791`](https://github.com/mastra-ai/mastra/commit/e84e79174031d7bc8793ca6c805eb38b06e7cfb1)]:
+  - @mastra/core@1.48.0-alpha.9
+  - @mastra/react@1.2.1-alpha.9
+  - @mastra/server@1.48.0-alpha.9
+  - @mastra/hono@1.5.3-alpha.9
+
+## 0.27.0-alpha.8
+
+### Patch Changes
+
+- MastraCode now builds its code agent through the new `createCodingAgent` factory from `@mastra/core/coding-agent` instead of constructing the `Agent` inline. No user-facing behavior changes — the system prompt and agent configuration are unchanged. ([#18695](https://github.com/mastra-ai/mastra/pull/18695))
+
+- Updated dependencies [[`0ac14ce`](https://github.com/mastra-ai/mastra/commit/0ac14cea48e1b0a7857782153c78f7242fdf7e1a), [`c2f0b7f`](https://github.com/mastra-ai/mastra/commit/c2f0b7f1370f4428d165f51f0d1d9a48331cc257)]:
+  - @mastra/core@1.48.0-alpha.8
+  - @mastra/react@1.2.1-alpha.8
+  - @mastra/server@1.48.0-alpha.8
+  - @mastra/hono@1.5.3-alpha.8
+
+## 0.27.0-alpha.7
+
+### Minor Changes
+
+- Reworked headless mode into a real programmatic API. You can now run MastraCode from Node/CI code with `runMC({ controller, session, prompt })`, which returns a handle that streams live events as an async-iterable and resolves to a typed result with status, text, usage, tool calls, and an exit code — it never calls `process.exit` or writes to global streams. The CLI is now a thin adapter over the same runner. ([#18680](https://github.com/mastra-ai/mastra/pull/18680))
+
+  ```ts
+  import { createMastraCode, runMC } from 'mastracode';
+
+  const { controller, session } = await createMastraCode({ settingsPath });
+
+  const run = runMC({ controller, session, prompt: 'Fix the failing test' });
+  for await (const event of run) {
+    // optional: react to live progress events
+  }
+  const result = await run.result;
+  process.exitCode = result.exitCode; // 0 success, 1 error/aborted/max-turns, 2 timeout
+  ```
+
+  Approvals and suspensions are resolved by a pluggable policy (default keeps the previous auto-approve behavior); a built-in `denyPolicy` plus `permissionModeToPolicy` are exported, and a new `--permission-mode {auto|deny}` flag selects between them. A new `--max-turns` flag (and `maxTurns` option) caps assistant turns and reports a `max_turns` status with exit code 1 when the cap is hit mid-task.
+
+  Breaking changes / migration:
+  - Output flags consolidated: the `--format` and `--output-format` flags are replaced by a single `--output` flag with values `human`, `json`, or `jsonl`.
+    - Before: `mastracode --prompt "..." --output-format json`
+    - After: `mastracode --prompt "..." --output json`
+  - Programmatic entry point changed from the old `runHeadless`/`headlessMain` to `runMC` (pure runner) and `runMCCli` (CLI adapter). `runMC` takes an already-built `controller` + `session` from `createMastraCode` and returns a result object instead of only an exit code.
+
+- Turned MastraCode Web into a multi-org cloud coding service. When WorkOS auth and a GitHub App are configured, a team can sign in, connect their repos, and run coding agents that branch, commit, push, and open pull requests — all from isolated cloud sandboxes. When the relevant environment variables are absent, the server and UI behave exactly as before (local-path projects, single shared store, no auth UI), so this is fully opt-in. ([#18567](https://github.com/mastra-ai/mastra/pull/18567))
+
+  **Authentication (WorkOS AuthKit).** Setting `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` protects every route: unauthenticated visitors are redirected to the WorkOS hosted login, signed-in users get an encrypted session, expired sessions bounce back to login, and the sidebar shows the signed-in email with a Sign out button. Users with no WorkOS organization get a personal org bootstrapped on first authenticated use (idempotent, with recovery from partial creations), so personal accounts can use org-scoped features without hand-creating an org.
+
+  **Org-owned GitHub projects.** With the GitHub App env vars set (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, `APP_DATABASE_URL`), users install/connect the app, pick repos they can access, and turn each into a project. The installation and connected repos belong to the WorkOS organization; the same repo can be connected independently by different orgs with no cross-visibility. Each repo is materialized into an isolated cloud sandbox on open — cloned (or pulled) inside the sandbox with a short-lived installation token that never reaches the browser and is scrubbed from the remote afterward.
+
+  **Cloud coding-agent write-back.** From a connected repo, each user gets their own sandbox, git worktrees, and feature branches. The agent runs against the selected worktree (file edits and commands bind to its path) and can commit, push, and open pull requests via the in-sandbox `gh` CLI, authenticated with short-lived per-operation installation tokens. The sidebar shows a nested project → worktree → conversations tree with a "+ New worktree" affordance; conversations scope per worktree.
+
+  **Sandbox providers.** A provider is selected automatically: Railway when `RAILWAY_API_TOKEN` is set, otherwise a local provider that runs git directly on the host (single-user local dev only — no tenant isolation). `MASTRACODE_SANDBOX_PROVIDER` overrides explicitly. Idle sandboxes are torn down and re-provisioned on the next open; a per-replica live-sandbox cap (`MASTRACODE_MAX_SANDBOXES`) and a per-user teardown route bound resource use.
+
+  **Per-(org,user) state isolation.** Agent state (threads, messages, memory, recall vectors) is isolated by the `(organization, user)` pair, each backed by a dedicated libSQL database whose location is derived server-side from a hash of `(orgId, userId)` — never a client-supplied path. By default each tenant gets local libSQL files under `MASTRACODE_TENANT_DB_ROOT`; for hosted deployments, point each tenant at a remote libSQL/Turso database via `MASTRACODE_TENANT_DB_URL_TEMPLATE` (plus optional vector template and auth tokens).
+
+  **Sandbox isolation hardening.** Commands run in the local sandbox receive only a sanitized allow-list of environment variables (PATH/HOME/locale/git config), so server secrets such as `GITHUB_APP_PRIVATE_KEY`, `WORKOS_API_KEY`, and `APP_DATABASE_URL` are never exposed to code running against an untrusted checkout. Sandbox filesystem write operations (write/append/copy/move/mkdir) now verify the destination's real path — including a symlinked parent directory — stays within the workspace root, preventing a malicious repo's symlink from redirecting writes outside the sandbox.
+
+  **Multi-replica deployment hardening.** Per-(project,user) git writes are serialized across replicas with Postgres advisory locks (`MASTRACODE_DISTRIBUTED_LOCK`, on by default; requires `APP_DATABASE_URL`). OAuth/install state signing requires a replica-stable secret in multi-replica setups, in-memory tenant stacks are evicted by idle timeout and an LRU cap (`MASTRACODE_TENANT_IDLE_MINUTES`, `MASTRACODE_TENANT_MAX_APPS`), and `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1` fails startup when no shared remote tenant DB is configured.
+
+  ```bash
+  # Auth + GitHub App (opt-in)
+  WORKOS_API_KEY=sk_xxxxxxxx
+  WORKOS_CLIENT_ID=client_xxxxxxxx
+  GITHUB_APP_ID=123456
+  GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+  GITHUB_APP_CLIENT_ID=Iv1.xxxxxxxx
+  GITHUB_APP_CLIENT_SECRET=xxxxxxxx
+  GITHUB_APP_SLUG=your-app-slug
+  APP_DATABASE_URL=postgres://user:pass@host:5432/mastracode_web
+
+  # Multi-replica hosted deployment
+  GITHUB_APP_WEBHOOK_SECRET=...                      # replica-stable state signing
+  MASTRACODE_DISTRIBUTED_LOCK=1                       # cross-replica git write locks
+  MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1              # require shared remote tenant DBs
+  MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io
+  MASTRACODE_TENANT_IDLE_MINUTES=30
+  MASTRACODE_TENANT_MAX_APPS=100
+  MASTRACODE_MAX_SANDBOXES=50
+  ```
+
+  Still deferred: collaboration within a project (multiple users sharing one worktree/sandbox/branch), org admin/roles and membership management, and org-level project deletion.
+
+- Auto-provision a per-tenant Turso database in deployed MastraCode Web environments. ([#18690](https://github.com/mastra-ai/mastra/pull/18690))
+
+  Previously, hosting per-`(org, user)` agent state on Turso required each tenant's database to already exist at the URL produced by `MASTRACODE_TENANT_DB_URL_TEMPLATE`. There was no way to create those databases on demand, so the only zero-setup option was server-local libSQL files — which are ephemeral and not shared across replicas.
+
+  Setting `MASTRACODE_TURSO_PLATFORM_TOKEN` and `MASTRACODE_TURSO_ORG` now enables a third tenant-storage mode: the first time a tenant is seen, its own Turso database is created via the Turso Platform API (idempotent — an "already exists" race recovers the hostname via `databases.get`), a scoped auth token is minted, and the stable database-name/hostname mapping is persisted in the app Postgres (`tenant_databases` table, requires `APP_DATABASE_URL`). All replicas converge on the same database and cold starts never re-create it. Only the durable mapping is stored; the auth token is minted fresh per resolution, so no long-lived credential is persisted.
+
+  Resolution priority is: explicit `MASTRACODE_TENANT_DB_URL_TEMPLATE` → Turso auto-provisioning → local libSQL files. Turso provisioning also satisfies `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1`. The `@tursodatabase/api` client is loaded dynamically, so deployments that don't use Turso never pull it in at runtime.
+
+  ```bash
+  MASTRACODE_TURSO_PLATFORM_TOKEN=...    # Turso Platform API token
+  MASTRACODE_TURSO_ORG=my-org            # org that owns provisioned databases
+  MASTRACODE_TURSO_GROUP=default         # optional group (default "default")
+  APP_DATABASE_URL=postgres://...        # required for the mapping table
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8be63b0`](https://github.com/mastra-ai/mastra/commit/8be63b015fb8d72cea1220f05e7dc3bb997cc249), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c), [`345eecc`](https://github.com/mastra-ai/mastra/commit/345eecce6ba519b5d987f0e10b5de4c8e5734580), [`ee14cae`](https://github.com/mastra-ai/mastra/commit/ee14cae244805783bde518a6142de28b744b169c)]:
+  - @mastra/core@1.48.0-alpha.7
+  - @mastra/server@1.48.0-alpha.7
+  - @mastra/hono@1.5.3-alpha.7
+  - @mastra/react@1.2.1-alpha.7
+
+## 0.27.0-alpha.6
+
+### Patch Changes
+
+- Renamed the AgentController interval API. `heartbeatHandlers` is now `intervalHandlers`, the `HeartbeatHandler` type is now `IntervalHandler`, and the `removeHeartbeat()`/`stopHeartbeats()` methods are now `removeInterval()`/`stopIntervals()`. This better reflects that these are fixed-interval background tasks, not liveness pings, and is distinct from the unrelated `mastra.heartbeats` scheduled-agent feature. ([#18665](https://github.com/mastra-ai/mastra/pull/18665))
+
+  **Before**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    heartbeatHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeHeartbeat({ id: 'sync' });
+  await controller.stopHeartbeats();
+  ```
+
+  **After**
+
+  ```ts
+  const { controller } = await createMastraCode({
+    intervalHandlers: [{ id: 'sync', intervalMs: 60_000, handler: async () => {} }],
+  });
+  await controller.removeInterval({ id: 'sync' });
+  await controller.stopIntervals();
+  ```
+
+- Improved MastraCode web chat so hydrated and streaming messages render consistently, including tool cards, reasoning, and failed-tool states. ([#18620](https://github.com/mastra-ai/mastra/pull/18620))
+
+- Updated dependencies [[`b33c77d`](https://github.com/mastra-ai/mastra/commit/b33c77d5293f14a794f3ec38dc947a6676de2764), [`1009f77`](https://github.com/mastra-ai/mastra/commit/1009f772aa40016b49267c8566d0c29f6a16aa3c), [`23c31de`](https://github.com/mastra-ai/mastra/commit/23c31de96ed8153402dcf092ac84b27a0c3638c1), [`0368766`](https://github.com/mastra-ai/mastra/commit/0368766744c7ea3df4d6059e2cc15f7bdf55f5a6), [`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`65a66db`](https://github.com/mastra-ai/mastra/commit/65a66dbe249a0d92d828c605b955e73a983cf3b0), [`2866f04`](https://github.com/mastra-ai/mastra/commit/2866f04953edb78c1637fa45cc53abe24122edcb)]:
+  - @mastra/core@1.48.0-alpha.6
+  - @mastra/schema-compat@1.3.2-alpha.1
+  - @mastra/mcp@1.12.1-alpha.0
+  - @mastra/react@1.2.1-alpha.6
+  - @mastra/memory@1.21.3-alpha.2
+  - @mastra/server@1.48.0-alpha.6
+  - @mastra/hono@1.5.3-alpha.6
+
+## 0.27.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`1917c53`](https://github.com/mastra-ai/mastra/commit/1917c53b19dac43926f29c496893b0686462dca4), [`c607ece`](https://github.com/mastra-ai/mastra/commit/c607eceeda028a80b24d00ee7dae376db73df526), [`58e287b`](https://github.com/mastra-ai/mastra/commit/58e287b1edaf978b13745a1795989cad3826e82b)]:
+  - @mastra/core@1.48.0-alpha.5
+  - @mastra/server@1.48.0-alpha.5
+  - @mastra/memory@1.21.3-alpha.1
+  - @mastra/hono@1.5.3-alpha.5
+
+## 0.27.0-alpha.4
+
+### Minor Changes
+
+- Added voice input to the MastraCode TUI. Enable it with /voice, then hold the spacebar to dictate a prompt and release to finish. Your speech streams into the input in real time as you talk and is transcribed with OpenAI Whisper. The setting persists across restarts. ([#18624](https://github.com/mastra-ai/mastra/pull/18624))
+
+  Requires an OpenAI API key (set `OPENAI_API_KEY` or configure it via `/api-keys`) and a local audio recorder on your `PATH` — `rec`/`sox` (recommended for live streaming) or `ffmpeg` on macOS, and `pw-record`/`parecord`/`arecord`/`sox` on Linux.
+
+- Added Amazon Bedrock as a model provider in Mastra Code. Bedrock models surfaced by models.dev are now selectable via `/models` and usable as build/plan/fast or subagent models with the `amazon-bedrock/<modelId>` form. Models are only offered when AWS credentials are detected. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+  Bedrock authenticates with AWS SigV4 through the standard AWS credential chain (`fromNodeProviderChain`), so environment variables, shared `~/.aws` profiles, SSO, and container/instance roles all work without extra configuration. Set `AWS_REGION` (defaults to `us-east-1`) to target a region, or `AWS_BEARER_TOKEN_BEDROCK` to use Bedrock API-key auth instead.
+
+  ```sh
+  # Pick a Bedrock model from the picker
+  /models
+
+  # Or set it directly via the build/plan/fast slots
+  /build amazon-bedrock/<modelId>
+  ```
+
+### Patch Changes
+
+- Amazon Bedrock models now appear under their own `amazon-bedrock/<model>` provider in the model picker instead of the `mastracode/amazon-bedrock/<model>` namespace. Bedrock is resolved through a dedicated Amazon Bedrock gateway that authenticates with the AWS credential chain (SigV4) and surfaces models from the public models.dev catalog. Saved model selections using the previous `mastracode/amazon-bedrock/...` IDs are still resolved at runtime, so existing config keeps working. ([#17937](https://github.com/mastra-ai/mastra/pull/17937))
+
+- Updated dependencies [[`705ba98`](https://github.com/mastra-ai/mastra/commit/705ba98726d388a596e896225f237907ca6807a9), [`e62c108`](https://github.com/mastra-ai/mastra/commit/e62c108409dfd6a6cac0a48ec39c5cc81d24fd52), [`bfbbb01`](https://github.com/mastra-ai/mastra/commit/bfbbb01bd845ba54cdc0c678c277d08a7cb847e4)]:
+  - @mastra/core@1.48.0-alpha.4
+  - @mastra/server@1.48.0-alpha.4
+  - @mastra/hono@1.5.3-alpha.4
+
+## 0.27.0-alpha.3
+
+### Patch Changes
+
+- Fixed MCP HTTP server URLs so `${VAR}` references resolve from the environment, the same way header values already do. A server configured with `"url": "${MCP_SERVER_URL}"` is now connected instead of being silently skipped as an invalid URL. ([#18579](https://github.com/mastra-ai/mastra/pull/18579))
+
+- MCP stdio servers now resolve `${VAR}` references in their `env` values from the host environment, matching the existing behavior for HTTP server headers. You can reference secrets from the environment instead of hardcoding them in `mcp.json`: ([#18529](https://github.com/mastra-ai/mastra/pull/18529))
+
+  ```json
+  {
+    "mcpServers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+      }
+    }
+  }
+  ```
+
+- Updated dependencies [[`cdd5f93`](https://github.com/mastra-ai/mastra/commit/cdd5f939cefa67390629704dce92563ccbf492b2), [`1b8728a`](https://github.com/mastra-ai/mastra/commit/1b8728a57fd844205a452b0b4216d20ff60c784a), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`e05dade`](https://github.com/mastra-ai/mastra/commit/e05dade21c3e2551893ad939e6028cdafd84a1b2), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/core@1.48.0-alpha.3
+  - @mastra/schema-compat@1.3.2-alpha.0
+  - @mastra/server@1.48.0-alpha.3
+  - @mastra/mcp@1.12.0
+  - @mastra/memory@1.21.3-alpha.0
+  - @mastra/hono@1.5.3-alpha.3
+
+## 0.27.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e420b3c`](https://github.com/mastra-ai/mastra/commit/e420b3c3ffc98bbc5b791897ea390bb47af99696)]:
+  - @mastra/core@1.48.0-alpha.2
+  - @mastra/server@1.48.0-alpha.2
+  - @mastra/hono@1.5.3-alpha.2
+
+## 0.27.0-alpha.1
+
+### Minor Changes
+
+- **Improved web settings data loading** ([#18518](https://github.com/mastra-ai/mastra/pull/18518))
+  - Settings panels now avoid duplicate requests and refresh lists after saves or removals.
+  - Provider keys, custom providers, model packs, observational memory, and the directory picker now stay in sync automatically.
+  - Streaming chat behavior is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [[`95857bc`](https://github.com/mastra-ai/mastra/commit/95857bcd6669da7193f503e803f0d72a2bd66be6), [`8e9c0fb`](https://github.com/mastra-ai/mastra/commit/8e9c0fb48fd58da2efcdff2cf1202ee41092c315)]:
+  - @mastra/core@1.48.0-alpha.1
+  - @mastra/server@1.48.0-alpha.1
+  - @mastra/hono@1.5.3-alpha.1
+
+## 0.26.1-alpha.0
+
+### Patch Changes
+
+- Set goal judge `maxSteps` to 1000 (matching the main agent) so the judge has ample budget for complex goals requiring heavy verification. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+- Updated dependencies [[`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`1274eb3`](https://github.com/mastra-ai/mastra/commit/1274eb3a9508f579ceb3187fbce34408222d4b71), [`9566d27`](https://github.com/mastra-ai/mastra/commit/9566d27ead3d95bdbe5a69e5a082a68222829cf2)]:
+  - @mastra/core@1.48.0-alpha.0
+  - @mastra/server@1.48.0-alpha.0
+  - @mastra/hono@1.5.3-alpha.0
+
+## 0.26.0
+
+### Minor Changes
+
+- Added a live tokens/sec counter to the MastraCode terminal and web status lines. ([#18501](https://github.com/mastra-ai/mastra/pull/18501))
+
+  The counter shows how fast the model is generating, measured over decode time only — the window from the first streamed token of a step to when that step finishes. This excludes time-to-first-token, tool execution, and scheduling gaps, so the number reflects real generation speed instead of reading artificially low. Reasoning tokens are included, and the rate is smoothed with an exponential moving average for a stable readout.
+
+  The last reading stays visible while idle so you can read it after a turn finishes, and it clears when the next turn begins.
+
+- Add a browser UI for MastraCode. ([#18364](https://github.com/mastra-ai/mastra/pull/18364))
+
+  The web app boots the real MastraCode Harness, registers it on a Mastra
+  instance, mounts the Harness HTTP routes (via `@mastra/server`) on a Hono
+  server, and serves a React UI built with Vite. The UI drives a session over the
+  `@mastra/client-js` harness resource (SSE event stream + JSON commands) and
+  reaches feature parity with the terminal for the core interactive workflows:
+  chat streaming, tool execution, tool approvals, interactive suspensions
+  (`ask_user` / `submit_plan` / `request_access`), mode/model switching, thread
+  lifecycle, task tracking, goals, notifications, steer/abort, follow-ups, a
+  TUI-parity status line (message/reflection budgets and active-goal indicator),
+  and project-scoped workspaces with a server-driven directory picker.
+
+  A full Settings surface mirrors the terminal's configuration commands: model
+  selection, behavior (`yolo`, thinking level, notifications, smart editing,
+  per-category tool permissions), observational-memory models and thresholds,
+  model packs, API keys, and custom providers. These are backed by
+  `/api/web/config/*` routes that read and write the same global `settings.json`
+  the terminal uses, so configuration stays in sync across the terminal and the
+  browser.
+
+  The web server shares its storage with the registered Harness, and projects
+  resolve the same `resourceId` as the terminal, so the two share durable threads
+  and observations for a given project. Thread lists are scoped by project path so
+  worktrees that share a `resourceId` don't bleed each other's threads.
+
+  Internally, harness startup is shared through a single base factory with small
+  per-environment helpers, so the terminal app and the web server build the exact
+  same harness without duplicating wiring. The published `mastracode` package
+  remains terminal-only — the web UI lives in the repository for local
+  development and is excluded from the published package.
+
+  Includes a scenario test suite that drives the production stack
+  (`MastraClient` → Hono → `@mastra/server` routes → Harness → AIMock) end to end.
+
+### Patch Changes
+
+- Fixed MastraCode queued follow-up E2E tests to wait for stable terminal output. ([#18507](https://github.com/mastra-ai/mastra/pull/18507))
+
+- Reworked plan mode to use named plan files. The agent writes its plan to a markdown file under `.mastracode/plans/` and calls `submit_plan` with the `path` to that file, so multiple plans stay on disk for review. The host validates the submitted path is a `.md` file inside `.mastracode/plans/` before reading it, so the tool can't be pointed at arbitrary files. Plan mode can write any `.md` file inside `.mastracode/plans/` (enforced by a tool guard) but nothing else, submitted plan snapshots are persisted for history replay, revision diffs are computed from a real line-ending-normalized LCS diff and only shown when the change is small relative to the plan, "Request Changes" stops the run immediately with no trailing model output, and diffs only compare revisions of the same plan file. ([#18490](https://github.com/mastra-ai/mastra/pull/18490))
+
+- Fixed thread auto-resume selecting the wrong thread in git worktrees by scoping startup selection to threads tagged with the current project path. When Mastra Code detects a matching project thread on a different resource after resourceId drift, it now prompts before cloning and resuming that thread under the current resource; accepting the prompt leaves the old thread untouched and loads the clone, while declining starts fresh and leaves the old resource untouched. ([#18333](https://github.com/mastra-ai/mastra/pull/18333))
+
+- Switched internal imports to the canonical `@mastra/core/agent-controller` entrypoint, replacing the deprecated `@mastra/core/harness` path and `Harness` types. Updated the web client to call `getAgentController()` and use the new `AgentControllerEvent` type, renamed the `useHarnessSession` hook to `useAgentControllerSession`, and renamed the `handleHarnessEvent` ACP mapper to `handleAgentControllerEvent`. ([#18510](https://github.com/mastra-ai/mastra/pull/18510))
+
+- Resolve all Harness models through gateways. The Harness now builds its available-models catalog, model auth status, mode agents, Observational Memory models, and subagents from the gateways you register, instead of the separate `resolveModel`, `customModelCatalogProvider`, and `modelAuthChecker` config hooks. Removed those three options from `HarnessConfig` (and the `ModelAuthChecker` type) — register a gateway via `gateways` instead. ([#18382](https://github.com/mastra-ai/mastra/pull/18382))
+
+  `listAvailableModels()` and `getCurrentModelAuthStatus()` are now sourced entirely from gateways: model discovery comes from each gateway's `fetchProviders()` (a network call for gateways like models.dev and Netlify), and auth status is resolved through the same gateway chain the model router uses at run time (`resolveAuth()`, falling back to `getApiKey()`). There is no static provider-registry fallback — everything the model picker shows comes from a gateway.
+
+  The gateway-chain operations shared by `ModelRouterLanguageModel` and the Harness (gateway merging, model→gateway selection, auth resolution, provider/model listing) are now centralized in a new `GatewayManager` class exported from `@mastra/core`. Both consumers delegate to it, eliminating duplicated logic. `defaultGateways` is still re-exported from the same paths for backward compatibility.
+
+- Fixed OAuth logins (such as Anthropic and OpenAI sign-in) not being recognized for the selected model. The model status bar no longer shows a false "missing API key" error, and the `/api-keys` command and web settings panel now display a distinct "oauth" status for providers you are signed into instead of treating them as unset. ([#18503](https://github.com/mastra-ai/mastra/pull/18503))
+
+- Added support for reading MCP server config from a project root `.mcp.json` (the file Claude Code uses). Projects that already keep their MCP servers there no longer need a duplicate under `.mastracode/`. The root file sits below `.mastracode/mcp.json` in priority, so project-specific config still wins. ([#18494](https://github.com/mastra-ai/mastra/pull/18494))
+
+- MastraCode now passes a deterministic session `id` and `ownerId` to the Harness session. The session id is derived from the project resource ID and is stable across restarts for the same project directory. The owner id is derived from the machine hostname and project root path, tying the session to the local machine. ([#18372](https://github.com/mastra-ai/mastra/pull/18372))
+
+- Expand `${VAR}`, `${VAR:-default}`, and bare `$VAR` references in MCP server HTTP headers. Header values such as `"x-api-key": "${MY_API_KEY}"` in `mcp.json` are now resolved from the environment when the config is loaded, instead of being sent verbatim. This matches how Claude Code reads `.mcp.json` and lets header-authenticated HTTP servers pull secrets from the environment. ([#18240](https://github.com/mastra-ai/mastra/pull/18240))
+
+- Updated plan and explore modes to declare `availableTools` allowlists so tool visibility is gated at LLM-call time instead of workspace construction. Plan mode includes read-only tools plus plan-file editing and delivery tools; explore mode includes only read-only tools. Build mode remains unrestricted. Workspace creation no longer branches on mode for tool visibility — all modes now share the same workspace instance. ([#18463](https://github.com/mastra-ai/mastra/pull/18463))
+
+- Improved plan mode UX: "Request changes" stops the agent via processor-based abort and lets you provide revision feedback via chat. Plan resubmissions show a diff of what changed. Plans save to title-derived filenames (e.g. `add-dark-mode.md`) for multi-plan support. Plan filename displayed in TUI header. ([#18323](https://github.com/mastra-ai/mastra/pull/18323))
+
+- Add MastraCode browser tool availability scenarios ([#18498](https://github.com/mastra-ai/mastra/pull/18498))
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`42d74d5`](https://github.com/mastra-ai/mastra/commit/42d74d5671f95aa6076576e32a9b7d11f13dd208), [`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`b4e97e6`](https://github.com/mastra-ai/mastra/commit/b4e97e676232a3a398ef32d3e78faa0c91c5fa1c), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`06e0d63`](https://github.com/mastra-ai/mastra/commit/06e0d63d42bc2a202e18bc091f3781f409f5e6fb), [`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`438a971`](https://github.com/mastra-ai/mastra/commit/438a9715c8b4398e5eaf8914a1f19dc8a85dc1de), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`77518cc`](https://github.com/mastra-ai/mastra/commit/77518ccb5bb8cc684875081e64213dc85cffdbee), [`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`8a68844`](https://github.com/mastra-ai/mastra/commit/8a688443013816105a09f89c6afa34b5ff13e26d), [`bb2a13b`](https://github.com/mastra-ai/mastra/commit/bb2a13bb4b32e6bb807200fe7b18ae8fa4322118), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`a73cd1a`](https://github.com/mastra-ai/mastra/commit/a73cd1a62a5e4ca023dcc39ba150029f4f1f74c1), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`0b5cc47`](https://github.com/mastra-ai/mastra/commit/0b5cc4726dc18d9a685a27520db39ff1b36bb89a), [`87f38a3`](https://github.com/mastra-ai/mastra/commit/87f38a3de03e24731f2dd6f8ed6a60b6722b85a1), [`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98), [`fe98ef2`](https://github.com/mastra-ai/mastra/commit/fe98ef2e66dbfcbd7d645c88c9ee1e67b458a136), [`e1f272d`](https://github.com/mastra-ai/mastra/commit/e1f272d2bf1963c0ccb060f34b103b0b780bbff0), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`26f54af`](https://github.com/mastra-ai/mastra/commit/26f54afb5dbfbbb02d4d09bec4bd7c5029751767), [`793ea0f`](https://github.com/mastra-ai/mastra/commit/793ea0f52f831178837f21c83af6af93bf4ce638), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`507a5c4`](https://github.com/mastra-ai/mastra/commit/507a5c461bdc3136ad80744c0efbb55ce1f18f97), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`307573b`](https://github.com/mastra-ai/mastra/commit/307573b9ff3149b70c79540dbc86f1319b180f29), [`79b3626`](https://github.com/mastra-ai/mastra/commit/79b3626f8d647307eb07c8da14c9073c2699719d), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59), [`74f447a`](https://github.com/mastra-ai/mastra/commit/74f447a6fae171ac3a6ec2d9e61be171ca46d23c), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.47.0
+  - @mastra/server@1.47.0
+  - @mastra/observability@1.15.2
+  - @mastra/memory@1.21.2
+  - @mastra/pg@1.14.2
+  - @mastra/libsql@1.14.2
+  - @mastra/github-signals@0.2.2
+  - @mastra/schema-compat@1.3.1
+  - @mastra/hono@1.5.2
+  - @mastra/mcp@1.12.0
+
+## 0.26.0-alpha.8
+
+### Patch Changes
+
+- Reworked plan mode to use named plan files. The agent writes its plan to a markdown file under `.mastracode/plans/` and calls `submit_plan` with the `path` to that file, so multiple plans stay on disk for review. The host validates the submitted path is a `.md` file inside `.mastracode/plans/` before reading it, so the tool can't be pointed at arbitrary files. Plan mode can write any `.md` file inside `.mastracode/plans/` (enforced by a tool guard) but nothing else, submitted plan snapshots are persisted for history replay, revision diffs are computed from a real line-ending-normalized LCS diff and only shown when the change is small relative to the plan, "Request Changes" stops the run immediately with no trailing model output, and diffs only compare revisions of the same plan file. ([#18490](https://github.com/mastra-ai/mastra/pull/18490))
+
+- Updated dependencies [[`8a68844`](https://github.com/mastra-ai/mastra/commit/8a688443013816105a09f89c6afa34b5ff13e26d)]:
+  - @mastra/core@1.47.0-alpha.7
+  - @mastra/server@1.47.0-alpha.7
+  - @mastra/hono@1.5.2-alpha.7
+
+## 0.26.0-alpha.7
+
+### Patch Changes
+
+- Fixed MastraCode queued follow-up E2E tests to wait for stable terminal output. ([#18507](https://github.com/mastra-ai/mastra/pull/18507))
+
+## 0.26.0-alpha.6
+
+### Minor Changes
+
+- Added a live tokens/sec counter to the MastraCode terminal and web status lines. ([#18501](https://github.com/mastra-ai/mastra/pull/18501))
+
+  The counter shows how fast the model is generating, measured over decode time only — the window from the first streamed token of a step to when that step finishes. This excludes time-to-first-token, tool execution, and scheduling gaps, so the number reflects real generation speed instead of reading artificially low. Reasoning tokens are included, and the rate is smoothed with an exponential moving average for a stable readout.
+
+  The last reading stays visible while idle so you can read it after a turn finishes, and it clears when the next turn begins.
+
+### Patch Changes
+
+- Switched internal imports to the canonical `@mastra/core/agent-controller` entrypoint, replacing the deprecated `@mastra/core/harness` path and `Harness` types. Updated the web client to call `getAgentController()` and use the new `AgentControllerEvent` type, renamed the `useHarnessSession` hook to `useAgentControllerSession`, and renamed the `handleHarnessEvent` ACP mapper to `handleAgentControllerEvent`. ([#18510](https://github.com/mastra-ai/mastra/pull/18510))
+
+- Fixed OAuth logins (such as Anthropic and OpenAI sign-in) not being recognized for the selected model. The model status bar no longer shows a false "missing API key" error, and the `/api-keys` command and web settings panel now display a distinct "oauth" status for providers you are signed into instead of treating them as unset. ([#18503](https://github.com/mastra-ai/mastra/pull/18503))
+
+- Added support for reading MCP server config from a project root `.mcp.json` (the file Claude Code uses). Projects that already keep their MCP servers there no longer need a duplicate under `.mastracode/`. The root file sits below `.mastracode/mcp.json` in priority, so project-specific config still wins. ([#18494](https://github.com/mastra-ai/mastra/pull/18494))
+
+- Add MastraCode browser tool availability scenarios ([#18498](https://github.com/mastra-ai/mastra/pull/18498))
+
+- Updated dependencies [[`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156), [`42d74d5`](https://github.com/mastra-ai/mastra/commit/42d74d5671f95aa6076576e32a9b7d11f13dd208), [`b4e97e6`](https://github.com/mastra-ai/mastra/commit/b4e97e676232a3a398ef32d3e78faa0c91c5fa1c), [`06e0d63`](https://github.com/mastra-ai/mastra/commit/06e0d63d42bc2a202e18bc091f3781f409f5e6fb), [`438a971`](https://github.com/mastra-ai/mastra/commit/438a9715c8b4398e5eaf8914a1f19dc8a85dc1de), [`77518cc`](https://github.com/mastra-ai/mastra/commit/77518ccb5bb8cc684875081e64213dc85cffdbee), [`bb2a13b`](https://github.com/mastra-ai/mastra/commit/bb2a13bb4b32e6bb807200fe7b18ae8fa4322118), [`a73cd1a`](https://github.com/mastra-ai/mastra/commit/a73cd1a62a5e4ca023dcc39ba150029f4f1f74c1), [`0b5cc47`](https://github.com/mastra-ai/mastra/commit/0b5cc4726dc18d9a685a27520db39ff1b36bb89a), [`87f38a3`](https://github.com/mastra-ai/mastra/commit/87f38a3de03e24731f2dd6f8ed6a60b6722b85a1), [`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98), [`fe98ef2`](https://github.com/mastra-ai/mastra/commit/fe98ef2e66dbfcbd7d645c88c9ee1e67b458a136), [`793ea0f`](https://github.com/mastra-ai/mastra/commit/793ea0f52f831178837f21c83af6af93bf4ce638), [`507a5c4`](https://github.com/mastra-ai/mastra/commit/507a5c461bdc3136ad80744c0efbb55ce1f18f97), [`79b3626`](https://github.com/mastra-ai/mastra/commit/79b3626f8d647307eb07c8da14c9073c2699719d)]:
+  - @mastra/server@1.47.0-alpha.6
+  - @mastra/core@1.47.0-alpha.6
+  - @mastra/observability@1.15.2-alpha.1
+  - @mastra/memory@1.21.2-alpha.1
+  - @mastra/schema-compat@1.3.1-alpha.0
+  - @mastra/hono@1.5.2-alpha.6
+  - @mastra/mcp@1.12.0
+
+## 0.26.0-alpha.5
+
+### Minor Changes
+
+- Add a browser UI for MastraCode. ([#18364](https://github.com/mastra-ai/mastra/pull/18364))
+
+  The web app boots the real MastraCode Harness, registers it on a Mastra
+  instance, mounts the Harness HTTP routes (via `@mastra/server`) on a Hono
+  server, and serves a React UI built with Vite. The UI drives a session over the
+  `@mastra/client-js` harness resource (SSE event stream + JSON commands) and
+  reaches feature parity with the terminal for the core interactive workflows:
+  chat streaming, tool execution, tool approvals, interactive suspensions
+  (`ask_user` / `submit_plan` / `request_access`), mode/model switching, thread
+  lifecycle, task tracking, goals, notifications, steer/abort, follow-ups, a
+  TUI-parity status line (message/reflection budgets and active-goal indicator),
+  and project-scoped workspaces with a server-driven directory picker.
+
+  A full Settings surface mirrors the terminal's configuration commands: model
+  selection, behavior (`yolo`, thinking level, notifications, smart editing,
+  per-category tool permissions), observational-memory models and thresholds,
+  model packs, API keys, and custom providers. These are backed by
+  `/api/web/config/*` routes that read and write the same global `settings.json`
+  the terminal uses, so configuration stays in sync across the terminal and the
+  browser.
+
+  The web server shares its storage with the registered Harness, and projects
+  resolve the same `resourceId` as the terminal, so the two share durable threads
+  and observations for a given project. Thread lists are scoped by project path so
+  worktrees that share a `resourceId` don't bleed each other's threads.
+
+  Internally, harness startup is shared through a single base factory with small
+  per-environment helpers, so the terminal app and the web server build the exact
+  same harness without duplicating wiring. The published `mastracode` package
+  remains terminal-only — the web UI lives in the repository for local
+  development and is excluded from the published package.
+
+  Includes a scenario test suite that drives the production stack
+  (`MastraClient` → Hono → `@mastra/server` routes → Harness → AIMock) end to end.
+
+### Patch Changes
+
+- Updated dependencies [[`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0)]:
+  - @mastra/core@1.47.0-alpha.5
+  - @mastra/server@1.47.0-alpha.5
+  - @mastra/hono@1.5.2-alpha.5
+
+## 0.25.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59)]:
+  - @mastra/core@1.47.0-alpha.4
+
+## 0.25.1-alpha.3
+
+### Patch Changes
+
+- Updated plan and explore modes to declare `availableTools` allowlists so tool visibility is gated at LLM-call time instead of workspace construction. Plan mode includes read-only tools plus plan-file editing and delivery tools; explore mode includes only read-only tools. Build mode remains unrestricted. Workspace creation no longer branches on mode for tool visibility — all modes now share the same workspace instance. ([#18463](https://github.com/mastra-ai/mastra/pull/18463))
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`e1f272d`](https://github.com/mastra-ai/mastra/commit/e1f272d2bf1963c0ccb060f34b103b0b780bbff0), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`74f447a`](https://github.com/mastra-ai/mastra/commit/74f447a6fae171ac3a6ec2d9e61be171ca46d23c), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+  - @mastra/pg@1.14.2-alpha.1
+  - @mastra/libsql@1.14.2-alpha.0
+  - @mastra/observability@1.15.2-alpha.0
+
+## 0.25.1-alpha.2
+
+### Patch Changes
+
+- Fixed thread auto-resume selecting the wrong thread in git worktrees by scoping startup selection to threads tagged with the current project path. When Mastra Code detects a matching project thread on a different resource after resourceId drift, it now prompts before cloning and resuming that thread under the current resource; accepting the prompt leaves the old thread untouched and loads the clone, while declining starts fresh and leaves the old resource untouched. ([#18333](https://github.com/mastra-ai/mastra/pull/18333))
+
+- Resolve all Harness models through gateways. The Harness now builds its available-models catalog, model auth status, mode agents, Observational Memory models, and subagents from the gateways you register, instead of the separate `resolveModel`, `customModelCatalogProvider`, and `modelAuthChecker` config hooks. Removed those three options from `HarnessConfig` (and the `ModelAuthChecker` type) — register a gateway via `gateways` instead. ([#18382](https://github.com/mastra-ai/mastra/pull/18382))
+
+  `listAvailableModels()` and `getCurrentModelAuthStatus()` are now sourced entirely from gateways: model discovery comes from each gateway's `fetchProviders()` (a network call for gateways like models.dev and Netlify), and auth status is resolved through the same gateway chain the model router uses at run time (`resolveAuth()`, falling back to `getApiKey()`). There is no static provider-registry fallback — everything the model picker shows comes from a gateway.
+
+  The gateway-chain operations shared by `ModelRouterLanguageModel` and the Harness (gateway merging, model→gateway selection, auth resolution, provider/model listing) are now centralized in a new `GatewayManager` class exported from `@mastra/core`. Both consumers delegate to it, eliminating duplicated logic. `defaultGateways` is still re-exported from the same paths for backward compatibility.
+
+- Improved plan mode UX: "Request changes" stops the agent via processor-based abort and lets you provide revision feedback via chat. Plan resubmissions show a diff of what changed. Plans save to title-derived filenames (e.g. `add-dark-mode.md`) for multi-plan support. Plan filename displayed in TUI header. ([#18323](https://github.com/mastra-ai/mastra/pull/18323))
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`26f54af`](https://github.com/mastra-ai/mastra/commit/26f54afb5dbfbbb02d4d09bec4bd7c5029751767), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8)]:
+  - @mastra/core@1.47.0-alpha.2
+  - @mastra/pg@1.14.2-alpha.0
+
+## 0.25.1-alpha.1
+
+### Patch Changes
+
+- MastraCode now passes a deterministic session `id` and `ownerId` to the Harness session. The session id is derived from the project resource ID and is stable across restarts for the same project directory. The owner id is derived from the machine hostname and project root path, tying the session to the local machine. ([#18372](https://github.com/mastra-ai/mastra/pull/18372))
+
+- Expand `${VAR}`, `${VAR:-default}`, and bare `$VAR` references in MCP server HTTP headers. Header values such as `"x-api-key": "${MY_API_KEY}"` in `mcp.json` are now resolved from the environment when the config is loaded, instead of being sent verbatim. This matches how Claude Code reads `.mcp.json` and lets header-authenticated HTTP servers pull secrets from the environment. ([#18240](https://github.com/mastra-ai/mastra/pull/18240))
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/memory@1.21.2-alpha.0
+
+## 0.25.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`307573b`](https://github.com/mastra-ai/mastra/commit/307573b9ff3149b70c79540dbc86f1319b180f29)]:
+  - @mastra/core@1.46.1-alpha.0
+  - @mastra/github-signals@0.2.2-alpha.0
+
+## 0.25.0
+
+### Minor Changes
+
+- Added ACP server mode for `mastracode`. ([#18231](https://github.com/mastra-ai/mastra/pull/18231))
+
+  You can now connect ACP-compatible editors and clients to `mastracode` over stdio. This lets clients start sessions, send prompts, and receive streamed responses.
+
+  **Example**
+
+  ```bash
+  mastracode --acp
+  ```
+
+- Added automatic OpenAI subscription support for Stagehand browser automation. When a user has an active OpenAI subscription (authenticated via /login), Stagehand now uses the subscription credentials for its AI operations (act/extract/observe) instead of requiring a separate OPENAI_API_KEY. ([#18233](https://github.com/mastra-ai/mastra/pull/18233))
+
+### Patch Changes
+
+- Removed the deprecated `Harness.getState()` and `Harness.setState()` compatibility wrappers, along with the unused private `updateState`. Harness state has lived on the session for a while; these were thin proxies marked `@deprecated`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const state = harness.getState();
+  await harness.setState({ count: 1 });
+  ```
+
+  **After**
+
+  ```typescript
+  const state = harness.session.state.get();
+  await harness.session.state.set({ count: 1 });
+  ```
+
+  This does not affect the tool-facing harness context, which continues to expose `state` / `getState` / `setState` / `updateState` alongside `session.state`.
+
+  `mastracode` is updated to set browser settings via `session.state.set()`.
+
+- Moved the observational-memory model accessors off the Harness onto `session.om`. Reading and switching the observer/reflector models and reading observation/reflection thresholds now live on the session, next to the state they read and write. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const observer = harness.getObserverModelId();
+  await harness.switchObserverModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  **After**
+
+  ```typescript
+  const observer = harness.session.om.observer.modelId();
+  await harness.session.om.observer.switchModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  The accessors are grouped by role under `session.om.observer` and `session.om.reflector`, each exposing `modelId()`, `threshold()`, `resolvedModel()`, and `switchModel({ modelId })`.
+
+  Removed `Harness.getObserverModelId`, `getReflectorModelId`, `getObservationThreshold`, `getReflectionThreshold`, `getResolvedObserverModel`, `getResolvedReflectorModel`, `switchObserverModel`, and `switchReflectorModel`.
+
+  `mastracode` is updated to consume the new API: the `/om` command and status line now read and switch observer/reflector models via `session.om`.
+
+- Moved the run-control surface off the Harness onto the `Session`. Sending messages and signals, steering, following up, aborting, responding to tool suspensions, and saving system reminders now live on the session that owns the run state they drive, instead of being delegated through the Harness. This is the final step of the single-session extraction series and a prerequisite for the upcoming multi-session (`createSession`) work: every per-session operation now lives on `Session`, while the Harness retains only genuinely shared machinery (agent, config builders, storage/lock gateway), which it injects into each session via the `SessionMachinery` provider. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  **Before**
+
+  ```typescript
+  await harness.sendMessage({ content: 'hello' });
+  harness.sendSignal({ content: 'steer the run' });
+  harness.abort();
+  await harness.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  **After**
+
+  ```typescript
+  const session = await harness.createSession();
+  await session.sendMessage({ content: 'hello' });
+  session.sendSignal({ content: 'steer the run' });
+  session.abort();
+  await session.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  Removed `Harness.sendMessage`, `Harness.sendSignal`, `Harness.sendNotificationSignal`, `Harness.steer`, `Harness.followUp`, `Harness.abort`, `Harness.respondToToolSuspension`, `Harness.saveSystemReminderMessage`, and `Harness.waitForCurrentThreadStreamIdle`. The `Session` reaches Harness-owned machinery through the injected `SessionMachinery` provider, so the heavy run loop is still constructed and owned by the Harness while being parameterized by the session it runs on.
+
+  `mastracode` is updated to consume the new API: the TUI run loop, slash-command dispatch, goal lifecycle, prompt handlers, and headless entry points all drive run-control through the session returned by `harness.createSession()`.
+
+- The Harness event bus now lives on the Session. Each `Session` owns its own listeners and emit pipeline (`session.subscribe()` / internal `session.emit()`), so events emitted on one session are delivered only to that session's subscribers — never to another session's. This is the isolation foundation for serving a single Harness to multiple concurrent sessions (e.g. one Harness backing many channel threads). ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  Breaking (Harness is under active development): `Harness.subscribe()` is removed. Subscribe on the session instead:
+
+  ```diff
+  - harness.subscribe(listener)
+  + harness.session.subscribe(listener)
+  ```
+
+  Session subsystems (mode/model/om/permissions/subagents/state) no longer receive an injected `emit` callback — they emit directly to their session's bus. `mastracode` is updated to subscribe via `harness.session.subscribe()`.
+
+- Replaced `Harness.switchModel()` with `harness.session.model.switch()`. Model switching now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchModel({ modelId: 'openai/gpt-5' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.model.switch({ modelId: 'openai/gpt-5' });
+  ```
+
+- Replaced `Harness.switchMode()` with `harness.session.mode.switch()`. Switching modes now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchMode({ modeId: 'build' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.mode.switch({ modeId: 'build' });
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI and headless callers now invoke `harness.session.mode.switch()` instead of the removed `harness.switchMode()`.
+
+- Restored task list progress and history rendering behavior in Mastra Code. ([#18248](https://github.com/mastra-ai/mastra/pull/18248))
+
+- Made the Harness a pure factory + shared-resource owner and removed its singleton session. The Harness no longer holds a `#session` field or exposes a `harness.session` getter; instead, callers create fully isolated sessions via `harness.createSession()`. Each session owns its own mode, model, state, thread, run-control, event bus, and stream engine, so a single Harness can now serve many concurrent sessions (e.g. one per user/thread in a server or channel adapter) without cross-session state or event leakage. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  `harness.createSession({ resourceId? })` constructs and wires a new `Session`, replays the current workspace status onto it, and selects or creates its thread before returning. Harness methods that previously read the singleton session are now parameterized by an explicit `session` argument (`setResourceId`, `getKnownResourceIds`, `getCurrentModelAuthStatus`, `loadOMProgress`, `getObservationalMemoryRecord`, `destroy`). `harness.init()` is now idempotent, so repeated calls reuse the same initialization instead of rebuilding internal state.
+
+  **Before**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = harness.session; // singleton
+  await session.sendMessage({ content: 'hello' });
+  ```
+
+  **After**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = await harness.createSession({ resourceId });
+  await session.sendMessage({ content: 'hello' });
+
+  // A second, fully isolated session from the same Harness:
+  const other = await harness.createSession({ resourceId: otherUser });
+  ```
+
+  Removed `harness.session`, `harness.getSession()`, the singleton `#session` field, and the deprecated `harness.subscribe`/`harness.emit`/`harness.memory` delegators.
+
+  `mastracode` is updated to consume the new API: composition roots call `createSession()` once at startup and store the result on `state.session`, and all per-session operations flow through that session object.
+
+- Added a public ACP export so workflows can import the ACP agent with `import { MastraCodeAcpAgent } from 'mastracode/acp'`. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- MastraCode now automatically retries transient ECONNRESET model stream failures with exponential backoff. Dropped provider sockets recover without manual intervention using a global policy of 2 retries with delays of 1000ms, 2000ms, and 4000ms (capped at 30000ms), applied to all model calls independent of model-pack settings. ([#18370](https://github.com/mastra-ai/mastra/pull/18370))
+
+- Exported isBadRequestError matcher for detecting transient HTTP 400 errors that can be retried ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Migrate TUI thread operations to the session-scoped `session.thread.*` APIs following the core thread lifecycle migration. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Added automatic retry (once) for transient OpenAI Bad Request (400) errors that occur during service degradation ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Resolve notification stream options from the target resource's session (falling back to the active session's model, then the mode default) so a woken GitHub-signal notification always has a model to run with. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Moved the tool-permission rule accessors off the Harness onto `session.permissions`. Reading and writing the persisted per-category / per-tool approval policies now lives on the session, next to the state it reads and writes. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const rules = harness.getPermissionRules();
+  harness.setPermissionForCategory({ category: 'execute', policy: 'ask' });
+  harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  **After**
+
+  ```typescript
+  const rules = harness.session.permissions.getRules();
+  await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' });
+  await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  Removed `Harness.getPermissionRules`, `Harness.setPermissionForCategory`, and `Harness.setPermissionForTool`. The setters now return a promise that resolves once the change is persisted to session state, so callers that read the rules back can await the write. Tool-category resolution stays on the harness as `harness.getToolCategory()` since it reads harness config rather than session state.
+
+  `mastracode` is updated to consume the new API: the `/permissions` command reads and sets policies via `session.permissions`.
+
+- Replaced `Harness.getModelName()` and `Harness.getFullModelId()` with session accessors. The full model id is read via the existing `harness.session.model.get()`, and the short display name moves to a new `harness.session.model.displayName()`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const name = harness.getModelName();
+  const fullId = harness.getFullModelId();
+  ```
+
+  **After**
+
+  ```typescript
+  const name = harness.session.model.displayName();
+  const fullId = harness.session.model.get();
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI status line and message renderer now read the model id via `harness.session.model.get()`.
+
+- Fix Stagehand AI ops (`observe`, `act`, `extract`) failing with `Bad Request` (HTTP 400) when the user is signed in to OpenAI Codex OAuth. ([#18399](https://github.com/mastra-ai/mastra/pull/18399))
+
+  Stagehand drives its browser actions through AI SDK's non-streaming `generateText`, but Codex's `/responses` backend only accepts streamed requests and replies with Server-Sent Events. The previous integration routed Stagehand traffic to Codex by rewriting the request URL inside a custom `fetch`, but did not translate between the streaming and non-streaming shapes — so every Stagehand AI call was rejected by Codex.
+
+  MastraCode now configures Stagehand with proper AI SDK provider options (`baseURL`, `headers`, `middleware`) and a dedicated `buildCodexStagehandFetch` that:
+  - Injects (and refreshes) the Codex OAuth bearer per call
+  - Forces `stream: true` on the outgoing request body
+  - Aggregates the SSE response into the non-streaming JSON shape `@ai-sdk/openai`'s Responses parser expects
+
+  The shared OAuth-bearer-refresh logic is extracted into a `getCodexBearer` helper used by both the main agent fetch and the Stagehand fetch.
+
+  `observe`, `act`, and `extract` now work end-to-end against Codex OAuth using a Codex-compatible OpenAI model, with no `OPENAI_API_KEY` required.
+
+- Fixed ACP server mode so sessions can start, receive prompts, and handle tool approvals after the Harness session changes. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- Fixed Mastra Code steering display so messages wait for runtime acceptance, blocked inputs are shown as blocked instead of chat, abort cleanup removes pending steering without duplicating output, and plan approvals continue correctly in same-mode and cross-mode flows. ([#18183](https://github.com/mastra-ai/mastra/pull/18183))
+
+- Fixed thread loading in worktrees to only show threads explicitly tagged for the current worktree path, preventing threads from other worktrees or the main repo from being incorrectly loaded on startup ([#18332](https://github.com/mastra-ai/mastra/pull/18332))
+
+- Moved the subagent model accessors off the Harness onto `session.subagents.model`. Reading and setting the global or per-`agentType` subagent model now lives on the session, next to the state it reads and writes, and is grouped under `session.subagents` to leave room for future subagent settings. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const modelId = harness.getSubagentModelId({ agentType: 'explore' });
+  await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  **After**
+
+  ```typescript
+  const modelId = harness.session.subagents.model.get({ agentType: 'explore' });
+  await harness.session.subagents.model.set({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  `get()` prefers the per-`agentType` value, then the global subagent model, returning `null` when neither is set. `set()` persists to thread settings and emits a `subagent_model_changed` event. Removed `Harness.getSubagentModelId` and `Harness.setSubagentModelId`.
+
+  `mastracode` is updated to consume the new API: the `/subagents` command, model-pack activation, and startup model restoration read and set subagent models via `session.subagents.model`.
+
+- Updated dependencies [[`5bd72d2`](https://github.com/mastra-ai/mastra/commit/5bd72d255f45b5ea8ab342643bd463814a980a24), [`1cc9ee1`](https://github.com/mastra-ai/mastra/commit/1cc9ee1ba51db53020a735626d33017a60b4b5b3), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`b4a43c7`](https://github.com/mastra-ai/mastra/commit/b4a43c705c961d24c9888690ae84451ca1630197), [`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`30ebaf0`](https://github.com/mastra-ai/mastra/commit/30ebaf07bed5f4d30f2f257836c15d1bf7e40aae), [`5704634`](https://github.com/mastra-ai/mastra/commit/5704634b22133167dea337a942a34f57aaa3fa14), [`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`b13925b`](https://github.com/mastra-ai/mastra/commit/b13925bfa91aa8700f56fa54a9ce707ee7e4ba62), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`bf94ec6`](https://github.com/mastra-ai/mastra/commit/bf94ec68192d9f16e46ef7e5ac36370aeeddf35d), [`a29f371`](https://github.com/mastra-ai/mastra/commit/a29f371aef629ac8562661524a497127e93b5131), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`6075e17`](https://github.com/mastra-ai/mastra/commit/6075e173c4f11b889df5a592e0a708d6307220eb), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`073f910`](https://github.com/mastra-ai/mastra/commit/073f910481e7d94b95ba3830f96531774ae95d33), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be), [`25d1854`](https://github.com/mastra-ai/mastra/commit/25d18545337e615f3fc573ddbfc0c413157bd148), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`1f97ce5`](https://github.com/mastra-ai/mastra/commit/1f97ce5695463bebb4eaacf501da6fb403e20885), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c), [`64f58c0`](https://github.com/mastra-ai/mastra/commit/64f58c04e78b40137497d47f781e897e416f22a5), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`42b13ad`](https://github.com/mastra-ai/mastra/commit/42b13ad9d92a9d72ea6e96a8c87bf83797167eac), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`b89fbd1`](https://github.com/mastra-ai/mastra/commit/b89fbd15bfdceeee469651c81133f70cc22a6fb9), [`cff28df`](https://github.com/mastra-ai/mastra/commit/cff28df33476e41c9538cf9dba7fc8013d69ebb1), [`8e25a78`](https://github.com/mastra-ai/mastra/commit/8e25a78e0597575f0b0729bae8c5e190c84869b5), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311), [`a5b22d3`](https://github.com/mastra-ai/mastra/commit/a5b22d314d62a68d801886a8d3d0eb6c089473db), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858)]:
+  - @mastra/core@1.46.0
+  - @mastra/pg@1.14.1
+  - @mastra/github-signals@0.2.1
+  - @mastra/libsql@1.14.1
+  - @mastra/memory@1.21.1
+  - @mastra/observability@1.15.1
+  - @mastra/mcp@1.12.0
+
+## 0.25.0-alpha.5
+
+### Patch Changes
+
+- Exported isBadRequestError matcher for detecting transient HTTP 400 errors that can be retried ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Added automatic retry (once) for transient OpenAI Bad Request (400) errors that occur during service degradation ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Fix Stagehand AI ops (`observe`, `act`, `extract`) failing with `Bad Request` (HTTP 400) when the user is signed in to OpenAI Codex OAuth. ([#18399](https://github.com/mastra-ai/mastra/pull/18399))
+
+  Stagehand drives its browser actions through AI SDK's non-streaming `generateText`, but Codex's `/responses` backend only accepts streamed requests and replies with Server-Sent Events. The previous integration routed Stagehand traffic to Codex by rewriting the request URL inside a custom `fetch`, but did not translate between the streaming and non-streaming shapes — so every Stagehand AI call was rejected by Codex.
+
+  MastraCode now configures Stagehand with proper AI SDK provider options (`baseURL`, `headers`, `middleware`) and a dedicated `buildCodexStagehandFetch` that:
+  - Injects (and refreshes) the Codex OAuth bearer per call
+  - Forces `stream: true` on the outgoing request body
+  - Aggregates the SSE response into the non-streaming JSON shape `@ai-sdk/openai`'s Responses parser expects
+
+  The shared OAuth-bearer-refresh logic is extracted into a `getCodexBearer` helper used by both the main agent fetch and the Stagehand fetch.
+
+  `observe`, `act`, and `extract` now work end-to-end against Codex OAuth using a Codex-compatible OpenAI model, with no `OPENAI_API_KEY` required.
+
+- Updated dependencies [[`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be)]:
+  - @mastra/core@1.46.0-alpha.5
+
+## 0.25.0-alpha.4
+
+### Patch Changes
+
+- Restored task list progress and history rendering behavior in Mastra Code. ([#18248](https://github.com/mastra-ai/mastra/pull/18248))
+
+- MastraCode now automatically retries transient ECONNRESET model stream failures with exponential backoff. Dropped provider sockets recover without manual intervention using a global policy of 2 retries with delays of 1000ms, 2000ms, and 4000ms (capped at 30000ms), applied to all model calls independent of model-pack settings. ([#18370](https://github.com/mastra-ai/mastra/pull/18370))
+
+- Updated dependencies [[`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311)]:
+  - @mastra/core@1.46.0-alpha.4
+  - @mastra/libsql@1.14.1-alpha.1
+  - @mastra/pg@1.14.1-alpha.1
+
+## 0.25.0-alpha.3
+
+### Patch Changes
+
+- Added a public ACP export so workflows can import the ACP agent with `import { MastraCodeAcpAgent } from 'mastracode/acp'`. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- Fixed ACP server mode so sessions can start, receive prompts, and handle tool approvals after the Harness session changes. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- Updated dependencies [[`b4a43c7`](https://github.com/mastra-ai/mastra/commit/b4a43c705c961d24c9888690ae84451ca1630197), [`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`25d1854`](https://github.com/mastra-ai/mastra/commit/25d18545337e615f3fc573ddbfc0c413157bd148), [`42b13ad`](https://github.com/mastra-ai/mastra/commit/42b13ad9d92a9d72ea6e96a8c87bf83797167eac), [`cff28df`](https://github.com/mastra-ai/mastra/commit/cff28df33476e41c9538cf9dba7fc8013d69ebb1), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16)]:
+  - @mastra/pg@1.14.1-alpha.0
+  - @mastra/core@1.46.0-alpha.3
+  - @mastra/libsql@1.14.1-alpha.0
+  - @mastra/observability@1.15.1-alpha.0
+  - @mastra/memory@1.21.1-alpha.1
+
+## 0.25.0-alpha.2
+
+### Minor Changes
+
+- Added ACP server mode for `mastracode`. ([#18231](https://github.com/mastra-ai/mastra/pull/18231))
+
+  You can now connect ACP-compatible editors and clients to `mastracode` over stdio. This lets clients start sessions, send prompts, and receive streamed responses.
+
+  **Example**
+
+  ```bash
+  mastracode --acp
+  ```
+
+### Patch Changes
+
+- Fixed Mastra Code steering display so messages wait for runtime acceptance, blocked inputs are shown as blocked instead of chat, abort cleanup removes pending steering without duplicating output, and plan approvals continue correctly in same-mode and cross-mode flows. ([#18183](https://github.com/mastra-ai/mastra/pull/18183))
+
+- Fixed thread loading in worktrees to only show threads explicitly tagged for the current worktree path, preventing threads from other worktrees or the main repo from being incorrectly loaded on startup ([#18332](https://github.com/mastra-ai/mastra/pull/18332))
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+
+## 0.25.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2)]:
+  - @mastra/core@1.46.0-alpha.1
+
+## 0.25.0-alpha.0
+
+### Minor Changes
+
+- Added automatic OpenAI subscription support for Stagehand browser automation. When a user has an active OpenAI subscription (authenticated via /login), Stagehand now uses the subscription credentials for its AI operations (act/extract/observe) instead of requiring a separate OPENAI_API_KEY. ([#18233](https://github.com/mastra-ai/mastra/pull/18233))
+
+### Patch Changes
+
+- Removed the deprecated `Harness.getState()` and `Harness.setState()` compatibility wrappers, along with the unused private `updateState`. Harness state has lived on the session for a while; these were thin proxies marked `@deprecated`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const state = harness.getState();
+  await harness.setState({ count: 1 });
+  ```
+
+  **After**
+
+  ```typescript
+  const state = harness.session.state.get();
+  await harness.session.state.set({ count: 1 });
+  ```
+
+  This does not affect the tool-facing harness context, which continues to expose `state` / `getState` / `setState` / `updateState` alongside `session.state`.
+
+  `mastracode` is updated to set browser settings via `session.state.set()`.
+
+- Moved the observational-memory model accessors off the Harness onto `session.om`. Reading and switching the observer/reflector models and reading observation/reflection thresholds now live on the session, next to the state they read and write. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const observer = harness.getObserverModelId();
+  await harness.switchObserverModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  **After**
+
+  ```typescript
+  const observer = harness.session.om.observer.modelId();
+  await harness.session.om.observer.switchModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  The accessors are grouped by role under `session.om.observer` and `session.om.reflector`, each exposing `modelId()`, `threshold()`, `resolvedModel()`, and `switchModel({ modelId })`.
+
+  Removed `Harness.getObserverModelId`, `getReflectorModelId`, `getObservationThreshold`, `getReflectionThreshold`, `getResolvedObserverModel`, `getResolvedReflectorModel`, `switchObserverModel`, and `switchReflectorModel`.
+
+  `mastracode` is updated to consume the new API: the `/om` command and status line now read and switch observer/reflector models via `session.om`.
+
+- Moved the run-control surface off the Harness onto the `Session`. Sending messages and signals, steering, following up, aborting, responding to tool suspensions, and saving system reminders now live on the session that owns the run state they drive, instead of being delegated through the Harness. This is the final step of the single-session extraction series and a prerequisite for the upcoming multi-session (`createSession`) work: every per-session operation now lives on `Session`, while the Harness retains only genuinely shared machinery (agent, config builders, storage/lock gateway), which it injects into each session via the `SessionMachinery` provider. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  **Before**
+
+  ```typescript
+  await harness.sendMessage({ content: 'hello' });
+  harness.sendSignal({ content: 'steer the run' });
+  harness.abort();
+  await harness.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  **After**
+
+  ```typescript
+  const session = await harness.createSession();
+  await session.sendMessage({ content: 'hello' });
+  session.sendSignal({ content: 'steer the run' });
+  session.abort();
+  await session.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  Removed `Harness.sendMessage`, `Harness.sendSignal`, `Harness.sendNotificationSignal`, `Harness.steer`, `Harness.followUp`, `Harness.abort`, `Harness.respondToToolSuspension`, `Harness.saveSystemReminderMessage`, and `Harness.waitForCurrentThreadStreamIdle`. The `Session` reaches Harness-owned machinery through the injected `SessionMachinery` provider, so the heavy run loop is still constructed and owned by the Harness while being parameterized by the session it runs on.
+
+  `mastracode` is updated to consume the new API: the TUI run loop, slash-command dispatch, goal lifecycle, prompt handlers, and headless entry points all drive run-control through the session returned by `harness.createSession()`.
+
+- The Harness event bus now lives on the Session. Each `Session` owns its own listeners and emit pipeline (`session.subscribe()` / internal `session.emit()`), so events emitted on one session are delivered only to that session's subscribers — never to another session's. This is the isolation foundation for serving a single Harness to multiple concurrent sessions (e.g. one Harness backing many channel threads). ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  Breaking (Harness is under active development): `Harness.subscribe()` is removed. Subscribe on the session instead:
+
+  ```diff
+  - harness.subscribe(listener)
+  + harness.session.subscribe(listener)
+  ```
+
+  Session subsystems (mode/model/om/permissions/subagents/state) no longer receive an injected `emit` callback — they emit directly to their session's bus. `mastracode` is updated to subscribe via `harness.session.subscribe()`.
+
+- Replaced `Harness.switchModel()` with `harness.session.model.switch()`. Model switching now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchModel({ modelId: 'openai/gpt-5' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.model.switch({ modelId: 'openai/gpt-5' });
+  ```
+
+- Replaced `Harness.switchMode()` with `harness.session.mode.switch()`. Switching modes now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchMode({ modeId: 'build' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.mode.switch({ modeId: 'build' });
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI and headless callers now invoke `harness.session.mode.switch()` instead of the removed `harness.switchMode()`.
+
+- Made the Harness a pure factory + shared-resource owner and removed its singleton session. The Harness no longer holds a `#session` field or exposes a `harness.session` getter; instead, callers create fully isolated sessions via `harness.createSession()`. Each session owns its own mode, model, state, thread, run-control, event bus, and stream engine, so a single Harness can now serve many concurrent sessions (e.g. one per user/thread in a server or channel adapter) without cross-session state or event leakage. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  `harness.createSession({ resourceId? })` constructs and wires a new `Session`, replays the current workspace status onto it, and selects or creates its thread before returning. Harness methods that previously read the singleton session are now parameterized by an explicit `session` argument (`setResourceId`, `getKnownResourceIds`, `getCurrentModelAuthStatus`, `loadOMProgress`, `getObservationalMemoryRecord`, `destroy`). `harness.init()` is now idempotent, so repeated calls reuse the same initialization instead of rebuilding internal state.
+
+  **Before**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = harness.session; // singleton
+  await session.sendMessage({ content: 'hello' });
+  ```
+
+  **After**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = await harness.createSession({ resourceId });
+  await session.sendMessage({ content: 'hello' });
+
+  // A second, fully isolated session from the same Harness:
+  const other = await harness.createSession({ resourceId: otherUser });
+  ```
+
+  Removed `harness.session`, `harness.getSession()`, the singleton `#session` field, and the deprecated `harness.subscribe`/`harness.emit`/`harness.memory` delegators.
+
+  `mastracode` is updated to consume the new API: composition roots call `createSession()` once at startup and store the result on `state.session`, and all per-session operations flow through that session object.
+
+- Migrate TUI thread operations to the session-scoped `session.thread.*` APIs following the core thread lifecycle migration. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Resolve notification stream options from the target resource's session (falling back to the active session's model, then the mode default) so a woken GitHub-signal notification always has a model to run with. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Moved the tool-permission rule accessors off the Harness onto `session.permissions`. Reading and writing the persisted per-category / per-tool approval policies now lives on the session, next to the state it reads and writes. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const rules = harness.getPermissionRules();
+  harness.setPermissionForCategory({ category: 'execute', policy: 'ask' });
+  harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  **After**
+
+  ```typescript
+  const rules = harness.session.permissions.getRules();
+  await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' });
+  await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  Removed `Harness.getPermissionRules`, `Harness.setPermissionForCategory`, and `Harness.setPermissionForTool`. The setters now return a promise that resolves once the change is persisted to session state, so callers that read the rules back can await the write. Tool-category resolution stays on the harness as `harness.getToolCategory()` since it reads harness config rather than session state.
+
+  `mastracode` is updated to consume the new API: the `/permissions` command reads and sets policies via `session.permissions`.
+
+- Replaced `Harness.getModelName()` and `Harness.getFullModelId()` with session accessors. The full model id is read via the existing `harness.session.model.get()`, and the short display name moves to a new `harness.session.model.displayName()`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const name = harness.getModelName();
+  const fullId = harness.getFullModelId();
+  ```
+
+  **After**
+
+  ```typescript
+  const name = harness.session.model.displayName();
+  const fullId = harness.session.model.get();
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI status line and message renderer now read the model id via `harness.session.model.get()`.
+
+- Moved the subagent model accessors off the Harness onto `session.subagents.model`. Reading and setting the global or per-`agentType` subagent model now lives on the session, next to the state it reads and writes, and is grouped under `session.subagents` to leave room for future subagent settings. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const modelId = harness.getSubagentModelId({ agentType: 'explore' });
+  await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  **After**
+
+  ```typescript
+  const modelId = harness.session.subagents.model.get({ agentType: 'explore' });
+  await harness.session.subagents.model.set({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  `get()` prefers the per-`agentType` value, then the global subagent model, returning `null` when neither is set. `set()` persists to thread settings and emits a `subagent_model_changed` event. Removed `Harness.getSubagentModelId` and `Harness.setSubagentModelId`.
+
+  `mastracode` is updated to consume the new API: the `/subagents` command, model-pack activation, and startup model restoration read and set subagent models via `session.subagents.model`.
+
+- Updated dependencies [[`5bd72d2`](https://github.com/mastra-ai/mastra/commit/5bd72d255f45b5ea8ab342643bd463814a980a24), [`1cc9ee1`](https://github.com/mastra-ai/mastra/commit/1cc9ee1ba51db53020a735626d33017a60b4b5b3), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`30ebaf0`](https://github.com/mastra-ai/mastra/commit/30ebaf07bed5f4d30f2f257836c15d1bf7e40aae), [`5704634`](https://github.com/mastra-ai/mastra/commit/5704634b22133167dea337a942a34f57aaa3fa14), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`b13925b`](https://github.com/mastra-ai/mastra/commit/b13925bfa91aa8700f56fa54a9ce707ee7e4ba62), [`bf94ec6`](https://github.com/mastra-ai/mastra/commit/bf94ec68192d9f16e46ef7e5ac36370aeeddf35d), [`a29f371`](https://github.com/mastra-ai/mastra/commit/a29f371aef629ac8562661524a497127e93b5131), [`6075e17`](https://github.com/mastra-ai/mastra/commit/6075e173c4f11b889df5a592e0a708d6307220eb), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`073f910`](https://github.com/mastra-ai/mastra/commit/073f910481e7d94b95ba3830f96531774ae95d33), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`1f97ce5`](https://github.com/mastra-ai/mastra/commit/1f97ce5695463bebb4eaacf501da6fb403e20885), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`64f58c0`](https://github.com/mastra-ai/mastra/commit/64f58c04e78b40137497d47f781e897e416f22a5), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`b89fbd1`](https://github.com/mastra-ai/mastra/commit/b89fbd15bfdceeee469651c81133f70cc22a6fb9), [`8e25a78`](https://github.com/mastra-ai/mastra/commit/8e25a78e0597575f0b0729bae8c5e190c84869b5), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`a5b22d3`](https://github.com/mastra-ai/mastra/commit/a5b22d314d62a68d801886a8d3d0eb6c089473db), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858)]:
+  - @mastra/core@1.46.0-alpha.0
+  - @mastra/github-signals@0.2.1-alpha.0
+  - @mastra/memory@1.21.1-alpha.0
+  - @mastra/mcp@1.12.0-alpha.0
+
+## 0.24.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Improved Mastra Code responsiveness in large threads by speeding up chat rendering and keeping the initial thread render window bounded. ([#18181](https://github.com/mastra-ai/mastra/pull/18181))
+
+- Fixed plan mode not calling submit_plan tool by removing conflicting subagent-style output instructions from mode definition ([#18157](https://github.com/mastra-ai/mastra/pull/18157))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0
+  - @mastra/agent-browser@0.4.0
+  - @mastra/stagehand@0.3.0
+  - @mastra/tavily@1.1.0
+  - @mastra/observability@1.15.0
+  - @mastra/fastembed@1.2.0
+  - @mastra/mcp@1.11.0
+  - @mastra/memory@1.21.0
+  - @mastra/schema-compat@1.3.0
+  - @mastra/github-signals@0.2.0
+  - @mastra/duckdb@1.5.0
+  - @mastra/libsql@1.14.0
+  - @mastra/pg@1.14.0
+
+## 0.24.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Improved Mastra Code responsiveness in large threads by speeding up chat rendering and keeping the initial thread render window bounded. ([#18181](https://github.com/mastra-ai/mastra/pull/18181))
+
+- Fixed plan mode not calling submit_plan tool by removing conflicting subagent-style output instructions from mode definition ([#18157](https://github.com/mastra-ai/mastra/pull/18157))
+
+- Updated dependencies [[`7c0d868`](https://github.com/mastra-ai/mastra/commit/7c0d868d97d0fdbc04c14d0166dbf44d4c5a4a62), [`d9d2273`](https://github.com/mastra-ai/mastra/commit/d9d2273c702690c9a26eab2aebea879701d4355a), [`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756), [`8f3c262`](https://github.com/mastra-ai/mastra/commit/8f3c262587b335588a02d96b17fd6aca34c885b3)]:
+  - @mastra/core@1.45.0-alpha.0
+  - @mastra/agent-browser@0.4.0-alpha.0
+  - @mastra/stagehand@0.3.0-alpha.0
+  - @mastra/tavily@1.1.0-alpha.0
+  - @mastra/observability@1.15.0-alpha.0
+  - @mastra/fastembed@1.2.0-alpha.0
+  - @mastra/mcp@1.11.0-alpha.0
+  - @mastra/memory@1.21.0-alpha.0
+  - @mastra/schema-compat@1.3.0-alpha.0
+  - @mastra/github-signals@0.2.0-alpha.0
+  - @mastra/duckdb@1.5.0-alpha.0
+  - @mastra/libsql@1.14.0-alpha.0
+  - @mastra/pg@1.14.0-alpha.0
+
+## 0.23.1
+
+### Patch Changes
+
+- Removed the unused harness v1 TUI development script. ([#18131](https://github.com/mastra-ai/mastra/pull/18131))
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Made the native Agent goal mechanism robust, restoring behavior that regressed when goal handling moved into core. ([#18016](https://github.com/mastra-ai/mastra/pull/18016))
+  - **Tool-capable judges.** Scorer judge configs accept optional `tools`, and the default goal scorer can use them to verify the agent's work against reality instead of grading prose alone. MastraCode wires its read-only workspace tools (`view`, `search_content`, `find_files`, `file_stat`, `lsp_inspect`) into `goal.tools`.
+  - **Judge memory restored.** Scorer judge configs accept optional `memory`; goal scoring uses the original MastraCode per-goal judge thread shape and prompt format so repeated evaluations retain prior facts, feedback, and user checkpoints through judge memory.
+  - **Tri-state waiting.** The default goal scorer emits `done`/`continue`/`waiting`; a `waiting` decision (only when the goal text explicitly asks to stop for the user) stops the auto-loop but keeps the objective `active` so the next agent turn is still judged — no `/goal resume` needed.
+  - **Budget-exhaustion pause.** Reaching `maxRuns` without completing now parks the objective as `paused` with a clear reason, resumable by raising `maxRuns` and reactivating, instead of silently leaving it `active`.
+  - **Judge-failure pause (no infinite loop).** Any failure while evaluating the goal — including judge-model/tools resolution, not just the scorer run — pauses the objective and stops the loop, surfacing the cause, rather than re-running the model against a broken judge every turn.
+  - **Structured-output retry.** `tryGenerateWithJsonFallback` now retries with `jsonPromptInjection` when the judge resolves without a parseable object (not only on a thrown error), matching the streaming path.
+  - **Signal-based feedback.** Goal judge feedback is now injected as a `goal-judge` system-reminder signal instead of an assistant-authored "Completion Check Results" transcript message, so reloads and subsequent model context match the original MastraCode goal loop. Continuation, waiting, paused, and done decisions all persist structured evaluation metadata for replay.
+  - **TUI activity/replay fixes.** Goal evaluation chunks close the current assistant message before rendering the judge UI, stream judge activity with useful tool targets, stream partial judge reason text while scoring, replay persisted judge results as judge display components instead of raw Goal reminder text, and correctly persist Esc/Ctrl+C pauses while the judge is running.
+
+  The goal evaluation chunk now carries `pausedReason`, `judgeFailed`, `waitingForUser`, `pending` (emitted before scoring starts so consumers can show a loading indicator), and judge `activity` entries including streamed `reason` updates.
+
+- Move the Harness display state onto `session.displayState` ([#18136](https://github.com/mastra-ai/mastra/pull/18136))
+
+  The canonical display state a UI renders — `isRunning`, active tools, tool-input
+  buffers, pending approval/suspensions, active subagents, current message,
+  queued follow-ups, modified files, tasks, OM progress, and token usage — now
+  lives on the Session as `session.displayState`, alongside the reducer that keeps
+  it in sync with every Harness event.
+
+  `SessionDisplayState` owns:
+  - `get()` — a read-only snapshot to render from (replaces `harness.getDisplayState()`)
+  - `apply(event)` — the centralized state machine that folds each event into the snapshot
+  - `resetThread()` — reset thread-scoped fields on thread switch/create
+  - `restoreTasks(tasks)` — restore replayed task history without emitting an event
+  - `clearPendingSuspensions()` / `deletePendingSuspension(toolCallId)` — display mirror upkeep on abort/resume
+
+  Display state is inherently per-conversation, so in a shared (multi-user) host
+  it can't hang off the Harness — `harness.getDisplayState()` has no single answer
+  when one host serves many sessions. It reads from `harness.session.displayState`
+  instead.
+
+  The Harness stays the **event-bus owner**: `emit()` folds the event into
+  `session.displayState` and then dispatches to listeners (including the
+  `display_state_changed` fan-out). The reducer needs a few read-only host facts it
+  doesn't own — the live token-usage tally, the subagent display-name lookup
+  (Harness config), and the active thread id — which are injected into the Session
+  at construction.
+
+  Removed from the Harness public API (read through `harness.session.displayState.*`):
+  - `getDisplayState()` → `session.displayState.get()`
+  - `restoreDisplayTasks(tasks)` → `session.displayState.restoreTasks(tasks)`
+
+  `restoreTasks` is now a pure session-state mutation (it no longer emits
+  `display_state_changed`); the UI re-renders explicitly after a replay.
+
+- Introduce the Harness `Session`: the Harness now exposes `harness.session`, a class that owns the per-conversation runtime state that previously lived flattened on the Harness instance. The Harness remains the shared host (storage, the thread lock, the agent registry, the event bus); the Session owns the state scoped to a single user's conversation. ([#18107](https://github.com/mastra-ai/mastra/pull/18107))
+
+  `harness.session` owns:
+  - **`session.identity`** — the session's `resourceId` / `defaultResourceId` (the stable "who").
+  - **`session.thread`** — the active thread binding (`getId` / `set` / `clear` / `isSet` / `requireId`) plus the thread data domain scoped to the session: `list`, `getById`, `listMessages`, `listActiveMessages`, `firstUserMessage(s)`, and thread settings (`getSetting` / `setSetting` / `deleteSetting`). It reaches shared-host storage through an injected gateway rather than calling back into Harness orchestration.
+  - **`session.mode`** / **`session.model`** — the currently-selected mode and model (source of truth), the mode-switch sequence, and per-mode model memory. The Harness still owns the mode _definitions_ (`config.modes`).
+  - **`session.run`** — transient per-run identity (run id, trace id, operation counter) and abort control (controller, `isRunning`, `requestAbort`, …). Never persisted.
+  - **`session.stream`** — the live agent-thread subscription handle and its dedup key. Adds `session.getCurrentRunId()` and `session.abortRun()`, which compose the subscription.
+  - **`session.suspensions`** — the parked-tool resume map (`toolCallId → { runId, toolName }`) for tools paused via the native suspension primitive (`ask_user` / `request_access` / `submit_plan`).
+  - **`session.followUps`** — the queue of messages to send after the active run finishes.
+  - **`session.approval`** — the interactive tool-approval gate; `session.respondToToolApproval({ decision, requestContext })` applies the user's approve / decline / always-allow choice and releases the run.
+  - session-scoped permission grants and the live token-usage counter (the Harness still persists usage to thread metadata, since usage is thread-scoped).
+
+  **Removed from the Harness public API** — read these through `harness.session.*` instead:
+  - `getSessionGrants()`, `getTokenUsage()` → `session.getGrants()` / `session.getTokenUsage()`
+  - `getCurrentModelId()`, `hasModelSelected()` → `session.model.get()` / `session.model.hasSelection()`
+  - `getCurrentRunId()`, `getCurrentTraceId()`, `isRunning()` → `session.getCurrentRunId()` / `session.run.getTraceId()` / `session.run.isRunning()`
+  - `getCurrentThreadId()`, `getThreads()`, `listThreads()`, `listMessages()`, `listMessagesForThread()`, `getFirstUserMessage(s)ForThread(s)()`, `getThreadSetting()`, `setThreadSetting()` → `session.thread.*`
+  - `getResourceId()`, `getDefaultResourceId()` → `session.identity.*`
+  - `getFollowUpCount()` → `session.followUps.count()`
+  - `respondToToolApproval()` → `session.respondToToolApproval()`
+  - `getCurrentModeId()` → `session.mode.get()`
+  - `getCurrentMode()` → `session.mode.resolve()` (resolves the selected mode id against the host's `config.modes` catalog, injected into the Session)
+  - `hasPendingSuspensions()` → `session.suspensions.hasPending()`
+  - `isCurrentThreadStreamActive()` → `session.stream.isActive()`
+
+  `Harness.abort()` and `setResourceId()` remain on the Harness with unchanged behavior — they orchestrate Harness-host state (the display-state mirror, the agent-stream subscription, thread teardown) before delegating the relevant reads/writes to the session.
+
+  `session.mode` exposes two complementary accessors: `get()` returns the selected mode **id** (a `string`, mirroring `session.model.get()`), while `resolve()` returns the full `HarnessMode` definition by looking the id up in the injected mode catalog.
+
+  The legacy `HarnessCompat` shim (v1-session/legacy-thread merge) has been removed; its thread-list merge now lives in the Session's thread-data store, so `session.thread.list()` returns the merged result directly.
+
+  `session.abortRun()` now also releases a parked tool-approval gate: a run awaiting `session.approval.arm()` is not actively streaming, so aborting resolves the gate as a decline (rejecting the gated tool) instead of leaving the await hung. Mirrors how abort already drops parked tool suspensions.
+
+- Improved MastraCode Harness state access. ([#18133](https://github.com/mastra-ai/mastra/pull/18133))
+
+  MastraCode now reads and writes Harness state through `harness.session.state` while keeping fallback support for older request-context mocks during the transition.
+
+- Updated dependencies [[`339c57c`](https://github.com/mastra-ai/mastra/commit/339c57c5b2c6dbe75a125e138228e0556528976f), [`1dd4117`](https://github.com/mastra-ai/mastra/commit/1dd4117dcbd8e031ede9f0489436bfbc6f0315b8), [`2b11d1f`](https://github.com/mastra-ai/mastra/commit/2b11d1f6ac7024c5dd2b2dd12a48a956ac9d63bd), [`7d6ff70`](https://github.com/mastra-ai/mastra/commit/7d6ff708727297a0526ca0e26e93eeb5bbaaa187), [`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d), [`b7dff0a`](https://github.com/mastra-ai/mastra/commit/b7dff0a3d1022eb6868f48dc40a2b1febd5c277f), [`b91d921`](https://github.com/mastra-ai/mastra/commit/b91d9213a4998eb343dccd0ff780c42ba22bdfa1), [`02087e1`](https://github.com/mastra-ai/mastra/commit/02087e1fbc54aa07f3071f7a200df1bf5be601a8), [`49af8df`](https://github.com/mastra-ai/mastra/commit/49af8df589c4ff71a5015a4553b377b32704b691), [`30ce559`](https://github.com/mastra-ai/mastra/commit/30ce55902ecf819b8ab8697398dd68b108228063), [`c241b92`](https://github.com/mastra-ai/mastra/commit/c241b929dc8c8d6a7b7219c99ed13ac1f3124a77), [`7d6ff70`](https://github.com/mastra-ai/mastra/commit/7d6ff708727297a0526ca0e26e93eeb5bbaaa187), [`ab975d4`](https://github.com/mastra-ai/mastra/commit/ab975d4dd9488752f05bda7afa03166d207e3e2a), [`9d6aa1b`](https://github.com/mastra-ai/mastra/commit/9d6aa1bae407e2afa6a089abc2a6accbbcb287b8)]:
+  - @mastra/core@1.44.0
+  - @mastra/observability@1.14.4
+  - @mastra/agent-browser@0.3.4
+  - @mastra/duckdb@1.4.3
+  - @mastra/fastembed@1.1.3
+  - @mastra/github-signals@0.1.4
+  - @mastra/libsql@1.13.3
+  - @mastra/mcp@1.10.1
+  - @mastra/memory@1.20.6
+  - @mastra/pg@1.13.3
+  - @mastra/schema-compat@1.2.14
+  - @mastra/stagehand@0.2.7
+  - @mastra/tavily@1.0.5
+
+## 0.23.1-alpha.2
+
+### Patch Changes
+
+- Removed the unused harness v1 TUI development script. ([#18131](https://github.com/mastra-ai/mastra/pull/18131))
+
+- Move the Harness display state onto `session.displayState` ([#18136](https://github.com/mastra-ai/mastra/pull/18136))
+
+  The canonical display state a UI renders — `isRunning`, active tools, tool-input
+  buffers, pending approval/suspensions, active subagents, current message,
+  queued follow-ups, modified files, tasks, OM progress, and token usage — now
+  lives on the Session as `session.displayState`, alongside the reducer that keeps
+  it in sync with every Harness event.
+
+  `SessionDisplayState` owns:
+  - `get()` — a read-only snapshot to render from (replaces `harness.getDisplayState()`)
+  - `apply(event)` — the centralized state machine that folds each event into the snapshot
+  - `resetThread()` — reset thread-scoped fields on thread switch/create
+  - `restoreTasks(tasks)` — restore replayed task history without emitting an event
+  - `clearPendingSuspensions()` / `deletePendingSuspension(toolCallId)` — display mirror upkeep on abort/resume
+
+  Display state is inherently per-conversation, so in a shared (multi-user) host
+  it can't hang off the Harness — `harness.getDisplayState()` has no single answer
+  when one host serves many sessions. It reads from `harness.session.displayState`
+  instead.
+
+  The Harness stays the **event-bus owner**: `emit()` folds the event into
+  `session.displayState` and then dispatches to listeners (including the
+  `display_state_changed` fan-out). The reducer needs a few read-only host facts it
+  doesn't own — the live token-usage tally, the subagent display-name lookup
+  (Harness config), and the active thread id — which are injected into the Session
+  at construction.
+
+  Removed from the Harness public API (read through `harness.session.displayState.*`):
+  - `getDisplayState()` → `session.displayState.get()`
+  - `restoreDisplayTasks(tasks)` → `session.displayState.restoreTasks(tasks)`
+
+  `restoreTasks` is now a pure session-state mutation (it no longer emits
+  `display_state_changed`); the UI re-renders explicitly after a replay.
+
+- Introduce the Harness `Session`: the Harness now exposes `harness.session`, a class that owns the per-conversation runtime state that previously lived flattened on the Harness instance. The Harness remains the shared host (storage, the thread lock, the agent registry, the event bus); the Session owns the state scoped to a single user's conversation. ([#18107](https://github.com/mastra-ai/mastra/pull/18107))
+
+  `harness.session` owns:
+  - **`session.identity`** — the session's `resourceId` / `defaultResourceId` (the stable "who").
+  - **`session.thread`** — the active thread binding (`getId` / `set` / `clear` / `isSet` / `requireId`) plus the thread data domain scoped to the session: `list`, `getById`, `listMessages`, `listActiveMessages`, `firstUserMessage(s)`, and thread settings (`getSetting` / `setSetting` / `deleteSetting`). It reaches shared-host storage through an injected gateway rather than calling back into Harness orchestration.
+  - **`session.mode`** / **`session.model`** — the currently-selected mode and model (source of truth), the mode-switch sequence, and per-mode model memory. The Harness still owns the mode _definitions_ (`config.modes`).
+  - **`session.run`** — transient per-run identity (run id, trace id, operation counter) and abort control (controller, `isRunning`, `requestAbort`, …). Never persisted.
+  - **`session.stream`** — the live agent-thread subscription handle and its dedup key. Adds `session.getCurrentRunId()` and `session.abortRun()`, which compose the subscription.
+  - **`session.suspensions`** — the parked-tool resume map (`toolCallId → { runId, toolName }`) for tools paused via the native suspension primitive (`ask_user` / `request_access` / `submit_plan`).
+  - **`session.followUps`** — the queue of messages to send after the active run finishes.
+  - **`session.approval`** — the interactive tool-approval gate; `session.respondToToolApproval({ decision, requestContext })` applies the user's approve / decline / always-allow choice and releases the run.
+  - session-scoped permission grants and the live token-usage counter (the Harness still persists usage to thread metadata, since usage is thread-scoped).
+
+  **Removed from the Harness public API** — read these through `harness.session.*` instead:
+  - `getSessionGrants()`, `getTokenUsage()` → `session.getGrants()` / `session.getTokenUsage()`
+  - `getCurrentModelId()`, `hasModelSelected()` → `session.model.get()` / `session.model.hasSelection()`
+  - `getCurrentRunId()`, `getCurrentTraceId()`, `isRunning()` → `session.getCurrentRunId()` / `session.run.getTraceId()` / `session.run.isRunning()`
+  - `getCurrentThreadId()`, `getThreads()`, `listThreads()`, `listMessages()`, `listMessagesForThread()`, `getFirstUserMessage(s)ForThread(s)()`, `getThreadSetting()`, `setThreadSetting()` → `session.thread.*`
+  - `getResourceId()`, `getDefaultResourceId()` → `session.identity.*`
+  - `getFollowUpCount()` → `session.followUps.count()`
+  - `respondToToolApproval()` → `session.respondToToolApproval()`
+  - `getCurrentModeId()` → `session.mode.get()`
+  - `getCurrentMode()` → `session.mode.resolve()` (resolves the selected mode id against the host's `config.modes` catalog, injected into the Session)
+  - `hasPendingSuspensions()` → `session.suspensions.hasPending()`
+  - `isCurrentThreadStreamActive()` → `session.stream.isActive()`
+
+  `Harness.abort()` and `setResourceId()` remain on the Harness with unchanged behavior — they orchestrate Harness-host state (the display-state mirror, the agent-stream subscription, thread teardown) before delegating the relevant reads/writes to the session.
+
+  `session.mode` exposes two complementary accessors: `get()` returns the selected mode **id** (a `string`, mirroring `session.model.get()`), while `resolve()` returns the full `HarnessMode` definition by looking the id up in the injected mode catalog.
+
+  The legacy `HarnessCompat` shim (v1-session/legacy-thread merge) has been removed; its thread-list merge now lives in the Session's thread-data store, so `session.thread.list()` returns the merged result directly.
+
+  `session.abortRun()` now also releases a parked tool-approval gate: a run awaiting `session.approval.arm()` is not actively streaming, so aborting resolves the gate as a decline (rejecting the gated tool) instead of leaving the await hung. Mirrors how abort already drops parked tool suspensions.
+
+- Improved MastraCode Harness state access. ([#18133](https://github.com/mastra-ai/mastra/pull/18133))
+
+  MastraCode now reads and writes Harness state through `harness.session.state` while keeping fallback support for older request-context mocks during the transition.
+
+- Updated dependencies [[`339c57c`](https://github.com/mastra-ai/mastra/commit/339c57c5b2c6dbe75a125e138228e0556528976f), [`1dd4117`](https://github.com/mastra-ai/mastra/commit/1dd4117dcbd8e031ede9f0489436bfbc6f0315b8), [`2b11d1f`](https://github.com/mastra-ai/mastra/commit/2b11d1f6ac7024c5dd2b2dd12a48a956ac9d63bd), [`7d6ff70`](https://github.com/mastra-ai/mastra/commit/7d6ff708727297a0526ca0e26e93eeb5bbaaa187), [`49af8df`](https://github.com/mastra-ai/mastra/commit/49af8df589c4ff71a5015a4553b377b32704b691), [`30ce559`](https://github.com/mastra-ai/mastra/commit/30ce55902ecf819b8ab8697398dd68b108228063), [`c241b92`](https://github.com/mastra-ai/mastra/commit/c241b929dc8c8d6a7b7219c99ed13ac1f3124a77), [`7d6ff70`](https://github.com/mastra-ai/mastra/commit/7d6ff708727297a0526ca0e26e93eeb5bbaaa187)]:
+  - @mastra/core@1.44.0-alpha.2
+  - @mastra/observability@1.14.4-alpha.1
+
+## 0.23.1-alpha.1
+
+### Patch Changes
+
+- Made the native Agent goal mechanism robust, restoring behavior that regressed when goal handling moved into core. ([#18016](https://github.com/mastra-ai/mastra/pull/18016))
+  - **Tool-capable judges.** Scorer judge configs accept optional `tools`, and the default goal scorer can use them to verify the agent's work against reality instead of grading prose alone. MastraCode wires its read-only workspace tools (`view`, `search_content`, `find_files`, `file_stat`, `lsp_inspect`) into `goal.tools`.
+  - **Judge memory restored.** Scorer judge configs accept optional `memory`; goal scoring uses the original MastraCode per-goal judge thread shape and prompt format so repeated evaluations retain prior facts, feedback, and user checkpoints through judge memory.
+  - **Tri-state waiting.** The default goal scorer emits `done`/`continue`/`waiting`; a `waiting` decision (only when the goal text explicitly asks to stop for the user) stops the auto-loop but keeps the objective `active` so the next agent turn is still judged — no `/goal resume` needed.
+  - **Budget-exhaustion pause.** Reaching `maxRuns` without completing now parks the objective as `paused` with a clear reason, resumable by raising `maxRuns` and reactivating, instead of silently leaving it `active`.
+  - **Judge-failure pause (no infinite loop).** Any failure while evaluating the goal — including judge-model/tools resolution, not just the scorer run — pauses the objective and stops the loop, surfacing the cause, rather than re-running the model against a broken judge every turn.
+  - **Structured-output retry.** `tryGenerateWithJsonFallback` now retries with `jsonPromptInjection` when the judge resolves without a parseable object (not only on a thrown error), matching the streaming path.
+  - **Signal-based feedback.** Goal judge feedback is now injected as a `goal-judge` system-reminder signal instead of an assistant-authored "Completion Check Results" transcript message, so reloads and subsequent model context match the original MastraCode goal loop. Continuation, waiting, paused, and done decisions all persist structured evaluation metadata for replay.
+  - **TUI activity/replay fixes.** Goal evaluation chunks close the current assistant message before rendering the judge UI, stream judge activity with useful tool targets, stream partial judge reason text while scoring, replay persisted judge results as judge display components instead of raw Goal reminder text, and correctly persist Esc/Ctrl+C pauses while the judge is running.
+
+  The goal evaluation chunk now carries `pausedReason`, `judgeFailed`, `waitingForUser`, `pending` (emitted before scoring starts so consumers can show a loading indicator), and judge `activity` entries including streamed `reason` updates.
+
+- Updated dependencies [[`b7dff0a`](https://github.com/mastra-ai/mastra/commit/b7dff0a3d1022eb6868f48dc40a2b1febd5c277f), [`b91d921`](https://github.com/mastra-ai/mastra/commit/b91d9213a4998eb343dccd0ff780c42ba22bdfa1), [`02087e1`](https://github.com/mastra-ai/mastra/commit/02087e1fbc54aa07f3071f7a200df1bf5be601a8), [`ab975d4`](https://github.com/mastra-ai/mastra/commit/ab975d4dd9488752f05bda7afa03166d207e3e2a)]:
+  - @mastra/core@1.44.0-alpha.1
+  - @mastra/github-signals@0.1.4-alpha.1
+
+## 0.23.1-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/agent-browser@0.3.4-alpha.0
+  - @mastra/core@1.43.1-alpha.0
+  - @mastra/duckdb@1.4.3-alpha.0
+  - @mastra/fastembed@1.1.3-alpha.0
+  - @mastra/github-signals@0.1.4-alpha.0
+  - @mastra/libsql@1.13.3-alpha.0
+  - @mastra/mcp@1.10.1-alpha.0
+  - @mastra/memory@1.20.6-alpha.0
+  - @mastra/observability@1.14.4-alpha.0
+  - @mastra/pg@1.13.3-alpha.0
+  - @mastra/schema-compat@1.2.14-alpha.0
+  - @mastra/stagehand@0.2.7-alpha.0
+  - @mastra/tavily@1.0.5-alpha.0
+
+## 0.23.0
+
+### Minor Changes
+
+- Reimplement `/goal` on top of the Agent's native goal mechanism instead of a MastraCode-specific judge loop. ([#17889](https://github.com/mastra-ai/mastra/pull/17889))
+
+  The goal is now configured on the agent (`goal: { judge, maxRuns, prompt }`, sourced from the `goalJudgeModel` / `goalMaxTurns` settings) and evaluated **in-loop** by the core goal step, surfaced via the typed `goal` stream chunk. `GoalManager` is now a thin adapter over the agent's `setObjective` / `getObjective` / `clearObjective` / `updateObjectiveOptions` methods backed by the thread-scoped `threadState` store, so the objective persists across thread reloads and process restarts. The old between-turn judge agent (`evaluateAfterTurn`, `maybeGoalContinuation`, the judge memory/tools, and the judge-failure resume retrigger) has been removed.
+
+  All user-facing behavior is preserved: `/goal <text>`, `/goal status|pause|resume|clear`, the goal action modal, the judge settings dialog (which now persists updated judge defaults into the active objective record), the status line, Esc-to-pause and the goal input lock, the judge display, and the plan-approval "Use as /goal" flow with plan-mode auto-switch on completion.
+
+  The standalone `/judge` command is now the `/goal judge` subcommand, grouping judge configuration under the goal it belongs to (the judge model is only meaningful for evaluating a goal).
+
+  The goal judge model is resolved through mastracode's model gateway (`goal.judge` is a resolver function), so provider credentials stored in auth storage are injected — previously the goal scorer received a bare model id and failed with "Could not find API key" for the configured judge. Because evaluation now happens during the run, an objective with no judge model configured anywhere is inert (no judging, no continuation).
+
+  The raw `<current-objective>` goal state signal is suppressed in the transcript (both streamed and replayed), matching the existing behavior for the `<current-task-list>` task signal — the objective is surfaced by the goal/judge UI instead of echoed inline.
+
+- Added MastraCode mode definitions for build, plan, and explore workflows using the shared harness mode model. ([#17892](https://github.com/mastra-ai/mastra/pull/17892))
+
+### Patch Changes
+
+- Enable the alpha browser video recording tools for Mastra Code's browser integration. Mastra Code now opts its configured browser provider into recording and stores videos in the app-data `browser-recordings` directory. ([#17028](https://github.com/mastra-ai/mastra/pull/17028))
+
+  Agents can use `browser_record` to start, stop, and check recording status, then use `browser_record_caption` to add short captions that are burned into the saved Motion-JPEG AVI video.
+
+- Fixed mastracode silently writing all tracing/observability data to the main libsql database even when /observability was never configured. The MastraStorageExporter now only activates when local DuckDB tracing is explicitly enabled via `/observability local on`, preventing the mastra_ai_spans table from growing to tens or hundreds of gigabytes. ([#18033](https://github.com/mastra-ai/mastra/pull/18033))
+
+- Moved MastraCode model catalog and gateway-backed model resolution out of the core harness and into a class-backed MastraCode gateway, with model IDs resolving directly to gateway-created provider instances. ([#17913](https://github.com/mastra-ai/mastra/pull/17913))
+
+- Migrated from deprecated @mariozechner/pi-tui to @earendil-works/pi-tui. Mastra Code now requires Node.js 22.19.0 or newer to match the new terminal UI dependency. ([#17974](https://github.com/mastra-ai/mastra/pull/17974))
+
+- dependencies updates: ([#17846](https://github.com/mastra-ai/mastra/pull/17846))
+  - Updated dependency [`posthog-node@^5.37.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.37.0) (from `^5.28.3`, in `dependencies`)
+
+- Fixed claude-fable-5 requests failing with "Invalid request: fallbacks: Extra inputs are not permitted" when logged in with Claude Max OAuth. The OAuth fetch wrapper was overwriting the anthropic-beta header, dropping the server-side-fallback beta that the automatic fable-5 fallback configuration requires. Request betas are now merged with the OAuth-required betas instead of being replaced. ([#17897](https://github.com/mastra-ai/mastra/pull/17897))
+
+- Moved Mastra Code model discovery and resolution onto its gateway configuration. ([#17913](https://github.com/mastra-ai/mastra/pull/17913))
+
+- Fixed TUI chat spacing so message layout stays stable while the assistant streams. Chat spacing now runs through a single boundary-spacing pass, preventing flicker from dynamic spacer recomputation, avoiding stacked or missing blank lines, and keeping custom slash command previews consistently spaced as responses begin. ([#17979](https://github.com/mastra-ai/mastra/pull/17979))
+
+- Fixed harness modes so they can reuse configured agents and resolve their default models before running. ([#17892](https://github.com/mastra-ai/mastra/pull/17892))
+
+- Fixed cross-instance output leaking between mastracode TUI tabs after /new. The /new command now fully unsubscribes from the old thread's PubSub topic instead of only aborting the current run, preventing another mc instance on the same thread from pushing events into the detached TUI. ([#17883](https://github.com/mastra-ai/mastra/pull/17883))
+
+- Updated dependencies [[`de66bb0`](https://github.com/mastra-ai/mastra/commit/de66bb040570444c702ce4d8e1e228a5de2949cb), [`67bf8e2`](https://github.com/mastra-ai/mastra/commit/67bf8e206dfe583954d96015cf0d09f7ac50e45f), [`8216d05`](https://github.com/mastra-ai/mastra/commit/8216d0528d866eb9a07f5d4c87ea3bb1e1139b45), [`d18b23c`](https://github.com/mastra-ai/mastra/commit/d18b23c5e29dfc381e73e3c51fcf6c779afd1823), [`8216d05`](https://github.com/mastra-ai/mastra/commit/8216d0528d866eb9a07f5d4c87ea3bb1e1139b45), [`bec2f15`](https://github.com/mastra-ai/mastra/commit/bec2f151d01f61f41dc45538a1ab8f80bad260d8), [`5eb94eb`](https://github.com/mastra-ai/mastra/commit/5eb94ebcf66d4e28c9e26d5821ac93379bab20a0), [`1fa3e12`](https://github.com/mastra-ai/mastra/commit/1fa3e123582b63cfe49de4ee52dc6a065e8d956a), [`f9ee2ac`](https://github.com/mastra-ai/mastra/commit/f9ee2ac661af584e61bc063ac208c9035cd752ef), [`c853d53`](https://github.com/mastra-ai/mastra/commit/c853d535d2df84ab89db1adb4c28900c54c9a2d2), [`d8df1f8`](https://github.com/mastra-ai/mastra/commit/d8df1f8e947e1966c9d4e54713df56d0d0d65226), [`9192ddb`](https://github.com/mastra-ai/mastra/commit/9192ddbced8949113b30de444cbe763f075b59f5), [`ae96523`](https://github.com/mastra-ai/mastra/commit/ae965231f562d9766b0c90c49a69fc68acaa031c), [`17d5a92`](https://github.com/mastra-ai/mastra/commit/17d5a9211aa293b4d4418de3de70dc0394d58101), [`5573693`](https://github.com/mastra-ai/mastra/commit/5573693b589822250e20dfe6cf66e9ff3bc96da8), [`ec4da8a`](https://github.com/mastra-ai/mastra/commit/ec4da8a09e0d2ab452c6ee2c786042ea826b77e5), [`adc44e1`](https://github.com/mastra-ai/mastra/commit/adc44e13c7e570b91e86b20ea7556e61d819db31), [`218d952`](https://github.com/mastra-ai/mastra/commit/218d952ec09e5111c10ccd143b5bc0ef19434376), [`7c987b4`](https://github.com/mastra-ai/mastra/commit/7c987b4cfcc498bb579f986d07f794633f8e0ff8), [`ed346c0`](https://github.com/mastra-ai/mastra/commit/ed346c0bee2d8496690a4e538bfba1e46894660f), [`9b1adf7`](https://github.com/mastra-ai/mastra/commit/9b1adf7f39943c869182106bc4016e793b3304ac), [`c9ce1b2`](https://github.com/mastra-ai/mastra/commit/c9ce1b28d10871110648f9d7b6d76e880b9fa999), [`81fe587`](https://github.com/mastra-ai/mastra/commit/81fe587275035715c1720ddf3fee0505cf053036), [`3ef01fd`](https://github.com/mastra-ai/mastra/commit/3ef01fd130b53d5bd4f828beb174e516a2eb1158), [`4572357`](https://github.com/mastra-ai/mastra/commit/45723576c19602ba28528d498399c67e2efc86f4), [`245a9a3`](https://github.com/mastra-ai/mastra/commit/245a9a315705fce17ddd980f78a92504b6615c4a), [`dc0b611`](https://github.com/mastra-ai/mastra/commit/dc0b6119b769bd00ee2c5df9259fb376fe63077a), [`38b5de8`](https://github.com/mastra-ai/mastra/commit/38b5de8e5d1d41a69522addf53d96f4b3a1d5bf0), [`eae1556`](https://github.com/mastra-ai/mastra/commit/eae1556eedac109b67d91b627689cdf70a83bab7), [`efe917d`](https://github.com/mastra-ai/mastra/commit/efe917d524f285d9d131804027c7201bf7aee110), [`b9ac4c3`](https://github.com/mastra-ai/mastra/commit/b9ac4c3ab54b0889c01d7f7285cca89a791d2351), [`dc0b611`](https://github.com/mastra-ai/mastra/commit/dc0b6119b769bd00ee2c5df9259fb376fe63077a), [`dd6a66e`](https://github.com/mastra-ai/mastra/commit/dd6a66ea0b32e0dea8059aec6b35d151e2c87dc4), [`d785c59`](https://github.com/mastra-ai/mastra/commit/d785c593b67fcb4cdc4fab9fdbde5f3b7665efc0), [`1fa3e12`](https://github.com/mastra-ai/mastra/commit/1fa3e123582b63cfe49de4ee52dc6a065e8d956a), [`8b984f4`](https://github.com/mastra-ai/mastra/commit/8b984f4361c202270ceb69257185c4756c9a7c56), [`bf08402`](https://github.com/mastra-ai/mastra/commit/bf084022374fa5d06ca70ed67a86dd64e379071b), [`81fe587`](https://github.com/mastra-ai/mastra/commit/81fe587275035715c1720ddf3fee0505cf053036), [`1fa3e12`](https://github.com/mastra-ai/mastra/commit/1fa3e123582b63cfe49de4ee52dc6a065e8d956a), [`403c438`](https://github.com/mastra-ai/mastra/commit/403c438e417278989ce247233d2c465b8d902cdd), [`f8ba195`](https://github.com/mastra-ai/mastra/commit/f8ba1954e27ee2b20586cc6cd9cf13c002c232f2)]:
+  - @mastra/core@1.43.0
+  - @mastra/tavily@1.0.3
+  - @mastra/memory@1.20.4
+  - @mastra/observability@1.14.2
+  - @mastra/schema-compat@1.2.12
+  - @mastra/stagehand@0.2.5
+  - @mastra/agent-browser@0.3.2
+  - @mastra/libsql@1.13.1
+  - @mastra/pg@1.13.1
+  - @mastra/mcp@1.10.0
+
+## 0.22.3
+
+### Patch Changes
+
+- Increased TUI chat scroll buffer from 200/100 to 5000/3000 components, so you can scroll back much further in conversation history ([#17633](https://github.com/mastra-ai/mastra/pull/17633))
+
+- Fixed analytics user tracking to use a private persistent ID instead of the device hostname, so unique user counts are not merged across machines with common names. ([#17695](https://github.com/mastra-ai/mastra/pull/17695))
+
+- Fixed state signal placement in streamed MastraCode output. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
+- Bumped @ai-sdk/anthropic to pick up refusal stop condition (vercel/ai#15928). When Anthropic refuses a request due to usage policy, the SDK now surfaces a proper stop reason instead of silently halting the agent loop. ([#17799](https://github.com/mastra-ai/mastra/pull/17799))
+
+- Fixed Ctrl+C / Esc not aborting while a `submit_plan` approval (or `ask_user` question) is on screen. In raw terminal mode the interrupt arrives as `\x03` to the editor, where the inline component was swallowing it and leaving the suspended run parked. Ctrl+C now falls through to the abort handler, which clears the inline prompt and aborts the parked tool suspension. ([#17817](https://github.com/mastra-ai/mastra/pull/17817))
+
+- Fixed the GitHub PR badge in MastraCode so it animates only while GitHub polling is actively running, instead of restarting whenever the agent processes a user message. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Revert to harness v0 ([#17589](https://github.com/mastra-ai/mastra/pull/17589))
+
+- Fix `request_access` granting a path but the file staying unreadable with `EACCES`. After approving access, the very next tool (e.g. `view`) could still be rejected for the path that was just granted. The grant now reliably applies to the filesystem the agent's tools actually read from, and persists before the run resumes, so reads of an approved path succeed. ([#17806](https://github.com/mastra-ai/mastra/pull/17806))
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+- Added interface-first model gateways while keeping the existing `MastraModelGateway` base class backwards compatible. ([#17608](https://github.com/mastra-ai/mastra/pull/17608))
+
+  Added `MastraModelGatewayInterface` for plain object/custom gateway implementations and optional gateway `resolveAuth` hooks.
+
+  Moved MastraCode gateway-routed OAuth model construction into a custom Mastra gateway so `ModelRouterLanguageModel` can route through gateway `resolveAuth` and provider-specific `resolveLanguageModel` behavior.
+
+  **Usage:**
+
+  ```typescript
+  import { MastraModelGatewayInterface, ModelRouterLanguageModel } from '@mastra/core/llm';
+
+  const myGateway: MastraModelGatewayInterface = {
+    id: 'my-gateway',
+    name: 'My Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl() {
+      return 'https://api.example.com';
+    },
+    async getApiKey() {
+      return process.env.API_KEY ?? '';
+    },
+    // Optional: own authentication lookup
+    async resolveAuth(request) {
+      return { apiKey: process.env.API_KEY, source: 'gateway' };
+    },
+    async resolveLanguageModel({ modelId, providerId, apiKey }) {
+      // Return an AI SDK language model instance
+    },
+  };
+
+  // Register and route through the gateway
+  const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
+  ```
+
+  **Additional changes in this release:**
+  - Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+  - Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+  - Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+  - Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
+
+- Fixed model selection being lost so the agent no longer prompts you to choose a model after you've already selected a models pack. The harness state schema was dropping the selected model id, leaving every pack (built-in or custom) with no active model. ([#17676](https://github.com/mastra-ai/mastra/pull/17676))
+
+- Updated dependencies [[`81423f2`](https://github.com/mastra-ai/mastra/commit/81423f27c6a5979c01d63393060174ca6bf5ff04), [`81423f2`](https://github.com/mastra-ai/mastra/commit/81423f27c6a5979c01d63393060174ca6bf5ff04), [`81423f2`](https://github.com/mastra-ai/mastra/commit/81423f27c6a5979c01d63393060174ca6bf5ff04), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`0c86326`](https://github.com/mastra-ai/mastra/commit/0c8632685adf25ebacf82b239da6bc1f227f5e85), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`575f815`](https://github.com/mastra-ai/mastra/commit/575f815c5c3567b71c0b83cbb7fa98c8253a9d9c), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`b421783`](https://github.com/mastra-ai/mastra/commit/b421783f8a16447436d3d0c89ea3dd8f0c558786), [`306909a`](https://github.com/mastra-ai/mastra/commit/306909a693de77d709b38706e2673c9547d24a28), [`5191af8`](https://github.com/mastra-ai/mastra/commit/5191af80c799eea25357c545fc05d91b3883531d), [`43bd3d4`](https://github.com/mastra-ai/mastra/commit/43bd3d421987463fdf35386a45199c49499ed069), [`e6fa79e`](https://github.com/mastra-ai/mastra/commit/e6fa79ec72a2ddffdd25e85270398951e9d552a4), [`904bcdf`](https://github.com/mastra-ai/mastra/commit/904bcdf7b8004aa7be823f9f70ca63580e47e470), [`7f5ee1d`](https://github.com/mastra-ai/mastra/commit/7f5ee1dca46daee8d2817f2ebe49e6335da81956), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`bec4678`](https://github.com/mastra-ai/mastra/commit/bec46781f31a2760b09b4aade1a87a62a40bee7b), [`f86b997`](https://github.com/mastra-ai/mastra/commit/f86b997e63a6ffc3503473835f2cfe0ed2ac8337), [`bf8eb6d`](https://github.com/mastra-ai/mastra/commit/bf8eb6d0ec213a403eb9265a594ad283c44ab3dc), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822), [`029a414`](https://github.com/mastra-ai/mastra/commit/029a4141719793bd3e898a39eb5a0466a55f5f3a), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`7ef9ebf`](https://github.com/mastra-ai/mastra/commit/7ef9ebf79ec3c90536643ef169c7a306f105fb9d), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`d371ac1`](https://github.com/mastra-ai/mastra/commit/d371ac1d9820afaaf7cfdbc380a475946a994d8f), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`75adfb8`](https://github.com/mastra-ai/mastra/commit/75adfb81e3fca1fe8dc9ab382bed7b714854ba4f), [`4c2158d`](https://github.com/mastra-ai/mastra/commit/4c2158d4c2a86e82105179d4a757cd625dfec9fa), [`f222f15`](https://github.com/mastra-ai/mastra/commit/f222f15823391d04cc41a82a16fb0e780bac9ae7), [`cf182b7`](https://github.com/mastra-ai/mastra/commit/cf182b7fb495767946d9840ef29f19cfa906f31f), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`a049c2a`](https://github.com/mastra-ai/mastra/commit/a049c2a9dfb41d0ee2e7a28874a88cd64fd5669f), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`63e3fe1`](https://github.com/mastra-ai/mastra/commit/63e3fe13cc1ea96f91d7c68aea92f400faf9e4da), [`1d4ce8d`](https://github.com/mastra-ai/mastra/commit/1d4ce8daaa54511f325c1b609d31b8e54009d677), [`8c68372`](https://github.com/mastra-ai/mastra/commit/8c68372e85fe0b066ec12c58bd29ffb93e54c552), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04)]:
+  - @mastra/duckdb@1.4.2
+  - @mastra/libsql@1.13.0
+  - @mastra/pg@1.13.0
+  - @mastra/tavily@1.0.2
+  - @mastra/core@1.42.0
+  - @mastra/stagehand@0.2.4
+  - @mastra/memory@1.20.3
+  - @mastra/github-signals@0.1.1
+  - @mastra/mcp@1.10.0
+  - @mastra/agent-browser@0.3.1
+
+## 0.22.3-alpha.4
+
+### Patch Changes
+
+- Fixed analytics user tracking to use a private persistent ID instead of the device hostname, so unique user counts are not merged across machines with common names. ([#17695](https://github.com/mastra-ai/mastra/pull/17695))
+
+- Bumped @ai-sdk/anthropic to pick up refusal stop condition (vercel/ai#15928). When Anthropic refuses a request due to usage policy, the SDK now surfaces a proper stop reason instead of silently halting the agent loop. ([#17799](https://github.com/mastra-ai/mastra/pull/17799))
+
+- Fixed Ctrl+C / Esc not aborting while a `submit_plan` approval (or `ask_user` question) is on screen. In raw terminal mode the interrupt arrives as `\x03` to the editor, where the inline component was swallowing it and leaving the suspended run parked. Ctrl+C now falls through to the abort handler, which clears the inline prompt and aborts the parked tool suspension. ([#17817](https://github.com/mastra-ai/mastra/pull/17817))
+
+- Fix `request_access` granting a path but the file staying unreadable with `EACCES`. After approving access, the very next tool (e.g. `view`) could still be rejected for the path that was just granted. The grant now reliably applies to the filesystem the agent's tools actually read from, and persists before the run resumes, so reads of an approved path succeed. ([#17806](https://github.com/mastra-ai/mastra/pull/17806))
+
+- Fixed model selection being lost so the agent no longer prompts you to choose a model after you've already selected a models pack. The harness state schema was dropping the selected model id, leaving every pack (built-in or custom) with no active model. ([#17676](https://github.com/mastra-ai/mastra/pull/17676))
+
+- Updated dependencies [[`81423f2`](https://github.com/mastra-ai/mastra/commit/81423f27c6a5979c01d63393060174ca6bf5ff04), [`81423f2`](https://github.com/mastra-ai/mastra/commit/81423f27c6a5979c01d63393060174ca6bf5ff04), [`81423f2`](https://github.com/mastra-ai/mastra/commit/81423f27c6a5979c01d63393060174ca6bf5ff04), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`0c86326`](https://github.com/mastra-ai/mastra/commit/0c8632685adf25ebacf82b239da6bc1f227f5e85), [`575f815`](https://github.com/mastra-ai/mastra/commit/575f815c5c3567b71c0b83cbb7fa98c8253a9d9c), [`b421783`](https://github.com/mastra-ai/mastra/commit/b421783f8a16447436d3d0c89ea3dd8f0c558786), [`306909a`](https://github.com/mastra-ai/mastra/commit/306909a693de77d709b38706e2673c9547d24a28), [`5191af8`](https://github.com/mastra-ai/mastra/commit/5191af80c799eea25357c545fc05d91b3883531d), [`43bd3d4`](https://github.com/mastra-ai/mastra/commit/43bd3d421987463fdf35386a45199c49499ed069), [`e6fa79e`](https://github.com/mastra-ai/mastra/commit/e6fa79ec72a2ddffdd25e85270398951e9d552a4), [`904bcdf`](https://github.com/mastra-ai/mastra/commit/904bcdf7b8004aa7be823f9f70ca63580e47e470), [`7f5ee1d`](https://github.com/mastra-ai/mastra/commit/7f5ee1dca46daee8d2817f2ebe49e6335da81956), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`bec4678`](https://github.com/mastra-ai/mastra/commit/bec46781f31a2760b09b4aade1a87a62a40bee7b), [`bf8eb6d`](https://github.com/mastra-ai/mastra/commit/bf8eb6d0ec213a403eb9265a594ad283c44ab3dc), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`029a414`](https://github.com/mastra-ai/mastra/commit/029a4141719793bd3e898a39eb5a0466a55f5f3a), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`d371ac1`](https://github.com/mastra-ai/mastra/commit/d371ac1d9820afaaf7cfdbc380a475946a994d8f), [`f222f15`](https://github.com/mastra-ai/mastra/commit/f222f15823391d04cc41a82a16fb0e780bac9ae7), [`cf182b7`](https://github.com/mastra-ai/mastra/commit/cf182b7fb495767946d9840ef29f19cfa906f31f), [`a049c2a`](https://github.com/mastra-ai/mastra/commit/a049c2a9dfb41d0ee2e7a28874a88cd64fd5669f), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`63e3fe1`](https://github.com/mastra-ai/mastra/commit/63e3fe13cc1ea96f91d7c68aea92f400faf9e4da), [`1d4ce8d`](https://github.com/mastra-ai/mastra/commit/1d4ce8daaa54511f325c1b609d31b8e54009d677), [`8c68372`](https://github.com/mastra-ai/mastra/commit/8c68372e85fe0b066ec12c58bd29ffb93e54c552)]:
+  - @mastra/duckdb@1.4.2-alpha.0
+  - @mastra/libsql@1.13.0-alpha.0
+  - @mastra/pg@1.13.0-alpha.1
+  - @mastra/tavily@1.0.2-alpha.0
+  - @mastra/core@1.42.0-alpha.4
+  - @mastra/stagehand@0.2.4-alpha.0
+  - @mastra/memory@1.20.3-alpha.0
+  - @mastra/mcp@1.10.0-alpha.1
+
+## 0.22.3-alpha.3
+
+### Patch Changes
+
+- Added interface-first model gateways while keeping the existing `MastraModelGateway` base class backwards compatible. ([#17608](https://github.com/mastra-ai/mastra/pull/17608))
+
+  Added `MastraModelGatewayInterface` for plain object/custom gateway implementations and optional gateway `resolveAuth` hooks.
+
+  Moved MastraCode gateway-routed OAuth model construction into a custom Mastra gateway so `ModelRouterLanguageModel` can route through gateway `resolveAuth` and provider-specific `resolveLanguageModel` behavior.
+
+  **Usage:**
+
+  ```typescript
+  import { MastraModelGatewayInterface, ModelRouterLanguageModel } from '@mastra/core/llm';
+
+  const myGateway: MastraModelGatewayInterface = {
+    id: 'my-gateway',
+    name: 'My Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl() {
+      return 'https://api.example.com';
+    },
+    async getApiKey() {
+      return process.env.API_KEY ?? '';
+    },
+    // Optional: own authentication lookup
+    async resolveAuth(request) {
+      return { apiKey: process.env.API_KEY, source: 'gateway' };
+    },
+    async resolveLanguageModel({ modelId, providerId, apiKey }) {
+      // Return an AI SDK language model instance
+    },
+  };
+
+  // Register and route through the gateway
+  const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
+  ```
+
+  **Additional changes in this release:**
+  - Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+  - Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+  - Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+  - Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
+
+- Updated dependencies [[`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963)]:
+  - @mastra/core@1.42.0-alpha.3
+
+## 0.22.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822)]:
+  - @mastra/core@1.42.0-alpha.2
+
+## 0.22.3-alpha.1
+
+### Patch Changes
+
+- Increased TUI chat scroll buffer from 200/100 to 5000/3000 components, so you can scroll back much further in conversation history ([#17633](https://github.com/mastra-ai/mastra/pull/17633))
+
+- Fixed state signal placement in streamed MastraCode output. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
+- Fixed the GitHub PR badge in MastraCode so it animates only while GitHub polling is actively running, instead of restarting whenever the agent processes a user message. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04)]:
+  - @mastra/core@1.42.0-alpha.1
+  - @mastra/github-signals@0.1.1-alpha.0
+  - @mastra/agent-browser@0.3.1-alpha.0
+
+## 0.22.3-alpha.0
+
+### Patch Changes
+
+- Revert to harness v0 ([#17589](https://github.com/mastra-ai/mastra/pull/17589))
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`f86b997`](https://github.com/mastra-ai/mastra/commit/f86b997e63a6ffc3503473835f2cfe0ed2ac8337), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`7ef9ebf`](https://github.com/mastra-ai/mastra/commit/7ef9ebf79ec3c90536643ef169c7a306f105fb9d), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`75adfb8`](https://github.com/mastra-ai/mastra/commit/75adfb81e3fca1fe8dc9ab382bed7b714854ba4f), [`4c2158d`](https://github.com/mastra-ai/mastra/commit/4c2158d4c2a86e82105179d4a757cd625dfec9fa), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f)]:
+  - @mastra/core@1.42.0-alpha.0
+  - @mastra/pg@1.13.0-alpha.0
+  - @mastra/mcp@1.9.2-alpha.0
+
+## 0.22.2
+
+### Patch Changes
+
+- Fixed thread isolation bug where /new command did not abort the running stream, causing events from the old thread (subagent results, tool approvals, task updates) to leak into the new conversation. ([#17565](https://github.com/mastra-ai/mastra/pull/17565))
+
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0
+
+## 0.22.2-alpha.1
+
+### Patch Changes
+
+- Fixed thread isolation bug where /new command did not abort the running stream, causing events from the old thread (subagent results, tool approvals, task updates) to leak into the new conversation. ([#17565](https://github.com/mastra-ai/mastra/pull/17565))
+
+## 0.22.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0-alpha.0
+
+## 0.22.1
+
+### Patch Changes
+
+- Auto-subscribe to the current branch's PR via GitHub Signals at the end of each agent run. When experimental GitHub Signals are enabled in /settings and the checked-out branch has an open PR, the thread is automatically subscribed (once per thread, fire-and-forget). ([#17538](https://github.com/mastra-ai/mastra/pull/17538))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0
+
+## 0.22.1-alpha.0
+
+### Patch Changes
+
+- Auto-subscribe to the current branch's PR via GitHub Signals at the end of each agent run. When experimental GitHub Signals are enabled in /settings and the checked-out branch has an open PR, the thread is automatically subscribed (once per thread, fire-and-forget). ([#17538](https://github.com/mastra-ai/mastra/pull/17538))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+
+## 0.22.0
+
+### Minor Changes
+
+- Add a /notify command that opens a modal composer, sends agent notifications from MastraCode, dispatches due notification summaries in the background, and exposes the notification inbox tool to inspect summarized notifications. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+### Patch Changes
+
+- Added GitHub PR notifications in Mastra Code with subscription management, manual sync, PR status badges, subscription hints, automatic merged PR cleanup, and inbox access. ([#17447](https://github.com/mastra-ai/mastra/pull/17447))
+
+- Fixed mode switching crash when no active thread exists. Previously, pressing Shift+Tab to cycle modes before sending a first message would cause a fatal error. ([#17511](https://github.com/mastra-ai/mastra/pull/17511))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`43dd577`](https://github.com/mastra-ai/mastra/commit/43dd577aa2b056b86b92cb903433f4fc13e69687), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0
+  - @mastra/mcp@1.9.1
+  - @mastra/libsql@1.12.1
+  - @mastra/pg@1.12.1
+  - @mastra/memory@1.20.2
+
+## 0.22.0-alpha.0
+
+### Minor Changes
+
+- Add a /notify command that opens a modal composer, sends agent notifications from MastraCode, dispatches due notification summaries in the background, and exposes the notification inbox tool to inspect summarized notifications. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+### Patch Changes
+
+- Added GitHub PR notifications in Mastra Code with subscription management, manual sync, PR status badges, subscription hints, automatic merged PR cleanup, and inbox access. ([#17447](https://github.com/mastra-ai/mastra/pull/17447))
+
+- Fixed mode switching crash when no active thread exists. Previously, pressing Shift+Tab to cycle modes before sending a first message would cause a fatal error. ([#17511](https://github.com/mastra-ai/mastra/pull/17511))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`43dd577`](https://github.com/mastra-ai/mastra/commit/43dd577aa2b056b86b92cb903433f4fc13e69687), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0-alpha.0
+  - @mastra/mcp@1.9.1-alpha.0
+  - @mastra/libsql@1.12.1-alpha.0
+  - @mastra/pg@1.12.1-alpha.0
+  - @mastra/memory@1.20.2-alpha.0
+
+## 0.21.2
+
+### Patch Changes
+
+- Added configurable shell passthrough for direct TUI `!` commands. You can now choose which shell runs `!` commands via `settings.json` or environment variables, with support for POSIX shells, `cmd.exe`, and PowerShell. ([#17283](https://github.com/mastra-ai/mastra/pull/17283))
+
+  ```json
+  {
+    "shellPassthrough": {
+      "mode": "path",
+      "executable": "/bin/zsh",
+      "family": "posix"
+    }
+  }
+  ```
+
+  Or via environment variables:
+
+  ```sh
+  export MASTRACODE_SHELL=/bin/zsh
+  export MASTRACODE_SHELL_MODE=path
+  ```
+
+  The default behavior is preserved when no configuration is set.
+
+- Fixed the `ask_user` tool's `multi_select` mode in Mastra Code, which previously rendered as a single-select list and returned only one answer. ([#17334](https://github.com/mastra-ai/mastra/pull/17334))
+
+  When an agent calls `ask_user` with `selectionMode: "multi_select"`, the CLI now shows a multi-select picker — press Space to toggle each option and Enter to confirm — and returns every selected label to the agent as an array instead of a single string.
+
+- Fixed TUI crash on narrow terminals when prompt dialogs render lines wider than terminal width ([#17431](https://github.com/mastra-ai/mastra/pull/17431))
+
+- Wrap long slash-command and skill descriptions in the autocomplete picker instead of truncating them on a single line. The picker dropdown now word-wraps descriptions across multiple rows (continuation rows indented under the description column), so long command/skill descriptions stay fully readable without widening the terminal. ([#17333](https://github.com/mastra-ai/mastra/pull/17333))
+
+- Updated dependencies [[`b0771a4`](https://github.com/mastra-ai/mastra/commit/b0771a48b46e46d270fca208a587922f3b7104a8), [`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`fa63872`](https://github.com/mastra-ai/mastra/commit/fa6387280954e6b667bec5714b55ba082bc627ff), [`d779de3`](https://github.com/mastra-ai/mastra/commit/d779de3cd9d2e7ed8110547190e2f15e786a0e41), [`1750c97`](https://github.com/mastra-ai/mastra/commit/1750c975d6179fbf6db2813b15229d4f8f23fc55), [`9283971`](https://github.com/mastra-ai/mastra/commit/928397157009b4aef4d5fdf3a0a273cb371beb55), [`f07b646`](https://github.com/mastra-ai/mastra/commit/f07b64604ab7d25391179790b7fd4823df9e2dff), [`d8838ae`](https://github.com/mastra-ai/mastra/commit/d8838ae80b69780361693d27098f7f6684af12fe), [`40f9297`](https://github.com/mastra-ai/mastra/commit/40f9297003b921c62373d3e8d3a4bda76c9f6de3), [`19a8658`](https://github.com/mastra-ai/mastra/commit/19a86589c788ef48bb6c1b0612cc82a201857379), [`850af77`](https://github.com/mastra-ai/mastra/commit/850af7779cb87c350804488734544a5b1843de25), [`82785f6`](https://github.com/mastra-ai/mastra/commit/82785f614bad7936ecbdcb526673f8da47779731), [`0f0d1ba`](https://github.com/mastra-ai/mastra/commit/0f0d1ba67bfcb2204e571401662f1eceefc03357), [`a18775a`](https://github.com/mastra-ai/mastra/commit/a18775a693172546ee2378d39b67d4e32895b251), [`1baf2d1`](https://github.com/mastra-ai/mastra/commit/1baf2d152c6881338ff8f114633d5316fe13dd15), [`8c31bcd`](https://github.com/mastra-ai/mastra/commit/8c31bcdb00e597880d5939b1b7d7566fbe5dacae), [`0e32507`](https://github.com/mastra-ai/mastra/commit/0e32507962cdfa5569b7bda5bc6fb3dd34e40b03), [`95b14cd`](https://github.com/mastra-ai/mastra/commit/95b14cdd820e86d97ac05fe568424c513a252e31), [`2c79486`](https://github.com/mastra-ai/mastra/commit/2c79486e1a812db9bfc8fd25a93dd47359b330e7), [`07c3de7`](https://github.com/mastra-ai/mastra/commit/07c3de7f7bc418beccaea3b5e6b7f7cdda79d492), [`0bf2d93`](https://github.com/mastra-ai/mastra/commit/0bf2d932d20e2936f2d9abb8c0a86e24fbc97ec6), [`7b0d34c`](https://github.com/mastra-ai/mastra/commit/7b0d34cfe4a2fce22ac86ae17404685ff67a2ddb), [`cb137cd`](https://github.com/mastra-ai/mastra/commit/cb137cdeed7c15ea4e8061f79d1d55d2ecea74d7), [`a659a77`](https://github.com/mastra-ai/mastra/commit/a659a779bdebe3a52a518c56d2260592d0240fe0), [`0e51c36`](https://github.com/mastra-ai/mastra/commit/0e51c362be673502ac79626a75d1416479b0b76e), [`aa36be2`](https://github.com/mastra-ai/mastra/commit/aa36be23aa513b7dc53cb8ca16b7fab8f20e43ad), [`8260167`](https://github.com/mastra-ai/mastra/commit/8260167431f98400f3acef4bbb7bd6027efd7a4b), [`3332be9`](https://github.com/mastra-ai/mastra/commit/3332be9701ecd77aba840959d9a1d1ce7aef02d3), [`212c635`](https://github.com/mastra-ai/mastra/commit/212c635203e61d036ab41db8ff86c3893dc795b3), [`d8838ae`](https://github.com/mastra-ai/mastra/commit/d8838ae80b69780361693d27098f7f6684af12fe), [`9aa5a73`](https://github.com/mastra-ai/mastra/commit/9aa5a73e7e110f6e9365eec69364a33d5f03bb56), [`f73c789`](https://github.com/mastra-ai/mastra/commit/f73c789e8ef21561580395d2c410119cab5848c8), [`8bd16da`](https://github.com/mastra-ai/mastra/commit/8bd16da73a4cb874d739373643dbd6a6e7f88684), [`09be9d9`](https://github.com/mastra-ai/mastra/commit/09be9d92043fc8db5b82319a729071ebfee26cca), [`c8630f8`](https://github.com/mastra-ai/mastra/commit/c8630f80d4f40cb5d22e60ab162b618b1907167a), [`8cdde58`](https://github.com/mastra-ai/mastra/commit/8cdde5875bbba6702d9df226f2b20232b8d75d6c), [`94dfef6`](https://github.com/mastra-ai/mastra/commit/94dfef6e2bf19a88467ea3940afcbce88a433f0f), [`47f71dc`](https://github.com/mastra-ai/mastra/commit/47f71dc6fbcbd12d71e21a979e676e20a02bd77d), [`e191065`](https://github.com/mastra-ai/mastra/commit/e191065af6039cf6388e05aa2b84f6f5d69af4c9), [`50ceae2`](https://github.com/mastra-ai/mastra/commit/50ceae270878e2f8fb2b2c6c2faab09df0007c8a), [`a122f79`](https://github.com/mastra-ai/mastra/commit/a122f79427ae225ec79c7b2ed46278da48d04b17), [`8cdde58`](https://github.com/mastra-ai/mastra/commit/8cdde5875bbba6702d9df226f2b20232b8d75d6c), [`3a081c1`](https://github.com/mastra-ai/mastra/commit/3a081c1255c5ae8c99f6dad91cc612934ef6f2bd), [`49f8abc`](https://github.com/mastra-ai/mastra/commit/49f8abce8258e4f2f87bd326acfbdb641264a47c), [`847ff1e`](https://github.com/mastra-ai/mastra/commit/847ff1e0d94368d94b2e173e4e0908e115568ef3), [`0c1ed1d`](https://github.com/mastra-ai/mastra/commit/0c1ed1d00c7d87b5ac99ca95896211a2fa9189fa), [`259d409`](https://github.com/mastra-ai/mastra/commit/259d409a514174299dbde1ff5e1121209b3ba850), [`9e16c68`](https://github.com/mastra-ai/mastra/commit/9e16c6818b6485ccb43df28aba6f3a2219d28662), [`a3372df`](https://github.com/mastra-ai/mastra/commit/a3372dfaf107461f47fb50a6f90088fa01d87567), [`cefca33`](https://github.com/mastra-ai/mastra/commit/cefca33ae666e69810c935fedf95a929c173d1d7), [`d00e8c5`](https://github.com/mastra-ai/mastra/commit/d00e8c50daebe5bce5bf2f48bde39c86fc3d2fe4), [`36fa7e2`](https://github.com/mastra-ai/mastra/commit/36fa7e24d14e58a1eb46147097b32f583e5b8775), [`87e9774`](https://github.com/mastra-ai/mastra/commit/87e97741c1e493cd6d62f478eb810b49bda4d57c), [`65a72e7`](https://github.com/mastra-ai/mastra/commit/65a72e70c25eedea8ff985a6624b96be2850236b), [`fe9eacd`](https://github.com/mastra-ai/mastra/commit/fe9eacd9545a0a9d64aad31c9fa90294a425289e), [`4c02027`](https://github.com/mastra-ai/mastra/commit/4c020277235eaa6b1dc957c90ad0639eef213992), [`0f77241`](https://github.com/mastra-ai/mastra/commit/0f7724108806703799a8ba80ad0f09414afd5066), [`e36253f`](https://github.com/mastra-ai/mastra/commit/e36253f0cbe1900f84e6eeaa3e0343d66ec1fce3), [`d8838ae`](https://github.com/mastra-ai/mastra/commit/d8838ae80b69780361693d27098f7f6684af12fe), [`f79df90`](https://github.com/mastra-ai/mastra/commit/f79df90e922c7985677c07d49d8fcf3afd2080c2), [`849efb9`](https://github.com/mastra-ai/mastra/commit/849efb9fca6dc976589c1f90a303fea618769109), [`92ff509`](https://github.com/mastra-ai/mastra/commit/92ff5098ef8a990438ca038077021a5f7541ec1d), [`3fce5e7`](https://github.com/mastra-ai/mastra/commit/3fce5e70d011d289043e75003ef3336ed4aa43c3), [`a763592`](https://github.com/mastra-ai/mastra/commit/a763592c3db46963ef1011cfe16fe372816e775e), [`db79c86`](https://github.com/mastra-ai/mastra/commit/db79c86c60723d57e02f9636ca2611bd4515f194), [`6855012`](https://github.com/mastra-ai/mastra/commit/685501247cc4717506f3e89beed03509d63a5370), [`80c7737`](https://github.com/mastra-ai/mastra/commit/80c7737e32d7917b5f356957d67c169d01744fd3), [`9f9a8dc`](https://github.com/mastra-ai/mastra/commit/9f9a8dc97684a0a9879390faf4525f3225ef8453), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23), [`ab3b611`](https://github.com/mastra-ai/mastra/commit/ab3b611d086c07d7e0c9ece270b51fc17b9f54b8), [`7fef31c`](https://github.com/mastra-ai/mastra/commit/7fef31c0d2a6d362a43a647a8a4f6ab893758a23), [`3f1cf47`](https://github.com/mastra-ai/mastra/commit/3f1cf476f74c1e4cc2df908837e05853a5347e31), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/agent-browser@0.3.0
+  - @mastra/schema-compat@1.2.11
+  - @mastra/core@1.38.0
+  - @mastra/mcp@1.9.0
+  - @mastra/observability@1.14.1
+  - @mastra/fastembed@1.1.2
+  - @mastra/libsql@1.12.0
+  - @mastra/duckdb@1.4.1
+  - @mastra/memory@1.20.1
+  - @mastra/pg@1.12.0
+
+## 0.21.2-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`850af77`](https://github.com/mastra-ai/mastra/commit/850af7779cb87c350804488734544a5b1843de25), [`7b0d34c`](https://github.com/mastra-ai/mastra/commit/7b0d34cfe4a2fce22ac86ae17404685ff67a2ddb)]:
+  - @mastra/core@1.38.0-alpha.9
+
+## 0.21.2-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`0c1ed1d`](https://github.com/mastra-ai/mastra/commit/0c1ed1d00c7d87b5ac99ca95896211a2fa9189fa), [`849efb9`](https://github.com/mastra-ai/mastra/commit/849efb9fca6dc976589c1f90a303fea618769109)]:
+  - @mastra/core@1.38.0-alpha.8
+  - @mastra/mcp@1.9.0-alpha.1
+
+## 0.21.2-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`e36253f`](https://github.com/mastra-ai/mastra/commit/e36253f0cbe1900f84e6eeaa3e0343d66ec1fce3)]:
+  - @mastra/observability@1.14.1-alpha.1
+  - @mastra/core@1.38.0-alpha.7
+
 ## 0.21.2-alpha.6
 
 ### Patch Changes

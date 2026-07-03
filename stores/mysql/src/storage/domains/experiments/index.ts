@@ -16,6 +16,7 @@ import type {
   ExperimentResult,
   ExperimentReviewCounts,
   ExperimentResultStatus,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -48,6 +49,9 @@ interface ExperimentRow {
   id: string;
   datasetId: string | null;
   datasetVersion: number | null;
+  agentVersion: string | null;
+  organizationId: string | null;
+  projectId: string | null;
   targetType: string;
   targetId: string;
   name: string | null;
@@ -69,6 +73,8 @@ interface ExperimentResultRow {
   experimentId: string;
   itemId: string;
   itemDatasetVersion: number | null;
+  organizationId: string | null;
+  projectId: string | null;
   input: string;
   output: string | null;
   groundTruth: string | null;
@@ -93,10 +99,22 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   /**
    * Returns default index definitions for the experiments domain tables.
-   * Currently no default indexes are defined for experiments.
    */
   static getDefaultIndexDefs(_prefix: string = ''): CreateIndexOptions[] {
-    return [];
+    return [
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with
+      // pg/libsql/spanner/mongodb experiments adapters).
+      {
+        name: 'idx_experiments_org_project',
+        table: TABLE_EXPERIMENTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'idx_experiment_results_org_project',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['organizationId', 'projectId'],
+      },
+    ];
   }
 
   /**
@@ -136,11 +154,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
 
   /**
    * Creates default indexes for optimal query performance.
-   * Currently no default indexes are defined for experiments.
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) return;
-    // No default indexes for experiments domain
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      await this.operations.createIndex(indexDef);
+    }
   }
 
   /**
@@ -156,6 +175,18 @@ export class ExperimentsMySQL extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: EXPERIMENT_RESULTS_SCHEMA });
+    // Backfill tenancy columns on pre-existing tables so older deployments
+    // keep working when they upgrade in place.
+    await this.operations.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: EXPERIMENTS_SCHEMA,
+      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+    });
+    await this.operations.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['organizationId', 'projectId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -170,6 +201,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       id: row.id,
       datasetId: row.datasetId ?? null,
       datasetVersion: row.datasetVersion ?? null,
+      agentVersion: row.agentVersion ?? null,
+      organizationId: row.organizationId ?? null,
+      projectId: row.projectId ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId,
       name: row.name ?? undefined,
@@ -193,6 +227,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       experimentId: row.experimentId,
       itemId: row.itemId,
       itemDatasetVersion: row.itemDatasetVersion ?? null,
+      organizationId: row.organizationId ?? null,
+      projectId: row.projectId ?? null,
       input: parseJSON<Record<string, unknown>>(row.input),
       output: row.output ? parseJSON<Record<string, unknown>>(row.output) : null,
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : null,
@@ -218,6 +254,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           id,
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
+          agentVersion: input.agentVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
           name: input.name ?? null,
@@ -239,6 +278,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: input.datasetVersion,
+        agentVersion: input.agentVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         name: input.name,
@@ -312,11 +354,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentRow>({
         tableName: TABLE_EXPERIMENTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperiment(row) : null;
     } catch (error) {
@@ -341,6 +389,33 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       if (args.datasetId) {
         conditions.push(`${quoteIdentifier('datasetId', 'column name')} = ?`);
         params.push(args.datasetId);
+      }
+      if (args.targetType) {
+        conditions.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        params.push(args.targetType);
+      }
+      if (args.targetId) {
+        conditions.push(`${quoteIdentifier('targetId', 'column name')} = ?`);
+        params.push(args.targetId);
+      }
+      if (args.agentVersion) {
+        conditions.push(`${quoteIdentifier('agentVersion', 'column name')} = ?`);
+        params.push(args.agentVersion);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          params.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          params.push(projectId);
+        }
       }
 
       const whereClause = {
@@ -389,11 +464,33 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Atomic gate + cascade under SELECT ... FOR UPDATE. Silent no-op on
+      // tenancy mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: any[] = [];
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.organizationId);
+      }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+        tenancyParams.push(args.filters.projectId);
+      }
+      const gateWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+
       const connection = await this.pool.getConnection();
       try {
         await connection.beginTransaction();
+        const [gateRows] = await connection.execute(
+          `SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${gateWhere} FOR UPDATE`,
+          [args.id, ...tenancyParams],
+        );
+        if (!Array.isArray(gateRows) || gateRows.length === 0) {
+          await connection.commit();
+          return;
+        }
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
           [args.id],
@@ -434,6 +531,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
   }
 
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
+    // Tool mock reports are produced only when an experiment used item-level tool
+    // mocks — which the MySQL adapter rejects on write. Guard here too so a report
+    // is never silently dropped.
+    if (input.toolMockReport) {
+      throw new MastraError({
+        id: 'MYSQL_EXPERIMENT_TOOL_MOCK_REPORT_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Tool mock reports are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist experiment tool mock reports.',
+      });
+    }
     try {
       const id = input.id ?? randomUUID();
       const now = new Date();
@@ -445,6 +553,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           experimentId: input.experimentId,
           itemId: input.itemId,
           itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           input: JSON.stringify(input.input),
           output: input.output ? JSON.stringify(input.output) : null,
           groundTruth: input.groundTruth ? JSON.stringify(input.groundTruth) : null,
@@ -464,6 +574,8 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
@@ -488,11 +600,20 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<ExperimentResultRow>({
         tableName: TABLE_EXPERIMENT_RESULTS,
-        keys: { id: args.id },
+        keys: {
+          id: args.id,
+          organizationId: args.filters?.organizationId,
+          projectId: args.filters?.projectId,
+        },
       });
       return row ? this.mapExperimentResult(row) : null;
     } catch (error) {
@@ -595,9 +716,31 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     try {
       const { page, perPage: perPageInput } = args.pagination;
 
+      const conditions: string[] = [`${quoteIdentifier('experimentId', 'column name')} = ?`];
+      const params: any[] = [args.experimentId];
+      if (args.traceId) {
+        conditions.push(`${quoteIdentifier('traceId', 'column name')} = ?`);
+        params.push(args.traceId);
+      }
+      if (args.status) {
+        conditions.push(`${quoteIdentifier('status', 'column name')} = ?`);
+        params.push(args.status);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          params.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          params.push(projectId);
+        }
+      }
+
       const whereClause = {
-        sql: ` WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
-        args: [args.experimentId] as any[],
+        sql: ` WHERE ${conditions.join(' AND ')}`,
+        args: params,
       };
 
       const total = await this.operations.loadTotalCount({ tableName: TABLE_EXPERIMENT_RESULTS, whereClause });
@@ -641,8 +784,28 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
+      if (args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined) {
+        const tenancyConditions: string[] = [];
+        const tenancyParams: any[] = [];
+        if (args.filters?.organizationId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.organizationId);
+        }
+        if (args.filters?.projectId !== undefined) {
+          tenancyConditions.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+          tenancyParams.push(args.filters.projectId);
+        }
+        const parentWhere = ['id = ?', ...tenancyConditions].join(' AND ');
+        await this.pool.execute(
+          `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${parentWhere})`,
+          [args.experimentId, ...tenancyParams],
+        );
+        return;
+      }
       await this.pool.execute(
         `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} = ?`,
         [args.experimentId],

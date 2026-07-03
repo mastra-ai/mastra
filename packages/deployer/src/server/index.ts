@@ -12,14 +12,15 @@ import { MastraServer, setupBrowserStream } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute } from '@mastra/server/auth';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
-import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
+import type { DescribeRouteOptions } from 'hono-openapi';
+import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -50,6 +51,8 @@ type Bindings = HonoBindings;
 type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
 };
+
+type ApiRouteMiddleware = Extract<Exclude<ApiRoute['middleware'], undefined>, Function>;
 
 const DEFAULT_CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
 const DEFAULT_CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'];
@@ -129,14 +132,20 @@ export async function createHonoServer(
 
   // Pre-process routes: bake hono-openapi describeRoute into route middleware
   // so the adapter handles it as normal middleware without needing to know about hono-openapi
-  const processedRoutes = routes?.map(route => {
+  const processedRoutes: ApiRoute[] | undefined = routes?.map(route => {
     if ('openapi' in route && route.openapi) {
       const existingMiddleware = route.middleware
         ? Array.isArray(route.middleware)
           ? route.middleware
           : [route.middleware]
         : [];
-      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+      return {
+        ...route,
+        middleware: [
+          describeRoute(route.openapi as unknown as DescribeRouteOptions) as unknown as ApiRouteMiddleware,
+          ...existingMiddleware,
+        ],
+      };
     }
     return route;
   });
@@ -157,7 +166,7 @@ export async function createHonoServer(
   const customOnError = server?.onError;
   app.onError((err, c) => {
     if (customOnError) {
-      return customOnError(err, c);
+      return customOnError(err, c as unknown as Parameters<typeof customOnError>[1]);
     }
     return errorHandler(err, c, options.isDev);
   });
@@ -243,7 +252,8 @@ export async function createHonoServer(
         c.req.method === 'OPTIONS' ? (c.req.header('Access-Control-Request-Method') ?? c.req.method) : c.req.method;
       const routeCors = getRouteCorsConfig(processedRoutes, pathname, method);
 
-      return cors(routeCors ? getCorsConfig(routeCors, false) : getCorsConfig(server?.cors, hasAuth))(c, next);
+      const corsOptions = routeCors ? getCorsConfig(routeCors, false) : getCorsConfig(server?.cors, hasAuth);
+      return cors(corsOptions as unknown as Parameters<typeof cors>[0])(c, next);
     });
   }
 
@@ -299,7 +309,7 @@ export async function createHonoServer(
     });
 
     for (const middleware of middlewares) {
-      app.use(middleware.path, middleware.handler);
+      app.use(middleware.path, middleware.handler as unknown as HonoMiddlewareHandler);
     }
   }
 
@@ -460,20 +470,11 @@ export async function createHonoServer(
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
+      const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
+      const organizationId = process.env.MASTRA_ORGANIZATION_ID || '';
+      const platformProjectId = process.env.MASTRA_PLATFORM_PROJECT_ID || '';
+      const platformObservabilityEndpoint = process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
-
-      // Helper function to escape JSON for embedding in HTML/JavaScript
-      const escapeForHtml = (json: string): string => {
-        return json
-          .replace(/\\/g, '\\\\')
-          .replace(/'/g, "\\'")
-          .replace(/\n/g, '\\n')
-          .replace(/\r/g, '\\r')
-          .replace(/</g, '\\u003c')
-          .replace(/>/g, '\\u003e')
-          .replace(/\u2028/g, '\\u2028')
-          .replace(/\u2029/g, '\\u2029');
-      };
 
       const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
@@ -484,13 +485,17 @@ export async function createHonoServer(
         apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
-        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        cloudApiEndpoint: `'${escapeStudioHtmlValue(cloudApiEndpoint)}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
-        telemetryDisabled: `'${process.env.MASTRA_TELEMETRY_DISABLED ?? ''}'`,
-        requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        telemetryDisabled: `'${escapeStudioHtmlValue(process.env.MASTRA_TELEMETRY_DISABLED ?? '')}'`,
+        requestContextPresets: `'${escapeStudioHtmlValue(requestContextPresets)}'`,
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
+        signalsUI: `'${signalsUI}'`,
+        organizationId: `'${escapeStudioHtmlValue(organizationId)}'`,
+        platformProjectId: `'${escapeStudioHtmlValue(platformProjectId)}'`,
+        platformObservabilityEndpoint: `'${escapeStudioHtmlValue(platformObservabilityEndpoint)}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -597,6 +602,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   } else {
     await workerLifecycle.startEventEngine();
   }
+
+  // Fire-and-forget anonymous token usage telemetry (respects MASTRA_TELEMETRY_DISABLED).
+  // Dynamic import keeps compatibility with older @mastra/core versions without the
+  // `@mastra/core/telemetry` entry point.
+  void import('@mastra/core/telemetry').then(({ syncUsageTelemetry }) => syncUsageTelemetry(mastra)).catch(() => {});
 
   // Graceful shutdown so storage backends release resources (e.g. DuckDB's
   // native file lock) before the process exits. On `mastra dev` hot reloads

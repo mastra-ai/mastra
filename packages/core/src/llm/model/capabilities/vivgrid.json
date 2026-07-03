@@ -7,5 +7,6 @@
     "gpt-5.4-mini",
     "gpt-5.4-nano",
     "gpt-5.5"
-  ]
+  ],
+  "temperature": ["deepseek-v3.2", "deepseek-v4-pro", "gemini-3.1-flash-lite-preview", "gemini-3.1-pro-preview"]
 }

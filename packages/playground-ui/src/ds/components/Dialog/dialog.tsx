@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
@@ -10,15 +11,14 @@ import './dialog.css';
 const Dialog = DialogPrimitive.Root;
 
 type DialogTriggerProps = DialogPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
 const DialogTrigger = React.forwardRef<HTMLButtonElement, DialogTriggerProps>(
   ({ asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
-      <DialogPrimitive.Trigger ref={ref} {...renderProps} {...props}>
+      <DialogPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
         {asChild ? undefined : children}
       </DialogPrimitive.Trigger>
     );
@@ -29,14 +29,13 @@ DialogTrigger.displayName = 'DialogTrigger';
 const DialogPortal = DialogPrimitive.Portal;
 
 type DialogCloseProps = DialogPrimitive.Close.Props & {
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
 const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(({ asChild, children, ...props }, ref) => {
-  const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
   return (
-    <DialogPrimitive.Close ref={ref} {...renderProps} {...props}>
+    <DialogPrimitive.Close ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
       {asChild ? undefined : children}
     </DialogPrimitive.Close>
   );
@@ -58,35 +57,39 @@ DialogOverlay.displayName = 'DialogOverlay';
 
 type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className'> & {
   className?: string;
+  showOverlay?: boolean;
+  overlayClassName?: string;
 };
 
-const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Popup
-      ref={ref}
-      data-slot="dialog-content"
-      className={cn(
-        'dialog-content-anim',
-        'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
-        'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
-        'focus-visible:outline-hidden',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close
-        render={
-          <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
-            <X />
-          </Button>
-        }
-      />
-    </DialogPrimitive.Popup>
-  </DialogPortal>
-));
+const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
+  ({ className, children, showOverlay = true, overlayClassName, ...props }, ref) => (
+    <DialogPortal>
+      {showOverlay && <DialogOverlay className={overlayClassName} />}
+      <DialogPrimitive.Popup
+        ref={ref}
+        data-slot="dialog-content"
+        className={cn(
+          'dialog-content-anim',
+          'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
+          'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
+          'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
+          'focus-visible:outline-hidden',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close
+          render={
+            <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
+              <X />
+            </Button>
+          }
+        />
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  ),
+);
 DialogContent.displayName = 'DialogContent';
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

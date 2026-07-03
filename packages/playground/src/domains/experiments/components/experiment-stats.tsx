@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckIcon, ClockIcon, TimerIcon, XIcon } from 'lucide-react';
 
 export interface ExperimentStatsProps {

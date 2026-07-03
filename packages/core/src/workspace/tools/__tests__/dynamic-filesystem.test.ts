@@ -41,6 +41,9 @@ describe('dynamic filesystem tools', () => {
     const workspace = new Workspace({ filesystem: resolver });
     const tools = await createWorkspaceTools(workspace);
 
+    const beforeToolCall = new Date(Date.now() - 1000);
+    workspace.lastAccessedAt = beforeToolCall;
+
     const ctx = { requestContext: new RequestContext() };
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
       { path: 'hello.txt', showLineNumbers: false },
@@ -48,6 +51,7 @@ describe('dynamic filesystem tools', () => {
     );
 
     expect(result).toContain('dynamic content');
+    expect(workspace.lastAccessedAt.getTime()).toBeGreaterThan(beforeToolCall.getTime());
   });
 
   it('should resolve different filesystems per request', async () => {
@@ -169,5 +173,43 @@ describe('dynamic filesystem tools', () => {
         },
       },
     });
+  });
+
+  it('should resolve the dynamic filesystem for the lsp_inspect tool', async () => {
+    // lsp_inspect reads workspace.filesystem (resolveAbsolutePath); it must
+    // declare a filesystem target so the resolver runs for dynamic filesystems.
+    let resolverCalls = 0;
+    const workspace = new Workspace({
+      filesystem: () => {
+        resolverCalls++;
+        return new LocalFilesystem({ basePath: tempDir });
+      },
+    });
+    const tools = await createWorkspaceTools(workspace);
+
+    await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+      { path: 'file.ts', match: 'const x<<<' },
+      { requestContext: new RequestContext() },
+    );
+
+    expect(resolverCalls).toBe(1);
+  });
+
+  it('should allow getInfo callers to opt out of resolving dynamic filesystems', async () => {
+    let filesystemResolverCalls = 0;
+    const workspace = new Workspace({
+      filesystem: () => {
+        filesystemResolverCalls++;
+        return new LocalFilesystem({ basePath: tempDir });
+      },
+    });
+
+    const unresolvedInfo = await workspace.getInfo({ resolveDynamicProviders: false });
+    expect(unresolvedInfo.filesystem?.provider).toBe('dynamic');
+    expect(filesystemResolverCalls).toBe(0);
+
+    const resolvedInfo = await workspace.getInfo();
+    expect(resolvedInfo.filesystem?.provider).toBe('local');
+    expect(filesystemResolverCalls).toBe(1);
   });
 });

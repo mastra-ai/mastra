@@ -1,6 +1,6 @@
 {
   "name": "@internal/changeset-cli",
-  "version": "0.0.53",
+  "version": "0.0.65",
   "description": "Custom changeset CLI for Mastra monorepo versioning",
   "type": "module",
   "main": "dist/src/index.js",
@@ -26,7 +26,7 @@
     "@manypkg/get-packages": "^3.1.0",
     "@manypkg/tools": "^2.1.1",
     "@octokit/rest": "^22.0.1",
-    "citty": "^0.1.6",
+    "citty": "^0.2.2",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
     "mri": "^1.2.0",
@@ -35,12 +35,12 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
-    "tsx": "^4.21.0",
+    "eslint": "^10.4.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

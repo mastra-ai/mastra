@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Comprehensive performance optimization guide for React applications, containing 12 rules across 6 categories. Rules are prioritized by impact to guide automated refactoring and code generation.
+Routing and priority guide for React performance and quality, containing 19 rules across 8 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -23,14 +23,16 @@ Reference these guidelines when:
 
 Rules are prioritized by impact:
 
-| Priority | Category                  | Impact      |
-| -------- | ------------------------- | ----------- |
-| 1        | Eliminating Waterfalls    | CRITICAL    |
-| 2        | Bundle Size Optimization  | CRITICAL    |
-| 3        | Client-Side Data Fetching | MEDIUM-HIGH |
-| 4        | Re-render Optimization    | MEDIUM      |
-| 5        | Rendering Performance     | MEDIUM      |
-| 6        | JavaScript Performance    | LOW-MEDIUM  |
+| Priority | Category                  | Impact                        |
+| -------- | ------------------------- | ----------------------------- |
+| 1        | Eliminating Waterfalls    | CRITICAL                      |
+| 2        | Bundle Size Optimization  | CRITICAL                      |
+| 3        | Client-Side Data Fetching | MEDIUM-HIGH                   |
+| 4        | Re-render Optimization    | MEDIUM                        |
+| 5        | Rendering Performance     | MEDIUM                        |
+| 6        | JavaScript Performance    | LOW-MEDIUM                    |
+| 7        | Component Structure       | MEDIUM-HIGH (maintainability) |
+| 8        | Testing                   | MEDIUM-HIGH (correctness)     |
 
 ## Quick Reference
 
@@ -50,12 +52,26 @@ Rules are prioritized by impact:
 **Client-Side Data Fetching:**
 
 - Use Tanstack Query for automatic request deduplication (`client-request-dedupe`)
+- Dependent query params are the value or `undefined`, never `| null` or a fake fallback; narrow at the caller so hooks stay strict, or guard with `skipToken` when the hook must accept an optional param (`client-request-dedupe`)
 
 **Re-render Optimization:**
 
 - Use lazy state initialization for expensive values (`rerender-lazy-state-init`)
 - Apply `startTransition` for non-urgent updates (`rerender-transitions`)
 - Minimize `useEffect` function calls (`rerender-useeffect-function-calls`)
+- Never reset state with `useEffect`; lift the discriminant and remount the branch (`rerender-no-useeffect-state-reset`)
+
+**Component Structure:**
+
+- One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
+- Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
+- Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
+- Pick the view with early `if` guards but keep the layout wrapper in one place — branch a body component, don't ternary or duplicate the shell (`structure-early-return-render-branches`)
+- For a fixed set of items, write one component per item with explicit props that owns its data and loading — don't map a config-object array onto a component shape (`structure-composition-over-config`)
+
+**Testing:**
+
+- BDD tests that drive the real `@mastra/client-js` + React Query stack and mock only the network; never `vi.mock` our own hooks/services/auth gating or the SDK (`testing-bdd-no-mocks`)
 
 ### Rendering Patterns
 
@@ -70,10 +86,12 @@ Rules are prioritized by impact:
 
 ## References
 
-Full documentation with code examples is available in:
+Rule files are the canonical source for detailed guidance and examples:
 
-- `references/react-best-practices-reference.md` - Complete guide with all patterns
-- `references/rules/` - Individual rule files organized by category
+- `references/react-best-practices-reference.md` - Rule catalog with category order and rule-file paths
+- `references/rules/` - Canonical individual rule files organized by category
+
+Load only the relevant rule file when implementing or reviewing a specific pattern. Use the catalog to choose the right rule without loading every example.
 
 To look up a specific pattern, grep the rules directory:
 
@@ -88,6 +106,8 @@ grep -l "Tanstack" references/rules/
 - `async-*` - Waterfall elimination (1 rule)
 - `bundle-*` - Bundle size optimization (2 rules)
 - `client-*` - Client-side data fetching (1 rule)
-- `rerender-*` - Re-render optimization (3 rules)
+- `rerender-*` - Re-render optimization (4 rules)
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
+- `structure-*` - Component/hook structure (5 rules)
+- `testing-*` - BDD tests + mock-only-the-network policy (1 rule)

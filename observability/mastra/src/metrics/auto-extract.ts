@@ -11,7 +11,7 @@ import type {
   UsageStats,
 } from '@mastra/core/observability';
 import { estimateCosts } from './estimator';
-import type { TokenMetrics } from './types';
+import { TokenMetrics } from './types';
 import { getTokenMetricSamples } from './usage-metrics';
 
 /** Emit duration metrics for a live span. */
@@ -65,25 +65,43 @@ export function emitAutoExtractedMetrics(span: AnySpan, metrics: MetricsContext)
   emitTokenMetrics(span, metrics);
 }
 
+/** Estimate costs and emit token usage metrics for a model-generation span. */
 function emitUsageMetrics(
   attrs: ModelGenerationAttributes,
   usage: NonNullable<ModelGenerationAttributes['usage']>,
   metrics: MetricsContext,
 ): void {
   let metricCosts = new Map<TokenMetrics, CostContext>();
-  try {
-    const provider = attrs.provider;
-    const model = attrs.responseModel ?? attrs.model;
+  const providedCostContext = getProvidedCostContext(attrs, usage);
+  if (providedCostContext) {
+    metricCosts = providedCostContext;
+  } else {
+    try {
+      const provider = attrs.provider;
+      const model = attrs.responseModel ?? attrs.model;
 
-    if (provider && model) {
-      metricCosts = estimateCosts({
-        provider,
-        model,
-        usage,
-      });
+      if (provider && model) {
+        metricCosts = estimateCosts({
+          provider,
+          model,
+          usage,
+        });
+
+        if (isNoMatchingModelResult(metricCosts) && attrs.model && attrs.model !== model) {
+          const configuredModelCosts = estimateCosts({
+            provider,
+            model: attrs.model,
+            usage,
+          });
+
+          if (!isNoMatchingModelResult(configuredModelCosts)) {
+            metricCosts = configuredModelCosts;
+          }
+        }
+      }
+    } catch {
+      metricCosts = new Map();
     }
-  } catch {
-    metricCosts = new Map();
   }
 
   const emit = (name: TokenMetrics, value: number) => {
@@ -99,6 +117,47 @@ function emitUsageMetrics(
   for (const sample of getTokenMetricSamples(usage)) {
     emit(sample.name, sample.value);
   }
+}
+
+function isNoMatchingModelResult(metricCosts: Map<TokenMetrics, CostContext>): boolean {
+  return (
+    metricCosts.size > 0 &&
+    [...metricCosts.values()].every(costContext => costContext.costMetadata?.error === 'no_matching_model')
+  );
+}
+
+function getProvidedCostContext(
+  attrs: ModelGenerationAttributes,
+  usage: NonNullable<ModelGenerationAttributes['usage']>,
+): Map<TokenMetrics, CostContext> | undefined {
+  const costContext = attrs.costContext;
+  if (typeof costContext?.estimatedCost !== 'number') {
+    return undefined;
+  }
+
+  const carrierMetric = usage.inputTokens !== undefined ? TokenMetrics.TOTAL_INPUT : TokenMetrics.TOTAL_OUTPUT;
+  const provider = costContext.provider ?? attrs.provider;
+  const model = costContext.model ?? attrs.responseModel ?? attrs.model;
+  const contexts = new Map<TokenMetrics, CostContext>();
+
+  for (const sample of getTokenMetricSamples(usage)) {
+    contexts.set(sample.name, {
+      provider,
+      model,
+    });
+  }
+
+  contexts.set(carrierMetric, {
+    ...costContext,
+    provider,
+    model,
+    costMetadata: {
+      ...costContext.costMetadata,
+      allocation: 'query_total',
+    },
+  });
+
+  return contexts;
 }
 
 function getDurationMetricName(span: AnySpan): string | null {

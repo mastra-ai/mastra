@@ -90,7 +90,11 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
   }
   const hasCredentials = hasAccessKey && hasSecretKey;
 
-  // Use a mount-specific credentials path to avoid races with concurrent mounts
+  // Use a per-mount credentials file. s3fs reads `passwd_file` at mount time, so a
+  // single shared path (rewritten rm -> write -> chmod on every mount) lets
+  // concurrent mounts race: one mount's write/chmod interleaves with another's rm,
+  // causing EACCES or a mount reading another mount's credentials. Hashing the
+  // mountPath gives each mount a unique, stable file (same approach as azure.ts).
   const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
   const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 

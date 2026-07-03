@@ -132,10 +132,15 @@ const skillConfigSchema = z.object({
 /** Skills config: skill IDs mapped to per-skill config */
 const skillsConfigSchema = z.record(z.string(), skillConfigSchema);
 
-/** Workspace reference: either a stored workspace ID or an inline config */
+/** Workspace reference: a stored workspace ID, inline config, or a registered workspace provider */
 const workspaceRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('id'), workspaceId: z.string() }),
   z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
+  z.object({
+    type: z.literal('provider'),
+    provider: z.string().describe('Workspace provider identifier'),
+    config: z.record(z.string(), z.unknown()).describe('Provider-specific configuration'),
+  }),
 ]);
 
 /** Screencast options for streaming browser frames */
@@ -374,9 +379,28 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
 
+export const openStoredAgentChangeRequestBodySchema = exportStoredAgentBodySchema.extend({
+  changeMessage: z.string().trim().max(500).optional(),
+  userName: z.string().trim().min(1).max(120).optional(),
+  inspectOnly: z.boolean().optional(),
+});
+
 // ============================================================================
 // Response Schemas
 // ============================================================================
+
+/**
+ * Resolved author object — server-side enrichment of `authorId` against the
+ * configured auth provider. Only `id` is required; the other fields mirror
+ * what `/auth/me` exposes and are optional because providers may not return
+ * every field.
+ */
+export const resolvedAuthorSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  email: z.string().optional(),
+  avatarUrl: z.string().optional(),
+});
 
 /**
  * Stored agent object schema (resolved response: thin record + version config)
@@ -388,6 +412,7 @@ export const storedAgentSchema = z.object({
   status: z.string().describe('Agent status: draft or published'),
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
+  author: resolvedAuthorSchema.optional().describe('Resolved author identity (when an auth provider is configured)'),
   metadata: z.record(z.string(), z.unknown()).optional(),
   visibility: z.enum(['private', 'public']).optional(),
   favoriteCount: z.number().int().nonnegative().optional().describe('Number of users who have favorited this agent'),
@@ -502,11 +527,37 @@ export const deleteStoredAgentResponseSchema = z.object({
   message: z.string(),
 });
 
+/**
+ * Response for GET /stored/agents/:storedAgentId/dependents
+ *
+ * `dependents` lists caller-readable stored agents whose resolved `agents` map
+ * references the target. Includes both public and the caller's own private
+ * agents — anything the caller already has read access to.
+ * `hiddenCount` aggregates references from agents the caller cannot read
+ * (cross-workspace private agents). Only populated when the target agent is
+ * public, to avoid leaking cross-workspace structure for private targets.
+ */
+export const getStoredAgentDependentsResponseSchema = z.object({
+  dependents: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+  ),
+  hiddenCount: z.number().int().nonnegative(),
+});
+
 export const exportStoredAgentResponseSchema = z.object({
   agentId: z.string(),
   fileName: z.string(),
   content: z.string(),
   config: z.record(z.string(), z.unknown()),
+});
+
+export const openStoredAgentChangeRequestResponseSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  url: z.string(),
+  ref: z.string().optional(),
 });
 
 // ============================================================================

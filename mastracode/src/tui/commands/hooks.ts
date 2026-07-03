@@ -1,3 +1,4 @@
+import { VALID_EVENTS } from '../../hooks/index.js';
 import type { SlashCommandContext } from './types.js';
 
 export function handleHooksCommand(ctx: SlashCommandContext, args: string[]): void {
@@ -40,7 +41,7 @@ export function handleHooksCommand(ctx: SlashCommandContext, args: string[]): vo
   lines.push(`  Global:  ${paths.global}`);
   lines.push('');
 
-  const eventNames = ['PreToolUse', 'PostToolUse', 'Stop', 'UserPromptSubmit', 'SessionStart', 'SessionEnd'] as const;
+  const eventNames = VALID_EVENTS;
 
   for (const event of eventNames) {
     const hooks = hookConfig[event];

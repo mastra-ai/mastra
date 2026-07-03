@@ -1,5 +1,5 @@
 ---
-title: "Reference: MCPServer | Tools & MCP"
+title: "Reference: MCPServer | Tools and MCP"
 description: API Reference for MCPServer - A class for exposing Mastra tools and capabilities as a Model Context Protocol server.
 packages:
   - "@mastra/core"
@@ -114,6 +114,20 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description: 'Optional instructions describing how to use the server and its features.',
   },
   {
+    name: 'mapAuthInfoToUser',
+    type: '({ authInfo, extra, requestContext }) => unknown | null | undefined | Promise<unknown | null | undefined>',
+    isOptional: true,
+    description:
+      'Maps MCP transport auth data from `extra.authInfo` into the `user` value used by Mastra FGA checks. Use this when an OAuth-protected MCP server is registered on a Mastra instance with an FGA provider.',
+  },
+  {
+    name: 'fga',
+    type: "{ resourceMapping?: Partial<Record<'tool' | 'tools', { fgaResourceType: string; deriveId?: ({ user, resourceId, requestContext }) => string | undefined }>>; permissionMapping?: Record<string, string> }",
+    isOptional: true,
+    description:
+      "Overrides resource and permission mappings for this MCP server's `tools/list` and `tools/call` FGA checks. Use this when MCP authorization should be scoped differently from internal agent or workflow tool execution.",
+  },
+  {
     name: 'repository',
     type: 'Repository', // { url: string; source: string; id: string; }
     isOptional: true,
@@ -197,7 +211,7 @@ When you provide agents in the `agents` configuration property, `MCPServer` will
 
 The description for this generated tool will be: "Ask agent `<agent.name>` a question. Agent description: `<agent.description>`".
 
-**Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
+**Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ id: 'my-agent', name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
 
 This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
 
@@ -1323,6 +1337,79 @@ Whatever you set on `req.auth` in your HTTP middleware becomes available as `con
 
 ```
 req.auth = { ... }  →  context?.mcp?.extra?.authInfo.extra = { ... }
+```
+
+### Map auth data for FGA
+
+When an `MCPServer` is registered on a Mastra instance with a fine-grained authorization (FGA) provider, Mastra checks `requestContext.get('user')` before listing or calling tools. HTTP MCP transports pass authenticated data as `extra.authInfo`, so use `mapAuthInfoToUser` to set the user shape expected by your FGA provider.
+
+```typescript
+const server = new MCPServer({
+  id: 'my-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { getUserData },
+  mapAuthInfoToUser: ({ authInfo }) => {
+    const user = authInfo as {
+      extra?: {
+        userId?: string
+        organizationMembershipId?: string
+      }
+    }
+
+    if (!user.extra?.userId) {
+      return null
+    }
+
+    return {
+      id: user.extra.userId,
+      organizationMembershipId: user.extra.organizationMembershipId,
+    }
+  },
+})
+```
+
+### Scope MCP tool FGA separately
+
+Use `fga.resourceMapping` and `fga.permissionMapping` when MCP clients need a different authorization scope than internal agent or workflow tool execution. The override applies only to `tools/list` and `tools/call` checks for this MCP server.
+
+```typescript
+import { MastraFGAPermissions } from '@mastra/core/auth/ee'
+
+const server = new MCPServer({
+  id: 'my-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { getUserData },
+  mapAuthInfoToUser: ({ authInfo }) => {
+    const user = authInfo as {
+      extra?: {
+        userId?: string
+        organizationMembershipId?: string
+      }
+    }
+
+    if (!user.extra?.userId) {
+      return null
+    }
+
+    return {
+      id: user.extra.userId,
+      organizationMembershipId: user.extra.organizationMembershipId,
+    }
+  },
+  fga: {
+    resourceMapping: {
+      tool: {
+        fgaResourceType: 'user',
+        deriveId: ({ user }) => (user as { id: string }).id,
+      },
+    },
+    permissionMapping: {
+      [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+    },
+  },
+})
 ```
 
 ### Setting Up Authentication Middleware

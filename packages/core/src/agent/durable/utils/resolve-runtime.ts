@@ -6,7 +6,7 @@ import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { RequestContext } from '../../../request-context';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { CoreTool } from '../../../tools/types';
+import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
 import { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
@@ -121,6 +121,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
           model: entry.model,
           maxRetries: entry.maxRetries ?? 0,
           enabled: entry.enabled ?? true,
+          headers: entry.headers,
         }));
       }
 
@@ -246,17 +247,40 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
 /**
  * Check if a tool requires human approval.
  *
- * If the tool has a `needsApprovalFn`, it takes precedence over both the
- * global `requireToolApproval` flag and the tool-level `requireApproval` flag
- * (e.g. skill tools return `false` to suppress approval). On error the call
- * defaults to requiring approval (safe default).
+ * Mirrors the non-durable precedence:
+ *  - Function-form global `requireToolApproval` is evaluated per call with
+ *    `(toolName, args, ...)`. Throwing defaults to "require approval" (safe).
+ *  - Boolean global / tool-level `requireApproval` seed the decision.
+ *  - A per-tool `needsApprovalFn` (e.g. skill tools) is authoritative when
+ *    present and overrides the seed.
+ *
+ * In durable execution the function form lives on the run registry, not on
+ * the serialized workflow input — pass the resolved value from the caller.
  */
 export async function toolRequiresApproval(
   tool: CoreTool,
-  globalRequireApproval?: boolean,
+  globalRequireApproval?: RequireToolApproval,
   args?: Record<string, unknown>,
+  approvalContext?: Partial<ToolApprovalContext> & { toolName: string },
 ): Promise<boolean> {
-  let requires = !!(globalRequireApproval || (tool as any).requireApproval);
+  let globalRequires: boolean;
+  if (typeof globalRequireApproval === 'function') {
+    try {
+      globalRequires = !!(await globalRequireApproval({
+        toolName: approvalContext?.toolName ?? '',
+        args: args ?? {},
+        requestContext: approvalContext?.requestContext,
+        workspace: approvalContext?.workspace,
+      }));
+    } catch {
+      // On error, default to requiring approval (safe default).
+      globalRequires = true;
+    }
+  } else {
+    globalRequires = !!globalRequireApproval;
+  }
+
+  let requires = globalRequires || !!(tool as any).requireApproval;
 
   // needsApprovalFn overrides all other flags (e.g., skill tools return false)
   const needsApprovalFn = getNeedsApprovalFn(tool);

@@ -373,7 +373,7 @@ interface WatchPayload {
   [key: string]: unknown;
 }
 
-interface TripwirePayload<TMetadata = unknown> {
+export interface TripwirePayload<TMetadata = unknown> {
   /** The reason for the tripwire */
   reason: string;
   /** If true, the agent should retry with the tripwire reason as feedback */
@@ -387,7 +387,7 @@ interface TripwirePayload<TMetadata = unknown> {
 /**
  * Payload for is-task-complete events emitted during stream/generate scoring.
  */
-interface IsTaskCompletePayload {
+export interface IsTaskCompletePayload {
   /** Current iteration number */
   iteration: number;
   /** Whether all/any scorers passed based on strategy */
@@ -404,6 +404,64 @@ interface IsTaskCompletePayload {
   maxIterationReached: boolean;
   /** Whether to suppress the completion feedback message */
   suppressFeedback: boolean;
+}
+
+/**
+ * Payload for `goal` events emitted by the in-loop goal scorer. Consumers (TUIs,
+ * `@mastra/client-js`) use this to render judge progress and the result.
+ */
+export interface GoalEvaluationActivity {
+  type: 'tool-call' | 'tool-result' | 'reason';
+  name?: string;
+  message: string;
+}
+
+export interface GoalEvaluationPayload {
+  /** The objective being judged. */
+  objective: string;
+  /** Goal evaluations consumed so far (runsUsed after this evaluation). */
+  iteration: number;
+  /** Max evaluations before the goal stops. */
+  maxRuns: number;
+  /** Whether the goal is judged complete. */
+  passed: boolean;
+  /** The objective status after this evaluation. */
+  status: 'active' | 'paused' | 'done';
+  /** Individual scorer results. */
+  results: ScorerResult[];
+  /** Judge feedback / stop reason. Falls back to the pause reason when parked. */
+  reason?: string;
+  /**
+   * Why the objective is parked (`status === 'paused'`). Set for judge failure
+   * or budget exhaustion. Cleared when `status` is `'active'` or `'done'`.
+   */
+  pausedReason?: string;
+  /**
+   * True when the judge decided the goal is not finished but explicitly wants
+   * the user to provide input before continuing. The record stays `active` (so
+   * the next agent turn is still judged), but `isContinued` is `false` (the
+   * auto-loop stops). Display layers use this to show a "waiting" indicator.
+   */
+  waitingForUser?: boolean;
+  /** True when the scorer/judge itself errored (as opposed to scoring 0). */
+  judgeFailed?: boolean;
+  /** Total duration of the goal scoring check. */
+  duration: number;
+  /** Whether scoring timed out. */
+  timedOut: boolean;
+  /** Whether the run budget (`maxRuns`) was reached. */
+  maxRunsReached: boolean;
+  /** Whether the goal feedback message is suppressed from memory. */
+  suppressFeedback: boolean;
+  /**
+   * True on the "pre-evaluation" chunk emitted before scoring starts. Display
+   * layers use this to show a loading/evaluating indicator while the scorer
+   * runs. A second chunk with `pending: false` (or absent) follows once the
+   * evaluation is complete.
+   */
+  pending?: boolean;
+  /** Judge activity emitted while the evaluation is still running. */
+  activity?: GoalEvaluationActivity[];
 }
 
 export interface BackgroundTaskStartedPayload {
@@ -800,6 +858,7 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
   | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & { type: 'goal'; payload: GoalEvaluationPayload })
   | (BaseChunkType & {
       type: 'background-task-started';
       payload: BackgroundTaskStartedPayload;
@@ -1037,6 +1096,13 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
+  /**
+   * When true, force text/finishReason promise resolution at step-finish even
+   * when `isLLMExecutionStep` is set.  Durable agents have a single
+   * MastraModelOutput for the entire run that needs both per-chunk output
+   * processor processing (isLLMExecutionStep) AND final promise resolution.
+   */
+  resolveFinalPromises?: boolean;
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;

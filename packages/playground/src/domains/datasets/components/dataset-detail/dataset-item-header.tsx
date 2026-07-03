@@ -1,7 +1,9 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { CopyButton, MainHeader, TextAndIcon } from '@mastra/playground-ui';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
 import { Calendar1Icon, HistoryIcon, FileCodeIcon } from 'lucide-react';
 

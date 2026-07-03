@@ -69,9 +69,9 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
 
   constructor(config: ClickhouseDomainConfig) {
     super();
-    const { client, ttl } = resolveClickhouseConfig(config);
+    const { client, ttl, replication } = resolveClickhouseConfig(config);
     this.client = client;
-    this.#db = new ClickhouseDB({ client, ttl });
+    this.#db = new ClickhouseDB({ client, ttl, replication });
   }
 
   async init(): Promise<void> {

@@ -1077,3 +1077,110 @@ describe('DurableAgent.streamUntilIdle', () => {
     result.cleanup();
   });
 });
+
+// ============================================================================
+// stream({ untilIdle }) tests — validates the new option delegates correctly
+// ============================================================================
+
+describe('DurableAgent.stream({ untilIdle })', () => {
+  const storage = new MockStore();
+
+  let mastra: Mastra;
+
+  beforeEach(async () => {
+    mastra = new Mastra({
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+    });
+  });
+
+  afterEach(async () => {
+    await mastra.backgroundTaskManager?.shutdown();
+    const bgStore = await storage.getStore('backgroundTasks');
+    await bgStore?.dangerouslyClearAll();
+  });
+
+  it('falls through to a plain stream when no bg manager or memory is configured', async () => {
+    const plainMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+    expect(plainMastra.backgroundTaskManager).toBeUndefined();
+
+    const { model } = makeScriptedModel([textResponse('plain')]);
+    const baseAgent = new Agent({
+      id: 'da-idle-plain',
+      name: 'da-idle-plain',
+      instructions: 'test',
+      model,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent });
+    plainMastra.addAgent(durableAgent as any, 'da-idle-plain');
+
+    const result = await durableAgent.stream('hi', { untilIdle: true });
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    const textChunks = chunks.filter(c => c?.type?.includes('text')).length;
+    expect(textChunks).toBeGreaterThan(0);
+
+    result.cleanup();
+  });
+
+  it('closes after the initial turn when no background tasks were dispatched', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([textResponse('hello')]);
+
+    const baseAgent = new Agent({
+      id: 'da-idle-1',
+      name: 'da-idle-1',
+      instructions: 'test',
+      model,
+      memory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent });
+    mastra.addAgent(durableAgent as any, 'da-idle-1');
+
+    const result = await durableAgent.stream('hi', {
+      untilIdle: true,
+      memory: { thread: 'th-idle', resource: 'u-idle' },
+    });
+
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    const textChunks = chunks.filter(c => c?.type?.includes('text')).length;
+    expect(textChunks).toBeGreaterThan(0);
+
+    expect(getCallCount()).toBe(1);
+    result.cleanup();
+  });
+
+  it('accepts untilIdle as an object with maxIdleMs', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([textResponse('hello world')]);
+
+    const baseAgent = new Agent({
+      id: 'da-idle-ms',
+      name: 'da-idle-ms',
+      instructions: 'test',
+      model,
+      memory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent });
+    mastra.addAgent(durableAgent as any, 'da-idle-ms');
+
+    const result = await durableAgent.stream('hi', {
+      untilIdle: { maxIdleMs: 30_000 },
+      memory: { thread: 'th-idle-ms', resource: 'u-idle-ms' },
+    });
+
+    expect(typeof result.cleanup).toBe('function');
+
+    await drain(result.fullStream as ReadableStream<any>);
+
+    const text = await result.output.text;
+    expect(text).toBe('hello world');
+
+    result.cleanup();
+  });
+});

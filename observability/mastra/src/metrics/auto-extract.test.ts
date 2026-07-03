@@ -417,6 +417,76 @@ describe('AutoExtractedMetrics', () => {
     expect(outputTokens!.metric.costContext).toBeUndefined();
   });
 
+  it('should use SDK-provided total cost context when present on model generation attributes', () => {
+    setup();
+    const estimateCostsSpy = vi.spyOn(estimatorModule, 'estimateCosts');
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        model: 'claude-sonnet-4-6',
+        provider: '@anthropic-ai/claude-agent-sdk',
+        usage: {
+          inputTokens: 15,
+          outputTokens: 4,
+          inputDetails: {
+            text: 10,
+            cacheRead: 2,
+            cacheWrite: 3,
+          },
+          outputDetails: {
+            text: 4,
+          },
+        },
+        costContext: {
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          estimatedCost: 0.0123,
+          costUnit: 'USD',
+          costMetadata: {
+            source: 'sdk_estimate',
+            sdkProvider: '@anthropic-ai/claude-agent-sdk',
+            sdkCostField: 'total_cost_usd',
+            scope: 'query_total',
+          },
+        },
+      },
+    });
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    expect(estimateCostsSpy).not.toHaveBeenCalled();
+    const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
+    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+      estimatedCost: 0.0123,
+      costUnit: 'USD',
+      costMetadata: {
+        source: 'sdk_estimate',
+        sdkProvider: '@anthropic-ai/claude-agent-sdk',
+        sdkCostField: 'total_cost_usd',
+        scope: 'query_total',
+        allocation: 'query_total',
+      },
+    });
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+    });
+    expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+    });
+    expect(byName('mastra_model_input_cache_write_tokens')!.metric.costContext).toMatchObject({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-6',
+    });
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
+    expect(byName('mastra_model_input_cache_read_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
+    expect(byName('mastra_model_input_cache_write_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
+  });
+
   it('should keep total output cost only when no output detail row has a successful cost', () => {
     setup();
     const span = createMockSpan({
@@ -548,5 +618,30 @@ describe('AutoExtractedMetrics', () => {
     emitAutoExtractedMetrics(span, createMetricsContext(span));
 
     expect(emittedMetrics[0]!.metric.labels).toEqual({ status: 'ok' });
+  });
+
+  it('should fall back to the configured model when responseModel has no pricing match', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-4-6',
+        responseModel: 'anthropic/claude-4.6-sonnet-20260217',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputTokens!.metric.costContext?.costMetadata).not.toHaveProperty('error', 'no_matching_model');
+    expect(inputTokens!.metric.costContext?.costMetadata).toHaveProperty(
+      'pricing_id',
+      'openrouter-anthropic-claude-sonnet-4-6',
+    );
   });
 });

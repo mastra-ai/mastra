@@ -55,8 +55,9 @@ import { Agent } from '@mastra/core/agent'
 import { RegexFilterProcessor } from '@mastra/core/processors'
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
-  model: '__OPENAI_MODEL_NANO__',
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
   processors: {
     input: [
       new RegexFilterProcessor({

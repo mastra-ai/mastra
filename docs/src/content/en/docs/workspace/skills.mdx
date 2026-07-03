@@ -197,8 +197,16 @@ const workspace = new Workspace({
 
 When `skillSource` is provided, it's used instead of the workspace filesystem for skill discovery.
 
+## Agent-level skills
+
+You can also attach skills directly to an agent without a workspace using `createSkill()` and the agent's `skills` config. When both agent-level and workspace-level skills exist, they merge — agent-level skills take precedence on name conflicts.
+
+See [Agent skills](/docs/agents/skills) for details.
+
 ## Related
 
+- [Agent skills](/docs/agents/skills)
 - [Agent skills specification](https://agentskills.io)
 - [Workspace overview](/docs/workspace/overview)
 - [Search and indexing](/docs/workspace/search)
+- [`createSkill()` reference](/reference/agents/createSkill)

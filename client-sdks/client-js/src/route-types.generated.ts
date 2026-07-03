@@ -63,6 +63,7 @@ export type GetAgents_Response = {
     provider?: string | undefined;
     modelId?: string | undefined;
     modelVersion?: string | undefined;
+    supportsMemory?: boolean | undefined;
     modelList?:
       | {
           model: {
@@ -72,6 +73,7 @@ export type GetAgents_Response = {
           };
         }[]
       | undefined;
+    /** Default options for agent execution */
     defaultOptions?:
       | {
           runId?: string | undefined;
@@ -133,7 +135,7 @@ export type GetAgents_Response = {
           [key: string]: any;
         }
       | undefined;
-    source?: ('code' | 'stored') | undefined;
+    source?: ('code' | 'stored' | 'fs') | undefined;
     status?: ('draft' | 'published' | 'archived') | undefined;
     activeVersionId?: string | undefined;
     hasDraft?: boolean | undefined;
@@ -269,6 +271,7 @@ export type GetAgentsAgentId_Response = {
   provider?: string | undefined;
   modelId?: string | undefined;
   modelVersion?: string | undefined;
+  supportsMemory?: boolean | undefined;
   modelList?:
     | {
         model: {
@@ -278,6 +281,7 @@ export type GetAgentsAgentId_Response = {
         };
       }[]
     | undefined;
+  /** Default options for agent execution */
   defaultOptions?:
     | {
         runId?: string | undefined;
@@ -339,7 +343,7 @@ export type GetAgentsAgentId_Response = {
         [key: string]: any;
       }
     | undefined;
-  source?: ('code' | 'stored') | undefined;
+  source?: ('code' | 'stored' | 'fs') | undefined;
   status?: ('draft' | 'published' | 'archived') | undefined;
   activeVersionId?: string | undefined;
   hasDraft?: boolean | undefined;
@@ -407,6 +411,15 @@ export type PostAgentsAgentIdClone_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -4402,6 +4415,15 @@ export type PostAgentsAgentIdClone_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -4516,6 +4538,15 @@ export type PostAgentsAgentIdClone_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -4964,6 +4995,14 @@ export type PostAgentsAgentIdGenerate_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -5130,6 +5169,14 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -5300,6 +5347,14 @@ export type PostAgentsAgentIdStream_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -5466,6 +5521,14 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   maxIdleMs?: number | undefined;
   [x: string]: unknown;
@@ -5638,6 +5701,14 @@ export type PostAgentsAgentIdStreamVnext_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -5965,6 +6036,14 @@ export type PostAgentsAgentIdSendMessage_Body =
                         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
                         fallbackValue?: any | undefined;
                       }
+                    | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
                     | undefined;
                   [x: string]: unknown;
                 }
@@ -6344,6 +6423,14 @@ export type PostAgentsAgentIdQueueMessage_Body =
                         fallbackValue?: any | undefined;
                       }
                     | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
+                    | undefined;
                   [x: string]: unknown;
                 }
               | undefined;
@@ -6696,6 +6783,14 @@ export type PostAgentsAgentIdSignals_Body =
                         fallbackValue?: any | undefined;
                       }
                     | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
+                    | undefined;
                   [x: string]: unknown;
                 }
               | undefined;
@@ -6960,7 +7055,10 @@ export type PostAgentsAgentIdSendToolApproval_Body = {
     | undefined;
   toolCallId: string;
   approved: boolean;
+  resumeData?: any | undefined;
   format?: string | undefined;
+  messages?: any[] | undefined;
+  streamOptions?: any | undefined;
 };
 
 export type PostAgentsAgentIdSendToolApproval_Response = {
@@ -6987,6 +7085,60 @@ export interface PostAgentsAgentIdSendToolApproval_RouteContract {
   body: PostAgentsAgentIdSendToolApproval_Body;
   request: PostAgentsAgentIdSendToolApproval_Request;
   response: PostAgentsAgentIdSendToolApproval_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agents/:agentId/suspended-runs
+// ============================================================================
+export type GetAgentsAgentIdSuspendedRuns_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_QueryParams = {
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  fromDate?: Date | undefined;
+  toDate?: Date | undefined;
+  perPage?: number | undefined;
+  page?: number | undefined;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_Response = {
+  runs: {
+    runId: string;
+    status: 'suspended';
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    suspendedAt: Date;
+    toolCalls: {
+      toolCallId?: string | undefined;
+      toolName?: string | undefined;
+      args?: unknown | undefined;
+      requiresApproval: boolean;
+      suspendPayload?: unknown | undefined;
+    }[];
+  }[];
+  total: number;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_Request = Simplify<
+  (GetAgentsAgentIdSuspendedRuns_PathParams extends never ? {} : { params: GetAgentsAgentIdSuspendedRuns_PathParams }) &
+    (GetAgentsAgentIdSuspendedRuns_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdSuspendedRuns_QueryParams
+        ? { query?: GetAgentsAgentIdSuspendedRuns_QueryParams }
+        : { query: GetAgentsAgentIdSuspendedRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdSuspendedRuns_RouteContract {
+  pathParams: GetAgentsAgentIdSuspendedRuns_PathParams;
+  queryParams: GetAgentsAgentIdSuspendedRuns_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdSuspendedRuns_Request;
+  response: GetAgentsAgentIdSuspendedRuns_Response;
   responseType: 'json';
 }
 
@@ -7175,6 +7327,14 @@ export type PostAgentsAgentIdResumeStream_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   resumeData: unknown;
   toolCallId?: string | undefined;
@@ -7510,6 +7670,14 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   resumeData: unknown;
   toolCallId?: string | undefined;
   maxIdleMs?: number | undefined;
@@ -7681,6 +7849,14 @@ export type PostAgentsAgentIdNetwork_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8028,7 +8204,7 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
   body: PostAgentsAgentIdVoiceSpeak_Body;
   request: PostAgentsAgentIdVoiceSpeak_Request;
   response: PostAgentsAgentIdVoiceSpeak_Response;
-  responseType: 'stream';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
@@ -8067,7 +8243,7 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
   body: PostAgentsAgentIdSpeak_Body;
   request: PostAgentsAgentIdSpeak_Request;
   response: PostAgentsAgentIdSpeak_Response;
-  responseType: 'stream';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
@@ -8325,6 +8501,14 @@ export type PostAgentsAgentIdStreamVNext_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -8496,6 +8680,14 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8670,6 +8862,14 @@ export type PostAgentsAgentIdStreamUi_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8972,6 +9172,28 @@ export interface GetAuthRolesRoleIdPermissions_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /auth/permission-patterns
+// ============================================================================
+export type GetAuthPermissionPatterns_Response = {
+  patterns: string[];
+};
+
+export type GetAuthPermissionPatterns_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthPermissionPatterns_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetAuthPermissionPatterns_Request;
+  response: GetAuthPermissionPatterns_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows
 // ============================================================================
 export type GetWorkflows_QueryParams = {
@@ -9158,6 +9380,7 @@ export type GetWorkflowsWorkflowIdRuns_QueryParams = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
 };
@@ -9230,7 +9453,8 @@ export type GetWorkflowsWorkflowIdRunsRunId_Response = {
     | 'pending'
     | 'bailed'
     | 'tripwire'
-    | 'paused';
+    | 'paused'
+    | 'skipped';
   initialState?:
     | {
         [key: string]: any;
@@ -9537,6 +9761,7 @@ export type PostWorkflowsWorkflowIdStartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -9743,6 +9968,7 @@ export type PostWorkflowsWorkflowIdResumeAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -10106,6 +10332,7 @@ export type PostWorkflowsWorkflowIdTimeTravelAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -10346,6 +10573,7 @@ export type PostWorkflowsWorkflowIdRestartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -11491,6 +11719,32 @@ export type GetMemoryObservationalMemory_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
@@ -11519,6 +11773,32 @@ export type GetMemoryObservationalMemory_Response = {
         threadId: string | null;
         activeObservations: string;
         bufferedObservations?: string | undefined;
+        bufferedObservationChunks?:
+          | {
+              id?: string | undefined;
+              cycleId: string;
+              observations: string;
+              tokenCount: number;
+              messageIds?: string[] | undefined;
+              messageTokens: number;
+              lastObservedAt?: Date | undefined;
+              createdAt?: Date | undefined;
+              suggestedContinuation?: string | undefined;
+              currentTask?: string | undefined;
+              threadTitle?: string | undefined;
+              extractedValues?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+              extractionFailures?:
+                | {
+                    slug: string;
+                    error: string;
+                  }[]
+                | undefined;
+            }[]
+          | undefined;
         bufferedReflection?: string | undefined;
         originType: 'initial' | 'observation' | 'reflection';
         generationCount: number;
@@ -11578,6 +11858,32 @@ export type PostMemoryObservationalMemoryBufferStatus_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
@@ -12728,7 +13034,7 @@ export type GetScoresScorers_Response = {
     agentNames: string[];
     workflowIds: string[];
     isRegistered: boolean;
-    source: 'code' | 'stored';
+    source: 'code' | 'stored' | 'fs';
   };
 };
 
@@ -12770,7 +13076,7 @@ export type GetScoresScorersScorerId_Response = {
   agentNames: string[];
   workflowIds: string[];
   isRegistered: boolean;
-  source: 'code' | 'stored';
+  source: 'code' | 'stored' | 'fs';
 } | null;
 
 export type GetScoresScorersScorerId_Request = Simplify<
@@ -13025,6 +13331,7 @@ export type GetObservabilityTraces_QueryParams = {
         | undefined
       )
     | undefined;
+  /** Filter by trace ID (matches root span) */
   traceId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -13158,10 +13465,13 @@ export type GetObservabilityTraces_QueryParams = {
   name?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'startedAt' | 'endedAt' */
   field?: ('startedAt' | 'endedAt') | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -13178,6 +13488,7 @@ export type GetObservabilityTraces_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -13186,6 +13497,7 @@ export type GetObservabilityTraces_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   spans: {
     /** Unique trace identifier */
@@ -13336,6 +13648,7 @@ export type GetObservabilityTraces_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
     /** Current status of the trace */
     status: 'success' | 'error' | 'running';
@@ -13436,6 +13749,7 @@ export type GetObservabilityTracesLight_QueryParams = {
         | undefined
       )
     | undefined;
+  /** Filter by trace ID (matches root span) */
   traceId?: (string | undefined) | undefined;
   entityType?: (string | undefined) | undefined;
   entityId?: ((string | null) | undefined) | undefined;
@@ -13527,9 +13841,13 @@ export type GetObservabilityTracesLight_QueryParams = {
   tags?: (((string[] | null) | undefined) | undefined) | any;
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   hasChildError?: (boolean | undefined) | undefined;
+  /** Zero-indexed page number */
   page?: (number | undefined) | undefined;
+  /** Number of items per page */
   perPage?: (number | undefined) | undefined;
+  /** Field to order by */
   field?: ('startedAt' | 'endedAt') | undefined;
+  /** Sort direction */
   direction?: ('ASC' | 'DESC') | undefined;
   dateRange?:
     | (
@@ -13630,6 +13948,7 @@ export type GetObservabilityTracesLight_Response = {
     entityName?: (string | null) | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -13728,6 +14047,7 @@ export type GetObservabilityBranches_QueryParams = {
         | undefined
       )
     | undefined;
+  /** Filter by parent trace ID */
   traceId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -13841,10 +14161,13 @@ export type GetObservabilityBranches_QueryParams = {
   status?: (('success' | 'error' | 'running') | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'startedAt' | 'endedAt' */
   field?: ('startedAt' | 'endedAt') | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -13861,6 +14184,7 @@ export type GetObservabilityBranches_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -13869,6 +14193,7 @@ export type GetObservabilityBranches_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   branches: {
     /** Unique trace identifier */
@@ -14019,6 +14344,7 @@ export type GetObservabilityBranches_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
     /** Current status of the trace */
     status: 'success' | 'error' | 'running';
@@ -14211,6 +14537,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -14396,6 +14723,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -14493,6 +14821,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
     entityName?: (string | null) | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -14675,6 +15004,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   };
 };
@@ -14736,6 +15066,7 @@ export type PostObservabilityTracesScore_Body = {
   targets: {
     /** Unique trace identifier */
     traceId: string;
+    /** Unique span identifier within a trace */
     spanId?: string | undefined;
   }[];
 };
@@ -14776,7 +15107,9 @@ export type GetObservabilityTracesTraceIdSpanIdScores_PathParams = {
 };
 
 export type GetObservabilityTracesTraceIdSpanIdScores_QueryParams = {
+  /** Zero-indexed page number */
   page?: (number | undefined) | undefined;
+  /** Number of items per page */
   perPage?: (number | undefined) | undefined;
 };
 
@@ -14876,6 +15209,11 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
     spanId?: string | undefined;
     resourceId?: string | undefined;
     threadId?: string | undefined;
+    organizationId?: (string | null) | undefined;
+    projectId?: (string | null) | undefined;
+    batchId?: (string | null) | undefined;
+    datasetId?: (string | null) | undefined;
+    datasetItemId?: (string | null) | undefined;
     preprocessStepResult?:
       | {
           [key: string]: unknown;
@@ -14886,6 +15224,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
     generateReasonPrompt?: string | undefined;
     /** Database record creation time */
     createdAt: Date;
+    /** Database record last update time */
     updatedAt: Date | null;
   }[];
 };
@@ -14933,7 +15272,9 @@ export type GetObservabilityMetrics_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -15011,6 +15352,7 @@ export type GetObservabilityMetrics_QueryParams = {
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
   name?: ((string[] | undefined) | undefined) | any;
+  /** Filter by execution source */
   source?: (string | undefined) | undefined;
   provider?: (string | undefined) | undefined;
   model?: (string | undefined) | undefined;
@@ -15028,10 +15370,13 @@ export type GetObservabilityMetrics_QueryParams = {
     | any;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' */
   field?: 'timestamp' | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -15048,6 +15393,7 @@ export type GetObservabilityMetrics_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -15056,6 +15402,7 @@ export type GetObservabilityMetrics_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   metrics: {
     /** Unique id for this metric event */
@@ -15168,6 +15515,7 @@ export type GetObservabilityMetrics_Response = {
           | null
         )
       | undefined;
+    /** Metric labels for dimensional filtering */
     labels: {
       [key: string]: string;
     };
@@ -15220,7 +15568,9 @@ export type GetObservabilityLogs_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -15297,7 +15647,9 @@ export type GetObservabilityLogs_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
+  /** Filter by execution source */
   source?: (string | undefined) | undefined;
+  /** Filter by log level(s) */
   level?:
     | (
         | (('debug' | 'info' | 'warn' | 'error' | 'fatal') | ('debug' | 'info' | 'warn' | 'error' | 'fatal')[])
@@ -15306,10 +15658,13 @@ export type GetObservabilityLogs_QueryParams = {
     | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' */
   field?: 'timestamp' | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -15326,6 +15681,7 @@ export type GetObservabilityLogs_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -15334,6 +15690,7 @@ export type GetObservabilityLogs_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   logs: {
     /** Unique id for this log event */
@@ -15485,7 +15842,9 @@ export type GetObservabilityScores_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -15562,15 +15921,21 @@ export type GetObservabilityScores_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
+  /** Filter by scorer ID(s) */
   scorerId?: ((string | string[]) | undefined) | undefined;
+  /** Filter by how the score was produced */
   scoreSource?: (string | undefined) | undefined;
+  /** Filter by how the score was produced */
   source?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' | 'score' */
   field?: ('timestamp' | 'score') | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -15587,6 +15952,7 @@ export type GetObservabilityScores_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -15595,6 +15961,7 @@ export type GetObservabilityScores_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   scores: {
     /** Unique id for this score event */
@@ -15872,6 +16239,7 @@ export type GetObservabilityScoresScoreId_PathParams = {
 };
 
 export type GetObservabilityScoresScoreId_Response = {
+  /** Score record as stored in the database */
   score: {
     /** Unique id for this score event */
     scoreId?: (string | null) | undefined;
@@ -16005,9 +16373,11 @@ export interface GetObservabilityScoresScoreId_RouteContract {
 export type PostObservabilityScoresAggregate_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16027,6 +16397,7 @@ export type PostObservabilityScoresAggregate_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16043,15 +16414,25 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16068,7 +16449,9 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16085,12 +16468,19 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16102,6 +16492,7 @@ export type PostObservabilityScoresAggregate_Body = {
         source?: string | undefined;
       }
     | undefined;
+  /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
 
@@ -16139,11 +16530,13 @@ export interface PostObservabilityScoresAggregate_RouteContract {
 export type PostObservabilityScoresBreakdown_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16163,6 +16556,7 @@ export type PostObservabilityScoresBreakdown_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16179,15 +16573,25 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16204,7 +16608,9 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16221,12 +16627,19 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16276,11 +16689,13 @@ export interface PostObservabilityScoresBreakdown_RouteContract {
 export type PostObservabilityScoresTimeseries_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16300,6 +16715,7 @@ export type PostObservabilityScoresTimeseries_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16316,15 +16732,25 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16341,7 +16767,9 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16358,12 +16786,19 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16375,6 +16810,7 @@ export type PostObservabilityScoresTimeseries_Body = {
         source?: string | undefined;
       }
     | undefined;
+  /** Fields to group by */
   groupBy?: string[] | undefined;
 };
 
@@ -16416,11 +16852,13 @@ export interface PostObservabilityScoresTimeseries_RouteContract {
 export type PostObservabilityScoresPercentiles_Body = {
   /** Identifier of the scorer (e.g., relevance, accuracy) */
   scorerId: string;
+  /** How the score was produced (e.g., manual, automated, experiment) */
   scoreSource?: string | undefined;
   /** Percentile values (0-1) */
   percentiles: number[];
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
+  /** Filters for querying scores */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16440,6 +16878,7 @@ export type PostObservabilityScoresPercentiles_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16456,15 +16895,25 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -16481,7 +16930,9 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -16498,12 +16949,19 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -16571,7 +17029,9 @@ export type GetObservabilityFeedback_QueryParams = {
         | undefined
       )
     | any;
+  /** Filter by trace ID */
   traceId?: (string | undefined) | undefined;
+  /** Filter by span ID */
   spanId?: (string | undefined) | undefined;
   entityType?:
     | (
@@ -16648,16 +17108,20 @@ export type GetObservabilityFeedback_QueryParams = {
   requestId?: (string | undefined) | undefined;
   executionSource?: (string | undefined) | undefined;
   tags?: ((string[] | undefined) | undefined) | any;
+  /** Filter by feedback type(s) */
   feedbackType?: ((string | string[]) | undefined) | undefined;
   feedbackSource?: (string | undefined) | undefined;
   source?: (string | undefined) | undefined;
   feedbackUserId?: (string | undefined) | undefined;
   page?: (number | undefined) | undefined;
   perPage?: (number | undefined) | undefined;
+  /** Field to order by: 'timestamp' */
   field?: 'timestamp' | undefined;
+  /** Sort direction: 'ASC' | 'DESC' */
   direction?: ('ASC' | 'DESC') | undefined;
   mode?: (('page' | 'delta') | undefined) | undefined;
   after?: (string | undefined) | undefined;
+  /** Maximum number of updates to return in one delta poll */
   limit?: (number | undefined) | undefined;
 };
 
@@ -16674,6 +17138,7 @@ export type GetObservabilityFeedback_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Incremental polling metadata */
   delta?:
     | {
         /** Maximum number of updates requested for this delta poll */
@@ -16682,6 +17147,7 @@ export type GetObservabilityFeedback_Response = {
         hasMore: boolean;
       }
     | undefined;
+  /** Opaque cursor value for incremental polling */
   deltaCursor?: string | undefined;
   feedback: {
     /** Unique id for this feedback event */
@@ -16955,9 +17421,11 @@ export interface PostObservabilityFeedback_RouteContract {
 export type PostObservabilityFeedbackAggregate_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -16977,6 +17445,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -16993,15 +17462,25 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17018,7 +17497,9 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17035,22 +17516,33 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
+  /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
 
@@ -17088,11 +17580,13 @@ export interface PostObservabilityFeedbackAggregate_RouteContract {
 export type PostObservabilityFeedbackBreakdown_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Fields to group by */
   groupBy: string[];
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17112,6 +17606,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17128,15 +17623,25 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17153,7 +17658,9 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17170,19 +17677,29 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
@@ -17224,11 +17741,13 @@ export interface PostObservabilityFeedbackBreakdown_RouteContract {
 export type PostObservabilityFeedbackTimeseries_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
   /** Aggregation function */
   aggregation: 'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17248,6 +17767,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17264,15 +17784,25 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17289,7 +17819,9 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17306,22 +17838,33 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
+  /** Fields to group by */
   groupBy?: string[] | undefined;
 };
 
@@ -17363,11 +17906,13 @@ export interface PostObservabilityFeedbackTimeseries_RouteContract {
 export type PostObservabilityFeedbackPercentiles_Body = {
   /** Type of feedback (e.g., 'thumbs', 'rating', 'correction') */
   feedbackType: string;
+  /** Source of feedback (e.g., 'user', 'system', 'manual') */
   feedbackSource?: string | undefined;
   /** Percentile values (0-1) */
   percentiles: number[];
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
+  /** Filters for querying feedback */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17387,6 +17932,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17403,15 +17949,25 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17428,7 +17984,9 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17445,19 +18003,29 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
         /** Filter by feedback type(s) */
         feedbackType?: (string | string[]) | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         feedbackSource?: string | undefined;
+        /** Source of feedback (e.g., 'user', 'system', 'manual') */
         source?: string | undefined;
+        /** User who provided the feedback */
         feedbackUserId?: string | undefined;
       }
     | undefined;
@@ -17522,6 +18090,7 @@ export type PostObservabilityMetricsAggregate_Body = {
         | 'resourceId'
       )
     | undefined;
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17541,6 +18110,7 @@ export type PostObservabilityMetricsAggregate_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17557,15 +18127,25 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17582,7 +18162,9 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17599,12 +18181,19 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -17612,8 +18201,11 @@ export type PostObservabilityMetricsAggregate_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -17623,6 +18215,7 @@ export type PostObservabilityMetricsAggregate_Body = {
           | undefined;
       }
     | undefined;
+  /** Comparison period for aggregate queries */
   comparePeriod?: ('previous_period' | 'previous_day' | 'previous_week') | undefined;
 };
 
@@ -17691,6 +18284,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
         | 'resourceId'
       )
     | undefined;
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17710,6 +18304,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17726,15 +18321,25 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17751,7 +18356,9 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17768,12 +18375,19 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -17781,8 +18395,11 @@ export type PostObservabilityMetricsBreakdown_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -17861,6 +18478,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
         | 'resourceId'
       )
     | undefined;
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -17880,6 +18498,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -17896,15 +18515,25 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -17921,7 +18550,9 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -17938,12 +18569,19 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -17951,8 +18589,11 @@ export type PostObservabilityMetricsTimeseries_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -17962,6 +18603,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
           | undefined;
       }
     | undefined;
+  /** Fields to group by */
   groupBy?: string[] | undefined;
 };
 
@@ -18011,6 +18653,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
   percentiles: number[];
   /** Time bucket interval */
   interval: '1m' | '5m' | '15m' | '1h' | '1d';
+  /** Filters for querying metrics */
   filters?:
     | {
         /** Filter by timestamp range */
@@ -18030,6 +18673,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
         traceId?: string | undefined;
         /** Filter by span ID */
         spanId?: string | undefined;
+        /** Entity type (e.g., 'agent' | 'processor' | 'tool' | 'workflow') */
         entityType?:
           | (
               | 'agent'
@@ -18046,15 +18690,25 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the entity */
         entityName?: string | undefined;
+        /** Version ID of the entity that produced this signal (e.g., agent version, workflow version) */
         entityVersionId?: string | undefined;
+        /** Version ID of the parent entity that produced this signal */
         parentEntityVersionId?: string | undefined;
+        /** Version ID of the root entity that produced this signal */
         rootEntityVersionId?: string | undefined;
+        /** Human end-user who triggered execution */
         userId?: string | undefined;
+        /** Multi-tenant organization/account */
         organizationId?: string | undefined;
+        /** Experiment or eval run identifier */
         experimentId?: string | undefined;
+        /** Name of the service */
         serviceName?: string | undefined;
+        /** Environment (e.g., "production" | "staging" | "development") */
         environment?: string | undefined;
+        /** Entity type of the parent entity */
         parentEntityType?:
           | (
               | 'agent'
@@ -18071,7 +18725,9 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the parent entity */
         parentEntityName?: string | undefined;
+        /** Entity type of the root entity */
         rootEntityType?:
           | (
               | 'agent'
@@ -18088,12 +18744,19 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'memory'
             )
           | undefined;
+        /** Name of the root entity */
         rootEntityName?: string | undefined;
+        /** Broader resource context (Mastra memory compatibility) */
         resourceId?: string | undefined;
+        /** Unique execution run identifier */
         runId?: string | undefined;
+        /** Session identifier for grouping traces */
         sessionId?: string | undefined;
+        /** Conversation thread identifier */
         threadId?: string | undefined;
+        /** HTTP request ID for log correlation */
         requestId?: string | undefined;
+        /** Source of execution (e.g., "local" | "cloud" | "ci") */
         executionSource?: string | undefined;
         /** Filter by tags (must have all specified tags) */
         tags?: string[] | undefined;
@@ -18101,8 +18764,11 @@ export type PostObservabilityMetricsPercentiles_Body = {
         name?: string[] | undefined;
         /** Filter by execution source */
         source?: string | undefined;
+        /** Model provider */
         provider?: string | undefined;
+        /** Model */
         model?: string | undefined;
+        /** Unit for the estimated cost (e.g., usd) */
         costUnit?: string | undefined;
         /** Exact match on label key-value pairs */
         labels?:
@@ -18150,7 +18816,9 @@ export interface PostObservabilityMetricsPercentiles_RouteContract {
 // Route: GET /observability/discovery/metric-names
 // ============================================================================
 export type GetObservabilityDiscoveryMetricNames_QueryParams = {
+  /** Filter metric names by prefix */
   prefix?: (string | undefined) | undefined;
+  /** Maximum number of names to return */
   limit?: (number | undefined) | undefined;
 };
 
@@ -18288,6 +18956,7 @@ export interface GetObservabilityDiscoveryEntityTypes_RouteContract {
 // Route: GET /observability/discovery/entity-names
 // ============================================================================
 export type GetObservabilityDiscoveryEntityNames_QueryParams = {
+  /** Optional entity type filter */
   entityType?:
     | (
         | (
@@ -18383,6 +19052,7 @@ export interface GetObservabilityDiscoveryEnvironments_RouteContract {
 // Route: GET /observability/discovery/tags
 // ============================================================================
 export type GetObservabilityDiscoveryTags_QueryParams = {
+  /** Optional entity type filter */
   entityType?:
     | (
         | (
@@ -20484,6 +21154,14 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   resourceId?: string | undefined;
   resourceid?: string | undefined;
   threadId?: string | undefined;
@@ -20655,6 +21333,14 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   resourceId?: string | undefined;
   resourceid?: string | undefined;
@@ -21177,6 +21863,15 @@ export type GetStoredAgents_Response = {
     status: string;
     activeVersionId?: string | undefined;
     authorId?: string | undefined;
+    /** Resolved author identity (when an auth provider is configured) */
+    author?:
+      | {
+          id: string;
+          name?: string | undefined;
+          email?: string | undefined;
+          avatarUrl?: string | undefined;
+        }
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -25172,6 +25867,15 @@ export type GetStoredAgents_Response = {
                     operationTimeout?: number | undefined;
                   };
                 }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
+                  };
+                }
             )
           | {
               value:
@@ -25286,6 +25990,15 @@ export type GetStoredAgents_Response = {
                       autoSync?: boolean | undefined;
                       /** Operation timeout in milliseconds */
                       operationTimeout?: number | undefined;
+                    };
+                  }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
                     };
                   };
               rules?:
@@ -25650,6 +26363,39 @@ export interface PostStoredAgentsPreviewInstructions_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /stored/agents/:storedAgentId/dependents
+// ============================================================================
+export type GetStoredAgentsStoredAgentIdDependents_PathParams = {
+  /** Unique identifier for the stored agent */
+  storedAgentId: string;
+};
+
+export type GetStoredAgentsStoredAgentIdDependents_Response = {
+  dependents: {
+    id: string;
+    name: string;
+  }[];
+  hiddenCount: number;
+};
+
+export type GetStoredAgentsStoredAgentIdDependents_Request = Simplify<
+  (GetStoredAgentsStoredAgentIdDependents_PathParams extends never
+    ? {}
+    : { params: GetStoredAgentsStoredAgentIdDependents_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetStoredAgentsStoredAgentIdDependents_RouteContract {
+  pathParams: GetStoredAgentsStoredAgentIdDependents_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetStoredAgentsStoredAgentIdDependents_Request;
+  response: GetStoredAgentsStoredAgentIdDependents_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /stored/agents/:storedAgentId/export
 // ============================================================================
 export type PostStoredAgentsStoredAgentIdExport_PathParams = {
@@ -25658,8 +26404,11 @@ export type PostStoredAgentsStoredAgentIdExport_PathParams = {
 };
 
 export type PostStoredAgentsStoredAgentIdExport_Body = {
+  /** Name of the agent */
   name?: string | undefined;
+  /** Description of the agent */
   description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
   instructions?:
     | (
         | string
@@ -25745,6 +26494,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
           )[]
       )
     | undefined;
+  /** Model configuration — static value or array of conditional variants */
   model?:
     | (
         | {
@@ -25831,6 +26581,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
           }[]
       )
     | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
         | (
@@ -26048,6 +26799,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Default options for generate/stream calls — static or conditional */
   defaultOptions?:
     | (
         | (
@@ -26222,6 +26974,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
   workflows?:
     | (
         | (
@@ -26439,6 +27192,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
   agents?:
     | (
         | (
@@ -26656,6 +27410,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
   integrationTools?:
     | (
         | (
@@ -26885,6 +27640,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolProviders?:
     | (
         | (
@@ -26998,6 +27754,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
         | (
@@ -27227,6 +27984,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Input processor graph — static or conditional */
   inputProcessors?:
     | (
         | (
@@ -28058,6 +28816,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Output processor graph — static or conditional */
   outputProcessors?:
     | (
         | (
@@ -28889,6 +29648,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Memory configuration — static, conditional, or null to disable memory */
   memory?:
     | (
         | (
@@ -29223,6 +29983,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
   scorers?:
     | (
         | (
@@ -29462,6 +30223,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
         | (
@@ -29553,6 +30315,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Workspace reference (stored ID or inline config) — static or conditional */
   workspace?:
     | (
         | (
@@ -29670,6 +30433,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -29785,6 +30557,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
                       };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
+                      };
                     };
                 rules?:
                   | {
@@ -29857,6 +30638,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?:
     | (
         | (
@@ -30006,6 +30788,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining valid request context variables for conditional rule evaluation */
   requestContextSchema?:
     | (
         | {
@@ -30047,6 +30830,4440 @@ export interface PostStoredAgentsStoredAgentIdExport_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /stored/agents/:storedAgentId/change-request
+// ============================================================================
+export type PostStoredAgentsStoredAgentIdChangeRequest_PathParams = {
+  /** Unique identifier for the stored agent */
+  storedAgentId: string;
+};
+
+export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
+  /** Name of the agent */
+  name?: string | undefined;
+  /** Description of the agent */
+  description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
+  instructions?:
+    | (
+        | string
+        | (
+            | {
+                type: 'text';
+                content: string;
+              }
+            | {
+                type: 'prompt_block_ref';
+                id: string;
+              }
+            | {
+                type: 'prompt_block';
+                content: string;
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }
+          )[]
+      )
+    | undefined;
+  /** Model configuration — static value or array of conditional variants */
+  model?:
+    | (
+        | {
+            /** Model provider (e.g., openai, anthropic) */
+            provider: string;
+            /** Model name (e.g., gpt-4o, claude-3-opus) */
+            name: string;
+            [x: string]: unknown;
+          }
+        | {
+            value: {
+              /** Model provider (e.g., openai, anthropic) */
+              provider: string;
+              /** Model name (e.g., gpt-4o, claude-3-opus) */
+              name: string;
+              [x: string]: unknown;
+            };
+            rules?:
+              | {
+                  operator: 'AND' | 'OR';
+                  conditions: (
+                    | {
+                        field: string;
+                        operator:
+                          | 'equals'
+                          | 'not_equals'
+                          | 'contains'
+                          | 'not_contains'
+                          | 'greater_than'
+                          | 'less_than'
+                          | 'greater_than_or_equal'
+                          | 'less_than_or_equal'
+                          | 'in'
+                          | 'not_in'
+                          | 'exists'
+                          | 'not_exists';
+                        value?: unknown | undefined;
+                      }
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }[];
+                            }
+                        )[];
+                      }
+                  )[];
+                }
+              | undefined;
+          }[]
+      )
+    | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
+  tools?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  description?: string | undefined;
+                  rules?:
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: (
+                                | {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }[];
+                                  }
+                              )[];
+                            }
+                        )[];
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    description?: string | undefined;
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Default options for generate/stream calls — static or conditional */
+  defaultOptions?:
+    | (
+        | (
+            | {
+                runId?: string | undefined;
+                savePerStep?: boolean | undefined;
+                maxSteps?: number | undefined;
+                activeTools?: string[] | undefined;
+                maxProcessorRetries?: number | undefined;
+                toolChoice?:
+                  | (
+                      | 'auto'
+                      | 'none'
+                      | 'required'
+                      | {
+                          type: 'tool';
+                          toolName: string;
+                        }
+                    )
+                  | undefined;
+                modelSettings?:
+                  | {
+                      temperature?: number | undefined;
+                      maxTokens?: number | undefined;
+                      topP?: number | undefined;
+                      topK?: number | undefined;
+                      frequencyPenalty?: number | undefined;
+                      presencePenalty?: number | undefined;
+                      stopSequences?: string[] | undefined;
+                      seed?: number | undefined;
+                      maxRetries?: number | undefined;
+                    }
+                  | undefined;
+                returnScorerData?: boolean | undefined;
+                tracingOptions?:
+                  | {
+                      traceName?: string | undefined;
+                      attributes?:
+                        | {
+                            [key: string]: unknown;
+                          }
+                        | undefined;
+                      spanId?: string | undefined;
+                      traceId?: string | undefined;
+                    }
+                  | undefined;
+                requireToolApproval?: boolean | undefined;
+                autoResumeSuspendedTools?: boolean | undefined;
+                toolCallConcurrency?: number | undefined;
+                includeRawChunks?: boolean | undefined;
+                [x: string]: unknown;
+              }
+            | {
+                /** Default options for agent execution */
+                value: {
+                  runId?: string | undefined;
+                  savePerStep?: boolean | undefined;
+                  maxSteps?: number | undefined;
+                  activeTools?: string[] | undefined;
+                  maxProcessorRetries?: number | undefined;
+                  toolChoice?:
+                    | (
+                        | 'auto'
+                        | 'none'
+                        | 'required'
+                        | {
+                            type: 'tool';
+                            toolName: string;
+                          }
+                      )
+                    | undefined;
+                  modelSettings?:
+                    | {
+                        temperature?: number | undefined;
+                        maxTokens?: number | undefined;
+                        topP?: number | undefined;
+                        topK?: number | undefined;
+                        frequencyPenalty?: number | undefined;
+                        presencePenalty?: number | undefined;
+                        stopSequences?: string[] | undefined;
+                        seed?: number | undefined;
+                        maxRetries?: number | undefined;
+                      }
+                    | undefined;
+                  returnScorerData?: boolean | undefined;
+                  tracingOptions?:
+                    | {
+                        traceName?: string | undefined;
+                        attributes?:
+                          | {
+                              [key: string]: unknown;
+                            }
+                          | undefined;
+                        spanId?: string | undefined;
+                        traceId?: string | undefined;
+                      }
+                    | undefined;
+                  requireToolApproval?: boolean | undefined;
+                  autoResumeSuspendedTools?: boolean | undefined;
+                  toolCallConcurrency?: number | undefined;
+                  includeRawChunks?: boolean | undefined;
+                  [x: string]: unknown;
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
+  workflows?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  description?: string | undefined;
+                  rules?:
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: (
+                                | {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }[];
+                                  }
+                              )[];
+                            }
+                        )[];
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    description?: string | undefined;
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
+  agents?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  description?: string | undefined;
+                  rules?:
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: (
+                                | {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }[];
+                                  }
+                              )[];
+                            }
+                        )[];
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    description?: string | undefined;
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
+  integrationTools?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  tools?:
+                    | {
+                        [key: string]: {
+                          description?: string | undefined;
+                          rules?:
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }[];
+                                          }
+                                      )[];
+                                    }
+                                )[];
+                              }
+                            | undefined;
+                        };
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools?:
+                      | {
+                          [key: string]: {
+                            description?: string | undefined;
+                            rules?:
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: (
+                                    | {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }
+                                    | {
+                                        operator: 'AND' | 'OR';
+                                        conditions: (
+                                          | {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }
+                                          | {
+                                              operator: 'AND' | 'OR';
+                                              conditions: {
+                                                field: string;
+                                                operator:
+                                                  | 'equals'
+                                                  | 'not_equals'
+                                                  | 'contains'
+                                                  | 'not_contains'
+                                                  | 'greater_than'
+                                                  | 'less_than'
+                                                  | 'greater_than_or_equal'
+                                                  | 'less_than_or_equal'
+                                                  | 'in'
+                                                  | 'not_in'
+                                                  | 'exists'
+                                                  | 'not_exists';
+                                                value?: unknown | undefined;
+                                              }[];
+                                            }
+                                        )[];
+                                      }
+                                  )[];
+                                }
+                              | undefined;
+                          };
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
+  toolProviders?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  tools: {
+                    [key: string]: {
+                      toolkit?: string | undefined;
+                      description?: string | undefined;
+                    };
+                  };
+                  connections: {
+                    [key: string]: {
+                      kind: 'author' | 'invoker' | 'platform';
+                      toolkit: string;
+                      connectionId: string;
+                      label?: string | undefined;
+                      scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                    }[];
+                  };
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools: {
+                      [key: string]: {
+                        toolkit?: string | undefined;
+                        description?: string | undefined;
+                      };
+                    };
+                    connections: {
+                      [key: string]: {
+                        kind: 'author' | 'invoker' | 'platform';
+                        toolkit: string;
+                        connectionId: string;
+                        label?: string | undefined;
+                        scope?: ('shared' | 'per-author' | 'caller-supplied') | undefined;
+                      }[];
+                    };
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
+  mcpClients?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  tools?:
+                    | {
+                        [key: string]: {
+                          description?: string | undefined;
+                          rules?:
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }[];
+                                          }
+                                      )[];
+                                    }
+                                )[];
+                              }
+                            | undefined;
+                        };
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    tools?:
+                      | {
+                          [key: string]: {
+                            description?: string | undefined;
+                            rules?:
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: (
+                                    | {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }
+                                    | {
+                                        operator: 'AND' | 'OR';
+                                        conditions: (
+                                          | {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }
+                                          | {
+                                              operator: 'AND' | 'OR';
+                                              conditions: {
+                                                field: string;
+                                                operator:
+                                                  | 'equals'
+                                                  | 'not_equals'
+                                                  | 'contains'
+                                                  | 'not_contains'
+                                                  | 'greater_than'
+                                                  | 'less_than'
+                                                  | 'greater_than_or_equal'
+                                                  | 'less_than_or_equal'
+                                                  | 'in'
+                                                  | 'not_in'
+                                                  | 'exists'
+                                                  | 'not_exists';
+                                                value?: unknown | undefined;
+                                              }[];
+                                            }
+                                        )[];
+                                      }
+                                  )[];
+                                }
+                              | undefined;
+                          };
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Input processor graph — static or conditional */
+  inputProcessors?:
+    | (
+        | (
+            | {
+                /** Ordered list of processor graph entries */
+                steps: (
+                  | {
+                      type: 'step';
+                      step: {
+                        /** Unique ID for this step within the graph */
+                        id: string;
+                        /** ProcessorProvider ID that creates this processor */
+                        providerId: string;
+                        /** Configuration matching the provider configSchema */
+                        config: {
+                          [key: string]: unknown;
+                        };
+                        /** Which processor phases to enable */
+                        enabledPhases: (
+                          | 'processInput'
+                          | 'processInputStep'
+                          | 'processOutputStream'
+                          | 'processOutputResult'
+                          | 'processOutputStep'
+                        )[];
+                      };
+                    }
+                  | {
+                      type: 'parallel';
+                      branches: (
+                        | {
+                            type: 'step';
+                            step: {
+                              /** Unique ID for this step within the graph */
+                              id: string;
+                              /** ProcessorProvider ID that creates this processor */
+                              providerId: string;
+                              /** Configuration matching the provider configSchema */
+                              config: {
+                                [key: string]: unknown;
+                              };
+                              /** Which processor phases to enable */
+                              enabledPhases: (
+                                | 'processInput'
+                                | 'processInputStep'
+                                | 'processOutputStream'
+                                | 'processOutputResult'
+                                | 'processOutputStep'
+                              )[];
+                            };
+                          }
+                        | {
+                            type: 'parallel';
+                            branches: {
+                              type: 'step';
+                              step: {
+                                /** Unique ID for this step within the graph */
+                                id: string;
+                                /** ProcessorProvider ID that creates this processor */
+                                providerId: string;
+                                /** Configuration matching the provider configSchema */
+                                config: {
+                                  [key: string]: unknown;
+                                };
+                                /** Which processor phases to enable */
+                                enabledPhases: (
+                                  | 'processInput'
+                                  | 'processInputStep'
+                                  | 'processOutputStream'
+                                  | 'processOutputResult'
+                                  | 'processOutputStep'
+                                )[];
+                              };
+                            }[][];
+                          }
+                        | {
+                            type: 'conditional';
+                            conditions: {
+                              steps: {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }[];
+                              rules?:
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: (
+                                      | {
+                                          field: string;
+                                          operator:
+                                            | 'equals'
+                                            | 'not_equals'
+                                            | 'contains'
+                                            | 'not_contains'
+                                            | 'greater_than'
+                                            | 'less_than'
+                                            | 'greater_than_or_equal'
+                                            | 'less_than_or_equal'
+                                            | 'in'
+                                            | 'not_in'
+                                            | 'exists'
+                                            | 'not_exists';
+                                          value?: unknown | undefined;
+                                        }
+                                      | {
+                                          operator: 'AND' | 'OR';
+                                          conditions: (
+                                            | {
+                                                field: string;
+                                                operator:
+                                                  | 'equals'
+                                                  | 'not_equals'
+                                                  | 'contains'
+                                                  | 'not_contains'
+                                                  | 'greater_than'
+                                                  | 'less_than'
+                                                  | 'greater_than_or_equal'
+                                                  | 'less_than_or_equal'
+                                                  | 'in'
+                                                  | 'not_in'
+                                                  | 'exists'
+                                                  | 'not_exists';
+                                                value?: unknown | undefined;
+                                              }
+                                            | {
+                                                operator: 'AND' | 'OR';
+                                                conditions: {
+                                                  field: string;
+                                                  operator:
+                                                    | 'equals'
+                                                    | 'not_equals'
+                                                    | 'contains'
+                                                    | 'not_contains'
+                                                    | 'greater_than'
+                                                    | 'less_than'
+                                                    | 'greater_than_or_equal'
+                                                    | 'less_than_or_equal'
+                                                    | 'in'
+                                                    | 'not_in'
+                                                    | 'exists'
+                                                    | 'not_exists';
+                                                  value?: unknown | undefined;
+                                                }[];
+                                              }
+                                          )[];
+                                        }
+                                    )[];
+                                  }
+                                | undefined;
+                            }[];
+                          }
+                      )[][];
+                    }
+                  | {
+                      type: 'conditional';
+                      conditions: {
+                        steps: (
+                          | {
+                              type: 'step';
+                              step: {
+                                /** Unique ID for this step within the graph */
+                                id: string;
+                                /** ProcessorProvider ID that creates this processor */
+                                providerId: string;
+                                /** Configuration matching the provider configSchema */
+                                config: {
+                                  [key: string]: unknown;
+                                };
+                                /** Which processor phases to enable */
+                                enabledPhases: (
+                                  | 'processInput'
+                                  | 'processInputStep'
+                                  | 'processOutputStream'
+                                  | 'processOutputResult'
+                                  | 'processOutputStep'
+                                )[];
+                              };
+                            }
+                          | {
+                              type: 'parallel';
+                              branches: {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }[][];
+                            }
+                          | {
+                              type: 'conditional';
+                              conditions: {
+                                steps: {
+                                  type: 'step';
+                                  step: {
+                                    /** Unique ID for this step within the graph */
+                                    id: string;
+                                    /** ProcessorProvider ID that creates this processor */
+                                    providerId: string;
+                                    /** Configuration matching the provider configSchema */
+                                    config: {
+                                      [key: string]: unknown;
+                                    };
+                                    /** Which processor phases to enable */
+                                    enabledPhases: (
+                                      | 'processInput'
+                                      | 'processInputStep'
+                                      | 'processOutputStream'
+                                      | 'processOutputResult'
+                                      | 'processOutputStep'
+                                    )[];
+                                  };
+                                }[];
+                                rules?:
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: (
+                                              | {
+                                                  field: string;
+                                                  operator:
+                                                    | 'equals'
+                                                    | 'not_equals'
+                                                    | 'contains'
+                                                    | 'not_contains'
+                                                    | 'greater_than'
+                                                    | 'less_than'
+                                                    | 'greater_than_or_equal'
+                                                    | 'less_than_or_equal'
+                                                    | 'in'
+                                                    | 'not_in'
+                                                    | 'exists'
+                                                    | 'not_exists';
+                                                  value?: unknown | undefined;
+                                                }
+                                              | {
+                                                  operator: 'AND' | 'OR';
+                                                  conditions: {
+                                                    field: string;
+                                                    operator:
+                                                      | 'equals'
+                                                      | 'not_equals'
+                                                      | 'contains'
+                                                      | 'not_contains'
+                                                      | 'greater_than'
+                                                      | 'less_than'
+                                                      | 'greater_than_or_equal'
+                                                      | 'less_than_or_equal'
+                                                      | 'in'
+                                                      | 'not_in'
+                                                      | 'exists'
+                                                      | 'not_exists';
+                                                    value?: unknown | undefined;
+                                                  }[];
+                                                }
+                                            )[];
+                                          }
+                                      )[];
+                                    }
+                                  | undefined;
+                              }[];
+                            }
+                        )[];
+                        rules?:
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: (
+                                | {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: (
+                                      | {
+                                          field: string;
+                                          operator:
+                                            | 'equals'
+                                            | 'not_equals'
+                                            | 'contains'
+                                            | 'not_contains'
+                                            | 'greater_than'
+                                            | 'less_than'
+                                            | 'greater_than_or_equal'
+                                            | 'less_than_or_equal'
+                                            | 'in'
+                                            | 'not_in'
+                                            | 'exists'
+                                            | 'not_exists';
+                                          value?: unknown | undefined;
+                                        }
+                                      | {
+                                          operator: 'AND' | 'OR';
+                                          conditions: {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }[];
+                                        }
+                                    )[];
+                                  }
+                              )[];
+                            }
+                          | undefined;
+                      }[];
+                    }
+                )[];
+              }
+            | {
+                value: {
+                  /** Ordered list of processor graph entries */
+                  steps: (
+                    | {
+                        type: 'step';
+                        step: {
+                          /** Unique ID for this step within the graph */
+                          id: string;
+                          /** ProcessorProvider ID that creates this processor */
+                          providerId: string;
+                          /** Configuration matching the provider configSchema */
+                          config: {
+                            [key: string]: unknown;
+                          };
+                          /** Which processor phases to enable */
+                          enabledPhases: (
+                            | 'processInput'
+                            | 'processInputStep'
+                            | 'processOutputStream'
+                            | 'processOutputResult'
+                            | 'processOutputStep'
+                          )[];
+                        };
+                      }
+                    | {
+                        type: 'parallel';
+                        branches: (
+                          | {
+                              type: 'step';
+                              step: {
+                                /** Unique ID for this step within the graph */
+                                id: string;
+                                /** ProcessorProvider ID that creates this processor */
+                                providerId: string;
+                                /** Configuration matching the provider configSchema */
+                                config: {
+                                  [key: string]: unknown;
+                                };
+                                /** Which processor phases to enable */
+                                enabledPhases: (
+                                  | 'processInput'
+                                  | 'processInputStep'
+                                  | 'processOutputStream'
+                                  | 'processOutputResult'
+                                  | 'processOutputStep'
+                                )[];
+                              };
+                            }
+                          | {
+                              type: 'parallel';
+                              branches: {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }[][];
+                            }
+                          | {
+                              type: 'conditional';
+                              conditions: {
+                                steps: {
+                                  type: 'step';
+                                  step: {
+                                    /** Unique ID for this step within the graph */
+                                    id: string;
+                                    /** ProcessorProvider ID that creates this processor */
+                                    providerId: string;
+                                    /** Configuration matching the provider configSchema */
+                                    config: {
+                                      [key: string]: unknown;
+                                    };
+                                    /** Which processor phases to enable */
+                                    enabledPhases: (
+                                      | 'processInput'
+                                      | 'processInputStep'
+                                      | 'processOutputStream'
+                                      | 'processOutputResult'
+                                      | 'processOutputStep'
+                                    )[];
+                                  };
+                                }[];
+                                rules?:
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: (
+                                              | {
+                                                  field: string;
+                                                  operator:
+                                                    | 'equals'
+                                                    | 'not_equals'
+                                                    | 'contains'
+                                                    | 'not_contains'
+                                                    | 'greater_than'
+                                                    | 'less_than'
+                                                    | 'greater_than_or_equal'
+                                                    | 'less_than_or_equal'
+                                                    | 'in'
+                                                    | 'not_in'
+                                                    | 'exists'
+                                                    | 'not_exists';
+                                                  value?: unknown | undefined;
+                                                }
+                                              | {
+                                                  operator: 'AND' | 'OR';
+                                                  conditions: {
+                                                    field: string;
+                                                    operator:
+                                                      | 'equals'
+                                                      | 'not_equals'
+                                                      | 'contains'
+                                                      | 'not_contains'
+                                                      | 'greater_than'
+                                                      | 'less_than'
+                                                      | 'greater_than_or_equal'
+                                                      | 'less_than_or_equal'
+                                                      | 'in'
+                                                      | 'not_in'
+                                                      | 'exists'
+                                                      | 'not_exists';
+                                                    value?: unknown | undefined;
+                                                  }[];
+                                                }
+                                            )[];
+                                          }
+                                      )[];
+                                    }
+                                  | undefined;
+                              }[];
+                            }
+                        )[][];
+                      }
+                    | {
+                        type: 'conditional';
+                        conditions: {
+                          steps: (
+                            | {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }
+                            | {
+                                type: 'parallel';
+                                branches: {
+                                  type: 'step';
+                                  step: {
+                                    /** Unique ID for this step within the graph */
+                                    id: string;
+                                    /** ProcessorProvider ID that creates this processor */
+                                    providerId: string;
+                                    /** Configuration matching the provider configSchema */
+                                    config: {
+                                      [key: string]: unknown;
+                                    };
+                                    /** Which processor phases to enable */
+                                    enabledPhases: (
+                                      | 'processInput'
+                                      | 'processInputStep'
+                                      | 'processOutputStream'
+                                      | 'processOutputResult'
+                                      | 'processOutputStep'
+                                    )[];
+                                  };
+                                }[][];
+                              }
+                            | {
+                                type: 'conditional';
+                                conditions: {
+                                  steps: {
+                                    type: 'step';
+                                    step: {
+                                      /** Unique ID for this step within the graph */
+                                      id: string;
+                                      /** ProcessorProvider ID that creates this processor */
+                                      providerId: string;
+                                      /** Configuration matching the provider configSchema */
+                                      config: {
+                                        [key: string]: unknown;
+                                      };
+                                      /** Which processor phases to enable */
+                                      enabledPhases: (
+                                        | 'processInput'
+                                        | 'processInputStep'
+                                        | 'processOutputStream'
+                                        | 'processOutputResult'
+                                        | 'processOutputStep'
+                                      )[];
+                                    };
+                                  }[];
+                                  rules?:
+                                    | {
+                                        operator: 'AND' | 'OR';
+                                        conditions: (
+                                          | {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }
+                                          | {
+                                              operator: 'AND' | 'OR';
+                                              conditions: (
+                                                | {
+                                                    field: string;
+                                                    operator:
+                                                      | 'equals'
+                                                      | 'not_equals'
+                                                      | 'contains'
+                                                      | 'not_contains'
+                                                      | 'greater_than'
+                                                      | 'less_than'
+                                                      | 'greater_than_or_equal'
+                                                      | 'less_than_or_equal'
+                                                      | 'in'
+                                                      | 'not_in'
+                                                      | 'exists'
+                                                      | 'not_exists';
+                                                    value?: unknown | undefined;
+                                                  }
+                                                | {
+                                                    operator: 'AND' | 'OR';
+                                                    conditions: {
+                                                      field: string;
+                                                      operator:
+                                                        | 'equals'
+                                                        | 'not_equals'
+                                                        | 'contains'
+                                                        | 'not_contains'
+                                                        | 'greater_than'
+                                                        | 'less_than'
+                                                        | 'greater_than_or_equal'
+                                                        | 'less_than_or_equal'
+                                                        | 'in'
+                                                        | 'not_in'
+                                                        | 'exists'
+                                                        | 'not_exists';
+                                                      value?: unknown | undefined;
+                                                    }[];
+                                                  }
+                                              )[];
+                                            }
+                                        )[];
+                                      }
+                                    | undefined;
+                                }[];
+                              }
+                          )[];
+                          rules?:
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }[];
+                                          }
+                                      )[];
+                                    }
+                                )[];
+                              }
+                            | undefined;
+                        }[];
+                      }
+                  )[];
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Output processor graph — static or conditional */
+  outputProcessors?:
+    | (
+        | (
+            | {
+                /** Ordered list of processor graph entries */
+                steps: (
+                  | {
+                      type: 'step';
+                      step: {
+                        /** Unique ID for this step within the graph */
+                        id: string;
+                        /** ProcessorProvider ID that creates this processor */
+                        providerId: string;
+                        /** Configuration matching the provider configSchema */
+                        config: {
+                          [key: string]: unknown;
+                        };
+                        /** Which processor phases to enable */
+                        enabledPhases: (
+                          | 'processInput'
+                          | 'processInputStep'
+                          | 'processOutputStream'
+                          | 'processOutputResult'
+                          | 'processOutputStep'
+                        )[];
+                      };
+                    }
+                  | {
+                      type: 'parallel';
+                      branches: (
+                        | {
+                            type: 'step';
+                            step: {
+                              /** Unique ID for this step within the graph */
+                              id: string;
+                              /** ProcessorProvider ID that creates this processor */
+                              providerId: string;
+                              /** Configuration matching the provider configSchema */
+                              config: {
+                                [key: string]: unknown;
+                              };
+                              /** Which processor phases to enable */
+                              enabledPhases: (
+                                | 'processInput'
+                                | 'processInputStep'
+                                | 'processOutputStream'
+                                | 'processOutputResult'
+                                | 'processOutputStep'
+                              )[];
+                            };
+                          }
+                        | {
+                            type: 'parallel';
+                            branches: {
+                              type: 'step';
+                              step: {
+                                /** Unique ID for this step within the graph */
+                                id: string;
+                                /** ProcessorProvider ID that creates this processor */
+                                providerId: string;
+                                /** Configuration matching the provider configSchema */
+                                config: {
+                                  [key: string]: unknown;
+                                };
+                                /** Which processor phases to enable */
+                                enabledPhases: (
+                                  | 'processInput'
+                                  | 'processInputStep'
+                                  | 'processOutputStream'
+                                  | 'processOutputResult'
+                                  | 'processOutputStep'
+                                )[];
+                              };
+                            }[][];
+                          }
+                        | {
+                            type: 'conditional';
+                            conditions: {
+                              steps: {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }[];
+                              rules?:
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: (
+                                      | {
+                                          field: string;
+                                          operator:
+                                            | 'equals'
+                                            | 'not_equals'
+                                            | 'contains'
+                                            | 'not_contains'
+                                            | 'greater_than'
+                                            | 'less_than'
+                                            | 'greater_than_or_equal'
+                                            | 'less_than_or_equal'
+                                            | 'in'
+                                            | 'not_in'
+                                            | 'exists'
+                                            | 'not_exists';
+                                          value?: unknown | undefined;
+                                        }
+                                      | {
+                                          operator: 'AND' | 'OR';
+                                          conditions: (
+                                            | {
+                                                field: string;
+                                                operator:
+                                                  | 'equals'
+                                                  | 'not_equals'
+                                                  | 'contains'
+                                                  | 'not_contains'
+                                                  | 'greater_than'
+                                                  | 'less_than'
+                                                  | 'greater_than_or_equal'
+                                                  | 'less_than_or_equal'
+                                                  | 'in'
+                                                  | 'not_in'
+                                                  | 'exists'
+                                                  | 'not_exists';
+                                                value?: unknown | undefined;
+                                              }
+                                            | {
+                                                operator: 'AND' | 'OR';
+                                                conditions: {
+                                                  field: string;
+                                                  operator:
+                                                    | 'equals'
+                                                    | 'not_equals'
+                                                    | 'contains'
+                                                    | 'not_contains'
+                                                    | 'greater_than'
+                                                    | 'less_than'
+                                                    | 'greater_than_or_equal'
+                                                    | 'less_than_or_equal'
+                                                    | 'in'
+                                                    | 'not_in'
+                                                    | 'exists'
+                                                    | 'not_exists';
+                                                  value?: unknown | undefined;
+                                                }[];
+                                              }
+                                          )[];
+                                        }
+                                    )[];
+                                  }
+                                | undefined;
+                            }[];
+                          }
+                      )[][];
+                    }
+                  | {
+                      type: 'conditional';
+                      conditions: {
+                        steps: (
+                          | {
+                              type: 'step';
+                              step: {
+                                /** Unique ID for this step within the graph */
+                                id: string;
+                                /** ProcessorProvider ID that creates this processor */
+                                providerId: string;
+                                /** Configuration matching the provider configSchema */
+                                config: {
+                                  [key: string]: unknown;
+                                };
+                                /** Which processor phases to enable */
+                                enabledPhases: (
+                                  | 'processInput'
+                                  | 'processInputStep'
+                                  | 'processOutputStream'
+                                  | 'processOutputResult'
+                                  | 'processOutputStep'
+                                )[];
+                              };
+                            }
+                          | {
+                              type: 'parallel';
+                              branches: {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }[][];
+                            }
+                          | {
+                              type: 'conditional';
+                              conditions: {
+                                steps: {
+                                  type: 'step';
+                                  step: {
+                                    /** Unique ID for this step within the graph */
+                                    id: string;
+                                    /** ProcessorProvider ID that creates this processor */
+                                    providerId: string;
+                                    /** Configuration matching the provider configSchema */
+                                    config: {
+                                      [key: string]: unknown;
+                                    };
+                                    /** Which processor phases to enable */
+                                    enabledPhases: (
+                                      | 'processInput'
+                                      | 'processInputStep'
+                                      | 'processOutputStream'
+                                      | 'processOutputResult'
+                                      | 'processOutputStep'
+                                    )[];
+                                  };
+                                }[];
+                                rules?:
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: (
+                                              | {
+                                                  field: string;
+                                                  operator:
+                                                    | 'equals'
+                                                    | 'not_equals'
+                                                    | 'contains'
+                                                    | 'not_contains'
+                                                    | 'greater_than'
+                                                    | 'less_than'
+                                                    | 'greater_than_or_equal'
+                                                    | 'less_than_or_equal'
+                                                    | 'in'
+                                                    | 'not_in'
+                                                    | 'exists'
+                                                    | 'not_exists';
+                                                  value?: unknown | undefined;
+                                                }
+                                              | {
+                                                  operator: 'AND' | 'OR';
+                                                  conditions: {
+                                                    field: string;
+                                                    operator:
+                                                      | 'equals'
+                                                      | 'not_equals'
+                                                      | 'contains'
+                                                      | 'not_contains'
+                                                      | 'greater_than'
+                                                      | 'less_than'
+                                                      | 'greater_than_or_equal'
+                                                      | 'less_than_or_equal'
+                                                      | 'in'
+                                                      | 'not_in'
+                                                      | 'exists'
+                                                      | 'not_exists';
+                                                    value?: unknown | undefined;
+                                                  }[];
+                                                }
+                                            )[];
+                                          }
+                                      )[];
+                                    }
+                                  | undefined;
+                              }[];
+                            }
+                        )[];
+                        rules?:
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: (
+                                | {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: (
+                                      | {
+                                          field: string;
+                                          operator:
+                                            | 'equals'
+                                            | 'not_equals'
+                                            | 'contains'
+                                            | 'not_contains'
+                                            | 'greater_than'
+                                            | 'less_than'
+                                            | 'greater_than_or_equal'
+                                            | 'less_than_or_equal'
+                                            | 'in'
+                                            | 'not_in'
+                                            | 'exists'
+                                            | 'not_exists';
+                                          value?: unknown | undefined;
+                                        }
+                                      | {
+                                          operator: 'AND' | 'OR';
+                                          conditions: {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }[];
+                                        }
+                                    )[];
+                                  }
+                              )[];
+                            }
+                          | undefined;
+                      }[];
+                    }
+                )[];
+              }
+            | {
+                value: {
+                  /** Ordered list of processor graph entries */
+                  steps: (
+                    | {
+                        type: 'step';
+                        step: {
+                          /** Unique ID for this step within the graph */
+                          id: string;
+                          /** ProcessorProvider ID that creates this processor */
+                          providerId: string;
+                          /** Configuration matching the provider configSchema */
+                          config: {
+                            [key: string]: unknown;
+                          };
+                          /** Which processor phases to enable */
+                          enabledPhases: (
+                            | 'processInput'
+                            | 'processInputStep'
+                            | 'processOutputStream'
+                            | 'processOutputResult'
+                            | 'processOutputStep'
+                          )[];
+                        };
+                      }
+                    | {
+                        type: 'parallel';
+                        branches: (
+                          | {
+                              type: 'step';
+                              step: {
+                                /** Unique ID for this step within the graph */
+                                id: string;
+                                /** ProcessorProvider ID that creates this processor */
+                                providerId: string;
+                                /** Configuration matching the provider configSchema */
+                                config: {
+                                  [key: string]: unknown;
+                                };
+                                /** Which processor phases to enable */
+                                enabledPhases: (
+                                  | 'processInput'
+                                  | 'processInputStep'
+                                  | 'processOutputStream'
+                                  | 'processOutputResult'
+                                  | 'processOutputStep'
+                                )[];
+                              };
+                            }
+                          | {
+                              type: 'parallel';
+                              branches: {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }[][];
+                            }
+                          | {
+                              type: 'conditional';
+                              conditions: {
+                                steps: {
+                                  type: 'step';
+                                  step: {
+                                    /** Unique ID for this step within the graph */
+                                    id: string;
+                                    /** ProcessorProvider ID that creates this processor */
+                                    providerId: string;
+                                    /** Configuration matching the provider configSchema */
+                                    config: {
+                                      [key: string]: unknown;
+                                    };
+                                    /** Which processor phases to enable */
+                                    enabledPhases: (
+                                      | 'processInput'
+                                      | 'processInputStep'
+                                      | 'processOutputStream'
+                                      | 'processOutputResult'
+                                      | 'processOutputStep'
+                                    )[];
+                                  };
+                                }[];
+                                rules?:
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: (
+                                              | {
+                                                  field: string;
+                                                  operator:
+                                                    | 'equals'
+                                                    | 'not_equals'
+                                                    | 'contains'
+                                                    | 'not_contains'
+                                                    | 'greater_than'
+                                                    | 'less_than'
+                                                    | 'greater_than_or_equal'
+                                                    | 'less_than_or_equal'
+                                                    | 'in'
+                                                    | 'not_in'
+                                                    | 'exists'
+                                                    | 'not_exists';
+                                                  value?: unknown | undefined;
+                                                }
+                                              | {
+                                                  operator: 'AND' | 'OR';
+                                                  conditions: {
+                                                    field: string;
+                                                    operator:
+                                                      | 'equals'
+                                                      | 'not_equals'
+                                                      | 'contains'
+                                                      | 'not_contains'
+                                                      | 'greater_than'
+                                                      | 'less_than'
+                                                      | 'greater_than_or_equal'
+                                                      | 'less_than_or_equal'
+                                                      | 'in'
+                                                      | 'not_in'
+                                                      | 'exists'
+                                                      | 'not_exists';
+                                                    value?: unknown | undefined;
+                                                  }[];
+                                                }
+                                            )[];
+                                          }
+                                      )[];
+                                    }
+                                  | undefined;
+                              }[];
+                            }
+                        )[][];
+                      }
+                    | {
+                        type: 'conditional';
+                        conditions: {
+                          steps: (
+                            | {
+                                type: 'step';
+                                step: {
+                                  /** Unique ID for this step within the graph */
+                                  id: string;
+                                  /** ProcessorProvider ID that creates this processor */
+                                  providerId: string;
+                                  /** Configuration matching the provider configSchema */
+                                  config: {
+                                    [key: string]: unknown;
+                                  };
+                                  /** Which processor phases to enable */
+                                  enabledPhases: (
+                                    | 'processInput'
+                                    | 'processInputStep'
+                                    | 'processOutputStream'
+                                    | 'processOutputResult'
+                                    | 'processOutputStep'
+                                  )[];
+                                };
+                              }
+                            | {
+                                type: 'parallel';
+                                branches: {
+                                  type: 'step';
+                                  step: {
+                                    /** Unique ID for this step within the graph */
+                                    id: string;
+                                    /** ProcessorProvider ID that creates this processor */
+                                    providerId: string;
+                                    /** Configuration matching the provider configSchema */
+                                    config: {
+                                      [key: string]: unknown;
+                                    };
+                                    /** Which processor phases to enable */
+                                    enabledPhases: (
+                                      | 'processInput'
+                                      | 'processInputStep'
+                                      | 'processOutputStream'
+                                      | 'processOutputResult'
+                                      | 'processOutputStep'
+                                    )[];
+                                  };
+                                }[][];
+                              }
+                            | {
+                                type: 'conditional';
+                                conditions: {
+                                  steps: {
+                                    type: 'step';
+                                    step: {
+                                      /** Unique ID for this step within the graph */
+                                      id: string;
+                                      /** ProcessorProvider ID that creates this processor */
+                                      providerId: string;
+                                      /** Configuration matching the provider configSchema */
+                                      config: {
+                                        [key: string]: unknown;
+                                      };
+                                      /** Which processor phases to enable */
+                                      enabledPhases: (
+                                        | 'processInput'
+                                        | 'processInputStep'
+                                        | 'processOutputStream'
+                                        | 'processOutputResult'
+                                        | 'processOutputStep'
+                                      )[];
+                                    };
+                                  }[];
+                                  rules?:
+                                    | {
+                                        operator: 'AND' | 'OR';
+                                        conditions: (
+                                          | {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }
+                                          | {
+                                              operator: 'AND' | 'OR';
+                                              conditions: (
+                                                | {
+                                                    field: string;
+                                                    operator:
+                                                      | 'equals'
+                                                      | 'not_equals'
+                                                      | 'contains'
+                                                      | 'not_contains'
+                                                      | 'greater_than'
+                                                      | 'less_than'
+                                                      | 'greater_than_or_equal'
+                                                      | 'less_than_or_equal'
+                                                      | 'in'
+                                                      | 'not_in'
+                                                      | 'exists'
+                                                      | 'not_exists';
+                                                    value?: unknown | undefined;
+                                                  }
+                                                | {
+                                                    operator: 'AND' | 'OR';
+                                                    conditions: {
+                                                      field: string;
+                                                      operator:
+                                                        | 'equals'
+                                                        | 'not_equals'
+                                                        | 'contains'
+                                                        | 'not_contains'
+                                                        | 'greater_than'
+                                                        | 'less_than'
+                                                        | 'greater_than_or_equal'
+                                                        | 'less_than_or_equal'
+                                                        | 'in'
+                                                        | 'not_in'
+                                                        | 'exists'
+                                                        | 'not_exists';
+                                                      value?: unknown | undefined;
+                                                    }[];
+                                                  }
+                                              )[];
+                                            }
+                                        )[];
+                                      }
+                                    | undefined;
+                                }[];
+                              }
+                          )[];
+                          rules?:
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: (
+                                        | {
+                                            field: string;
+                                            operator:
+                                              | 'equals'
+                                              | 'not_equals'
+                                              | 'contains'
+                                              | 'not_contains'
+                                              | 'greater_than'
+                                              | 'less_than'
+                                              | 'greater_than_or_equal'
+                                              | 'less_than_or_equal'
+                                              | 'in'
+                                              | 'not_in'
+                                              | 'exists'
+                                              | 'not_exists';
+                                            value?: unknown | undefined;
+                                          }
+                                        | {
+                                            operator: 'AND' | 'OR';
+                                            conditions: {
+                                              field: string;
+                                              operator:
+                                                | 'equals'
+                                                | 'not_equals'
+                                                | 'contains'
+                                                | 'not_contains'
+                                                | 'greater_than'
+                                                | 'less_than'
+                                                | 'greater_than_or_equal'
+                                                | 'less_than_or_equal'
+                                                | 'in'
+                                                | 'not_in'
+                                                | 'exists'
+                                                | 'not_exists';
+                                              value?: unknown | undefined;
+                                            }[];
+                                          }
+                                      )[];
+                                    }
+                                )[];
+                              }
+                            | undefined;
+                        }[];
+                      }
+                  )[];
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Memory configuration — static, conditional, or null to disable memory */
+  memory?:
+    | (
+        | (
+            | (
+                | {
+                    /** Vector database identifier or false to disable */
+                    vector?: (string | false) | undefined;
+                    /** Memory behavior configuration, excluding workingMemory and threads */
+                    options?:
+                      | {
+                          readOnly?: boolean | undefined;
+                          lastMessages?: (number | false) | undefined;
+                          semanticRecall?:
+                            | (
+                                | boolean
+                                | {
+                                    /** Number of semantically similar messages to retrieve */
+                                    topK: number;
+                                    /** Amount of surrounding context to include with each retrieved message */
+                                    messageRange:
+                                      | number
+                                      | {
+                                          before: number;
+                                          after: number;
+                                        };
+                                    /** Scope for semantic search queries */
+                                    scope?: ('thread' | 'resource') | undefined;
+                                    /** Minimum similarity score threshold */
+                                    threshold?: number | undefined;
+                                    /** Index name for the vector store */
+                                    indexName?: string | undefined;
+                                  }
+                              )
+                            | undefined;
+                          generateTitle?:
+                            | (
+                                | boolean
+                                | {
+                                    /** Model ID in format provider/model-name (ModelRouterModelId) */
+                                    model: string;
+                                    /** Custom instructions for title generation */
+                                    instructions?: string | undefined;
+                                  }
+                              )
+                            | undefined;
+                        }
+                      | undefined;
+                    /** Embedding model ID in the format "provider/model" (e.g., "openai/text-embedding-3-small") */
+                    embedder?: string | undefined;
+                    /** Options to pass to the embedder, omitting telemetry */
+                    embedderOptions?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                    /** Serialized observational memory configuration */
+                    observationalMemory?:
+                      | (
+                          | boolean
+                          | {
+                              /** Model ID for both Observer and Reflector */
+                              model?: string | undefined;
+                              /** Memory scope */
+                              scope?: ('resource' | 'thread') | undefined;
+                              /** Share token budget between messages and observations */
+                              shareTokenBudget?: boolean | undefined;
+                              /** Observation step configuration */
+                              observation?:
+                                | {
+                                    /** Observer model ID */
+                                    model?: string | undefined;
+                                    /** Token threshold that triggers observation */
+                                    messageTokens?: number | undefined;
+                                    /** Model settings (temperature, etc.) */
+                                    modelSettings?:
+                                      | {
+                                          [key: string]: unknown;
+                                        }
+                                      | undefined;
+                                    /** Provider-specific options */
+                                    providerOptions?:
+                                      | {
+                                          [key: string]:
+                                            | {
+                                                [key: string]: unknown;
+                                              }
+                                            | undefined;
+                                        }
+                                      | undefined;
+                                    /** Maximum tokens per batch */
+                                    maxTokensPerBatch?: number | undefined;
+                                    /** Async buffering interval or false */
+                                    bufferTokens?: (number | false) | undefined;
+                                    /** Ratio of buffered observations to activate */
+                                    bufferActivation?: number | undefined;
+                                    /** Token threshold for synchronous blocking */
+                                    blockAfter?: number | undefined;
+                                  }
+                                | undefined;
+                              /** Reflection step configuration */
+                              reflection?:
+                                | {
+                                    /** Reflector model ID */
+                                    model?: string | undefined;
+                                    /** Token threshold that triggers reflection */
+                                    observationTokens?: number | undefined;
+                                    /** Model settings (temperature, etc.) */
+                                    modelSettings?:
+                                      | {
+                                          [key: string]: unknown;
+                                        }
+                                      | undefined;
+                                    /** Provider-specific options */
+                                    providerOptions?:
+                                      | {
+                                          [key: string]:
+                                            | {
+                                                [key: string]: unknown;
+                                              }
+                                            | undefined;
+                                        }
+                                      | undefined;
+                                    /** Token threshold for synchronous blocking */
+                                    blockAfter?: number | undefined;
+                                    /** Ratio for async reflection buffering */
+                                    bufferActivation?: number | undefined;
+                                  }
+                                | undefined;
+                            }
+                        )
+                      | undefined;
+                  }
+                | {
+                    value: {
+                      /** Vector database identifier or false to disable */
+                      vector?: (string | false) | undefined;
+                      /** Memory behavior configuration, excluding workingMemory and threads */
+                      options?:
+                        | {
+                            readOnly?: boolean | undefined;
+                            lastMessages?: (number | false) | undefined;
+                            semanticRecall?:
+                              | (
+                                  | boolean
+                                  | {
+                                      /** Number of semantically similar messages to retrieve */
+                                      topK: number;
+                                      /** Amount of surrounding context to include with each retrieved message */
+                                      messageRange:
+                                        | number
+                                        | {
+                                            before: number;
+                                            after: number;
+                                          };
+                                      /** Scope for semantic search queries */
+                                      scope?: ('thread' | 'resource') | undefined;
+                                      /** Minimum similarity score threshold */
+                                      threshold?: number | undefined;
+                                      /** Index name for the vector store */
+                                      indexName?: string | undefined;
+                                    }
+                                )
+                              | undefined;
+                            generateTitle?:
+                              | (
+                                  | boolean
+                                  | {
+                                      /** Model ID in format provider/model-name (ModelRouterModelId) */
+                                      model: string;
+                                      /** Custom instructions for title generation */
+                                      instructions?: string | undefined;
+                                    }
+                                )
+                              | undefined;
+                          }
+                        | undefined;
+                      /** Embedding model ID in the format "provider/model" (e.g., "openai/text-embedding-3-small") */
+                      embedder?: string | undefined;
+                      /** Options to pass to the embedder, omitting telemetry */
+                      embedderOptions?:
+                        | {
+                            [key: string]: unknown;
+                          }
+                        | undefined;
+                      /** Serialized observational memory configuration */
+                      observationalMemory?:
+                        | (
+                            | boolean
+                            | {
+                                /** Model ID for both Observer and Reflector */
+                                model?: string | undefined;
+                                /** Memory scope */
+                                scope?: ('resource' | 'thread') | undefined;
+                                /** Share token budget between messages and observations */
+                                shareTokenBudget?: boolean | undefined;
+                                /** Observation step configuration */
+                                observation?:
+                                  | {
+                                      /** Observer model ID */
+                                      model?: string | undefined;
+                                      /** Token threshold that triggers observation */
+                                      messageTokens?: number | undefined;
+                                      /** Model settings (temperature, etc.) */
+                                      modelSettings?:
+                                        | {
+                                            [key: string]: unknown;
+                                          }
+                                        | undefined;
+                                      /** Provider-specific options */
+                                      providerOptions?:
+                                        | {
+                                            [key: string]:
+                                              | {
+                                                  [key: string]: unknown;
+                                                }
+                                              | undefined;
+                                          }
+                                        | undefined;
+                                      /** Maximum tokens per batch */
+                                      maxTokensPerBatch?: number | undefined;
+                                      /** Async buffering interval or false */
+                                      bufferTokens?: (number | false) | undefined;
+                                      /** Ratio of buffered observations to activate */
+                                      bufferActivation?: number | undefined;
+                                      /** Token threshold for synchronous blocking */
+                                      blockAfter?: number | undefined;
+                                    }
+                                  | undefined;
+                                /** Reflection step configuration */
+                                reflection?:
+                                  | {
+                                      /** Reflector model ID */
+                                      model?: string | undefined;
+                                      /** Token threshold that triggers reflection */
+                                      observationTokens?: number | undefined;
+                                      /** Model settings (temperature, etc.) */
+                                      modelSettings?:
+                                        | {
+                                            [key: string]: unknown;
+                                          }
+                                        | undefined;
+                                      /** Provider-specific options */
+                                      providerOptions?:
+                                        | {
+                                            [key: string]:
+                                              | {
+                                                  [key: string]: unknown;
+                                                }
+                                              | undefined;
+                                          }
+                                        | undefined;
+                                      /** Token threshold for synchronous blocking */
+                                      blockAfter?: number | undefined;
+                                      /** Ratio for async reflection buffering */
+                                      bufferActivation?: number | undefined;
+                                    }
+                                  | undefined;
+                              }
+                          )
+                        | undefined;
+                    };
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  }[]
+              )
+            | null
+          )
+        | undefined
+      )
+    | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
+  scorers?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  description?: string | undefined;
+                  sampling?:
+                    | (
+                        | {
+                            type: 'none';
+                          }
+                        | {
+                            type: 'ratio';
+                            rate: number;
+                          }
+                      )
+                    | undefined;
+                  rules?:
+                    | {
+                        operator: 'AND' | 'OR';
+                        conditions: (
+                          | {
+                              field: string;
+                              operator:
+                                | 'equals'
+                                | 'not_equals'
+                                | 'contains'
+                                | 'not_contains'
+                                | 'greater_than'
+                                | 'less_than'
+                                | 'greater_than_or_equal'
+                                | 'less_than_or_equal'
+                                | 'in'
+                                | 'not_in'
+                                | 'exists'
+                                | 'not_exists';
+                              value?: unknown | undefined;
+                            }
+                          | {
+                              operator: 'AND' | 'OR';
+                              conditions: (
+                                | {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }
+                                | {
+                                    operator: 'AND' | 'OR';
+                                    conditions: {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }[];
+                                  }
+                              )[];
+                            }
+                        )[];
+                      }
+                    | undefined;
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    description?: string | undefined;
+                    sampling?:
+                      | (
+                          | {
+                              type: 'none';
+                            }
+                          | {
+                              type: 'ratio';
+                              rate: number;
+                            }
+                        )
+                      | undefined;
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Skill IDs mapped to per-skill config — static or conditional */
+  skills?:
+    | (
+        | (
+            | {
+                [key: string]: {
+                  description?: string | undefined;
+                  instructions?: string | undefined;
+                  pin?: string | undefined;
+                  strategy?: ('latest' | 'live') | undefined;
+                };
+              }
+            | {
+                value: {
+                  [key: string]: {
+                    description?: string | undefined;
+                    instructions?: string | undefined;
+                    pin?: string | undefined;
+                    strategy?: ('latest' | 'live') | undefined;
+                  };
+                };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Workspace reference (stored ID or inline config) — static or conditional */
+  workspace?:
+    | (
+        | (
+            | (
+                | {
+                    type: 'id';
+                    workspaceId: string;
+                  }
+                | {
+                    type: 'inline';
+                    config: {
+                      /** Name of the workspace */
+                      name: string;
+                      /** Description of the workspace */
+                      description?: string | undefined;
+                      /** Filesystem configuration */
+                      filesystem?:
+                        | {
+                            /** Filesystem provider name */
+                            provider: string;
+                            /** Filesystem provider configuration */
+                            config: {
+                              [key: string]: unknown;
+                            };
+                          }
+                        | undefined;
+                      /** Sandbox configuration */
+                      sandbox?:
+                        | {
+                            /** Sandbox provider name */
+                            provider: string;
+                            /** Sandbox provider configuration */
+                            config: {
+                              [key: string]: unknown;
+                            };
+                          }
+                        | undefined;
+                      /** Mounted filesystems keyed by mount path */
+                      mounts?:
+                        | {
+                            [key: string]: {
+                              /** Filesystem provider name */
+                              provider: string;
+                              /** Filesystem provider configuration */
+                              config: {
+                                [key: string]: unknown;
+                              };
+                            };
+                          }
+                        | undefined;
+                      /** Search configuration */
+                      search?:
+                        | {
+                            /** Vector store provider identifier */
+                            vectorProvider?: string | undefined;
+                            /** Vector store provider-specific configuration */
+                            vectorConfig?:
+                              | {
+                                  [key: string]: unknown;
+                                }
+                              | undefined;
+                            /** Embedder provider identifier */
+                            embedderProvider?: string | undefined;
+                            /** Embedder model name */
+                            embedderModel?: string | undefined;
+                            /** Embedder provider-specific configuration */
+                            embedderConfig?:
+                              | {
+                                  [key: string]: unknown;
+                                }
+                              | undefined;
+                            /** BM25 keyword search config */
+                            bm25?:
+                              | (
+                                  | boolean
+                                  | {
+                                      k1?: number | undefined;
+                                      b?: number | undefined;
+                                    }
+                                )
+                              | undefined;
+                            /** Custom index name for the vector store */
+                            searchIndexName?: string | undefined;
+                            /** Paths to auto-index on init */
+                            autoIndexPaths?: string[] | undefined;
+                          }
+                        | undefined;
+                      /** Array of skill IDs */
+                      skills?: string[] | undefined;
+                      /** Workspace tool configuration */
+                      tools?:
+                        | {
+                            /** Default: whether all tools are enabled */
+                            enabled?: boolean | undefined;
+                            /** Default: whether all tools require user approval */
+                            requireApproval?: boolean | undefined;
+                            /** Per-tool overrides keyed by workspace tool name */
+                            tools?:
+                              | {
+                                  [key: string]: {
+                                    /** Whether the tool is enabled */
+                                    enabled?: boolean | undefined;
+                                    /** Whether the tool requires user approval before execution */
+                                    requireApproval?: boolean | undefined;
+                                    /** For write tools: require reading a file before writing to it */
+                                    requireReadBeforeWrite?: boolean | undefined;
+                                  };
+                                }
+                              | undefined;
+                          }
+                        | undefined;
+                      /** Whether to automatically sync the workspace */
+                      autoSync?: boolean | undefined;
+                      /** Operation timeout in milliseconds */
+                      operationTimeout?: number | undefined;
+                    };
+                  }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
+              )
+            | {
+                value:
+                  | {
+                      type: 'id';
+                      workspaceId: string;
+                    }
+                  | {
+                      type: 'inline';
+                      config: {
+                        /** Name of the workspace */
+                        name: string;
+                        /** Description of the workspace */
+                        description?: string | undefined;
+                        /** Filesystem configuration */
+                        filesystem?:
+                          | {
+                              /** Filesystem provider name */
+                              provider: string;
+                              /** Filesystem provider configuration */
+                              config: {
+                                [key: string]: unknown;
+                              };
+                            }
+                          | undefined;
+                        /** Sandbox configuration */
+                        sandbox?:
+                          | {
+                              /** Sandbox provider name */
+                              provider: string;
+                              /** Sandbox provider configuration */
+                              config: {
+                                [key: string]: unknown;
+                              };
+                            }
+                          | undefined;
+                        /** Mounted filesystems keyed by mount path */
+                        mounts?:
+                          | {
+                              [key: string]: {
+                                /** Filesystem provider name */
+                                provider: string;
+                                /** Filesystem provider configuration */
+                                config: {
+                                  [key: string]: unknown;
+                                };
+                              };
+                            }
+                          | undefined;
+                        /** Search configuration */
+                        search?:
+                          | {
+                              /** Vector store provider identifier */
+                              vectorProvider?: string | undefined;
+                              /** Vector store provider-specific configuration */
+                              vectorConfig?:
+                                | {
+                                    [key: string]: unknown;
+                                  }
+                                | undefined;
+                              /** Embedder provider identifier */
+                              embedderProvider?: string | undefined;
+                              /** Embedder model name */
+                              embedderModel?: string | undefined;
+                              /** Embedder provider-specific configuration */
+                              embedderConfig?:
+                                | {
+                                    [key: string]: unknown;
+                                  }
+                                | undefined;
+                              /** BM25 keyword search config */
+                              bm25?:
+                                | (
+                                    | boolean
+                                    | {
+                                        k1?: number | undefined;
+                                        b?: number | undefined;
+                                      }
+                                  )
+                                | undefined;
+                              /** Custom index name for the vector store */
+                              searchIndexName?: string | undefined;
+                              /** Paths to auto-index on init */
+                              autoIndexPaths?: string[] | undefined;
+                            }
+                          | undefined;
+                        /** Array of skill IDs */
+                        skills?: string[] | undefined;
+                        /** Workspace tool configuration */
+                        tools?:
+                          | {
+                              /** Default: whether all tools are enabled */
+                              enabled?: boolean | undefined;
+                              /** Default: whether all tools require user approval */
+                              requireApproval?: boolean | undefined;
+                              /** Per-tool overrides keyed by workspace tool name */
+                              tools?:
+                                | {
+                                    [key: string]: {
+                                      /** Whether the tool is enabled */
+                                      enabled?: boolean | undefined;
+                                      /** Whether the tool requires user approval before execution */
+                                      requireApproval?: boolean | undefined;
+                                      /** For write tools: require reading a file before writing to it */
+                                      requireReadBeforeWrite?: boolean | undefined;
+                                    };
+                                  }
+                                | undefined;
+                            }
+                          | undefined;
+                        /** Whether to automatically sync the workspace */
+                        autoSync?: boolean | undefined;
+                        /** Operation timeout in milliseconds */
+                        operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
+                      };
+                    };
+                rules?:
+                  | {
+                      operator: 'AND' | 'OR';
+                      conditions: (
+                        | {
+                            field: string;
+                            operator:
+                              | 'equals'
+                              | 'not_equals'
+                              | 'contains'
+                              | 'not_contains'
+                              | 'greater_than'
+                              | 'less_than'
+                              | 'greater_than_or_equal'
+                              | 'less_than_or_equal'
+                              | 'in'
+                              | 'not_in'
+                              | 'exists'
+                              | 'not_exists';
+                            value?: unknown | undefined;
+                          }
+                        | {
+                            operator: 'AND' | 'OR';
+                            conditions: (
+                              | {
+                                  field: string;
+                                  operator:
+                                    | 'equals'
+                                    | 'not_equals'
+                                    | 'contains'
+                                    | 'not_contains'
+                                    | 'greater_than'
+                                    | 'less_than'
+                                    | 'greater_than_or_equal'
+                                    | 'less_than_or_equal'
+                                    | 'in'
+                                    | 'not_in'
+                                    | 'exists'
+                                    | 'not_exists';
+                                  value?: unknown | undefined;
+                                }
+                              | {
+                                  operator: 'AND' | 'OR';
+                                  conditions: {
+                                    field: string;
+                                    operator:
+                                      | 'equals'
+                                      | 'not_equals'
+                                      | 'contains'
+                                      | 'not_contains'
+                                      | 'greater_than'
+                                      | 'less_than'
+                                      | 'greater_than_or_equal'
+                                      | 'less_than_or_equal'
+                                      | 'in'
+                                      | 'not_in'
+                                      | 'exists'
+                                      | 'not_exists';
+                                    value?: unknown | undefined;
+                                  }[];
+                                }
+                            )[];
+                          }
+                      )[];
+                    }
+                  | undefined;
+              }[]
+          )
+        | undefined
+      )
+    | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
+  browser?:
+    | (
+        | (
+            | (
+                | {
+                    type: 'inline';
+                    config: {
+                      /** Browser provider type (e.g., stagehand, playwright) */
+                      provider: string;
+                      /** Run browser in headless mode (default: true) */
+                      headless?: boolean | undefined;
+                      /** Browser viewport dimensions */
+                      viewport?:
+                        | {
+                            /** Viewport width in pixels */
+                            width: number;
+                            /** Viewport height in pixels */
+                            height: number;
+                          }
+                        | undefined;
+                      /** Default timeout in milliseconds (default: 10000) */
+                      timeout?: number | undefined;
+                      /** Screencast options for streaming browser frames */
+                      screencast?:
+                        | {
+                            /** Image format (default: jpeg) */
+                            format?: ('jpeg' | 'png') | undefined;
+                            /** JPEG quality 0-100 (default: 80) */
+                            quality?: number | undefined;
+                            /** Max width in pixels (default: 1280) */
+                            maxWidth?: number | undefined;
+                            /** Max height in pixels (default: 720) */
+                            maxHeight?: number | undefined;
+                            /** Capture every Nth frame (default: 1) */
+                            everyNthFrame?: number | undefined;
+                          }
+                        | undefined;
+                    };
+                  }
+                | {
+                    value: {
+                      type: 'inline';
+                      config: {
+                        /** Browser provider type (e.g., stagehand, playwright) */
+                        provider: string;
+                        /** Run browser in headless mode (default: true) */
+                        headless?: boolean | undefined;
+                        /** Browser viewport dimensions */
+                        viewport?:
+                          | {
+                              /** Viewport width in pixels */
+                              width: number;
+                              /** Viewport height in pixels */
+                              height: number;
+                            }
+                          | undefined;
+                        /** Default timeout in milliseconds (default: 10000) */
+                        timeout?: number | undefined;
+                        /** Screencast options for streaming browser frames */
+                        screencast?:
+                          | {
+                              /** Image format (default: jpeg) */
+                              format?: ('jpeg' | 'png') | undefined;
+                              /** JPEG quality 0-100 (default: 80) */
+                              quality?: number | undefined;
+                              /** Max width in pixels (default: 1280) */
+                              maxWidth?: number | undefined;
+                              /** Max height in pixels (default: 720) */
+                              maxHeight?: number | undefined;
+                              /** Capture every Nth frame (default: 1) */
+                              everyNthFrame?: number | undefined;
+                            }
+                          | undefined;
+                      };
+                    };
+                    rules?:
+                      | {
+                          operator: 'AND' | 'OR';
+                          conditions: (
+                            | {
+                                field: string;
+                                operator:
+                                  | 'equals'
+                                  | 'not_equals'
+                                  | 'contains'
+                                  | 'not_contains'
+                                  | 'greater_than'
+                                  | 'less_than'
+                                  | 'greater_than_or_equal'
+                                  | 'less_than_or_equal'
+                                  | 'in'
+                                  | 'not_in'
+                                  | 'exists'
+                                  | 'not_exists';
+                                value?: unknown | undefined;
+                              }
+                            | {
+                                operator: 'AND' | 'OR';
+                                conditions: (
+                                  | {
+                                      field: string;
+                                      operator:
+                                        | 'equals'
+                                        | 'not_equals'
+                                        | 'contains'
+                                        | 'not_contains'
+                                        | 'greater_than'
+                                        | 'less_than'
+                                        | 'greater_than_or_equal'
+                                        | 'less_than_or_equal'
+                                        | 'in'
+                                        | 'not_in'
+                                        | 'exists'
+                                        | 'not_exists';
+                                      value?: unknown | undefined;
+                                    }
+                                  | {
+                                      operator: 'AND' | 'OR';
+                                      conditions: {
+                                        field: string;
+                                        operator:
+                                          | 'equals'
+                                          | 'not_equals'
+                                          | 'contains'
+                                          | 'not_contains'
+                                          | 'greater_than'
+                                          | 'less_than'
+                                          | 'greater_than_or_equal'
+                                          | 'less_than_or_equal'
+                                          | 'in'
+                                          | 'not_in'
+                                          | 'exists'
+                                          | 'not_exists';
+                                        value?: unknown | undefined;
+                                      }[];
+                                    }
+                                )[];
+                              }
+                          )[];
+                        }
+                      | undefined;
+                  }[]
+              )
+            | boolean
+            | null
+          )
+        | undefined
+      )
+    | undefined;
+  /** JSON Schema defining valid request context variables for conditional rule evaluation */
+  requestContextSchema?:
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | undefined;
+  changeMessage?: string | undefined;
+  userName?: string | undefined;
+  inspectOnly?: boolean | undefined;
+};
+
+export type PostStoredAgentsStoredAgentIdChangeRequest_Response = {
+  id?: (string | number) | undefined;
+  url: string;
+  ref?: string | undefined;
+};
+
+export type PostStoredAgentsStoredAgentIdChangeRequest_Request = Simplify<
+  (PostStoredAgentsStoredAgentIdChangeRequest_PathParams extends never
+    ? {}
+    : { params: PostStoredAgentsStoredAgentIdChangeRequest_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostStoredAgentsStoredAgentIdChangeRequest_Body extends never
+      ? {}
+      : {} extends PostStoredAgentsStoredAgentIdChangeRequest_Body
+        ? { body?: PostStoredAgentsStoredAgentIdChangeRequest_Body }
+        : { body: PostStoredAgentsStoredAgentIdChangeRequest_Body })
+>;
+
+export interface PostStoredAgentsStoredAgentIdChangeRequest_RouteContract {
+  pathParams: PostStoredAgentsStoredAgentIdChangeRequest_PathParams;
+  queryParams: never;
+  body: PostStoredAgentsStoredAgentIdChangeRequest_Body;
+  request: PostStoredAgentsStoredAgentIdChangeRequest_Request;
+  response: PostStoredAgentsStoredAgentIdChangeRequest_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /stored/agents/:storedAgentId
 // ============================================================================
 export type GetStoredAgentsStoredAgentId_PathParams = {
@@ -30065,6 +35282,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -34060,6 +39286,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -34174,6 +39409,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -38421,6 +43665,15 @@ export type PostStoredAgents_Body = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -38535,6 +43788,15 @@ export type PostStoredAgents_Body = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -38767,6 +44029,15 @@ export type PostStoredAgents_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -42762,6 +48033,15 @@ export type PostStoredAgents_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -42876,6 +48156,15 @@ export type PostStoredAgents_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -43130,7 +48419,9 @@ export type PatchStoredAgentsStoredAgentId_PathParams = {
 };
 
 export type PatchStoredAgentsStoredAgentId_Body = {
+  /** Author identifier for multi-tenant filtering */
   authorId?: (string | undefined) | undefined;
+  /** Additional metadata for the agent */
   metadata?:
     | (
         | {
@@ -43139,9 +48430,13 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Agent visibility: private (owner/admin only) or public (any reader) */
   visibility?: (('private' | 'public') | undefined) | undefined;
+  /** Name of the agent */
   name?: string | undefined;
+  /** Description of the agent */
   description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
   instructions?:
     | (
         | string
@@ -43227,6 +48522,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
           )[]
       )
     | undefined;
+  /** Model configuration — static value or array of conditional variants */
   model?:
     | (
         | {
@@ -43313,6 +48609,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
           }[]
       )
     | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
         | (
@@ -43530,6 +48827,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Default options for generate/stream calls — static or conditional */
   defaultOptions?:
     | (
         | (
@@ -43704,6 +49002,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
   workflows?:
     | (
         | (
@@ -43921,6 +49220,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
   agents?:
     | (
         | (
@@ -44138,6 +49438,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
   integrationTools?:
     | (
         | (
@@ -44367,6 +49668,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Tool provider connections and per-tool config (provider-agnostic). Coexists with the deprecated `integrationTools` field. */
   toolProviders?:
     | (
         | (
@@ -44480,6 +49782,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
         | (
@@ -44709,6 +50012,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Input processor graph — static or conditional */
   inputProcessors?:
     | (
         | (
@@ -45540,6 +50844,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Output processor graph — static or conditional */
   outputProcessors?:
     | (
         | (
@@ -46371,6 +51676,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Memory configuration — static, conditional, or null to disable memory */
   memory?:
     | (
         | (
@@ -46705,6 +52011,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
   scorers?:
     | (
         | (
@@ -46944,6 +52251,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Skill IDs mapped to per-skill config — static or conditional */
   skills?:
     | (
         | (
@@ -47035,6 +52343,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Workspace reference (stored ID or inline config) — static or conditional */
   workspace?:
     | (
         | (
@@ -47152,6 +52461,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -47267,6 +52585,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
                       };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
+                      };
                     };
                 rules?:
                   | {
@@ -47339,6 +52666,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** Browser configuration — object config, true (apply default), false/null (disable) */
   browser?:
     | (
         | (
@@ -47488,6 +52816,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining valid request context variables for conditional rule evaluation */
   requestContextSchema?:
     | (
         | {
@@ -47521,6 +52850,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
       status: string;
       activeVersionId?: string | undefined;
       authorId?: string | undefined;
+      /** Resolved author identity (when an auth provider is configured) */
+      author?:
+        | {
+            id: string;
+            name?: string | undefined;
+            email?: string | undefined;
+            avatarUrl?: string | undefined;
+          }
+        | undefined;
       metadata?:
         | {
             [key: string]: unknown;
@@ -51516,6 +56854,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -51630,6 +56977,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -55660,8 +61016,11 @@ export type PostStoredAgentsAgentIdVersions_Response = {
   agentId: string;
   /** Sequential version number (1, 2, 3, ...) */
   versionNumber: number;
+  /** Name of the agent */
   name?: string | undefined;
+  /** Description of the agent */
   description?: (string | undefined) | undefined;
+  /** System instructions for the agent (string or array of instruction blocks) */
   instructions?:
     | (
         | string
@@ -55747,6 +61106,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
           )[]
       )
     | undefined;
+  /** Model configuration — static value or array of conditional variants */
   model?:
     | (
         | {
@@ -55833,6 +61193,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
           }[]
       )
     | undefined;
+  /** Tool keys mapped to per-tool config — static or conditional */
   tools?:
     | (
         | (
@@ -56050,6 +61411,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Default options for generate/stream calls — static or conditional */
   defaultOptions?:
     | (
         | (
@@ -56224,6 +61586,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Workflow keys with optional per-workflow config — static or conditional */
   workflows?:
     | (
         | (
@@ -56441,6 +61804,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Agent keys with optional per-agent config — static or conditional */
   agents?:
     | (
         | (
@@ -56658,6 +62022,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Map of tool provider IDs to their tool configurations — static or conditional */
   integrationTools?:
     | (
         | (
@@ -56887,6 +62252,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Map of stored MCP client IDs to their tool configurations — static or conditional */
   mcpClients?:
     | (
         | (
@@ -57116,6 +62482,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Input processor graph — static or conditional */
   inputProcessors?:
     | (
         | (
@@ -57947,6 +63314,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Output processor graph — static or conditional */
   outputProcessors?:
     | (
         | (
@@ -58778,6 +64146,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Memory configuration — static or conditional */
   memory?:
     | (
         | (
@@ -59109,6 +64478,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Scorer keys with optional sampling config — static or conditional */
   scorers?:
     | (
         | (
@@ -59348,6 +64718,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining valid request context variables */
   requestContextSchema?:
     | (
         | {
@@ -59356,7 +64727,9 @@ export type PostStoredAgentsAgentIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   /** When this version was created */
   createdAt: Date;
@@ -74643,8 +80016,11 @@ export type PatchStoredMcpClientsStoredMCPClientId_Body = {
         | undefined
       )
     | undefined;
+  /** Name of the MCP client */
   name?: string | undefined;
+  /** Description of the MCP client */
   description?: (string | undefined) | undefined;
+  /** Map of server name to server configuration */
   servers?:
     | {
         [key: string]: {
@@ -74870,7 +80246,9 @@ export type PostStoredMcpClientsMcpClientIdVersions_Response = {
   id: string;
   mcpClientId: string;
   versionNumber: number;
+  /** Name of the MCP client */
   name?: string | undefined;
+  /** Description of the MCP client */
   description?: (string | undefined) | undefined;
   servers?:
     | {
@@ -74888,7 +80266,9 @@ export type PostStoredMcpClientsMcpClientIdVersions_Response = {
         };
       }
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   createdAt: Date;
 };
@@ -75713,9 +81093,13 @@ export type PatchStoredPromptBlocksStoredPromptBlockId_Body = {
         [key: string]: unknown;
       }
     | undefined;
+  /** Display name of the prompt block */
   name?: string | undefined;
+  /** Purpose description */
   description?: (string | undefined) | undefined;
+  /** Template content with {{variable}} interpolation */
   content?: string | undefined;
+  /** Rules for conditional inclusion */
   rules?:
     | (
         | {
@@ -75785,6 +81169,7 @@ export type PatchStoredPromptBlocksStoredPromptBlockId_Body = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining available variables for {{variableName}} interpolation and conditions */
   requestContextSchema?:
     | (
         | {
@@ -76113,9 +81498,13 @@ export type PostStoredPromptBlocksPromptBlockIdVersions_Response = {
   id: string;
   blockId: string;
   versionNumber: number;
+  /** Display name of the prompt block */
   name?: string | undefined;
+  /** Purpose description */
   description?: (string | undefined) | undefined;
+  /** Template content with {{variable}} interpolation */
   content?: string | undefined;
+  /** Rules for conditional inclusion */
   rules?:
     | (
         | {
@@ -76185,6 +81574,7 @@ export type PostStoredPromptBlocksPromptBlockIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** JSON Schema defining available variables for {{variableName}} interpolation and conditions */
   requestContextSchema?:
     | (
         | {
@@ -76193,7 +81583,9 @@ export type PostStoredPromptBlocksPromptBlockIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   createdAt: Date;
 };
@@ -77153,8 +82545,11 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** Name of the scorer */
   name?: string | undefined;
+  /** Description of the scorer */
   description?: (string | undefined) | undefined;
+  /** Scorer type: llm-judge for custom, or a preset type name */
   type?:
     | (
         | 'llm-judge'
@@ -77171,6 +82566,7 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | 'toxicity'
       )
     | undefined;
+  /** Model configuration for LLM judge */
   model?:
     | (
         | {
@@ -77183,7 +82579,9 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** System instructions for the judge LLM (used when type is llm-judge) */
   instructions?: (string | undefined) | undefined;
+  /** Score range configuration (used when type is llm-judge) */
   scoreRange?:
     | (
         | {
@@ -77195,6 +82593,7 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** Serializable config options for preset scorers */
   presetConfig?:
     | (
         | {
@@ -77203,6 +82602,7 @@ export type PatchStoredScorersStoredScorerId_Body = {
         | undefined
       )
     | undefined;
+  /** Default sampling configuration */
   defaultSampling?:
     | (
         | (
@@ -77477,7 +82877,9 @@ export type PostStoredScorersScorerIdVersions_Response = {
   id: string;
   scorerDefinitionId: string;
   versionNumber: number;
+  /** Name of the scorer */
   name?: string | undefined;
+  /** Description of the scorer */
   description?: (string | undefined) | undefined;
   type?:
     | (
@@ -77539,7 +82941,9 @@ export type PostStoredScorersScorerIdVersions_Response = {
         | undefined
       )
     | undefined;
+  /** Array of field names that changed from the previous version */
   changedFields?: (string[] | undefined) | undefined;
+  /** Optional message describing the changes */
   changeMessage?: (string | undefined) | undefined;
   createdAt: Date;
 };
@@ -78575,8 +83979,11 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Name of the workspace */
   name?: string | undefined;
+  /** Description of the workspace */
   description?: (string | undefined) | undefined;
+  /** Filesystem configuration */
   filesystem?:
     | (
         | {
@@ -78590,6 +83997,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Sandbox configuration */
   sandbox?:
     | (
         | {
@@ -78603,6 +84011,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Mounted filesystems keyed by mount path */
   mounts?:
     | (
         | {
@@ -78618,6 +84027,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Search configuration */
   search?:
     | (
         | {
@@ -78657,7 +84067,9 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Array of skill IDs */
   skills?: (string[] | undefined) | undefined;
+  /** Workspace tool configuration */
   tools?:
     | (
         | {
@@ -78682,7 +84094,9 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Body = {
         | undefined
       )
     | undefined;
+  /** Whether to automatically sync the workspace */
   autoSync?: (boolean | undefined) | undefined;
+  /** Operation timeout in milliseconds */
   operationTimeout?: (number | undefined) | undefined;
 };
 
@@ -79250,12 +84664,19 @@ type PatchStoredSkillsStoredSkillId_Body_Auxiliary_4 = {
 
 export type PatchStoredSkillsStoredSkillId_Body = {
   authorId?: (string | undefined) | undefined;
+  /** Skill visibility: private (owner/admin only) or public (any reader) */
   visibility?: (('private' | 'public') | undefined) | undefined;
+  /** Name of the skill */
   name?: string | undefined;
+  /** Description of what the skill does and when to use it */
   description?: string | undefined;
+  /** Markdown instructions for the skill */
   instructions?: string | undefined;
+  /** License identifier for the skill */
   license?: (string | undefined) | undefined;
+  /** Compatibility requirements */
   compatibility?: (unknown | undefined) | undefined;
+  /** Source location of the skill */
   source?:
     | (
         | (
@@ -79278,10 +84699,15 @@ export type PatchStoredSkillsStoredSkillId_Body = {
         | undefined
       )
     | undefined;
+  /** List of reference file paths */
   references?: (string[] | undefined) | undefined;
+  /** List of script file paths */
   scripts?: (string[] | undefined) | undefined;
+  /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
+  /** Full file tree structure for the skill */
   files?: (PatchStoredSkillsStoredSkillId_Body_Auxiliary_4[] | undefined) | undefined;
+  /** Additional metadata for the skill */
   metadata?:
     | (
         | {
@@ -79761,8 +85187,8 @@ export type PostToolProvidersProviderIdAuthorize_PathParams = {
 export type PostToolProvidersProviderIdAuthorize_Body = {
   /** Toolkit slug being authorized */
   toolkit: string;
-  /** Existing or newly-minted connection bucket id */
-  connectionId: string;
+  /** Existing connection bucket id when re-authorizing; omit for a brand-new connection */
+  connectionId?: string | undefined;
   /** Optional tool slug for tool-scoped authorization */
   toolName?: string | undefined;
   /** Provider-specific user-supplied connection fields (e.g. subdomain) */
@@ -80237,6 +85663,21 @@ export type GetSystemPackages_Response = {
   isDev: boolean;
   cmsEnabled: boolean;
   editorSource?: ('code' | 'db') | undefined;
+  editorSourceCapabilities?:
+    | {
+        source: 'code' | 'db';
+        storage: 'database' | 'filesystem' | 'source-provider' | 'unavailable';
+        provider?:
+          | {
+              id: string;
+              displayName: string;
+            }
+          | undefined;
+        canSave: boolean;
+        canOpenChangeRequest: boolean;
+        unavailableReason?: string | undefined;
+      }
+    | undefined;
   observabilityEnabled: boolean;
   storageType?: string | undefined;
   observabilityStorageType?: string | undefined;
@@ -80484,6 +85925,13 @@ export type GetDatasetsDatasetId_PathParams = {
   datasetId: string;
 };
 
+export type GetDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
+};
+
 export type GetDatasetsDatasetId_Response = {
   id: string;
   name: string;
@@ -80522,13 +85970,17 @@ export type GetDatasetsDatasetId_Response = {
 
 export type GetDatasetsDatasetId_Request = Simplify<
   (GetDatasetsDatasetId_PathParams extends never ? {} : { params: GetDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends GetDatasetsDatasetId_QueryParams
+        ? { query?: GetDatasetsDatasetId_QueryParams }
+        : { query: GetDatasetsDatasetId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetId_RouteContract {
   pathParams: GetDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: GetDatasetsDatasetId_QueryParams;
   body: never;
   request: GetDatasetsDatasetId_Request;
   response: GetDatasetsDatasetId_Response;
@@ -80541,6 +85993,13 @@ export interface GetDatasetsDatasetId_RouteContract {
 export type PatchDatasetsDatasetId_PathParams = {
   /** Unique identifier for the dataset */
   datasetId: string;
+};
+
+export type PatchDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
 };
 
 export type PatchDatasetsDatasetId_Body = {
@@ -80620,7 +86079,11 @@ export type PatchDatasetsDatasetId_Response = {
 
 export type PatchDatasetsDatasetId_Request = Simplify<
   (PatchDatasetsDatasetId_PathParams extends never ? {} : { params: PatchDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends PatchDatasetsDatasetId_QueryParams
+        ? { query?: PatchDatasetsDatasetId_QueryParams }
+        : { query: PatchDatasetsDatasetId_QueryParams }) &
     (PatchDatasetsDatasetId_Body extends never
       ? {}
       : {} extends PatchDatasetsDatasetId_Body
@@ -80630,7 +86093,7 @@ export type PatchDatasetsDatasetId_Request = Simplify<
 
 export interface PatchDatasetsDatasetId_RouteContract {
   pathParams: PatchDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: PatchDatasetsDatasetId_QueryParams;
   body: PatchDatasetsDatasetId_Body;
   request: PatchDatasetsDatasetId_Request;
   response: PatchDatasetsDatasetId_Response;
@@ -80645,19 +86108,30 @@ export type DeleteDatasetsDatasetId_PathParams = {
   datasetId: string;
 };
 
+export type DeleteDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
+};
+
 export type DeleteDatasetsDatasetId_Response = {
   success: boolean;
 };
 
 export type DeleteDatasetsDatasetId_Request = Simplify<
   (DeleteDatasetsDatasetId_PathParams extends never ? {} : { params: DeleteDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetId_QueryParams
+        ? { query?: DeleteDatasetsDatasetId_QueryParams }
+        : { query: DeleteDatasetsDatasetId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetId_RouteContract {
   pathParams: DeleteDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: DeleteDatasetsDatasetId_QueryParams;
   body: never;
   request: DeleteDatasetsDatasetId_Request;
   response: DeleteDatasetsDatasetId_Response;
@@ -80687,6 +86161,21 @@ export type GetDatasetsDatasetIdItems_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -80701,7 +86190,7 @@ export type GetDatasetsDatasetIdItems_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -80999,6 +86488,21 @@ export type PostDatasetsDatasetIdItems_Body = {
         | undefined
       )
     | null;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -81015,7 +86519,7 @@ export type PostDatasetsDatasetIdItems_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -81029,6 +86533,21 @@ export type PostDatasetsDatasetIdItems_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -81043,7 +86562,7 @@ export type PostDatasetsDatasetIdItems_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -81333,6 +86852,21 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
           | undefined
         )
       | null;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -81347,7 +86881,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -81363,6 +86897,21 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -81377,7 +86926,7 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -81464,6 +87013,21 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -81478,7 +87042,7 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -81769,6 +87333,21 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
         | undefined
       )
     | null;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -81785,7 +87364,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -81799,6 +87378,21 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -81813,7 +87407,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -81939,6 +87533,21 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -81987,6 +87596,21 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -82001,7 +87625,7 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -82246,6 +87870,35 @@ export type PostDatasetsDatasetIdExperiments_Response = {
     startedAt: Date;
     completedAt: Date;
     retryCount: number;
+    /** Diagnostic receipt for item-level tool mocks */
+    toolMockReport?:
+      | (
+          | {
+              served: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              unconsumed: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              liveCalls: {
+                toolName: string;
+                args: unknown;
+              }[];
+              failure?:
+                | {
+                    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                    toolName: string;
+                    args: unknown;
+                  }
+                | undefined;
+            }
+          | undefined
+        )
+      | null;
     scores: {
       scorerId: string;
       scorerName: string;
@@ -82365,6 +88018,35 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
     traceId: string | null;
     status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
     tags?: (string[] | null) | undefined;
+    /** Diagnostic receipt for item-level tool mocks */
+    toolMockReport?:
+      | (
+          | {
+              served: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              unconsumed: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              liveCalls: {
+                toolName: string;
+                args: unknown;
+              }[];
+              failure?:
+                | {
+                    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                    toolName: string;
+                    args: unknown;
+                  }
+                | undefined;
+            }
+          | undefined
+        )
+      | null;
     createdAt: Date;
   }[];
   pagination: {
@@ -82433,6 +88115,35 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Respons
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  /** Diagnostic receipt for item-level tool mocks */
+  toolMockReport?:
+    | (
+        | {
+            served: {
+              mockIndex: number;
+              toolName: string;
+              args: unknown;
+            }[];
+            unconsumed: {
+              mockIndex: number;
+              toolName: string;
+              args: unknown;
+            }[];
+            liveCalls: {
+              toolName: string;
+              args: unknown;
+            }[];
+            failure?:
+              | {
+                  code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                  toolName: string;
+                  args: unknown;
+                }
+              | undefined;
+          }
+        | undefined
+      )
+    | null;
   createdAt: Date;
 };
 
@@ -82917,6 +88628,37 @@ export interface GetEditorBuilderSettings_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /editor/builder/models/available
+// ============================================================================
+export type GetEditorBuilderModelsAvailable_Response = {
+  providers: {
+    id: string;
+    name: string;
+    label?: string | undefined;
+    description?: string | undefined;
+    envVar: string | string[];
+    connected: boolean;
+    docUrl?: string | undefined;
+    models: string[];
+  }[];
+};
+
+export type GetEditorBuilderModelsAvailable_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorBuilderModelsAvailable_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetEditorBuilderModelsAvailable_Request;
+  response: GetEditorBuilderModelsAvailable_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /editor/builder/infrastructure
 // ============================================================================
 export type GetEditorBuilderInfrastructure_Response = {
@@ -83371,6 +89113,7 @@ export type GetAgentBuilderActionIdRuns_QueryParams = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
 };
@@ -83443,7 +89186,8 @@ export type GetAgentBuilderActionIdRunsRunId_Response = {
     | 'pending'
     | 'bailed'
     | 'tripwire'
-    | 'paused';
+    | 'paused'
+    | 'skipped';
   initialState?:
     | {
         [key: string]: any;
@@ -83714,6 +89458,7 @@ export type PostAgentBuilderActionIdStartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -83954,6 +89699,7 @@ export type PostAgentBuilderActionIdResumeAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -84251,17 +89997,71 @@ export type GetSchedules_QueryParams = {
 export type GetSchedules_Response = {
   schedules: {
     id: string;
-    target: {
-      type: 'workflow';
-      workflowId: string;
-      inputData?: unknown | undefined;
-      initialState?: unknown | undefined;
-      requestContext?:
-        | {
-            [key: string]: unknown;
-          }
-        | undefined;
-    };
+    target:
+      | {
+          type: 'workflow';
+          workflowId: string;
+          inputData?: unknown | undefined;
+          initialState?: unknown | undefined;
+          requestContext?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+        }
+      | {
+          type: 'heartbeat';
+          agentId: string;
+          prompt: string;
+          threadId?: string | undefined;
+          resourceId?: string | undefined;
+          signalType?: string | undefined;
+          tagName?: string | undefined;
+          attributes?:
+            | {
+                [key: string]: (string | number | boolean | null) | undefined;
+              }
+            | undefined;
+          ifActive?:
+            | {
+                behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+                attributes?:
+                  | {
+                      [key: string]: (string | number | boolean | null) | undefined;
+                    }
+                  | undefined;
+              }
+            | undefined;
+          ifIdle?:
+            | {
+                behavior?: ('wake' | 'persist' | 'discard') | undefined;
+                attributes?:
+                  | {
+                      [key: string]: (string | number | boolean | null) | undefined;
+                    }
+                  | undefined;
+                streamOptions?:
+                  | {
+                      requestContext?:
+                        | {
+                            [key: string]: unknown;
+                          }
+                        | undefined;
+                    }
+                  | undefined;
+              }
+            | undefined;
+          providerOptions?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          requestContext?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+        };
     cron: string;
     timezone?: string | undefined;
     status: 'active' | 'paused';
@@ -84280,7 +90080,8 @@ export type GetSchedules_Response = {
             | 'pending'
             | 'canceled'
             | 'bailed'
-            | 'paused';
+            | 'paused'
+            | 'skipped';
           startedAt?: number | undefined;
           completedAt?: number | undefined;
           durationMs?: number | undefined;
@@ -84327,17 +90128,71 @@ export type GetSchedulesScheduleId_PathParams = {
 
 export type GetSchedulesScheduleId_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        tagName?: string | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        ifActive?:
+          | {
+              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        ifIdle?:
+          | {
+              behavior?: ('wake' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+              streamOptions?:
+                | {
+                    requestContext?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        providerOptions?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -84356,7 +90211,8 @@ export type GetSchedulesScheduleId_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -84411,8 +90267,13 @@ export type GetSchedulesScheduleIdTriggers_Response = {
     actualFireAt: number;
     outcome:
       | 'published'
-      | 'failed'
+      | 'succeeded'
+      | 'delivered'
+      | 'persisted'
+      | 'discarded'
       | 'skipped'
+      | 'aborted'
+      | 'failed'
       | 'acked'
       | 'alerted'
       | 'deferred'
@@ -84421,7 +90282,7 @@ export type GetSchedulesScheduleIdTriggers_Response = {
       | 'dropped-superseded'
       | 'dropped-busy';
     error?: string | undefined;
-    triggerKind?: ('schedule-fire' | 'queue-drain') | undefined;
+    triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;
     metadata?:
       | {
@@ -84440,7 +90301,8 @@ export type GetSchedulesScheduleIdTriggers_Response = {
             | 'pending'
             | 'canceled'
             | 'bailed'
-            | 'paused';
+            | 'paused'
+            | 'skipped';
           startedAt?: number | undefined;
           completedAt?: number | undefined;
           durationMs?: number | undefined;
@@ -84480,17 +90342,71 @@ export type PostSchedulesScheduleIdPause_PathParams = {
 
 export type PostSchedulesScheduleIdPause_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        tagName?: string | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        ifActive?:
+          | {
+              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        ifIdle?:
+          | {
+              behavior?: ('wake' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+              streamOptions?:
+                | {
+                    requestContext?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        providerOptions?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -84509,7 +90425,8 @@ export type PostSchedulesScheduleIdPause_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -84551,17 +90468,71 @@ export type PostSchedulesScheduleIdResume_PathParams = {
 
 export type PostSchedulesScheduleIdResume_Response = {
   id: string;
-  target: {
-    type: 'workflow';
-    workflowId: string;
-    inputData?: unknown | undefined;
-    initialState?: unknown | undefined;
-    requestContext?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-  };
+  target:
+    | {
+        type: 'workflow';
+        workflowId: string;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      }
+    | {
+        type: 'heartbeat';
+        agentId: string;
+        prompt: string;
+        threadId?: string | undefined;
+        resourceId?: string | undefined;
+        signalType?: string | undefined;
+        tagName?: string | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        ifActive?:
+          | {
+              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        ifIdle?:
+          | {
+              behavior?: ('wake' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+              streamOptions?:
+                | {
+                    requestContext?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        providerOptions?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        requestContext?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+      };
   cron: string;
   timezone?: string | undefined;
   status: 'active' | 'paused';
@@ -84580,7 +90551,8 @@ export type PostSchedulesScheduleIdResume_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -84610,6 +90582,817 @@ export interface PostSchedulesScheduleIdResume_RouteContract {
   body: never;
   request: PostSchedulesScheduleIdResume_Request;
   response: PostSchedulesScheduleIdResume_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /heartbeats
+// ============================================================================
+export type GetHeartbeats_QueryParams = {
+  agentId?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  name?: string | undefined;
+};
+
+export type GetHeartbeats_Response = {
+  heartbeats: {
+    id: string;
+    agentId: string;
+    name?: string | undefined;
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    prompt: string;
+    cron: string;
+    timezone?: string | undefined;
+    status: 'active' | 'paused';
+    nextFireAt: number;
+    lastFireAt?: number | undefined;
+    lastRunId?: string | undefined;
+    lastRun?:
+      | {
+          status:
+            | 'running'
+            | 'success'
+            | 'failed'
+            | 'tripwire'
+            | 'suspended'
+            | 'waiting'
+            | 'pending'
+            | 'canceled'
+            | 'bailed'
+            | 'paused'
+            | 'skipped';
+          startedAt?: number | undefined;
+          completedAt?: number | undefined;
+          durationMs?: number | undefined;
+          error?: string | undefined;
+        }
+      | undefined;
+    signalType?: string | undefined;
+    tagName?: string | undefined;
+    attributes?:
+      | {
+          [key: string]: (string | number | boolean | null) | undefined;
+        }
+      | undefined;
+    ifActive?:
+      | {
+          behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          attributes?:
+            | {
+                [key: string]: (string | number | boolean | null) | undefined;
+              }
+            | undefined;
+        }
+      | undefined;
+    ifIdle?:
+      | {
+          behavior?: ('wake' | 'persist' | 'discard') | undefined;
+          attributes?:
+            | {
+                [key: string]: (string | number | boolean | null) | undefined;
+              }
+            | undefined;
+          streamOptions?:
+            | {
+                requestContext?:
+                  | {
+                      [key: string]: unknown;
+                    }
+                  | undefined;
+              }
+            | undefined;
+        }
+      | undefined;
+    providerOptions?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    metadata?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    createdAt: number;
+    updatedAt: number;
+  }[];
+};
+
+export type GetHeartbeats_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetHeartbeats_QueryParams extends never
+      ? {}
+      : {} extends GetHeartbeats_QueryParams
+        ? { query?: GetHeartbeats_QueryParams }
+        : { query: GetHeartbeats_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHeartbeats_RouteContract {
+  pathParams: never;
+  queryParams: GetHeartbeats_QueryParams;
+  body: never;
+  request: GetHeartbeats_Request;
+  response: GetHeartbeats_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /heartbeats/:heartbeatId
+// ============================================================================
+export type GetHeartbeatsHeartbeatId_PathParams = {
+  heartbeatId: string;
+};
+
+export type GetHeartbeatsHeartbeatId_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused'
+          | 'skipped';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GetHeartbeatsHeartbeatId_Request = Simplify<
+  (GetHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: GetHeartbeatsHeartbeatId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetHeartbeatsHeartbeatId_RouteContract {
+  pathParams: GetHeartbeatsHeartbeatId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetHeartbeatsHeartbeatId_Request;
+  response: GetHeartbeatsHeartbeatId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /heartbeats
+// ============================================================================
+export type PostHeartbeats_Body = {
+  id?: string | undefined;
+  agentId: string;
+  cron: string;
+  timezone?: string | undefined;
+  prompt: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  signalType?: string | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostHeartbeats_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused'
+          | 'skipped';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PostHeartbeats_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostHeartbeats_Body extends never
+      ? {}
+      : {} extends PostHeartbeats_Body
+        ? { body?: PostHeartbeats_Body }
+        : { body: PostHeartbeats_Body })
+>;
+
+export interface PostHeartbeats_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostHeartbeats_Body;
+  request: PostHeartbeats_Request;
+  response: PostHeartbeats_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /heartbeats/:heartbeatId
+// ============================================================================
+export type PatchHeartbeatsHeartbeatId_PathParams = {
+  heartbeatId: string;
+};
+
+export type PatchHeartbeatsHeartbeatId_Body = {
+  cron?: string | undefined;
+  timezone?: string | undefined;
+  prompt?: string | undefined;
+  name?: string | undefined;
+  signalType?: string | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PatchHeartbeatsHeartbeatId_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused'
+          | 'skipped';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PatchHeartbeatsHeartbeatId_Request = Simplify<
+  (PatchHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: PatchHeartbeatsHeartbeatId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchHeartbeatsHeartbeatId_Body extends never
+      ? {}
+      : {} extends PatchHeartbeatsHeartbeatId_Body
+        ? { body?: PatchHeartbeatsHeartbeatId_Body }
+        : { body: PatchHeartbeatsHeartbeatId_Body })
+>;
+
+export interface PatchHeartbeatsHeartbeatId_RouteContract {
+  pathParams: PatchHeartbeatsHeartbeatId_PathParams;
+  queryParams: never;
+  body: PatchHeartbeatsHeartbeatId_Body;
+  request: PatchHeartbeatsHeartbeatId_Request;
+  response: PatchHeartbeatsHeartbeatId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /heartbeats/:heartbeatId
+// ============================================================================
+export type DeleteHeartbeatsHeartbeatId_PathParams = {
+  heartbeatId: string;
+};
+
+export type DeleteHeartbeatsHeartbeatId_Response = {
+  message: string;
+};
+
+export type DeleteHeartbeatsHeartbeatId_Request = Simplify<
+  (DeleteHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: DeleteHeartbeatsHeartbeatId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteHeartbeatsHeartbeatId_RouteContract {
+  pathParams: DeleteHeartbeatsHeartbeatId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteHeartbeatsHeartbeatId_Request;
+  response: DeleteHeartbeatsHeartbeatId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /heartbeats/:heartbeatId/pause
+// ============================================================================
+export type PostHeartbeatsHeartbeatIdPause_PathParams = {
+  heartbeatId: string;
+};
+
+export type PostHeartbeatsHeartbeatIdPause_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused'
+          | 'skipped';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PostHeartbeatsHeartbeatIdPause_Request = Simplify<
+  (PostHeartbeatsHeartbeatIdPause_PathParams extends never
+    ? {}
+    : { params: PostHeartbeatsHeartbeatIdPause_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostHeartbeatsHeartbeatIdPause_RouteContract {
+  pathParams: PostHeartbeatsHeartbeatIdPause_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostHeartbeatsHeartbeatIdPause_Request;
+  response: PostHeartbeatsHeartbeatIdPause_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /heartbeats/:heartbeatId/resume
+// ============================================================================
+export type PostHeartbeatsHeartbeatIdResume_PathParams = {
+  heartbeatId: string;
+};
+
+export type PostHeartbeatsHeartbeatIdResume_Response = {
+  id: string;
+  agentId: string;
+  name?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  prompt: string;
+  cron: string;
+  timezone?: string | undefined;
+  status: 'active' | 'paused';
+  nextFireAt: number;
+  lastFireAt?: number | undefined;
+  lastRunId?: string | undefined;
+  lastRun?:
+    | {
+        status:
+          | 'running'
+          | 'success'
+          | 'failed'
+          | 'tripwire'
+          | 'suspended'
+          | 'waiting'
+          | 'pending'
+          | 'canceled'
+          | 'bailed'
+          | 'paused'
+          | 'skipped';
+        startedAt?: number | undefined;
+        completedAt?: number | undefined;
+        durationMs?: number | undefined;
+        error?: string | undefined;
+      }
+    | undefined;
+  signalType?: string | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PostHeartbeatsHeartbeatIdResume_Request = Simplify<
+  (PostHeartbeatsHeartbeatIdResume_PathParams extends never
+    ? {}
+    : { params: PostHeartbeatsHeartbeatIdResume_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostHeartbeatsHeartbeatIdResume_RouteContract {
+  pathParams: PostHeartbeatsHeartbeatIdResume_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostHeartbeatsHeartbeatIdResume_Request;
+  response: PostHeartbeatsHeartbeatIdResume_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /heartbeats/:heartbeatId/run
+// ============================================================================
+export type PostHeartbeatsHeartbeatIdRun_PathParams = {
+  heartbeatId: string;
+};
+
+export type PostHeartbeatsHeartbeatIdRun_Response = {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
+};
+
+export type PostHeartbeatsHeartbeatIdRun_Request = Simplify<
+  (PostHeartbeatsHeartbeatIdRun_PathParams extends never ? {} : { params: PostHeartbeatsHeartbeatIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostHeartbeatsHeartbeatIdRun_RouteContract {
+  pathParams: PostHeartbeatsHeartbeatIdRun_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostHeartbeatsHeartbeatIdRun_Request;
+  response: PostHeartbeatsHeartbeatIdRun_Response;
   responseType: 'json';
 }
 
@@ -84780,6 +91563,1308 @@ export interface PostChannelsPlatformAgentIdDisconnect_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agent-controller
+// ============================================================================
+export type GetAgentController_Response = {
+  agentControllers: {
+    id: string;
+  }[];
+};
+
+export type GetAgentController_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentController_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetAgentController_Request;
+  response: GetAgentController_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/modes
+// ============================================================================
+export type GetAgentControllerControllerIdModes_PathParams = {
+  controllerId: string;
+};
+
+export type GetAgentControllerControllerIdModes_Response = {
+  modes: {
+    id: string;
+    name?: string | undefined;
+  }[];
+};
+
+export type GetAgentControllerControllerIdModes_Request = Simplify<
+  (GetAgentControllerControllerIdModes_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdModes_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdModes_RouteContract {
+  pathParams: GetAgentControllerControllerIdModes_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdModes_Request;
+  response: GetAgentControllerControllerIdModes_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/models
+// ============================================================================
+export type GetAgentControllerControllerIdModels_PathParams = {
+  controllerId: string;
+};
+
+export type GetAgentControllerControllerIdModels_Response = {
+  models: {
+    id: string;
+    provider: string;
+    modelName: string;
+    hasApiKey: boolean;
+    useCount: number;
+  }[];
+};
+
+export type GetAgentControllerControllerIdModels_Request = Simplify<
+  (GetAgentControllerControllerIdModels_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdModels_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdModels_RouteContract {
+  pathParams: GetAgentControllerControllerIdModels_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdModels_Request;
+  response: GetAgentControllerControllerIdModels_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions
+// ============================================================================
+export type PostAgentControllerControllerIdSessions_PathParams = {
+  controllerId: string;
+};
+
+export type PostAgentControllerControllerIdSessions_Body = {
+  resourceId: string;
+  tags?:
+    | {
+        [key: string]: string;
+      }
+    | undefined;
+};
+
+export type PostAgentControllerControllerIdSessions_Response = {
+  controllerId: string;
+  resourceId: string;
+  threadId?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessions_Request = Simplify<
+  (PostAgentControllerControllerIdSessions_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessions_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessions_Body
+        ? { body?: PostAgentControllerControllerIdSessions_Body }
+        : { body: PostAgentControllerControllerIdSessions_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessions_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessions_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessions_Body;
+  request: PostAgentControllerControllerIdSessions_Request;
+  response: PostAgentControllerControllerIdSessions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceId_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceId_Response = {
+  controllerId: string;
+  resourceId: string;
+  threadId?: string | undefined;
+  modeId: string;
+  modelId: string;
+  omProgress?:
+    | {
+        status: string;
+        pendingTokens: number;
+        threshold: number;
+        thresholdPercent: number;
+        observationTokens: number;
+        reflectionThreshold: number;
+        reflectionThresholdPercent: number;
+        projectedMessageRemoval: number;
+        projectedReflectionSavings: number;
+      }
+    | undefined;
+  tokenUsage?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  settings?:
+    | {
+        yolo: boolean;
+        thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+        notifications: 'off' | 'bell' | 'system' | 'both';
+        smartEditing: boolean;
+      }
+    | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceId_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceId_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceId_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceId_Request;
+  response: GetAgentControllerControllerIdSessionsResourceId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/threads
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams = {
+  limit?: number | undefined;
+  tags?:
+    | (
+        | {
+            [key: string]: string;
+          }
+        | undefined
+      )
+    | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_Response = {
+  threads: {
+    id: string;
+    title?: string | undefined;
+    updatedAt?: string | undefined;
+    tags?:
+      | {
+          [key: string]: string;
+        }
+      | undefined;
+  }[];
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdThreads_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdThreads_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdThreads_QueryParams;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdThreads_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdThreads_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_Body = {
+  title?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_Response = {
+  id: string;
+  title?: string | undefined;
+  resourceId?: string | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreads_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreads_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreads_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdThreads_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdThreads_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThreads_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdThreads_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdThreads_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThreads_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId
+// ============================================================================
+export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams = {
+  controllerId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
+  ok: boolean;
+};
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams extends never
+    ? {}
+    : { params: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request;
+  response: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId
+// ============================================================================
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams = {
+  controllerId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body = {
+  title: string;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body })
+>;
+
+export interface PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: never;
+  body: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/threads/clone
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body = {
+  sourceThreadId?: string | undefined;
+  title?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Response = {
+  id: string;
+  title?: string | undefined;
+  resourceId?: string | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams = {
+  controllerId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams = {
+  limit?: number | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Response = {
+  messages: {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: {
+      type: string;
+      [x: string]: unknown;
+    }[];
+    createdAt?: string | undefined;
+  }[];
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_QueryParams;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/stream
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdStream_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdStream_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdStream_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdStream_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdStream_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdStream_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdStream_Request;
+  response: unknown;
+  responseType: 'stream';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/messages
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_Body = {
+  message: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMessages_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdMessages_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdMessages_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdMessages_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdMessages_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdMessages_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdMessages_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdMessages_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdMessages_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdMessages_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/steer
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Body = {
+  message: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdSteer_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdSteer_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdSteer_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdSteer_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdSteer_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdSteer_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdSteer_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdSteer_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdSteer_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdSteer_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/follow-up
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body = {
+  message: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdFollowUp_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdFollowUp_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdFollowUp_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/abort
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdAbort_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdAbort_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdAbort_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdAbort_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentControllerControllerIdSessionsResourceIdAbort_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdAbort_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/tool-approval
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body = {
+  toolCallId: string;
+  approved: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolApproval_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdToolApproval_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdToolApproval_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdToolApproval_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/tool-suspension
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body = {
+  toolCallId: string;
+  resumeData: any;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdToolSuspension_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/mode
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdMode_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMode_Body = {
+  modeId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMode_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdMode_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdMode_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdMode_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdMode_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdMode_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdMode_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdMode_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdMode_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdMode_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdMode_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdMode_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/model
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdModel_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdModel_Body = {
+  modelId: string;
+  scope?: ('global' | 'thread') | undefined;
+  modeId?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdModel_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdModel_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdModel_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdModel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdModel_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdModel_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdModel_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdModel_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdModel_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdModel_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdModel_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdModel_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/thread
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdThread_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThread_Body = {
+  threadId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThread_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdThread_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdThread_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdThread_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdThread_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdThread_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdThread_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdThread_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdThread_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdThread_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdThread_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdThread_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/notifications
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Body = {
+  source: string;
+  kind: string;
+  summary: string;
+  priority?: ('low' | 'medium' | 'high' | 'urgent') | undefined;
+  payload?: any | undefined;
+  sourceId?: string | undefined;
+  dedupeKey?: string | undefined;
+  coalesceKey?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Response = {
+  accepted: boolean;
+  notificationId?: string | undefined;
+  decision?: string | undefined;
+  runId?: string | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdNotifications_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdNotifications_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdNotifications_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdNotifications_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdNotifications_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdNotifications_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdNotifications_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdNotifications_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdNotifications_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/workspace
+// ============================================================================
+export type GetAgentControllerControllerIdWorkspace_PathParams = {
+  controllerId: string;
+};
+
+export type GetAgentControllerControllerIdWorkspace_Response = {
+  hasWorkspace: boolean;
+  isReady: boolean;
+};
+
+export type GetAgentControllerControllerIdWorkspace_Request = Simplify<
+  (GetAgentControllerControllerIdWorkspace_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdWorkspace_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdWorkspace_RouteContract {
+  pathParams: GetAgentControllerControllerIdWorkspace_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdWorkspace_Request;
+  response: GetAgentControllerControllerIdWorkspace_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/om
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdOm_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdOm_Response = {
+  record?: any | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdOm_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdOm_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdOm_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdOm_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdOm_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdOm_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/resource
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdResource_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdResource_Body = {
+  newResourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdResource_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdResource_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdResource_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdResource_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdResource_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdResource_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdResource_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdResource_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdResource_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdResource_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdResource_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdResource_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdResource_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/resources
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdResources_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdResources_Response = {
+  resourceIds: string[];
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdResources_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdResources_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdResources_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdResources_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdResources_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdResources_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdResources_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/goal
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:controllerId/sessions/:resourceId/goal
+// ============================================================================
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_Body = {
+  objective: string;
+  judgeModelId?: string | undefined;
+  maxRuns?: number | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type PostAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerControllerIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PostAgentControllerControllerIdSessionsResourceIdGoal_Body
+        ? { body?: PostAgentControllerControllerIdSessionsResourceIdGoal_Body }
+        : { body: PostAgentControllerControllerIdSessionsResourceIdGoal_Body })
+>;
+
+export interface PostAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PostAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: PostAgentControllerControllerIdSessionsResourceIdGoal_Body;
+  request: PostAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: PostAgentControllerControllerIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/goal
+// ============================================================================
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_Body = {
+  judgeModelId?: string | undefined;
+  maxRuns?: number | undefined;
+  status?: ('active' | 'paused' | 'done') | undefined;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdGoal_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdGoal_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdGoal_Body })
+>;
+
+export interface PutAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: PutAgentControllerControllerIdSessionsResourceIdGoal_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /agent-controller/:controllerId/sessions/:resourceId/goal
+// ============================================================================
+export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_Response = {
+  ok: boolean;
+};
+
+export type DeleteAgentControllerControllerIdSessionsResourceIdGoal_Request = Simplify<
+  (DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAgentControllerControllerIdSessionsResourceIdGoal_RouteContract {
+  pathParams: DeleteAgentControllerControllerIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteAgentControllerControllerIdSessionsResourceIdGoal_Request;
+  response: DeleteAgentControllerControllerIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/permissions
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdPermissions_Response = {
+  categories?:
+    | {
+        [key: string]: 'allow' | 'ask' | 'deny';
+      }
+    | undefined;
+  tools?:
+    | {
+        [key: string]: 'allow' | 'ask' | 'deny';
+      }
+    | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdPermissions_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdPermissions_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdPermissions_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdPermissions_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdPermissions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/category
+// ============================================================================
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body = {
+  category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
+  policy: 'allow' | 'ask' | 'deny';
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body })
+>;
+
+export interface PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_PathParams;
+  queryParams: never;
+  body: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/tool
+// ============================================================================
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body = {
+  toolName: string;
+  policy: 'allow' | 'ask' | 'deny';
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body })
+>;
+
+export interface PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_PathParams;
+  queryParams: never;
+  body: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:controllerId/sessions/:resourceId/state
+// ============================================================================
+export type PutAgentControllerControllerIdSessionsResourceIdState_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdState_Body = {
+  state: {
+    [key: string]: unknown;
+  };
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdState_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerControllerIdSessionsResourceIdState_Request = Simplify<
+  (PutAgentControllerControllerIdSessionsResourceIdState_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerControllerIdSessionsResourceIdState_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerControllerIdSessionsResourceIdState_Body extends never
+      ? {}
+      : {} extends PutAgentControllerControllerIdSessionsResourceIdState_Body
+        ? { body?: PutAgentControllerControllerIdSessionsResourceIdState_Body }
+        : { body: PutAgentControllerControllerIdSessionsResourceIdState_Body })
+>;
+
+export interface PutAgentControllerControllerIdSessionsResourceIdState_RouteContract {
+  pathParams: PutAgentControllerControllerIdSessionsResourceIdState_PathParams;
+  queryParams: never;
+  body: PutAgentControllerControllerIdSessionsResourceIdState_Body;
+  request: PutAgentControllerControllerIdSessionsResourceIdState_Request;
+  response: PutAgentControllerControllerIdSessionsResourceIdState_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Master Route Type Map
 // ============================================================================
 export interface RouteTypes {
@@ -84803,6 +92888,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/send-tool-approval': PostAgentsAgentIdSendToolApproval_RouteContract;
+  'GET /agents/:agentId/suspended-runs': GetAgentsAgentIdSuspendedRuns_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
@@ -84835,6 +92921,7 @@ export interface RouteTypes {
   'POST /auth/credentials/sign-in': PostAuthCredentialsSignIn_RouteContract;
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
+  'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -84990,7 +93077,9 @@ export interface RouteTypes {
   'POST /mcp/:serverId/messages': PostMcpServerIdMessages_RouteContract;
   'GET /stored/agents': GetStoredAgents_RouteContract;
   'POST /stored/agents/preview-instructions': PostStoredAgentsPreviewInstructions_RouteContract;
+  'GET /stored/agents/:storedAgentId/dependents': GetStoredAgentsStoredAgentIdDependents_RouteContract;
   'POST /stored/agents/:storedAgentId/export': PostStoredAgentsStoredAgentIdExport_RouteContract;
+  'POST /stored/agents/:storedAgentId/change-request': PostStoredAgentsStoredAgentIdChangeRequest_RouteContract;
   'GET /stored/agents/:storedAgentId': GetStoredAgentsStoredAgentId_RouteContract;
   'POST /stored/agents': PostStoredAgents_RouteContract;
   'PATCH /stored/agents/:storedAgentId': PatchStoredAgentsStoredAgentId_RouteContract;
@@ -85099,6 +93188,7 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/builder/models/available': GetEditorBuilderModelsAvailable_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
   'GET /editor/builder/registries/:registryId/search': GetEditorBuilderRegistriesRegistryIdSearch_RouteContract;
@@ -85126,10 +93216,52 @@ export interface RouteTypes {
   'GET /schedules/:scheduleId/triggers': GetSchedulesScheduleIdTriggers_RouteContract;
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
+  'GET /heartbeats': GetHeartbeats_RouteContract;
+  'GET /heartbeats/:heartbeatId': GetHeartbeatsHeartbeatId_RouteContract;
+  'POST /heartbeats': PostHeartbeats_RouteContract;
+  'PATCH /heartbeats/:heartbeatId': PatchHeartbeatsHeartbeatId_RouteContract;
+  'DELETE /heartbeats/:heartbeatId': DeleteHeartbeatsHeartbeatId_RouteContract;
+  'POST /heartbeats/:heartbeatId/pause': PostHeartbeatsHeartbeatIdPause_RouteContract;
+  'POST /heartbeats/:heartbeatId/resume': PostHeartbeatsHeartbeatIdResume_RouteContract;
+  'POST /heartbeats/:heartbeatId/run': PostHeartbeatsHeartbeatIdRun_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
   'POST /channels/:platform/:agentId/disconnect': PostChannelsPlatformAgentIdDisconnect_RouteContract;
+  'GET /agent-controller': GetAgentController_RouteContract;
+  'GET /agent-controller/:controllerId/modes': GetAgentControllerControllerIdModes_RouteContract;
+  'GET /agent-controller/:controllerId/models': GetAgentControllerControllerIdModels_RouteContract;
+  'POST /agent-controller/:controllerId/sessions': PostAgentControllerControllerIdSessions_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId': GetAgentControllerControllerIdSessionsResourceId_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/threads': GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/threads': PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+  'DELETE /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/threads/clone': PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages': GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/stream': GetAgentControllerControllerIdSessionsResourceIdStream_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/messages': PostAgentControllerControllerIdSessionsResourceIdMessages_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/steer': PostAgentControllerControllerIdSessionsResourceIdSteer_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/follow-up': PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/abort': PostAgentControllerControllerIdSessionsResourceIdAbort_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/tool-approval': PostAgentControllerControllerIdSessionsResourceIdToolApproval_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/tool-suspension': PostAgentControllerControllerIdSessionsResourceIdToolSuspension_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/mode': PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/model': PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/thread': PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/notifications': PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract;
+  'GET /agent-controller/:controllerId/workspace': GetAgentControllerControllerIdWorkspace_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/om': GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/resource': PostAgentControllerControllerIdSessionsResourceIdResource_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/resources': GetAgentControllerControllerIdSessionsResourceIdResources_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/goal': GetAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'POST /agent-controller/:controllerId/sessions/:resourceId/goal': PostAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/goal': PutAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'DELETE /agent-controller/:controllerId/sessions/:resourceId/goal': DeleteAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/permissions': GetAgentControllerControllerIdSessionsResourceIdPermissions_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/category': PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/permissions/tool': PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_RouteContract;
+  'PUT /agent-controller/:controllerId/sessions/:resourceId/state': PutAgentControllerControllerIdSessionsResourceIdState_RouteContract;
 }
 
 export type RouteKey = keyof RouteTypes;
@@ -85197,6 +93329,98 @@ export interface Client {
   };
   '/agent-builder/:actionId/stream-legacy': {
     POST: PostAgentBuilderActionIdStreamLegacy_RouteContract;
+  };
+  '/agent-controller': {
+    GET: GetAgentController_RouteContract;
+  };
+  '/agent-controller/:controllerId/models': {
+    GET: GetAgentControllerControllerIdModels_RouteContract;
+  };
+  '/agent-controller/:controllerId/modes': {
+    GET: GetAgentControllerControllerIdModes_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions': {
+    POST: PostAgentControllerControllerIdSessions_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId': {
+    GET: GetAgentControllerControllerIdSessionsResourceId_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/abort': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdAbort_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/follow-up': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdFollowUp_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/goal': {
+    DELETE: DeleteAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+    GET: GetAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+    POST: PostAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+    PUT: PutAgentControllerControllerIdSessionsResourceIdGoal_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/messages': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdMessages_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/mode': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdMode_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/model': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdModel_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/notifications': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdNotifications_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/om': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdOm_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/permissions': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdPermissions_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/permissions/category': {
+    PUT: PutAgentControllerControllerIdSessionsResourceIdPermissionsCategory_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/permissions/tool': {
+    PUT: PutAgentControllerControllerIdSessionsResourceIdPermissionsTool_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/resource': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdResource_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/resources': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdResources_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/state': {
+    PUT: PutAgentControllerControllerIdSessionsResourceIdState_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/steer': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdSteer_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/stream': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdStream_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/thread': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdThread_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+    POST: PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': {
+    DELETE: DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+    PUT: PutAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/:threadId/messages': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/threads/clone': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdThreadsClone_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/tool-approval': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdToolApproval_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/tool-suspension': {
+    POST: PostAgentControllerControllerIdSessionsResourceIdToolSuspension_RouteContract;
+  };
+  '/agent-controller/:controllerId/workspace': {
+    GET: GetAgentControllerControllerIdWorkspace_RouteContract;
   };
   '/agents': {
     GET: GetAgents_RouteContract;
@@ -85306,6 +93530,9 @@ export interface Client {
   '/agents/:agentId/streamVNext': {
     POST: PostAgentsAgentIdStreamVNext_RouteContract;
   };
+  '/agents/:agentId/suspended-runs': {
+    GET: GetAgentsAgentIdSuspendedRuns_RouteContract;
+  };
   '/agents/:agentId/threads/abort': {
     POST: PostAgentsAgentIdThreadsAbort_RouteContract;
   };
@@ -85347,6 +93574,9 @@ export interface Client {
   };
   '/auth/me': {
     GET: GetAuthMe_RouteContract;
+  };
+  '/auth/permission-patterns': {
+    GET: GetAuthPermissionPatterns_RouteContract;
   };
   '/auth/refresh': {
     POST: PostAuthRefresh_RouteContract;
@@ -85437,6 +93667,9 @@ export interface Client {
   '/editor/builder/infrastructure': {
     GET: GetEditorBuilderInfrastructure_RouteContract;
   };
+  '/editor/builder/models/available': {
+    GET: GetEditorBuilderModelsAvailable_RouteContract;
+  };
   '/editor/builder/registries': {
     GET: GetEditorBuilderRegistries_RouteContract;
   };
@@ -85463,6 +93696,24 @@ export interface Client {
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
+  };
+  '/heartbeats': {
+    GET: GetHeartbeats_RouteContract;
+    POST: PostHeartbeats_RouteContract;
+  };
+  '/heartbeats/:heartbeatId': {
+    DELETE: DeleteHeartbeatsHeartbeatId_RouteContract;
+    GET: GetHeartbeatsHeartbeatId_RouteContract;
+    PATCH: PatchHeartbeatsHeartbeatId_RouteContract;
+  };
+  '/heartbeats/:heartbeatId/pause': {
+    POST: PostHeartbeatsHeartbeatIdPause_RouteContract;
+  };
+  '/heartbeats/:heartbeatId/resume': {
+    POST: PostHeartbeatsHeartbeatIdResume_RouteContract;
+  };
+  '/heartbeats/:heartbeatId/run': {
+    POST: PostHeartbeatsHeartbeatIdRun_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;
@@ -85744,6 +93995,12 @@ export interface Client {
     DELETE: DeleteStoredAgentsStoredAgentId_RouteContract;
     GET: GetStoredAgentsStoredAgentId_RouteContract;
     PATCH: PatchStoredAgentsStoredAgentId_RouteContract;
+  };
+  '/stored/agents/:storedAgentId/change-request': {
+    POST: PostStoredAgentsStoredAgentIdChangeRequest_RouteContract;
+  };
+  '/stored/agents/:storedAgentId/dependents': {
+    GET: GetStoredAgentsStoredAgentIdDependents_RouteContract;
   };
   '/stored/agents/:storedAgentId/export': {
     POST: PostStoredAgentsStoredAgentIdExport_RouteContract;

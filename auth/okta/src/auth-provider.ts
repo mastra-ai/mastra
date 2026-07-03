@@ -11,11 +11,36 @@ import type {
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
-} from '@mastra/core/auth';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
+} from '@internal/auth';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider } from '@internal/auth/provider';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+/**
+ * Trim trailing slashes. Index scan instead of regex to avoid backtracking
+ * (CodeQL js/polynomial-redos).
+ */
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
+}
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
 
 import type { OktaUser, MastraAuthOktaOptions } from './types.js';
 import { mapOktaClaimsToUser } from './types.js';
@@ -167,7 +192,7 @@ export class MastraAuthOkta
     this.clientId = clientId;
     this.clientSecret = clientSecret;
     // Normalize trailing slashes so a stray `OKTA_ISSUER=https://domain/` doesn't produce `.../oauth2//v1/...`
-    this.issuer = (issuer ?? `https://${domain}/oauth2/default`).replace(/\/+$/, '');
+    this.issuer = trimTrailingSlashes(issuer ?? `https://${domain}/oauth2/default`);
     // Org authorization servers use issuer `https://{domain}` but serve endpoints under `/oauth2/v1/*`.
     // Custom authorization servers use issuer `https://{domain}/oauth2/<name>` and serve endpoints under `<issuer>/v1/*`.
     // `issuer` is still used verbatim for JWT `iss`-claim validation on both server types.
@@ -206,7 +231,7 @@ export class MastraAuthOkta
    * Authenticate a token from the request.
    * First tries to read from session cookie, then falls back to Authorization header.
    */
-  async authenticateToken(token: string, request: HonoRequest | Request): Promise<OktaUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<OktaUser | null> {
     // Try session cookie first
     const sessionUser = await this.getUserFromSession(request);
     if (sessionUser) {
@@ -234,7 +259,7 @@ export class MastraAuthOkta
   /**
    * Authorize a user.
    */
-  authorizeUser(user: OktaUser, _request: HonoRequest): boolean {
+  authorizeUser(user: OktaUser, _request: MastraAuthRequest): boolean {
     if (!user || !user.oktaId) return false;
     return true;
   }
@@ -296,10 +321,9 @@ export class MastraAuthOkta
   /**
    * Get user from session cookie.
    */
-  private async getUserFromSession(request: HonoRequest | Request): Promise<OktaUser | null> {
+  private async getUserFromSession(request: MastraAuthRequest): Promise<OktaUser | null> {
     try {
-      // Handle both HonoRequest and standard Request
-      const cookieHeader = 'header' in request ? request.header('cookie') : request.headers.get('cookie');
+      const cookieHeader = getRequestHeader(request, 'cookie');
       if (!cookieHeader) return null;
 
       const cookies = cookieHeader.split(';').map((c: string) => c.trim());
@@ -330,10 +354,9 @@ export class MastraAuthOkta
    * Extract the raw ID token from the encrypted session cookie.
    * Used to provide id_token_hint for Okta logout.
    */
-  private async getIdTokenFromSession(request: Request): Promise<string | null> {
+  private async getIdTokenFromSession(request: MastraAuthRequest): Promise<string | null> {
     try {
-      const cookieHeader =
-        'header' in request ? (request as unknown as HonoRequest).header('cookie') : request.headers.get('cookie');
+      const cookieHeader = getRequestHeader(request, 'cookie');
       if (!cookieHeader) return null;
 
       const cookies = cookieHeader.split(';').map((c: string) => c.trim());

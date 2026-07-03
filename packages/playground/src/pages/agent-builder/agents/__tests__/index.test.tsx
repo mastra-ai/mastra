@@ -1,7 +1,5 @@
-// @vitest-environment jsdom
-import type { BuilderSettingsResponse } from '@mastra/client-js';
-import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import type { BuilderAvailableModelsResponse, BuilderSettingsResponse } from '@mastra/client-js';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -18,19 +16,21 @@ const builderEnabled: BuilderSettingsResponse = {
   features: { agent: {} },
 };
 
+const emptyAvailableModels: BuilderAvailableModelsResponse = {
+  providers: [],
+};
+
 const unauthenticatedCapabilities = {
   enabled: true,
   login: { type: 'credentials' as const },
 } satisfies AuthCapabilities;
+vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
 
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -108,10 +108,14 @@ const baseAgent = {
   updatedAt: new Date().toISOString(),
 };
 
-function defaultHandlers() {
+function defaultHandlers(onAvailableModels?: () => void) {
   return [
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(unauthenticatedCapabilities)),
     http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderEnabled)),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => {
+      onAvailableModels?.();
+      return HttpResponse.json(emptyAvailableModels);
+    }),
   ];
 }
 
@@ -179,6 +183,66 @@ describe('AgentBuilderAgentsPage', () => {
     await act(() => new Promise(resolve => setTimeout(resolve, 0)));
     expect(screen.queryByText('No agents yet')).toBeNull();
     expect(screen.queryByText('Create an agent')).toBeNull();
+  });
+
+  it('renders the resolved author name returned by the API in each row', async () => {
+    server.use(
+      ...defaultHandlers(),
+      ...userHandler({ id: 'user-1' }),
+      http.get(`${BASE_URL}/api/stored/agents`, () => {
+        return HttpResponse.json({
+          agents: [
+            {
+              ...baseAgent,
+              id: 'agent-1',
+              name: 'Alpha',
+              description: 'd1',
+              authorId: 'user-1',
+              author: { id: 'user-1', name: 'Alice Doe' },
+            },
+            {
+              ...baseAgent,
+              id: 'agent-2',
+              name: 'Beta',
+              description: 'd2',
+              authorId: 'user-2',
+              author: { id: 'user-2', email: 'bob@example.com' },
+            },
+          ],
+          total: 2,
+          page: 1,
+          perPage: 100,
+          hasMore: false,
+        });
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha')).toBeTruthy();
+      expect(screen.getByText('Beta')).toBeTruthy();
+    });
+
+    expect(screen.getAllByText('Alice Doe').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('bob@example.com').length).toBeGreaterThan(0);
+  });
+
+  it('seeds the builder-available-models cache so the model picker is warm on the create/edit page', async () => {
+    const onAvailableModels = vi.fn<() => void>();
+    server.use(
+      ...defaultHandlers(onAvailableModels),
+      ...userHandler({ id: 'user-1' }),
+      http.get(`${BASE_URL}/api/stored/agents`, () =>
+        HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+      ),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(onAvailableModels).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('omits authorId when no current user is available', async () => {

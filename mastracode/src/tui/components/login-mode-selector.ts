@@ -5,8 +5,8 @@
  * an env var.
  */
 
-import { Box, Container, getKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import type { AuthMode } from '../../auth/types.js';
 import { showModalOverlay } from '../overlay.js';
 import { theme } from '../theme.js';

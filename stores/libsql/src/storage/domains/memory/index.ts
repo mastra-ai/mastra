@@ -26,12 +26,17 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -48,9 +53,21 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
 export class MemoryLibSQL extends MemoryStorage {
   readonly supportsObservationalMemory = true;
+
+  /**
+   * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
+   * on `createdAt` and are indexed for fast batched deletes. Cascade order is
+   * enforced in `prune()` (children before threads), not here.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    messages: { table: TABLE_MESSAGES, column: 'createdAt', indexed: true },
+    resources: { table: TABLE_RESOURCES, column: 'createdAt', indexed: true },
+    threads: { table: TABLE_THREADS, column: 'createdAt', indexed: true },
+  };
 
   #client: Client;
   #db: LibSQLDB;
@@ -67,14 +84,15 @@ export class MemoryLibSQL extends MemoryStorage {
     await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
     await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
 
-    // Dynamically import OM schema to avoid crashing on older @mastra/core versions
-    let omSchema: Record<string, any> | undefined;
-    try {
-      const { OBSERVATIONAL_MEMORY_TABLE_SCHEMA } = await import('@mastra/core/storage');
-      omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
-    } catch {
-      // Older @mastra/core without OM support
-    }
+    // Static import — `await import('@mastra/core/storage')` deadlocks `mastra
+    // build` output: bundlers rewrite the dynamic import to point at the entry
+    // chunk that statically depends on this file, so the cycle never resolves
+    // when storage initializes during module evaluation (#18298). The
+    // peerDependency on `@mastra/core` is already `>=1.42.1`, which is the
+    // version that introduced `OBSERVATIONAL_MEMORY_TABLE_SCHEMA`, so the
+    // older-core compat the dynamic import was guarding against can no longer
+    // occur via npm resolution.
+    const omSchema = OBSERVATIONAL_MEMORY_TABLE_SCHEMA?.[OM_TABLE];
 
     if (omSchema) {
       await this.#db.createTable({
@@ -135,12 +153,30 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.init();
+
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });
     if (OM_TABLE) {
       await this.#db.deleteData({ tableName: OM_TABLE as any });
     }
+  }
+
+  /**
+   * Delete rows older than each policy's `maxAge`, batched and cancellable.
+   *
+   * Deletes children before parents (messages/resources before threads) so a
+   * `threads` policy doesn't strand rows behind a deleted parent — there are no
+   * FKs in the LibSQL schema, so cascade ordering is explicit here.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: MemoryLibSQL.retentionTables,
+      order: ['messages', 'resources', 'threads'],
+    });
+    return runPrune({ db: this.#db, domain: 'memory', targets, options, logger: this.logger });
   }
 
   private parseRow(row: any): MastraDBMessage {
@@ -1223,6 +1259,7 @@ export class MemoryLibSQL extends MemoryStorage {
       });
     }
 
+    const now = new Date();
     const updatedThread = {
       ...thread,
       title,
@@ -1230,12 +1267,13 @@ export class MemoryLibSQL extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: now,
     };
 
     try {
       await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?) WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), id],
+        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+        args: [title, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
       });
 
       return updatedThread;
@@ -2159,6 +2197,8 @@ export class MemoryLibSQL extends MemoryStorage {
         suggestedContinuation: input.chunk.suggestedContinuation,
         currentTask: input.chunk.currentTask,
         threadTitle: input.chunk.threadTitle,
+        extractedValues: input.chunk.extractedValues,
+        extractionFailures: input.chunk.extractionFailures,
       };
 
       const newChunks = [...existingChunks, newChunk];

@@ -40,7 +40,9 @@ function createMockAgent(name = 'test-agent') {
         },
       }),
     }),
-    sendMessage: vi.fn().mockResolvedValue({ accepted: true, runId: 'run-1' }),
+    sendMessage: vi.fn().mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+    }),
     subscribeToThread: vi.fn().mockResolvedValue({
       stream: (async function* () {})(),
       activeRunId: () => null,
@@ -379,54 +381,308 @@ describe('AgentChannels', () => {
         }),
       );
     });
+
+    it('consumes the run stream when the signal outcome is `wake`', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const consumeStream = vi.fn().mockResolvedValue(undefined);
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.resolve({ action: 'wake', runId: 'run-1', output: { consumeStream } }),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(consumeStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not consume a stream when the signal outcome is not `wake`', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      // Stub resolves the outcome to `deliver` (signal handed off) with a consumeStream spy.
+      const consumeStream = vi.fn().mockResolvedValue(undefined);
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.resolve({ action: 'deliver', runId: 'run-1', output: { consumeStream } }),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await expect((agentChannels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
+      expect(consumeStream).not.toHaveBeenCalled();
+    });
   });
 
-  describe('close', () => {
-    it('unsubscribes all cached thread subscriptions', () => {
-      const unsubscribeA = vi.fn();
-      const unsubscribeB = vi.fn();
-      // Seed the internal cache with two fake subscriptions to verify close() drains them.
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: unsubscribeA },
-        consumer: Promise.resolve(),
-      });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: unsubscribeB },
-        consumer: Promise.resolve(),
-      });
+  describe('resolveResourceId', () => {
+    function makeChatThread(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: undefined as any, // set per-test from the channels instance
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        ...overrides,
+      } as any;
+    }
 
-      (agentChannels as any).pendingApprovalCards.set('run-1', { channel: 'C', ts: '123' });
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
 
-      agentChannels.close();
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
 
-      expect(unsubscribeA).toHaveBeenCalledTimes(1);
-      expect(unsubscribeB).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
-      expect((agentChannels as any).pendingApprovalCards.size).toBe(0);
+    it('uses the default `${platform}:${author.userId}` when no resolver is set', async () => {
+      const mockMastra = makeMastra();
+      await agentChannels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          resourceId: 'discord:user-1',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'discord:user-1' }),
+            }),
+          }),
+        }),
+      );
     });
 
-    it('is safe to call without any subscriptions', () => {
-      expect(() => agentChannels.close()).not.toThrow();
+    it('uses the resolver return value as the new thread resourceId (DM uses bare SSO id)', async () => {
+      const resolveResourceId = vi.fn(async () => 'sso-user-42');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: true });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(resolveResourceId).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: 'discord',
+          thread: chatThread,
+          message,
+          defaultResourceId: 'discord:user-1',
+        }),
+      );
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          resourceId: 'sso-user-42',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'sso-user-42' }),
+            }),
+          }),
+        }),
+      );
     });
 
-    it('swallows errors from individual unsubscribe calls', () => {
-      const failing = vi.fn(() => {
-        throw new Error('boom');
+    it('scopes a group chat to its channelId while keeping the sender as actor', async () => {
+      const resolveResourceId = vi.fn(async ({ thread, defaultResourceId }: any) =>
+        thread.isDM ? defaultResourceId : thread.channelId,
+      );
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
       });
-      const succeeding = vi.fn();
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: failing },
-        consumer: Promise.resolve(),
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: false });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        // actor identity stays the sender
+        expect.objectContaining({
+          attributes: expect.objectContaining({ authorId: 'user-1' }),
+        }),
+        // memory owner is the group/channel
+        expect.objectContaining({
+          resourceId: 'channel-1',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'channel-1' }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('returning defaultResourceId keeps the built-in behavior', async () => {
+      const resolveResourceId = vi.fn(async ({ defaultResourceId }: any) => defaultResourceId);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
       });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: succeeding },
-        consumer: Promise.resolve(),
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ resourceId: 'discord:user-1' }),
+      );
+    });
+
+    it('does not run the resolver when reusing an existing thread (keeps stored owner)', async () => {
+      const resolveResourceId = vi.fn(async () => 'should-not-be-used');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      // Pre-create the mastra thread with a fixed owner, using the same channel metadata
+      // the handler queries on, so getOrCreateThread reuses it instead of creating a new one.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'pre-existing',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
       });
 
-      expect(() => agentChannels.close()).not.toThrow();
-      expect(failing).toHaveBeenCalledTimes(1);
-      expect(succeeding).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      // The reused thread's stored owner drives memory, and the resolver is never
+      // called; existing conversations don't depend on the resolver being available.
+      expect(resolveResourceId).not.toHaveBeenCalled();
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          resourceId: 'original-owner',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'original-owner' }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('does not fail an existing thread when the resolver throws', async () => {
+      const resolveResourceId = vi.fn(async () => {
+        throw new Error('SSO unavailable');
+      });
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      // Pre-create the thread so the handler reuses it instead of creating one.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'pre-existing',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
+      });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+
+      // A flaky resolver must not break message handling on an existing thread.
+      await expect((channels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
+      expect(resolveResourceId).not.toHaveBeenCalled();
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ resourceId: 'original-owner' }),
+      );
     });
   });
 });

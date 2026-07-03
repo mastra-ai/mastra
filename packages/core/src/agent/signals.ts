@@ -30,6 +30,20 @@ type SignalFilePart = {
  */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+export type AgentStateSignalMode = 'snapshot' | 'delta';
+
+export type AgentStateSignalInput = {
+  id: string;
+  cacheKey: string;
+  contents: AgentSignalContents;
+  mode?: AgentStateSignalMode;
+  value?: unknown;
+  delta?: unknown;
+  attributes?: AgentSignalAttributes;
+  metadata?: Record<string, unknown>;
+  providerOptions?: MastraProviderMetadata;
+  tagName?: AgentSignalTagName;
+};
 
 export type AgentMessageInput =
   | AgentSignalContents
@@ -61,16 +75,17 @@ export type AgentSignalInput = {
  * @experimental Agent signals are experimental and may change in a future release.
  */
 export type AgentSignalDataPart = {
-  type: `data-${string}`;
+  type: 'data-user-message' | 'data-signal';
   data: {
     id: string;
-    type: AgentSignalType;
+    type: AgentSignalCategory;
     tagName?: AgentSignalTagName;
     contents: AgentSignalContents;
     createdAt: string;
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
+    providerOptions?: MastraProviderMetadata;
   };
   transient: true;
 };
@@ -413,9 +428,8 @@ function signalToLLMMessage(
 }
 
 function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: SignalPart[]): AgentSignalDataPart {
-  const dataPartTagName = signal.type === 'user' && signal.tagName === 'user' ? 'user-message' : signal.tagName;
   return {
-    type: `data-${dataPartTagName}`,
+    type: signal.type === 'user' ? 'data-user-message' : 'data-signal',
     data: {
       id: signal.id,
       type: signal.type,
@@ -425,6 +439,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
+      ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
     },
     transient: true,
   };

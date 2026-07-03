@@ -4,8 +4,9 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { injectStudioHtmlConfig } from '@mastra/deployer/build';
+import { escapeStudioHtmlValue, injectStudioHtmlConfig } from '@mastra/deployer/build';
 import { copy, move } from 'fs-extra/esm';
+import { getVercelRoutes } from './routes';
 import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';
 
 export class VercelDeployer extends Deployer {
@@ -110,22 +111,20 @@ export const HEAD = handle(app);
       requestContextPresets: `''`,
       experimentalUI: `'false'`,
       agentSignals: process.env.MASTRA_AGENT_SIGNALS === 'false' ? `'false'` : `'true'`,
+      signalsUI: process.env.MASTRA_SIGNALS_UI === 'true' ? `'true'` : `'false'`,
+      organizationId: `'${escapeStudioHtmlValue(process.env.MASTRA_ORGANIZATION_ID || '')}'`,
+      platformProjectId: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_PROJECT_ID || '')}'`,
+      platformObservabilityEndpoint: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '')}'`,
     });
 
     writeFileSync(indexPath, html);
   }
 
   private writeVercelJSON(outputDirectory: string) {
-    const routes = this.studio
-      ? [
-          { src: '/api/(.*)', dest: '/' },
-          { src: '/health', dest: '/' },
-          { handle: 'filesystem' as const },
-          { src: '/(.*)', dest: '/index.html', check: true },
-        ]
-      : [{ src: '/(.*)', dest: '/' }];
-
-    writeFileSync(join(outputDirectory, 'config.json'), JSON.stringify({ version: 3, routes }));
+    writeFileSync(
+      join(outputDirectory, 'config.json'),
+      JSON.stringify({ version: 3, routes: getVercelRoutes({ studio: this.studio }) }),
+    );
   }
 
   async bundle(

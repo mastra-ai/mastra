@@ -2,20 +2,23 @@
  * Shared context passed to extracted slash command handlers.
  * Keeps commands decoupled from the MastraTUI class.
  */
-import type { Harness, HarnessMessage } from '@mastra/core/harness';
+import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import type { MastraCodeAnalytics } from '../../analytics.js';
 import type { AuthStorage } from '../../auth/storage.js';
 import type { HookManager } from '../../hooks/index.js';
 import type { McpManager } from '../../mcp/manager.js';
+import type { PluginManager } from '../../plugins/manager.js';
 import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
 import type { TUIState } from '../state.js';
 
 export interface SlashCommandContext {
   state: TUIState;
-  harness: Harness<any>;
+  controller: AgentController<any>;
+  session: Session<any>;
   hookManager?: HookManager;
   mcpManager?: McpManager;
+  pluginManager?: PluginManager;
   analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
   customSlashCommands: SlashCommandMetadata[];
@@ -24,7 +27,7 @@ export interface SlashCommandContext {
   updateStatusLine: () => void;
   stop: () => void;
   getResolvedWorkspace: () => Workspace | undefined;
-  addUserMessage: (message: HarnessMessage) => void;
+  addUserMessage: (message: AgentControllerMessage) => void;
   renderExistingMessages: () => Promise<void>;
   showOnboarding: () => Promise<void>;
 }

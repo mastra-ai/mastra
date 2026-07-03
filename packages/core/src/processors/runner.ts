@@ -1,22 +1,27 @@
 import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { StepResult } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
-import { createSignal } from '../agent/signals';
-import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
+import type { AgentStateSignalInput } from '../agent/signals';
+import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
+import type { MastraMemory } from '../memory/memory';
+import { parseMemoryRequestContext } from '../memory/types';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../observability';
 import type { ObservabilityContext, Span } from '../observability';
 import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { LanguageModelUsage } from '../stream/types';
+import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import { isProcessorWorkflow } from './is-processor-workflow';
+import { createProcessorSendSignal } from './send-signal';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -27,10 +32,10 @@ import {
 import type { ProcessorStepOutput } from './step-schema';
 import { REPROCESS_PART_KEY } from './stream-reprocess';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
-import { isProcessorWorkflow } from './index';
 import type {
   CachedLLMStepChunk,
   CachedLLMStepResponse,
+  ComputeStateSignalResult,
   ErrorProcessorOrWorkflow,
   OutputResult,
   ProcessInputStepResult,
@@ -162,20 +167,6 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
   );
 }
 
-export function createProcessorSendSignal(args: {
-  messageList: MessageList;
-  writer?: ProcessorStreamWriter;
-  rotateResponseMessageId?: () => string;
-}): (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal> {
-  return async signalInput => {
-    const signal = createSignal(signalInput);
-    args.rotateResponseMessageId?.();
-    args.messageList.add(signal.toDBMessage(), 'input');
-    await args.writer?.custom(signal.toDataPart());
-    return signal;
-  };
-}
-
 function buildProcessInputStepSpanInput(args: {
   messages: MastraDBMessage[];
   systemMessages: unknown[];
@@ -277,6 +268,7 @@ export class ProcessorRunner {
   public readonly errorProcessors: ErrorProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
+  private readonly agent?: Agent<any, any, any, any>;
   /**
    * Shared processor state that persists across loop iterations.
    * Used by all processor methods (input and output) to share state.
@@ -290,6 +282,7 @@ export class ProcessorRunner {
     errorProcessors,
     logger,
     agentName,
+    agent,
     processorStates,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
@@ -297,6 +290,7 @@ export class ProcessorRunner {
     errorProcessors?: ErrorProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
+    agent?: Agent<any, any, any, any>;
     processorStates?: Map<string, ProcessorState>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
@@ -304,6 +298,7 @@ export class ProcessorRunner {
     this.errorProcessors = errorProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+    this.agent = agent;
     this.processorStates = processorStates ?? new Map();
   }
 
@@ -319,6 +314,186 @@ export class ProcessorRunner {
       this.processorStates.set(processorId, state);
     }
     return state;
+  }
+
+  private async runComputeStateSignal({
+    processor,
+    messageList,
+    stepNumber,
+    steps,
+    requestContext,
+    writer,
+    abort,
+    processorState,
+    memory,
+    resourceId,
+    threadId,
+    abortSignal,
+    retryCount,
+    rotateResponseMessageId,
+  }: {
+    processor: Processor;
+    messageList: MessageList;
+    stepNumber: number;
+    steps: Array<StepResult<any>>;
+    requestContext?: RequestContext;
+    writer?: ProcessorStreamWriter;
+    abort: (reason?: string, options?: TripWireOptions) => never;
+    processorState: ProcessorState;
+    memory?: MastraMemory;
+    resourceId?: string;
+    threadId?: string;
+    abortSignal?: AbortSignal;
+    retryCount: number;
+    rotateResponseMessageId?: () => string;
+  }): Promise<void> {
+    const computeStateSignal = processor.computeStateSignal?.bind(processor);
+    if (!computeStateSignal) return;
+
+    const memoryContext = parseMemoryRequestContext(requestContext);
+    const resolvedMemory = memory;
+    const resolvedThreadId = threadId ?? memoryContext?.thread?.id;
+    const resolvedResourceId = resourceId ?? memoryContext?.resourceId;
+
+    if (!resolvedMemory || !resolvedThreadId || !resolvedResourceId) {
+      throw new Error(
+        `[Processor:${processor.id}] computeStateSignal requires Mastra memory with an active resourceId and threadId`,
+      );
+    }
+
+    const loadedThread = (await resolvedMemory.getThreadById({ threadId: resolvedThreadId })) ?? memoryContext?.thread;
+    if (!loadedThread) {
+      throw new Error(`[Processor:${processor.id}] computeStateSignal could not load thread ${resolvedThreadId}`);
+    }
+    let thread = {
+      ...loadedThread,
+      id: resolvedThreadId,
+      resourceId: loadedThread.resourceId ?? resolvedResourceId,
+      createdAt: loadedThread.createdAt ?? new Date(),
+      updatedAt: loadedThread.updatedAt ?? new Date(),
+      metadata: loadedThread.metadata,
+    };
+
+    const stateId = processor.stateId ?? processor.id;
+    const beforeAddStateSignal = rotateResponseMessageId
+      ? () => {
+          messageList.markResponseMessageBoundary();
+          rotateResponseMessageId();
+        }
+      : undefined;
+    const trackingById = getStateSignalsMetadata(thread.metadata);
+    const tracking = trackingById[stateId];
+    const { activeStateSignals, contextWindow, lastSnapshot, deltasSinceSnapshot } = await resolveStateSignalHistory({
+      messageList,
+      memory: resolvedMemory,
+      threadId: resolvedThreadId,
+      stateId,
+      tracking,
+    });
+    const result = (await computeStateSignal({
+      messages: messageList.get.all.db(),
+      messageList,
+      stepNumber,
+      steps,
+      state: processorState.customState,
+      requestContext,
+      writer,
+      abortSignal,
+      abort,
+      retryCount,
+      resourceId: resolvedResourceId,
+      threadId: resolvedThreadId,
+      activeStateSignals,
+      contextWindow,
+      lastSnapshot,
+      deltasSinceSnapshot,
+      tracking,
+      sendStateSignal: async stateSignal => {
+        const sendResult = await applyStateSignal({
+          input: stateSignal,
+          memory: resolvedMemory,
+          thread,
+          resourceId: resolvedResourceId,
+          threadId: resolvedThreadId,
+          memoryConfig: memoryContext?.memoryConfig,
+          messageList,
+          defaultId: stateId,
+          beforeAddSignal: beforeAddStateSignal,
+          writeSignal: signal => writer?.custom(signal.toDataPart()),
+        });
+        if (!sendResult.skipped) {
+          const updated = await resolvedMemory.getThreadById({ threadId: resolvedThreadId });
+          if (updated) thread = { ...thread, metadata: updated.metadata };
+        }
+        return sendResult.skipped ? sendResult : sendResult.signal;
+      },
+    })) as ComputeStateSignalResult;
+
+    if (!result) return;
+
+    await applyStateSignal({
+      input: result,
+      memory: resolvedMemory,
+      thread,
+      resourceId: resolvedResourceId,
+      threadId: resolvedThreadId,
+      memoryConfig: memoryContext?.memoryConfig,
+      messageList,
+      defaultId: stateId,
+      beforeAddSignal: beforeAddStateSignal,
+      writeSignal: signal => writer?.custom(signal.toDataPart()),
+    });
+  }
+
+  private async runWorkflowComputeStateSignals({
+    workflow,
+    messageList,
+    stepNumber,
+    steps,
+    requestContext,
+    writer,
+    memory,
+    resourceId,
+    threadId,
+    abortSignal,
+    retryCount,
+    rotateResponseMessageId,
+  }: {
+    workflow: ProcessorWorkflow;
+    messageList: MessageList;
+    stepNumber: number;
+    steps: Array<StepResult<any>>;
+    requestContext?: RequestContext;
+    writer?: ProcessorStreamWriter;
+    memory?: MastraMemory;
+    resourceId?: string;
+    threadId?: string;
+    abortSignal?: AbortSignal;
+    retryCount: number;
+    rotateResponseMessageId?: () => string;
+  }): Promise<void> {
+    for (const processor of workflow.__stateSignalProcessors ?? []) {
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      await this.runComputeStateSignal({
+        processor,
+        messageList,
+        stepNumber,
+        steps,
+        requestContext,
+        writer,
+        abort,
+        processorState: this.getProcessorState(processor.id),
+        memory,
+        resourceId,
+        threadId,
+        abortSignal,
+        retryCount,
+        rotateResponseMessageId,
+      });
+    }
   }
 
   /**
@@ -344,6 +519,7 @@ export class ProcessorRunner {
         processorStates: this.processorStates,
         // Pass abortSignal so processors can cancel in-flight work
         abortSignal,
+        agent: this.agent,
       } as ProcessorStepOutput,
       ...observabilityContext,
       requestContext,
@@ -497,6 +673,7 @@ export class ProcessorRunner {
           state: processorState.customState,
           result: result ?? defaultResult,
           abort,
+          agent: this.agent,
           ...createObservabilityContext({ currentSpan: processorSpan }),
           requestContext,
           retryCount,
@@ -531,7 +708,7 @@ export class ProcessorRunner {
             processableMessages = processResult || [];
             for (const message of processResult) {
               messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response');
+              messageList.add(message, check.getSource(message) || 'response', { merge: false });
             }
           }
         }
@@ -675,6 +852,7 @@ export class ProcessorRunner {
               part: processedPart as ChunkType,
               streamParts: state.streamParts as ChunkType[],
               state: state.customState,
+              agent: this.agent,
               abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
                 throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
               },
@@ -996,6 +1174,7 @@ export class ProcessorRunner {
           systemMessages: currentSystemMessages,
           state: processorState.customState,
           abort,
+          agent: this.agent,
           ...createObservabilityContext({ currentSpan: processorSpan }),
           messageList,
           requestContext,
@@ -1061,7 +1240,7 @@ export class ProcessorRunner {
             if (nonSystemMessages.length > 0) {
               for (const message of nonSystemMessages) {
                 messageList.removeByIds([message.id]);
-                messageList.add(message, check.getSource(message) || 'input');
+                messageList.add(message, check.getSource(message) || 'input', { merge: false });
               }
             }
           }
@@ -1095,7 +1274,7 @@ export class ProcessorRunner {
             if (nonSystemMessages.length > 0) {
               for (const message of nonSystemMessages) {
                 messageList.removeByIds([message.id]);
-                messageList.add(message, check.getSource(message) || 'input');
+                messageList.add(message, check.getSource(message) || 'input', { merge: false });
               }
             }
 
@@ -1216,14 +1395,35 @@ export class ProcessorRunner {
           args.abortSignal,
         );
         Object.assign(stepInput, result);
+        await this.runWorkflowComputeStateSignals({
+          workflow: processorOrWorkflow,
+          messageList,
+          stepNumber,
+          steps,
+          requestContext,
+          writer,
+          memory: args.memory,
+          resourceId: args.resourceId,
+          threadId: args.threadId,
+          abortSignal: args.abortSignal,
+          retryCount: args.retryCount ?? 0,
+          rotateResponseMessageId: args.rotateResponseMessageId
+            ? () => {
+                const nextMessageId = args.rotateResponseMessageId!();
+                stepInput.messageId = nextMessageId;
+                return nextMessageId;
+              }
+            : undefined,
+        });
         continue;
       }
 
       // Handle regular processor
-      const processor = processorOrWorkflow;
+      const processor = processorOrWorkflow as Processor;
       const processMethod = processor.processInputStep?.bind(processor);
-      if (!processMethod) {
-        // Skip processors that don't implement processInputStep
+      const computeStateSignal = processor.computeStateSignal?.bind(processor);
+      if (!processMethod && !computeStateSignal) {
+        // Skip processors that don't implement per-step input hooks
         continue;
       }
 
@@ -1249,6 +1449,7 @@ export class ProcessorRunner {
         modelSettings: stepInput.modelSettings,
         structuredOutput: stepInput.structuredOutput,
         requestContext,
+        agent: this.agent,
       };
 
       // Use the current span (the step span) as the parent for processor spans
@@ -1308,17 +1509,61 @@ export class ProcessorRunner {
           retryCount: args.retryCount ?? 0,
           writer,
           abortSignal: args.abortSignal,
+          agent: this.agent,
           sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),
+          sendStateSignal: async (
+            stateSignal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
+          ) => {
+            const memoryContext = parseMemoryRequestContext(requestContext);
+            const resolvedMemory = args.memory;
+            const resolvedThreadId = args.threadId ?? memoryContext?.thread?.id;
+            const resolvedResourceId = args.resourceId ?? memoryContext?.resourceId;
+            if (!resolvedMemory || !resolvedThreadId || !resolvedResourceId) {
+              throw new Error(
+                `[Processor:${processor.id}] sendStateSignal requires Mastra memory with an active resourceId and threadId`,
+              );
+            }
+            const loadedThread =
+              (await resolvedMemory.getThreadById({ threadId: resolvedThreadId })) ?? memoryContext?.thread;
+            if (!loadedThread) {
+              throw new Error(`[Processor:${processor.id}] sendStateSignal could not load thread ${resolvedThreadId}`);
+            }
+            const thread = {
+              ...loadedThread,
+              id: resolvedThreadId,
+              resourceId: loadedThread.resourceId ?? resolvedResourceId,
+              createdAt: loadedThread.createdAt ?? new Date(),
+              updatedAt: loadedThread.updatedAt ?? new Date(),
+              metadata: loadedThread.metadata,
+            };
+            const result = await applyStateSignal({
+              input: stateSignal,
+              memory: resolvedMemory,
+              thread,
+              resourceId: resolvedResourceId,
+              threadId: resolvedThreadId,
+              memoryConfig: memoryContext?.memoryConfig,
+              messageList,
+              defaultId: processor.stateId ?? processor.id,
+              beforeAddSignal: rotateResponseMessageId
+                ? () => {
+                    messageList.markResponseMessageBoundary();
+                    rotateResponseMessageId();
+                  }
+                : undefined,
+              writeSignal: signal => writer?.custom(signal.toDataPart()),
+            });
+            return result.skipped ? result : result.signal;
+          },
         };
 
-        const result = await ProcessorRunner.validateAndFormatProcessInputStepResult(
-          await processMethod(processMethodArgs),
-          {
-            messageList,
-            processor,
-            stepNumber,
-          },
-        );
+        const result = processMethod
+          ? await ProcessorRunner.validateAndFormatProcessInputStepResult(await processMethod(processMethodArgs), {
+              messageList,
+              processor,
+              stepNumber,
+            })
+          : {};
         const { messages, systemMessages, ...rest } = result;
         if (messages) {
           ProcessorRunner.applyMessagesToMessageList(messages, messageList, idsBeforeProcessing, check);
@@ -1327,6 +1572,23 @@ export class ProcessorRunner {
           messageList.replaceAllSystemMessages(systemMessages);
         }
         Object.assign(stepInput, rest);
+
+        await this.runComputeStateSignal({
+          processor,
+          messageList,
+          stepNumber,
+          steps,
+          requestContext,
+          writer,
+          abort,
+          processorState,
+          memory: args.memory,
+          resourceId: args.resourceId,
+          threadId: args.threadId,
+          abortSignal: args.abortSignal,
+          retryCount: args.retryCount ?? 0,
+          rotateResponseMessageId,
+        });
 
         // Stop recording and get mutations for this processor
         const mutations = messageList.stopRecording();
@@ -1419,6 +1681,7 @@ export class ProcessorRunner {
           state: processorState.customState,
           retryCount: args.retryCount ?? 0,
           requestContext: args.requestContext,
+          agent: this.agent,
           abort,
           abortSignal: args.abortSignal,
           writer: args.writer,
@@ -1504,6 +1767,7 @@ export class ProcessorRunner {
           fromCache: args.fromCache,
           retryCount: args.retryCount ?? 0,
           requestContext: args.requestContext,
+          agent: this.agent,
           abort,
           abortSignal: args.abortSignal,
           writer: args.writer,
@@ -1562,6 +1826,7 @@ export class ProcessorRunner {
       messageList: MessageList;
       stepNumber: number;
       finishReason?: string;
+      providerMetadata?: ProviderMetadata;
       toolCalls?: ToolCallInfo[];
       text?: string;
       usage?: LanguageModelUsage;
@@ -1575,6 +1840,7 @@ export class ProcessorRunner {
       messageList,
       stepNumber,
       finishReason,
+      providerMetadata,
       toolCalls,
       text,
       usage,
@@ -1601,6 +1867,7 @@ export class ProcessorRunner {
             messageList,
             stepNumber,
             finishReason,
+            providerMetadata,
             toolCalls,
             text,
             usage,
@@ -1668,6 +1935,7 @@ export class ProcessorRunner {
           messageList,
           stepNumber,
           finishReason,
+          providerMetadata,
           toolCalls,
           text,
           usage: usage ?? defaultUsage,
@@ -1677,6 +1945,7 @@ export class ProcessorRunner {
           abort,
           ...createObservabilityContext({ currentSpan: processorSpan }),
           requestContext,
+          agent: this.agent,
           retryCount,
           writer,
           sendSignal: createProcessorSendSignal({ messageList, writer }),
@@ -1715,7 +1984,7 @@ export class ProcessorRunner {
                 '';
               messageList.addSystem(systemText);
             } else {
-              messageList.add(message, check.getSource(message) || 'response');
+              messageList.add(message, check.getSource(message) || 'response', { merge: false });
             }
           }
         }
@@ -1856,6 +2125,7 @@ export class ProcessorRunner {
           abort,
           ...createObservabilityContext({ currentSpan: processorSpan }),
           requestContext,
+          agent: this.agent,
           retryCount,
           writer,
           abortSignal,
@@ -1946,7 +2216,7 @@ export class ProcessorRunner {
           '';
         messageList.addSystem(systemText);
       } else {
-        messageList.add(message, check.getSource(message) || defaultSource);
+        messageList.add(message, check.getSource(message) || defaultSource, { merge: false });
       }
     }
   }

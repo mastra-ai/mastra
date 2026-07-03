@@ -31,6 +31,8 @@ async function flushAsyncInit(): Promise<void> {
   for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
 }
 
+const withoutNotificationDispatch = { notifications: { dispatch: { enabled: false } } } as const;
+
 describe('Mastra — workflow scheduler integration', () => {
   it('auto-instantiates the scheduler when a workflow declares a schedule', async () => {
     const wf = createEventedWorkflow({
@@ -50,6 +52,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       workflows: { wf } as any,
     });
@@ -72,26 +75,26 @@ describe('Mastra — workflow scheduler integration', () => {
 
   it('does not instantiate the scheduler when no schedules are configured', async () => {
     const storage = new MockStore();
-    const getStoreSpy = vi.spyOn(storage, 'getStore');
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage,
     });
 
     await mastra.startWorkers();
     await flushAsyncInit();
 
+    // The schedules store may be touched on boot to check for existing
+    // heartbeat rows (cold-boot rehydration via #detectExistingHeartbeats).
+    // What matters is that the scheduler itself never spins up.
     expect(mastra.scheduler).toBeUndefined();
-    // Prove the scheduler never touched the schedules domain.
-    expect(getStoreSpy.mock.calls.some(call => call[0] === 'schedules')).toBe(false);
 
     await mastra.shutdown();
   });
 
   it('does not instantiate the scheduler when only unscheduled workflows are registered', async () => {
     const storage = new MockStore();
-    const getStoreSpy = vi.spyOn(storage, 'getStore');
 
     const wf = createDefaultWorkflow({
       id: 'plain-wf',
@@ -109,6 +112,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage,
       workflows: { wf } as any,
     });
@@ -116,8 +120,9 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.startWorkers();
     await flushAsyncInit();
 
+    // As above, boot-time cold rehydration may probe the schedules store;
+    // the invariant under test is that no scheduler worker is created.
     expect(mastra.scheduler).toBeUndefined();
-    expect(getStoreSpy.mock.calls.some(call => call[0] === 'schedules')).toBe(false);
 
     await mastra.shutdown();
   });
@@ -125,6 +130,7 @@ describe('Mastra — workflow scheduler integration', () => {
   it('instantiates the scheduler when explicitly enabled even without declarative schedules', async () => {
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       scheduler: { enabled: true },
     });
@@ -150,6 +156,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       workflows: { wf: wf as any },
     });
@@ -167,6 +174,7 @@ describe('Mastra — workflow scheduler integration', () => {
   it('starts the scheduler when scheduler.enabled is true even with no scheduled workflows', async () => {
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       scheduler: { enabled: true },
     });
@@ -207,6 +215,7 @@ describe('Mastra — workflow scheduler integration', () => {
     const boot = async (storage: InstanceType<typeof MockStore>, wf: ReturnType<typeof buildScheduledWorkflow>) => {
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         workflows: { wf } as any,
       });
@@ -308,6 +317,7 @@ describe('Mastra — workflow scheduler integration', () => {
     ) => {
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         workflows: { wf } as any,
       });
@@ -380,7 +390,12 @@ describe('Mastra — workflow scheduler integration', () => {
           }) as any,
         )
         .commit();
-      const first = new Mastra({ logger: false, storage, workflows: { wfSingle } as any });
+      const first = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { wfSingle } as any,
+      });
       await first.startWorkers();
       await waitForScheduler(first);
       const schedulesStore = (await storage.getStore('schedules'))!;
@@ -466,6 +481,7 @@ describe('Mastra — workflow scheduler integration', () => {
       // → mastra.getWorkflowById.
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 2 },
       });
@@ -504,6 +520,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 1 },
       });
@@ -532,6 +549,73 @@ describe('Mastra — workflow scheduler integration', () => {
 
       const afterTicks = await schedulesStore.getSchedule('future-ghost');
       expect(afterTicks).not.toBeNull();
+
+      await mastra.shutdown();
+    });
+  });
+
+  describe('storage init ordering (#17905)', () => {
+    /**
+     * Models a SQL store whose tables only exist after init(): writing a
+     * workflow snapshot before init() has run throws "no such table", exactly
+     * like libSQL/SQLite. The default notification dispatcher is a scheduled
+     * workflow whose warm-up tick persists a snapshot at startup, so if
+     * startWorkers() doesn't await storage.init() first, that write races
+     * table creation and fails.
+     */
+    class InitOrderProbeStore extends MockStore {
+      initialized = false;
+      // True if persistWorkflowSnapshot was ever called before init() finished
+      // — i.e. the warm-up snapshot write raced table creation.
+      sawWriteBeforeInit = false;
+
+      constructor() {
+        super();
+        // Undo InMemoryStore's "already initialized" shortcut so init() must
+        // actually run before the snapshot "table" is considered to exist.
+        this.hasInitialized = null as unknown as Promise<boolean>;
+        this.shouldCacheInit = true;
+
+        const workflows = this.stores.workflows;
+        const realPersist = workflows.persistWorkflowSnapshot.bind(workflows);
+        workflows.persistWorkflowSnapshot = async (args: Parameters<typeof realPersist>[0]) => {
+          if (!this.initialized) {
+            // Record the race and reproduce the libSQL/SQLite symptom.
+            this.sawWriteBeforeInit = true;
+            throw new Error('no such table: mastra_workflow_snapshot');
+          }
+          return realPersist(args);
+        };
+      }
+
+      async init(): Promise<void> {
+        await super.init();
+        this.initialized = true;
+      }
+    }
+
+    it('awaits storage.init() before workers start so the scheduler warm-up tick cannot race table creation', async () => {
+      const storage = new InitOrderProbeStore();
+
+      // No `notifications.dispatch.enabled: false` — we WANT the default
+      // notification dispatcher (a scheduled workflow) registered so the
+      // scheduler runs and its warm-up tick persists a snapshot at startup.
+      const mastra = new Mastra({ logger: false, storage });
+
+      await mastra.startWorkers();
+
+      // The fix guarantees storage.init() ran before any worker started.
+      expect(storage.initialized).toBe(true);
+
+      // Force a scheduler tick and let the fire-and-forget event handling
+      // settle, so any snapshot write the dispatcher triggers has run.
+      await mastra.scheduler?.tick();
+      await flushAsyncInit();
+
+      // Before the fix, the warm-up snapshot write happens while init() is
+      // still in flight → "no such table". After the fix, init() is awaited
+      // first, so no write ever lands on an uninitialized store.
+      expect(storage.sawWriteBeforeInit).toBe(false);
 
       await mastra.shutdown();
     });

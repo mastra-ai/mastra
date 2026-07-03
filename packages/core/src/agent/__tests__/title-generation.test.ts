@@ -1,6 +1,6 @@
 import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
@@ -1966,6 +1966,106 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(thread?.title).toBe(originalTitle);
     });
 
+    it('should catch title persistence failures without causing an unhandled rejection', async () => {
+      if (version !== 'v2') {
+        return;
+      }
+
+      const titleText = 'Generated thread title';
+      const mockMemory = new MockMemory();
+      const originalSaveThread = mockMemory.saveThread.bind(mockMemory);
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getTransports: vi.fn().mockReturnValue(new Map()),
+        listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+        listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+      };
+
+      vi.spyOn(mockMemory, 'saveThread').mockImplementation(async args => {
+        if (args.thread.title === titleText) {
+          throw new Error('sqlite write failed');
+        }
+
+        return originalSaveThread(args);
+      });
+
+      const titleModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: titleText,
+          content: [{ type: 'text', text: titleText }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: titleText },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+          ]),
+        }),
+      });
+
+      mockMemory.getMergedThreadConfig = () => {
+        return {
+          generateTitle: {
+            model: titleModel,
+          },
+        };
+      };
+
+      const agent = new Agent({
+        id: 'title-persist-error-agent',
+        name: 'Title Persist Error Agent',
+        instructions: 'test agent',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+      agent.__setLogger(logger as any);
+
+      let unhandledReason: unknown = null;
+      const onUnhandledRejection = (reason: unknown) => {
+        unhandledReason = reason;
+      };
+      process.once('unhandledRejection', onUnhandledRejection);
+
+      try {
+        await agent.generate('Test message', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-title-persist-error',
+              title: '',
+            },
+          },
+        });
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } finally {
+        process.removeListener('unhandledRejection', onUnhandledRejection);
+      }
+
+      expect(unhandledReason).toBeNull();
+      expect(logger.error).toHaveBeenCalledWith(
+        'Error persisting generated title:',
+        expect.objectContaining({ message: 'sqlite write failed' }),
+      );
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-title-persist-error' });
+      expect(thread).toBeDefined();
+      expect(thread?.title).toBe('');
+    });
+
     it('should handle empty or null instructions appropriately', async () => {
       let capturedPrompt = '';
 
@@ -2742,3 +2842,112 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
 titleGenerationTests('v1');
 titleGenerationTests('v2');
+
+/**
+ * Regression test for https://github.com/mastra-ai/mastra/issues/18738
+ *
+ * When a supervisor agent has a Memory instance with `generateTitle: true` and delegates to a
+ * subagent that has NO memory of its own, Mastra injects the supervisor's Memory instance into the
+ * subagent. That inherited instance carries `generateTitle: true`, so every ephemeral subagent
+ * delegation triggers an extra title-generation LLM call on a thread no one ever sees.
+ *
+ * Title generation is a top-level thread concern and must NOT propagate to ephemeral subagent
+ * delegations. The delegation path injects per-call memory options for the subagent, and those
+ * options must disable title generation for the ephemeral thread.
+ */
+describe('sub-agent title generation propagation (#18738)', () => {
+  function makeSubAgent() {
+    return new Agent({
+      id: 'helper',
+      name: 'helper',
+      description: 'A helper sub-agent.',
+      instructions: 'Say hello.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'a1', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 'x' },
+            { type: 'text-delta', id: 'x', delta: 'Hello from the sub-agent.' },
+            { type: 'text-end', id: 'x' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      }),
+    });
+  }
+
+  function supervisorModel() {
+    let call = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        call++;
+        if (call === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 's1', modelId: 'mock', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'agent-helper',
+                input: JSON.stringify({ prompt: 'hi' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 's2', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 't' },
+            { type: 'text-delta', id: 't', delta: 'done' },
+            { type: 'text-end', id: 't' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+  }
+
+  it('does not generate a title for the ephemeral subagent thread when the inherited memory has generateTitle enabled', async () => {
+    const memory = new MockMemory({ options: { generateTitle: true } });
+
+    const subAgent = makeSubAgent();
+    // Spy on the subagent's title generation — if the inherited generateTitle propagates, this fires.
+    const subAgentGenTitle = vi.spyOn(subAgent, 'genTitle');
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'Delegate to the helper sub-agent.',
+      model: supervisorModel(),
+      agents: { helper: subAgent },
+      memory,
+    });
+
+    const stream = await supervisor.stream('Please delegate.', {
+      maxSteps: 3,
+      memory: { thread: 'top-level-thread', resource: 'user-1' },
+    });
+    for await (const _ of stream.fullStream) {
+      // drain
+    }
+
+    // Let any async title-generation kick off.
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    expect(subAgentGenTitle).not.toHaveBeenCalled();
+  });
+});

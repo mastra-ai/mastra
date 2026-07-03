@@ -14,6 +14,7 @@ import { requestContextDemoAgent } from './request-context-demo-agent';
 // Export Dynamic Tools Agent
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
 export { slackDemoAgent } from './slack-agent.js';
+export { billingAgent, balanceAgent } from './billing-agent.js';
 const memory = new Memory();
 
 /**
@@ -27,7 +28,7 @@ export const codeOverrideEditableAgent = new Agent({
   description: 'Code-defined agent that Studio may override (instructions + tools)',
   // instructions: 'You are the original code-defined instructions for the editable override agent.',
   model: 'openai/gpt-5.4-mini',
-  editor: { instructions: true, tools: true }
+  editor: { instructions: true, tools: true },
 });
 
 /**

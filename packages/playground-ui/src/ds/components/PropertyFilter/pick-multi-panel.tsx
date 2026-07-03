@@ -33,8 +33,9 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
   // show their default option pre-selected before the user explicitly picks one.
   const selectedValue = typeof token?.value === 'string' ? token.value : !field.multi ? field.defaultValue : undefined;
   const selectedValues = useMemo<string[]>(() => {
-    if (Array.isArray(token?.value)) return token!.value as string[];
-    if (typeof token?.value === 'string') return [token.value];
+    const value = token?.value;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return [value];
     return [];
   }, [token]);
 
@@ -61,7 +62,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
 
       {field.isLoading ? (
         <div className="flex items-center gap-2 px-2 py-1.5 text-ui-sm text-neutral3">
-          <Spinner size="sm" className="w-3 h-3" color="var(--neutral3)" />
+          <Spinner size="sm" className="size-3 text-neutral3" />
           Loading options…
         </div>
       ) : filteredOptions.length === 0 ? (

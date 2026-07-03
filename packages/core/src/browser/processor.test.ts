@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { MastraDBMessage } from '../agent/message-list';
-import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
-import type { ProcessInputArgs, ProcessInputStepArgs } from '../processors';
+import { createSignal } from '../agent/signals';
+import type { ProcessInputArgs } from '../processors';
 import { RequestContext } from '../request-context';
 import { BrowserContextProcessor } from './processor';
 import type { BrowserContext } from './processor';
@@ -33,32 +33,6 @@ describe('BrowserContextProcessor', () => {
       add: vi.fn((msg: MastraDBMessage) => {
         messages.push(msg);
       }),
-    };
-  };
-
-  // Helper to create minimal args for processInputStep
-  const createInputStepArgs = (overrides: Partial<ProcessInputStepArgs> = {}): ProcessInputStepArgs => {
-    const messageList = overrides.messageList ?? (createMockMessageList() as any);
-    const rotateResponseMessageId = overrides.rotateResponseMessageId ?? vi.fn();
-    return {
-      messages: [],
-      systemMessages: [],
-      messageList,
-      requestContext: new RequestContext(),
-      stepNumber: 0,
-      steps: [],
-      state: {},
-      model: undefined as any,
-      retryCount: 0,
-      abort: vi.fn() as any,
-      rotateResponseMessageId,
-      sendSignal: async signalInput => {
-        const signal = createSignal(signalInput);
-        rotateResponseMessageId?.();
-        messageList.add(signal.toDBMessage(), 'input');
-        return signal;
-      },
-      ...overrides,
     };
   };
 
@@ -105,347 +79,806 @@ describe('BrowserContextProcessor', () => {
     });
   });
 
-  describe('processInputStep', () => {
-    it('should return undefined when no browser context', async () => {
-      const result = await processor.processInputStep(createInputStepArgs());
-
-      expect(result).toBeUndefined();
-    });
-
-    it('should return undefined when stepNumber is not 0', async () => {
+  describe('computeStateSignal', () => {
+    const createStateArgs = (
+      browserCtx?: BrowserContext,
+      activeStateSignals: any[] = [],
+      options: {
+        contextWindow?: { hasSnapshot?: boolean };
+        lastSnapshot?: any;
+        steps?: any[];
+        messageListMessages?: MastraDBMessage[];
+      } = {},
+    ) => {
       const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        currentUrl: 'https://example.com',
+      if (browserCtx) requestContext.set('browser', browserCtx);
+      return {
+        messages: [],
+        messageList: createMockMessageList(options.messageListMessages) as any,
+        requestContext,
+        state: {},
+        abort: vi.fn() as any,
+        retryCount: 0,
+        stepNumber: 0,
+        steps: options.steps ?? [],
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        activeStateSignals,
+        contextWindow: {
+          hasSnapshot:
+            options.contextWindow?.hasSnapshot ??
+            activeStateSignals.some(signal => signal.metadata?.state?.mode === 'snapshot'),
+        },
+        lastSnapshot:
+          options.lastSnapshot ?? activeStateSignals.findLast(signal => signal.metadata?.state?.mode === 'snapshot'),
+        deltasSinceSnapshot: activeStateSignals.filter(signal => signal.metadata?.state?.mode === 'delta'),
       };
-      requestContext.set('browser', browserCtx);
+    };
 
-      const result = await processor.processInputStep(createInputStepArgs({ requestContext, stepNumber: 1 }));
-
-      expect(result).toBeUndefined();
-    });
-
-    it('should add a new user message with system-reminder containing URL and title', async () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        currentUrl: 'https://example.com/page',
-        pageTitle: 'Example Page',
-      };
-      requestContext.set('browser', browserCtx);
-
-      const mockMessageList = createMockMessageList();
-      const rotateResponseMessageId = vi.fn();
-
-      const result = await processor.processInputStep(
-        createInputStepArgs({
-          requestContext,
-          messageList: mockMessageList as any,
-          rotateResponseMessageId,
+    it('returns an aggregate browser state snapshot', async () => {
+      const result = await processor.computeStateSignal(
+        createStateArgs({
+          provider: 'agent-browser',
+          currentUrl: 'https://example.com',
+          pageTitle: 'Example',
+          isOpen: true,
+          tabCount: 3,
+          pageMetadata: { ready: true },
         }),
       );
 
-      expect(result).toBe(mockMessageList);
-      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
-
-      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
-      expect(addedMessage.role).toBe('signal');
-      expect(addedMessage.type).toBe('system-reminder');
-      expect(addedMessage.content.metadata).toEqual(
+      expect(result).toEqual(
         expect.objectContaining({
-          signal: expect.objectContaining({
-            type: 'reactive',
-            tagName: 'system-reminder',
-            attributes: expect.objectContaining({ type: 'browser-context' }),
-            metadata: expect.objectContaining({
-              url: 'https://example.com/page',
-              title: 'Example Page',
-            }),
+          tagName: 'state',
+          contents: expect.stringContaining('Active tab URL: https://example.com'),
+          id: 'browser',
+          cacheKey: expect.any(String),
+          mode: 'snapshot',
+          value: expect.objectContaining({ open: true, activeUrl: 'https://example.com', tabCount: 3 }),
+          attributes: expect.objectContaining({ type: 'browser' }),
+          metadata: expect.objectContaining({
+            browser: expect.objectContaining({ open: true, activeUrl: 'https://example.com', tabCount: 3 }),
           }),
         }),
       );
-
-      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
-      expect(textPart.text).toContain('https://example.com/page');
-      expect(textPart.text).toContain('Example Page');
-
-      expect(rotateResponseMessageId).toHaveBeenCalled();
     });
 
-    it('should add system-reminder when only page title is available', async () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        pageTitle: 'Example Page',
-      };
-      requestContext.set('browser', browserCtx);
-
-      const mockMessageList = createMockMessageList();
-
-      const result = await processor.processInputStep(
-        createInputStepArgs({
-          requestContext,
-          messageList: mockMessageList as any,
-        }),
-      );
-
-      expect(result).toBe(mockMessageList);
-      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
-
-      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
-      expect(addedMessage.role).toBe('signal');
-      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
-      expect(textPart.text).toContain('Example Page');
-    });
-
-    it('should return undefined when no per-request data available', async () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        // No currentUrl or pageTitle
-      };
-      requestContext.set('browser', browserCtx);
-
-      const result = await processor.processInputStep(createInputStepArgs({ requestContext }));
-
-      expect(result).toBeUndefined();
-    });
-
-    it('should not add duplicate reminder if same content already exists', async () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        currentUrl: 'https://example.com/page',
-        pageTitle: 'Example Page',
-      };
-      requestContext.set('browser', browserCtx);
-
-      // Create messageList with an existing browser reminder (matching URL/title in metadata)
-      const existingReminder: MastraDBMessage = {
-        id: 'existing-reminder',
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'text',
-              text: '<system-reminder type="browser-context">Current URL: https://example.com/page | Page title: Example Page</system-reminder>',
-            },
-          ],
-          metadata: {
-            systemReminder: {
-              type: 'browser-context',
-              url: 'https://example.com/page',
-              title: 'Example Page',
-            },
-          },
+    it('returns metadata-backed deltas when active state exists', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. 2 open tabs.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com', pageTitle: 'Example', tabCount: 2 },
         },
-        createdAt: new Date(),
-      };
-
-      const mockMessageList = createMockMessageList([existingReminder]);
-
-      const result = await processor.processInputStep(
-        createInputStepArgs({
-          requestContext,
-          messageList: mockMessageList as any,
-        }),
-      );
-
-      expect(result).toBeUndefined();
-      expect(mockMessageList.add).not.toHaveBeenCalled();
-    });
-
-    it('should add new reminder if URL changed from previous reminder', async () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        currentUrl: 'https://example.com/new-page',
-        pageTitle: 'New Page',
-      };
-      requestContext.set('browser', browserCtx);
-
-      // Create messageList with an existing browser reminder for a different URL
-      const existingReminder: MastraDBMessage = {
-        id: 'existing-reminder',
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'text',
-              text: '<system-reminder type="browser-context">Current URL: https://example.com/old-page | Page title: Old Page</system-reminder>',
-            },
-          ],
-          metadata: {
-            systemReminder: {
-              type: 'browser-context',
-              url: 'https://example.com/old-page',
-              title: 'Old Page',
-            },
-          },
-        },
-        createdAt: new Date(),
-      };
-
-      const mockMessageList = createMockMessageList([existingReminder]);
-
-      const result = await processor.processInputStep(
-        createInputStepArgs({
-          requestContext,
-          messageList: mockMessageList as any,
-        }),
-      );
-
-      expect(result).toBe(mockMessageList);
-      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
-
-      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
-      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
-      expect(textPart.text).toContain('https://example.com/new-page');
-      expect(textPart.text).toContain('New Page');
-    });
-
-    it('should add reminder for A→B→A navigation (trailing reminder B differs from current A)', async () => {
-      const requestContext = new RequestContext();
-      // Current state: back on page A
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        currentUrl: 'https://example.com/page-a',
-        pageTitle: 'Page A',
-      };
-      requestContext.set('browser', browserCtx);
-
-      // History: A, then B (trailing is B, so A should be added)
-      const reminderA: MastraDBMessage = {
-        id: 'reminder-a',
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: '<system-reminder type="browser-context">Page A</system-reminder>' }],
-          metadata: {
-            systemReminder: { type: 'browser-context', url: 'https://example.com/page-a', title: 'Page A' },
-          },
-        },
-        createdAt: new Date(),
-      };
-      const reminderB: MastraDBMessage = {
-        id: 'reminder-b',
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: '<system-reminder type="browser-context">Page B</system-reminder>' }],
-          metadata: {
-            systemReminder: { type: 'browser-context', url: 'https://example.com/page-b', title: 'Page B' },
-          },
-        },
-        createdAt: new Date(),
-      };
-
-      const mockMessageList = createMockMessageList([reminderA, reminderB]);
-
-      const result = await processor.processInputStep(
-        createInputStepArgs({
-          requestContext,
-          messageList: mockMessageList as any,
-        }),
-      );
-
-      // Should add new reminder because trailing (B) doesn't match current (A)
-      expect(result).toBe(mockMessageList);
-      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
-
-      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
-      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
-      expect(textPart.text).toContain('page-a');
-    });
-
-    it('should add reminder when trailing message is not a browser reminder (user → reminder → assistant → user)', async () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        currentUrl: 'https://example.com/page-a',
-        pageTitle: 'Page A',
-      };
-      requestContext.set('browser', browserCtx);
-
-      // History: reminder(A), then assistant response, then new user message
-      const reminderA: MastraDBMessage = {
-        id: 'reminder-a',
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: '<system-reminder type="browser-context">Page A</system-reminder>' }],
-          metadata: {
-            systemReminder: { type: 'browser-context', url: 'https://example.com/page-a', title: 'Page A' },
-          },
-        },
-        createdAt: new Date(),
-      };
-      const assistantResponse: MastraDBMessage = {
-        id: 'assistant-response',
-        role: 'assistant',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: 'Here is the page content...' }],
-        },
-        createdAt: new Date(),
-      };
-      const userMessage: MastraDBMessage = {
-        id: 'user-message',
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [{ type: 'text', text: 'Now do something else' }],
-        },
-        createdAt: new Date(),
-      };
-
-      const mockMessageList = createMockMessageList([reminderA, assistantResponse, userMessage]);
-
-      const result = await processor.processInputStep(
-        createInputStepArgs({
-          requestContext,
-          messageList: mockMessageList as any,
-        }),
-      );
-
-      // Should add reminder because trailing message is a regular user message, not a browser reminder
-      expect(result).toBe(mockMessageList);
-      expect(mockMessageList.add).toHaveBeenCalledTimes(1);
-    });
-
-    it('should escape XML special characters in URL and title', async () => {
-      const requestContext = new RequestContext();
-      const browserCtx: BrowserContext = {
-        provider: 'agent-browser',
-        currentUrl: 'https://example.com/search?q=foo&bar=1',
-        pageTitle: 'Search <Results> & More',
-      };
-      requestContext.set('browser', browserCtx);
-
-      const mockMessageList = createMockMessageList();
-
-      await processor.processInputStep(
-        createInputStepArgs({
-          requestContext,
-          messageList: mockMessageList as any,
-        }),
-      );
-
-      const addedMessage = mockMessageList.add.mock.calls[0][0] as MastraDBMessage;
-      const textPart = addedMessage.content.parts?.[0] as { type: 'text'; text: string };
-
-      // DB signal content stays raw; XML escaping happens when converting to LLM markup.
-      expect(textPart.text).toContain('q=foo&bar');
-      expect(textPart.text).toContain('<Results>');
-
-      const llmMessage = mastraDBMessageToSignal(addedMessage).toLLMMessage();
-      expect(llmMessage).toEqual({
-        role: 'user',
-        content:
-          '<system-reminder type="browser-context">Current URL: https://example.com/search?q=foo&amp;bar=1 | Page title: Search &lt;Results&gt; &amp; More</system-reminder>',
       });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            currentUrl: 'https://example.com',
+            pageTitle: 'Example',
+            isOpen: true,
+            tabCount: 3,
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: 'browser',
+          mode: 'delta',
+          contents: 'changed: 3 open tabs',
+          delta: { tabCount: 3 },
+          value: expect.objectContaining({ tabCount: 3 }),
+          metadata: expect.objectContaining({
+            browser: expect.objectContaining({ tabCount: 3 }),
+          }),
+        }),
+      );
+    });
+
+    it('refreshes browser state before computing the signal', async () => {
+      const result = await processor.computeStateSignal(
+        createStateArgs({
+          provider: 'agent-browser',
+          currentUrl: 'https://stale.example.com',
+          pageTitle: 'Stale',
+          isOpen: true,
+          getState: vi.fn(async () => ({
+            currentUrl: 'https://fresh.example.com',
+            pageTitle: 'Fresh',
+            tabCount: 2,
+          })),
+        }),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          contents: expect.stringContaining('Active tab URL: https://fresh.example.com'),
+          value: expect.objectContaining({ activeUrl: 'https://fresh.example.com', pageTitle: 'Fresh', tabCount: 2 }),
+        }),
+      );
+    });
+
+    it('emits a fresh snapshot when the previous snapshot is no longer active', async () => {
+      const evictedSnapshot = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', mode: 'snapshot', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          { provider: 'agent-browser', currentUrl: 'https://example.com', isOpen: true },
+          [evictedSnapshot as any],
+          { contextWindow: { hasSnapshot: false } },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'snapshot',
+          contents: expect.stringContaining('Browser is open.'),
+          value: expect.objectContaining({ activeUrl: 'https://example.com' }),
+        }),
+      );
+    });
+
+    it('does not emit when browser state has not changed', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', currentUrl: 'https://example.com', isOpen: true }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('includes active URL when browser opens from a remembered closed state', async () => {
+      const closedSignal = createSignal({
+        type: 'state',
+        contents:
+          'The browser was closed because the chat process restarted. Active tab URL: https://example.com/. 1 open tab.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'closed', version: 1 },
+          value: { processId: 'previous-process', open: false, activeUrl: 'https://example.com/', tabCount: 1 },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/',
+            activeUrlChangeSource: 'agent',
+            tabCount: 1,
+          },
+          [closedSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: browser opened; agent changed active tab URL to https://example.com/; 1 open tab',
+          delta: expect.objectContaining({
+            open: true,
+            activeUrl: 'https://example.com/',
+            activeUrlChangeSource: 'agent',
+            tabCount: 1,
+          }),
+        }),
+      );
+    });
+
+    it('does not emit when browser was never opened (no previous state and currently closed)', async () => {
+      const result = await processor.computeStateSignal(createStateArgs({ provider: 'agent-browser', isOpen: false }));
+
+      expect(result).toBeUndefined();
+    });
+
+    it('does not refresh a bare closed browser snapshot after restart', async () => {
+      const evictedSnapshot = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', mode: 'snapshot', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [evictedSnapshot as any], {
+          contextWindow: { hasSnapshot: false },
+        }),
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('does not emit an ambiguous bare closed delta without process attribution', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [activeSignal as any]),
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('attributes a bare closed delta to process restart when process id changed', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          value: { processId: 'previous-process', open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [activeSignal as any]),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed because the chat process restarted'),
+          delta: expect.objectContaining({ open: false, closeReason: 'process_restart' }),
+        }),
+      );
+    });
+
+    it('attributes a same-process bare closed delta to the user', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [activeSignal as any]),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed externally, maybe by the user'),
+          delta: expect.objectContaining({ open: false, closeReason: 'user' }),
+        }),
+      );
+    });
+
+    it('attributes a same-process remembered closed state to the user', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com', tabCount: 1 }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, currentUrl: 'https://example.com', tabCount: 1 }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed externally, maybe by the user'),
+          delta: expect.objectContaining({ open: false, closeReason: 'user' }),
+        }),
+      );
+    });
+
+    it('attributes a remembered closed state to process restart when process id changed', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com. 1 open tab.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          value: { processId: 'previous-process', open: true, activeUrl: 'https://example.com', tabCount: 1 },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, currentUrl: 'https://example.com', tabCount: 1 }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed because the chat process restarted'),
+          delta: expect.objectContaining({ open: false, closeReason: 'process_restart' }),
+        }),
+      );
+    });
+
+    it('attributes snapshot refresh close to process restart from last snapshot when active copies are empty', async () => {
+      const lastSnapshot = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com. 1 open tab.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', mode: 'snapshot', version: 1 },
+          value: { processId: 'previous-process', open: true, activeUrl: 'https://example.com', tabCount: 1 },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          { provider: 'agent-browser', isOpen: false, currentUrl: 'https://example.com', tabCount: 1 },
+          [],
+          { contextWindow: { hasSnapshot: false }, lastSnapshot },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'snapshot',
+          contents: expect.stringContaining('The browser was closed because the chat process restarted.'),
+          value: expect.objectContaining({ closeReason: 'process_restart' }),
+        }),
+      );
+    });
+
+    it('includes process_restart close reason in delta', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, closeReason: 'process_restart' }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed because the chat process restarted'),
+        }),
+      );
+    });
+
+    it('includes user close reason in delta', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, closeReason: 'user' }, [activeSignal as any]),
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed externally, maybe by the user'),
+        }),
+      );
+    });
+
+    it('includes error close reason in delta', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, closeReason: 'error' }, [activeSignal as any]),
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('closed unexpectedly due to an error'),
+        }),
+      );
+    });
+
+    it('attributes active URL changes to the user when provided', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://www.google.com/',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: user changed active tab URL to https://www.google.com/',
+          delta: { activeUrl: 'https://www.google.com/', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('attributes same-process active URL changes to the user when source is missing', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://www.google.com/',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: user changed active tab URL to https://www.google.com/',
+          delta: { activeUrl: 'https://www.google.com/', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('attributes active URL changes to the agent when the latest browser click returned that URL', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/review-trip',
+          },
+          [activeSignal as any],
+          {
+            steps: [
+              {
+                toolResults: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'browser_click',
+                    output: { success: true, url: 'https://example.com/review-trip' },
+                  },
+                ],
+              },
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: agent changed active tab URL to https://example.com/review-trip',
+          delta: { activeUrl: 'https://example.com/review-trip', activeUrlChangeSource: 'agent' },
+        }),
+      );
+    });
+
+    it('overrides user attribution when the latest browser click in message history returned the active URL', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+      const latestBrowserStateMessage = createSignal({
+        type: 'state',
+        tagName: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1, mode: 'snapshot' },
+        },
+      }).toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/pricing',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+          {
+            messageListMessages: [
+              latestBrowserStateMessage,
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: {
+                  format: 2,
+                  parts: [
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'result',
+                        toolName: 'browser_click',
+                        result: { success: true, url: 'https://example.com/pricing' },
+                      },
+                    },
+                  ],
+                },
+              } as any,
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: agent changed active tab URL to https://example.com/pricing',
+          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'agent' },
+        }),
+      );
+    });
+
+    it('does not use stale browser click history before the latest browser state signal', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+      const latestBrowserStateMessage = createSignal({
+        type: 'state',
+        tagName: 'state',
+        contents: 'changed: agent changed active tab URL to https://example.com/docs',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'latest-browser-state', version: 2, mode: 'delta' },
+        },
+      }).toDBMessage({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/pricing',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+          {
+            messageListMessages: [
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: {
+                  format: 2,
+                  parts: [
+                    {
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        state: 'result',
+                        toolName: 'browser_click',
+                        result: { success: true, url: 'https://example.com/pricing' },
+                      },
+                    },
+                  ],
+                },
+              } as any,
+              latestBrowserStateMessage,
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: user changed active tab URL to https://example.com/pricing',
+          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('keeps user attribution when the latest browser click returned a different URL', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://www.google.com/',
+          },
+          [activeSignal as any],
+          {
+            steps: [
+              {
+                toolResults: [
+                  {
+                    type: 'tool-result',
+                    toolName: 'browser_click',
+                    output: { success: true, url: 'https://example.com' },
+                  },
+                ],
+              },
+            ],
+          },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: user changed active tab URL to https://www.google.com/',
+          delta: { activeUrl: 'https://www.google.com/', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('includes active URL change source when the URL changes but source stays the same', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: {
+            processId: 'browser-process',
+            open: true,
+            activeUrl: 'https://example.com',
+            activeUrlChangeSource: 'agent',
+          },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/pricing',
+            activeUrlChangeSource: 'agent',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: agent changed active tab URL to https://example.com/pricing',
+          delta: { activeUrl: 'https://example.com/pricing', activeUrlChangeSource: 'agent' },
+        }),
+      );
+    });
+
+    it('does not emit when only the active URL change source changes', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toBeUndefined();
     });
   });
 });

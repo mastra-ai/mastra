@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AgentBuilderEditLayout } from '../agent-builder-edit-layout';
@@ -67,6 +66,22 @@ describe('AgentBuilderEditLayout', () => {
     const footerWrapper = getByTestId('agent-builder-chat-footer');
     expect(chatPanel.contains(footerWrapper)).toBe(true);
     expect(getByTestId('stub-chat-footer')).not.toBeNull();
+  });
+
+  it('hides the chat-footer wrapper on desktop so it never shifts the composer', () => {
+    // The footer is a mobile-only slot. Its wrapper must contribute zero height
+    // at lg+ — otherwise steps that pass a footer (e.g. identity) render the
+    // composer higher than steps that don't.
+    const { getByTestId } = render(
+      <AgentBuilderEditLayout
+        topBar={<div data-testid="stub-top-bar">top</div>}
+        chat={<div data-testid="stub-chat">chat</div>}
+        profile={<div data-testid="stub-profile">profile</div>}
+        chatFooter={<div data-testid="stub-chat-footer">footer</div>}
+      />,
+    );
+
+    expect(getByTestId('agent-builder-chat-footer').classList.contains('lg:hidden')).toBe(true);
   });
 
   it('does not render the chat-footer wrapper when chatFooter is omitted', () => {

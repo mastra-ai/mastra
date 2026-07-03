@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
 
@@ -8,8 +9,29 @@ afterEach(() => {
   cleanup();
 });
 
-const getWrapper = () => document.querySelector<HTMLDivElement>('[data-slot="input-group"]')!;
-const getInput = () => document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]')!;
+const getWrapper = () => {
+  const wrapper = document.querySelector<HTMLDivElement>('[data-slot="input-group"]');
+  assert(wrapper, 'Expected input group wrapper');
+  return wrapper;
+};
+
+const getInput = () => {
+  const input = document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]');
+  assert(input, 'Expected input group control');
+  return input;
+};
+
+const inputGroupVariants = ['default', 'filled', 'outline'] as const;
+
+const expectOnlyGuardedHoverBorder = (className: string) => {
+  const hoverBorderTokens = className
+    .split(/\s+/)
+    .filter(token => token.includes('hover') && token.includes('border-border2'));
+
+  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within)]:border-border2']);
+  expect(className).toContain('focus-within:border-neutral5/50');
+  expect(className).not.toContain('hover:border-border2');
+};
 
 describe('InputGroup', () => {
   it('puts an explicit height on the root box so the group matches a same-size sibling control', () => {
@@ -156,22 +178,17 @@ describe('InputGroup', () => {
     expect(cls).toContain('[&::-webkit-search-cancel-button]:appearance-none');
   });
 
-  it('prioritizes the focus border over hover like Input (the hover border is guarded so focus always wins)', () => {
+  it.each(inputGroupVariants)('prioritizes the focus border over hover for the %s variant', variant => {
     render(
-      <InputGroup>
-        <InputGroupInput placeholder="x" />
+      <InputGroup variant={variant}>
+        <InputGroupInput placeholder={variant} />
       </InputGroup>,
     );
     const cls = getWrapper().className;
-    // Focused border brightens to a neutral tone (no green accent).
-    expect(cls).toContain('focus-within:border-neutral5/50');
+
+    // Focused border brightens to a neutral tone (no green accent), and the hover border
+    // is guarded so it cannot override focus when the group is focused and hovered.
+    expectOnlyGuardedHoverBorder(cls);
     expect(cls).not.toContain('ring-accent1');
-    // Tailwind emits the `focus-within` variant BEFORE `hover`, so an unguarded
-    // `hover:border-border2` (equal specificity) would override the focus border on a field
-    // that is focused AND hovered — the InputGroup bug. The hover border is guarded with
-    // :not(:focus-within) so the focus border always wins, matching the bare <Input> (whose
-    // `focus-visible` is emitted after `hover`).
-    expect(cls).toContain('[&:hover:not(:focus-within)]:border-border2');
-    expect(cls).not.toContain('hover:border-border2');
   });
 });

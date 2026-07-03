@@ -1,28 +1,17 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import {
-  Badge,
-  Button,
-  Column,
-  Columns,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  EmptyState,
-  DataList,
-  DataListSkeleton,
-  Searchbar,
-  Spinner,
-  StatusBadge,
-  Tabs,
-  TabContent,
-  TabList,
-  Tab,
-  Txt,
-  toast,
-} from '@mastra/playground-ui';
-import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip, SearchIcon } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -81,6 +70,11 @@ function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '—';
   const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): number {
+  if (!startedAt) return 0;
+  return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
@@ -174,7 +168,8 @@ export function AgentPlaygroundEvaluate({
   });
 
   const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
-    if (!acc[exp.datasetId] || new Date(exp.startedAt) > new Date(acc[exp.datasetId]!.startedAt)) {
+    const current = acc[exp.datasetId];
+    if (!current || getExperimentStartedAtTime(exp.startedAt) > getExperimentStartedAtTime(current.startedAt)) {
       acc[exp.datasetId] = exp;
     }
     return acc;
@@ -312,8 +307,8 @@ export function AgentPlaygroundEvaluate({
 
   const filteredExperiments = useMemo(() => {
     const exps = [...(experiments || [])].sort((a, b) => {
-      const da = a.startedAt ? new Date(a.startedAt as string).getTime() : 0;
-      const db = b.startedAt ? new Date(b.startedAt as string).getTime() : 0;
+      const da = getExperimentStartedAtTime(a.startedAt);
+      const db = getExperimentStartedAtTime(b.startedAt);
       return db - da;
     });
     if (!experimentsSearch) return exps;
@@ -706,7 +701,12 @@ export function AgentPlaygroundEvaluate({
     return (
       <>
         {/* Create Dataset Dialog */}
-        <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} targetIds={[agentId]} />
+        <CreateDatasetDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          targetType="agent"
+          targetIds={[agentId]}
+        />
 
         {/* Generate Config Dialog */}
         {generateDatasetId && (
@@ -736,7 +736,17 @@ export function AgentPlaygroundEvaluate({
               <DialogTitle>Attach Existing Dataset</DialogTitle>
             </DialogHeader>
             <DialogBody className="max-h-[50vh] overflow-y-auto">
-              <Searchbar onSearch={setAttachDatasetSearch} label="Search datasets" placeholder="Search datasets..." />
+              <InputGroup variant="outline">
+                <InputGroupAddon align="inline-start">
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  aria-label="Search datasets"
+                  placeholder="Search datasets..."
+                  onChange={event => setAttachDatasetSearch(event.target.value)}
+                />
+              </InputGroup>
               {unattachedDatasets
                 .filter(ds => !attachDatasetSearch || ds.name.toLowerCase().includes(attachDatasetSearch.toLowerCase()))
                 .map(ds => (
@@ -748,6 +758,8 @@ export function AgentPlaygroundEvaluate({
                       try {
                         await updateDataset.mutateAsync({
                           datasetId: ds.id,
+                          // Classify legacy/untyped datasets without overwriting existing target types.
+                          targetType: ds.targetType ?? 'agent',
                           targetIds: [...parseIdList(ds.targetIds), agentId],
                         });
                         toast.success(`Dataset "${ds.name}" attached`);
@@ -787,7 +799,17 @@ export function AgentPlaygroundEvaluate({
               <DialogTitle>Attach Existing Scorer</DialogTitle>
             </DialogHeader>
             <DialogBody className="max-h-[50vh] overflow-y-auto">
-              <Searchbar onSearch={setAttachScorerSearch} label="Search scorers" placeholder="Search scorers..." />
+              <InputGroup variant="outline">
+                <InputGroupAddon align="inline-start">
+                  <SearchIcon />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  aria-label="Search scorers"
+                  placeholder="Search scorers..."
+                  onChange={event => setAttachScorerSearch(event.target.value)}
+                />
+              </InputGroup>
               {unattachedScorers
                 .filter(([id, scorer]) => {
                   if (!attachScorerSearch) return true;
@@ -890,13 +912,43 @@ export function AgentPlaygroundEvaluate({
         {/* Search bar below tabs */}
         <div className="py-2 border-b border-border1">
           {activeTab === 'experiments' && (
-            <Searchbar onSearch={setExperimentsSearch} label="Search experiments" placeholder="Search experiments..." />
+            <InputGroup variant="outline">
+              <InputGroupAddon align="inline-start">
+                <SearchIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                aria-label="Search experiments"
+                placeholder="Search experiments..."
+                onChange={event => setExperimentsSearch(event.target.value)}
+              />
+            </InputGroup>
           )}
           {activeTab === 'datasets' && (
-            <Searchbar onSearch={setDatasetsSearch} label="Search datasets" placeholder="Search datasets..." />
+            <InputGroup variant="outline">
+              <InputGroupAddon align="inline-start">
+                <SearchIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                aria-label="Search datasets"
+                placeholder="Search datasets..."
+                onChange={event => setDatasetsSearch(event.target.value)}
+              />
+            </InputGroup>
           )}
           {activeTab === 'scorers' && (
-            <Searchbar onSearch={setScorersSearch} label="Search scorers" placeholder="Search scorers..." />
+            <InputGroup variant="outline">
+              <InputGroupAddon align="inline-start">
+                <SearchIcon />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                aria-label="Search scorers"
+                placeholder="Search scorers..."
+                onChange={event => setScorersSearch(event.target.value)}
+              />
+            </InputGroup>
           )}
         </div>
 

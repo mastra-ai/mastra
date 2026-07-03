@@ -112,16 +112,19 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // skill publish requires blob storage not available in InMemoryStore
       '/stored/skills/:storedSkillId/publish',
       // POST /stored/agents requires a builder-resolved model policy and a
-      // model-allowlist-compatible payload; the generic harness produces a
+      // model-allowlist-compatible payload; the generic test suite produces a
       // payload that fails allowlist enforcement. Behavior is covered by
       // packages/server/src/server/handlers/stored-agents.test.ts.
       '/stored/agents',
       // Favorites toggles require an existing stored entity AND an
       // authenticated caller (callerId is read from the auth-middleware
       // request context). Behavior is covered by stored-{agent,skill}-favorites
-      // unit tests; the generic harness can't satisfy both prereqs.
+      // unit tests; the generic test suite can't satisfy both prereqs.
       '/stored/agents/:storedAgentId/favorite',
       '/stored/skills/:storedSkillId/favorite',
+      // Change request creation requires a source-control provider that can open
+      // PRs; the generic test sutie has no provider. Covered by stored-agents tests.
+      '/stored/agents/:storedAgentId/change-request',
       // Builder registry routes that require external API calls + builder config
       '/editor/builder/registries',
       '/editor/builder/registries/:registryId/search',
@@ -129,19 +132,19 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/editor/builder/registries/:registryId/preview',
       '/editor/builder/registries/:registryId/install',
       // Long-lived SSE streams: stay open until the client disconnects, so the
-      // test harness's real-HTTP-server cleanup (server.close awaiting drain)
+      // test test suite's real-HTTP-server cleanup (server.close awaiting drain)
       // hangs. These routes' behavior is exercised in unit tests.
       '/background-tasks/stream',
       '/agents/:agentId/observe',
       // Tool-provider connection routes that require a persisted connection
-      // row matching the supplied connectionId. The harness uses a generic
+      // row matching the supplied connectionId. The test suite uses a generic
       // 'test-connection-id' that isn't seeded, so the fail-closed ownership
       // guard returns 403. Behavior is covered by
       // packages/server/src/server/handlers/tool-providers.test.ts.
       '/tool-providers/:providerId/connections/:connectionId',
       '/tool-providers/:providerId/connections/:connectionId/usage',
       // Tool-provider authorize + connection-status routes require a real
-      // OAuth provider config; the generic harness produces a payload the
+      // OAuth provider config; the generic test suite produces a payload the
       // mock provider can't authorize. Covered by tool-providers.test.ts.
       '/tool-providers/:providerId/authorize',
       '/tool-providers/:providerId/connection-status',
@@ -153,7 +156,15 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/tool-providers/:providerId/connections',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
-    const excludedPrefixes = ['/datasets'];
+    const excludedPrefixes = [
+      '/datasets',
+      // Agent-controller routes resolve a registered AgentController via
+      // mastra.getAgentController(id) and operate on a live session keyed by
+      // resourceId. The generic test context registers no controller, so every
+      // route fails closed with 404. Behavior is covered by
+      // packages/server/src/server/handlers/agent-controller.test.ts.
+      '/agent-controller',
+    ];
     const isExcluded = (r: ServerRoute) =>
       r.deprecated ||
       r.responseType === 'mcp-http' ||

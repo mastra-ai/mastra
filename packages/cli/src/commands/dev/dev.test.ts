@@ -36,6 +36,13 @@ vi.mock('@mastra/deployer/build', async importOriginal => {
 
   return {
     normalizeStudioBase: actual.normalizeStudioBase,
+    prepareFsAgentsEntry: vi.fn().mockImplementation(async (_mastraDir: string, entryFile: string) => ({
+      entryFile,
+      toolPaths: [],
+      agentCount: 0,
+    })),
+    writeFsAgentsEntry: vi.fn().mockResolvedValue(undefined),
+    mirrorFsAgentWorkspaces: vi.fn().mockResolvedValue([]),
     getServerOptions: vi.fn().mockResolvedValue({
       port: 4111,
       host: 'localhost',
@@ -76,6 +83,12 @@ const mockWatcher = {
   on: vi.fn(),
   close: vi.fn().mockResolvedValue(undefined),
 };
+
+vi.mock('./dev-lock', () => ({
+  acquireDevLock: vi.fn().mockResolvedValue(undefined),
+  updateDevLock: vi.fn().mockResolvedValue(undefined),
+  releaseDevLock: vi.fn(),
+}));
 
 vi.mock('./DevBundler', () => {
   // Use a class for constructor (Vitest v4 requirement)

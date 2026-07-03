@@ -1,15 +1,10 @@
-import {
-  AlertDialog,
-  Button,
-  CopyButton,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipProvider,
-  AmazonIcon,
-  AzureIcon,
-  GoogleIcon,
-} from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { AmazonIcon } from '@mastra/playground-ui/icons/AmazonIcon';
+import { AzureIcon } from '@mastra/playground-ui/icons/AzureIcon';
+import { GoogleIcon } from '@mastra/playground-ui/icons/GoogleIcon';
 import {
   File,
   Folder,
@@ -511,7 +506,7 @@ function HighlightedCode({ content, language }: { content: string; language: str
       }}
       codeTagProps={{
         style: {
-          fontFamily: 'var(--geist-mono), ui-monospace, monospace',
+          fontFamily: 'var(--font-mono)',
         },
       }}
     >

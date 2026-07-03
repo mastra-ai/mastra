@@ -1,5 +1,128 @@
 # @mastra/voice-openai-realtime
 
+## 0.13.3
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3
+
+## 0.13.3-alpha.1
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3-alpha.0
+
+## 0.13.2
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2
+
+## 0.13.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb)]:
+  - @mastra/schema-compat@1.3.2-alpha.1
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2-alpha.0
+
+## 0.13.1
+
+### Patch Changes
+
+- Updated dependencies [[`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98)]:
+  - @mastra/schema-compat@1.3.1
+
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98)]:
+  - @mastra/schema-compat@1.3.1-alpha.0
+
+## 0.13.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0
+
+## 0.13.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+### Patch Changes
+
+- Updated dependencies [[`b04369d`](https://github.com/mastra-ai/mastra/commit/b04369d6b167c698ef103981171a8bf92808e756)]:
+  - @mastra/schema-compat@1.3.0-alpha.0
+
+## 0.12.8
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14
+
+## 0.12.8-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+- Updated dependencies [[`77a2351`](https://github.com/mastra-ai/mastra/commit/77a2351ee79296e360bce822cb3391f7cfd6489d)]:
+  - @mastra/schema-compat@1.2.14-alpha.0
+
+## 0.12.6
+
+### Patch Changes
+
+- Updated dependencies [[`9b1adf7`](https://github.com/mastra-ai/mastra/commit/9b1adf7f39943c869182106bc4016e793b3304ac)]:
+  - @mastra/schema-compat@1.2.12
+
+## 0.12.5
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+- Fix `OpenAIRealtimeVoice` against the General Availability Realtime API. Previously, `connect()` failed against `wss://api.openai.com/v1/realtime` with errors like `Unknown parameter: 'session.voice'`, because the WebSocket handshake and initial session update were still using the legacy beta shape. Text-only responses also stopped emitting `writing` events because the GA endpoint renamed `response.text.*` to `response.output_text.*`. ([#16941](https://github.com/mastra-ai/mastra/pull/16941))
+
+  Also fix a separate duplicate-`response.create` issue when the model returned multiple `function_call` outputs in one response. Each call previously emitted its own `response.create` from `handleFunctionCall`'s `finally`, racing the server (which surfaced as `already has an active response in progress`). The send is now consolidated to a single `response.create` after all function calls in the response have been handled.
+
+  `voice.connect()` now succeeds against the GA endpoint, text-only responses fire `writing` events on both legacy beta and GA endpoints, and multi-function-call responses no longer race the server — all with no code changes required.
+
+- Remove the deprecated `OpenAI-Beta: realtime=v1` header from realtime voice connections. OpenAI removed the beta realtime interface, so sending this header broke all realtime voice connections. ([#17330](https://github.com/mastra-ai/mastra/pull/17330))
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11
+
 ## 0.12.5-alpha.1
 
 ### Patch Changes

@@ -55,6 +55,8 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
       status: 'draft',
       activeVersionId: undefined,
       authorId: scorerDefinition.authorId,
+      organizationId: scorerDefinition.organizationId,
+      projectId: scorerDefinition.projectId,
       metadata: scorerDefinition.metadata,
       createdAt: now,
       updatedAt: now,
@@ -63,7 +65,14 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     this.db.scorerDefinitions.set(scorerDefinition.id, newScorer);
 
     // Extract config fields from the flat input (everything except scorer-record fields)
-    const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = scorerDefinition;
+    const {
+      id: _id,
+      authorId: _authorId,
+      organizationId: _organizationId,
+      projectId: _projectId,
+      metadata: _metadata,
+      ...snapshotConfig
+    } = scorerDefinition;
 
     // Create version 1 from the config
     const versionId = crypto.randomUUID();
@@ -116,7 +125,16 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   }
 
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      organizationId,
+      projectId,
+      metadata,
+      status,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 100)
@@ -143,6 +161,16 @@ export class InMemoryScorerDefinitionsStorage extends ScorerDefinitionsStorage {
     // Filter by authorId if provided
     if (authorId !== undefined) {
       scorers = scorers.filter(scorer => scorer.authorId === authorId);
+    }
+
+    // Filter by organizationId if provided (multi-tenant scoping)
+    if (organizationId !== undefined) {
+      scorers = scorers.filter(scorer => scorer.organizationId === organizationId);
+    }
+
+    // Filter by projectId if provided (multi-tenant scoping)
+    if (projectId !== undefined) {
+      scorers = scorers.filter(scorer => scorer.projectId === projectId);
     }
 
     // Filter by metadata if provided (AND logic)

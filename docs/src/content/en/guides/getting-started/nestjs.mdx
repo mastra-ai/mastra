@@ -77,7 +77,7 @@ export class AppModule {}
 
 :::note
 
-`MastraModule` registers a catch-all controller (`@All('*')`). If it is imported before your app modules, it can intercept unrelated routes and return 404s. To avoid conflicts, import `MastraModule` last or mount it under a dedicated prefix (e.g., `/api/v1/mastra`).
+`MastraModule` registers a catch-all controller (`@All('*')`). If it's imported before your app modules, it can intercept unrelated routes and return 404s. To avoid conflicts, import `MastraModule` last or mount it under a dedicated prefix (e.g., `/api/v1/mastra`).
 
 :::
 

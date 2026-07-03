@@ -46,8 +46,10 @@ vi.mock('../../providers/openai-codex.js', () => ({
   },
 }));
 
+const mockGetCopilotModelCatalog = vi.hoisted(() => vi.fn(async () => []));
 vi.mock('../../providers/github-copilot.js', () => ({
   githubCopilotProvider: vi.fn(() => ({ __provider: 'github-copilot' })),
+  getCopilotModelCatalog: mockGetCopilotModelCatalog,
 }));
 
 // Mock @ai-sdk/anthropic
@@ -68,6 +70,37 @@ vi.mock('@ai-sdk/openai', () => ({
   }),
 }));
 
+vi.mock('@ai-sdk/openai-compatible', () => ({
+  createOpenAICompatible: vi.fn((opts: Record<string, unknown>) => ({
+    chatModel: (modelId: string) => ({
+      __provider: 'custom-openai-compatible',
+      modelId,
+      url: opts.baseURL,
+      apiKey: opts.apiKey,
+      headers: opts.headers,
+    }),
+  })),
+}));
+
+// Mock @ai-sdk/amazon-bedrock
+vi.mock('@ai-sdk/amazon-bedrock', () => ({
+  createAmazonBedrock: vi.fn((opts: Record<string, unknown>) => {
+    return (modelId: string) => ({
+      __provider: 'amazon-bedrock',
+      modelId,
+      region: opts.region,
+      credentialProvider: opts.credentialProvider,
+      headers: opts.headers,
+    });
+  }),
+}));
+
+// Mock @aws-sdk/credential-providers
+const mockCredentialProvider = vi.hoisted(() => vi.fn());
+vi.mock('@aws-sdk/credential-providers', () => ({
+  fromNodeProviderChain: vi.fn(() => mockCredentialProvider),
+}));
+
 // Mock ai SDK's wrapLanguageModel to pass through with a marker
 vi.mock('ai', () => ({
   wrapLanguageModel: vi.fn(({ model }: { model: Record<string, unknown> }) => ({
@@ -78,17 +111,34 @@ vi.mock('ai', () => ({
 
 // Mock ModelRouterLanguageModel and MastraGateway
 vi.mock('@mastra/core/llm', () => ({
+  MastraModelGateway: class MockMastraModelGateway {},
+  PROVIDER_REGISTRY: {},
   ModelRouterLanguageModel: vi.fn(function (
     this: Record<string, unknown>,
     config: string | { id: string; url?: string; apiKey?: string; headers?: Record<string, string> },
-    customGateways?: unknown[],
+    customGateways?: Array<Record<string, any>>,
   ) {
+    const id = typeof config === 'string' ? config : config.id;
     this.__provider = 'model-router';
-    this.modelId = typeof config === 'string' ? config : config.id;
+    this.modelId = id;
     this.url = typeof config === 'string' ? undefined : config.url;
     this.apiKey = typeof config === 'string' ? undefined : config.apiKey;
     this.headers = typeof config === 'string' ? undefined : config.headers;
     this.customGateways = customGateways;
+
+    const gateway = customGateways?.[0];
+    if (!gateway || !id.startsWith(`${gateway.id}/`)) return;
+
+    const [, providerId, ...modelParts] = id.split('/');
+    const modelId = modelParts.join('/');
+    const auth = gateway.resolveAuth?.({ gatewayId: gateway.id, providerId, modelId, routerId: id });
+    const resolved = gateway.resolveLanguageModel({
+      providerId,
+      modelId,
+      apiKey: auth?.apiKey ?? this.apiKey ?? '',
+      headers: this.headers,
+    });
+    Object.assign(this, resolved);
   }),
   MastraGateway: vi.fn(function (
     this: Record<string, unknown>,
@@ -98,6 +148,10 @@ vi.mock('@mastra/core/llm', () => ({
     this.apiKey = config?.apiKey;
     this.baseUrl = config?.baseUrl;
     this.customFetch = config?.customFetch;
+    this.resolveLanguageModel = vi.fn((args: Record<string, unknown>) => ({
+      __provider: 'mastra-gateway-delegate',
+      args,
+    }));
   }),
   GATEWAY_AUTH_HEADER: 'X-Memory-Gateway-Authorization',
 }));
@@ -125,14 +179,25 @@ vi.mock('../../onboarding/settings.js', () => ({
   MEMORY_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
 }));
 
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MODEL_TOKENS } from '../../../../docs/src/plugins/remark-model-tokens/models';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
-import { resolveModel, getDynamicModel, getAnthropicApiKey, getOpenAIApiKey } from '../model.js';
+import {
+  createMastraCodeGateway,
+  resolveModel,
+  getDynamicModel,
+  getAnthropicApiKey,
+  getOpenAIApiKey,
+  MastraCodeGateway,
+  resolveAuth,
+} from '../model.js';
 
 function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
   const values = new Map<string, unknown>();
@@ -140,7 +205,7 @@ function makeRequestContext({ threadId, resourceId }: { threadId?: string; resou
     get: (key: string) => values.get(key),
     set: (key: string, value: unknown) => values.set(key, value),
   } as any;
-  requestContext.set('harness', {
+  requestContext.set('controller', {
     threadId,
     resourceId,
   });
@@ -157,12 +222,53 @@ describe('resolveModel', () => {
     mockAuthStorageInstance.isLoggedIn.mockReturnValue(false);
     mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_AI_API_KEY;
+    delete process.env.MASTRA_GATEWAY_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
+  });
+
+  it('discovers custom and Copilot providers through the MastraCode gateway', async () => {
+    mockLoadSettings.mockReturnValue({
+      customProviders: [
+        {
+          name: 'Acme Models',
+          url: 'https://llm.acme.dev/v1',
+          apiKey: 'acme-secret',
+          models: ['reasoner-v1'],
+        } as any,
+      ],
+      memoryGateway: {},
+    });
+    mockGetCopilotModelCatalog.mockResolvedValueOnce([{ id: 'gpt-4.1' }] as any);
+
+    const gateway = createMastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
+      routeThroughMastraGateway: false,
+    });
+
+    expect(gateway).toBeInstanceOf(MastraCodeGateway);
+    expect(gateway.id).toBe('mastracode');
+
+    await expect(gateway.fetchProviders()).resolves.toMatchObject({
+      'acme-models': {
+        name: 'Acme Models',
+        url: 'https://llm.acme.dev/v1',
+        gateway: 'mastracode',
+        models: ['reasoner-v1'],
+      },
+      'github-copilot': {
+        name: 'GitHub Copilot',
+        gateway: 'mastracode',
+        models: ['gpt-4.1'],
+      },
+    });
+    expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
   describe('anthropic/* models', () => {
@@ -177,6 +283,36 @@ describe('resolveModel', () => {
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
+    });
+
+    it('parses provider/model ids and delegates directly through the MastraCode gateway', () => {
+      const resolveAuthSpy = vi.spyOn(MastraCodeGateway.prototype, 'resolveAuth');
+      const resolveLanguageModelSpy = vi.spyOn(MastraCodeGateway.prototype, 'resolveLanguageModel');
+
+      try {
+        const result = resolveModel('anthropic/claude-sonnet-4-20250514') as Record<string, unknown>;
+
+        expect(result.__provider).toBe('claude-max-oauth');
+        expect(resolveAuthSpy).toHaveBeenCalledWith({
+          gatewayId: 'mastracode',
+          providerId: 'anthropic',
+          modelId: 'claude-sonnet-4-20250514',
+          routerId: 'mastracode/anthropic/claude-sonnet-4-20250514',
+        });
+        expect(resolveLanguageModelSpy).toHaveBeenCalledWith({
+          providerId: 'anthropic',
+          modelId: 'claude-sonnet-4-20250514',
+          apiKey: '',
+          headers: undefined,
+        });
+        expect(ModelRouterLanguageModel).not.toHaveBeenCalledWith(
+          { id: 'mastracode/anthropic/claude-sonnet-4-20250514', headers: undefined },
+          expect.any(Array),
+        );
+      } finally {
+        resolveAuthSpy.mockRestore();
+        resolveLanguageModelSpy.mockRestore();
+      }
     });
 
     it('uses API key when stored credential is api_key, even if isLoggedIn reports true', () => {
@@ -223,7 +359,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
     });
 
-    it('passes harness headers to the Anthropic OAuth provider', () => {
+    it('passes controller headers to the Anthropic OAuth provider', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'oauth-access-token',
@@ -284,13 +420,26 @@ describe('resolveModel', () => {
       expect(result.modelId).toBe('gpt-4o');
     });
 
+    it('passes OPENAI_BASE_URL to the direct OpenAI API key provider', () => {
+      process.env.OPENAI_BASE_URL = 'http://127.0.0.1:4111/v1';
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-openai-key' });
+
+      resolveModel('openai/gpt-4o-mini');
+
+      expect(createOpenAI).toHaveBeenCalledWith({
+        apiKey: 'sk-openai-key',
+        baseURL: 'http://127.0.0.1:4111/v1',
+        headers: undefined,
+      });
+    });
+
     it('uses model router when no OpenAI auth is configured', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
     });
 
-    it('passes harness headers to the OpenAI OAuth provider', () => {
+    it('passes controller headers to the OpenAI OAuth provider', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'openai-oauth-access-token',
@@ -324,9 +473,9 @@ describe('resolveModel', () => {
         get: (key: string) => values.get(key),
         set: (key: string, value: unknown) => values.set(key, value),
       } as any;
-      requestContext.set('harness', {
+      requestContext.set('controller', {
+        session: { modelId: 'openai/gpt-5.2' },
         state: {
-          currentModelId: 'openai/gpt-5.2',
           thinkingLevel: 'high',
         },
       });
@@ -346,7 +495,21 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('model-router');
     });
 
-    it('passes harness headers to model router providers', () => {
+    it('resolves gateway auth through the MastraCode gateway hook', () => {
+      const auth = resolveAuth(
+        {
+          gatewayId: 'mastra',
+          providerId: 'anthropic',
+          modelId: 'claude-sonnet-4',
+          routerId: 'mastra/anthropic/claude-sonnet-4',
+        },
+        'msk_gateway_key_123',
+      );
+
+      expect(auth).toEqual({ apiKey: 'msk_gateway_key_123', source: 'gateway' });
+    });
+
+    it('passes controller headers to model router providers', () => {
       const result = resolveModel('google/gemini-2.0-flash', {
         requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
       }) as Record<string, unknown>;
@@ -358,7 +521,7 @@ describe('resolveModel', () => {
       });
     });
 
-    it('passes harness headers to custom providers', () => {
+    it('passes controller headers to custom providers', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [
           {
@@ -374,8 +537,8 @@ describe('resolveModel', () => {
         requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
       }) as Record<string, unknown>;
 
-      expect(result.__provider).toBe('model-router');
-      expect(result.modelId).toBe('acme/reasoner-v1');
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('reasoner-v1');
       expect(result.url).toBe('https://llm.acme.dev/v1');
       expect(result.apiKey).toBe('acme-secret');
       expect(result.headers).toEqual({
@@ -385,28 +548,73 @@ describe('resolveModel', () => {
     });
   });
 
+  describe('amazon-bedrock/* models', () => {
+    it('resolves Bedrock models through the AWS SDK with the credential chain', () => {
+      process.env.AWS_REGION = 'us-west-2';
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__);
+      expect(result.region).toBe('us-west-2');
+      expect(result.credentialProvider).toBe(mockCredentialProvider);
+      expect(fromNodeProviderChain).toHaveBeenCalled();
+      expect(createAmazonBedrock).toHaveBeenCalled();
+    });
+
+    it('falls back to us-east-1 when no AWS region is configured', () => {
+      delete process.env.AWS_REGION;
+      delete process.env.AWS_DEFAULT_REGION;
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
+
+      expect(result.region).toBe('us-east-1');
+    });
+
+    it('preserves a colon-bearing Bedrock model id', () => {
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_SONNET__) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__);
+    });
+
+    it('passes harness headers to the Bedrock provider', () => {
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      }) as Record<string, unknown>;
+
+      expect(result.headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
+    });
+  });
+
   describe('memory gateway enabled (gateway API key stored)', () => {
     beforeEach(() => {
-      mockAuthStorageInstance.getStoredApiKey.mockReturnValue('msk_gateway_key_123');
+      mockAuthStorageInstance.getStoredApiKey.mockImplementation((providerId: string) =>
+        providerId === 'mastra-gateway' ? 'msk_gateway_key_123' : undefined,
+      );
     });
 
     it('routes explicit mastra-prefixed anthropic model through gateway', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('model-router');
-      expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toEqual({
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4',
         apiKey: 'msk_gateway_key_123',
+        headers: undefined,
+      });
+      expect(MastraGateway).toHaveBeenCalledWith({
         baseUrl: 'https://gateway-api.mastra.ai',
       });
-      expect(ModelRouterLanguageModel).toHaveBeenCalledWith(
-        { id: 'mastra/anthropic/claude-sonnet-4', headers: undefined },
-        [expect.objectContaining({ __gateway: 'mastra', apiKey: 'msk_gateway_key_123' })],
-      );
+      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
     });
 
-    it('routes explicit mastra-prefixed anthropic OAuth model directly with middleware (bypasses ModelRouterLanguageModel)', () => {
+    it('routes explicit mastra-prefixed anthropic OAuth model through custom gateway middleware', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'oauth-access-token',
@@ -416,7 +624,11 @@ describe('resolveModel', () => {
 
       const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
-      // Should use createAnthropic directly, NOT go through ModelRouterLanguageModel
+      expect(result.__provider).toBe('anthropic-direct');
+      expect(result.__wrapped).toBe(true);
+      expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
+      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
+
       expect(createAnthropic).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'oauth-gateway-placeholder',
@@ -428,18 +640,14 @@ describe('resolveModel', () => {
       expect((opts?.headers as Record<string, string>)?.['X-Memory-Gateway-Authorization']).toBe(
         'Bearer msk_gateway_key_123',
       );
-      // Should wrap with middleware
       expect(wrapLanguageModel).toHaveBeenCalled();
       expect(result.__wrapped).toBe(true);
       expect(result.__provider).toBe('anthropic-direct');
       expect(result.modelId).toBe('claude-sonnet-4');
-      // Should NOT use ModelRouterLanguageModel or MastraGateway
-      expect(MastraGateway).not.toHaveBeenCalled();
-      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
       expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
     });
 
-    it('normalizes mastra-prefixed anthropic OAuth model ids to dash-separated names', () => {
+    it('normalizes mastra-prefixed anthropic OAuth model ids inside the custom gateway', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'oauth-access-token',
@@ -452,11 +660,9 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('anthropic-direct');
       expect(result.__wrapped).toBe(true);
       expect(result.modelId).toBe('claude-opus-4-6');
-      expect(MastraGateway).not.toHaveBeenCalled();
-      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
     });
 
-    it('routes explicit mastra-prefixed openai OAuth model directly with Codex middleware (bypasses ModelRouterLanguageModel)', () => {
+    it('routes explicit mastra-prefixed openai OAuth model through custom gateway Codex middleware', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'openai-oauth-access-token',
@@ -466,7 +672,11 @@ describe('resolveModel', () => {
 
       const result = resolveModel('mastra/openai/gpt-4o') as Record<string, unknown>;
 
-      // Should use createOpenAI directly, NOT go through ModelRouterLanguageModel
+      expect(result.__provider).toBe('openai-direct');
+      expect(result.__wrapped).toBe(true);
+      expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
+      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
+
       expect(createOpenAI).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'oauth-gateway-placeholder',
@@ -482,14 +692,10 @@ describe('resolveModel', () => {
         authStorage: expect.anything(),
         rewriteUrl: false,
       });
-      // Should wrap with middleware
       expect(wrapLanguageModel).toHaveBeenCalled();
       expect(result.__wrapped).toBe(true);
       expect(result.__provider).toBe('openai-direct');
       expect(result.modelId).toBe('gpt-4o');
-      // Should NOT use ModelRouterLanguageModel or MastraGateway
-      expect(MastraGateway).not.toHaveBeenCalled();
-      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
       expect(openaiCodexProvider).not.toHaveBeenCalled();
     });
 
@@ -498,22 +704,30 @@ describe('resolveModel', () => {
 
       const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('model-router');
-      expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toEqual({
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4',
         apiKey: 'msk_gateway_key_123',
+        headers: undefined,
+      });
+      expect(MastraGateway).toHaveBeenCalledWith({
         baseUrl: 'https://gateway-api.mastra.ai',
       });
       expect(buildAnthropicOAuthFetch).not.toHaveBeenCalled();
     });
 
-    it('routes explicit mastra-prefixed unknown provider through gateway', () => {
+    it('routes explicit mastra-prefixed unknown provider through gateway fallback', () => {
       const result = resolveModel('mastra/google/gemini-2.0-flash') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('model-router');
-      expect(result.modelId).toBe('mastra/google/gemini-2.0-flash');
-      expect(MastraGateway).toHaveBeenCalledWith({
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toEqual({
+        providerId: 'google',
+        modelId: 'gemini-2.0-flash',
         apiKey: 'msk_gateway_key_123',
+        headers: undefined,
+      });
+      expect(MastraGateway).toHaveBeenCalledWith({
         baseUrl: 'https://gateway-api.mastra.ai',
       });
     });
@@ -526,10 +740,10 @@ describe('resolveModel', () => {
 
       const result = resolveModel('acme/reasoner-v1') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('model-router');
-      expect(result.modelId).toBe('acme/reasoner-v1');
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('reasoner-v1');
       expect(result.url).toBe('https://llm.acme.dev/v1');
-      expect(MastraGateway).not.toHaveBeenCalled();
+      expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
     });
 
     it('passes baseUrl when explicitly set in settings for explicit mastra-prefixed models', () => {
@@ -542,7 +756,6 @@ describe('resolveModel', () => {
       resolveModel('mastra/anthropic/claude-sonnet-4');
 
       expect(MastraGateway).toHaveBeenCalledWith({
-        apiKey: 'msk_gateway_key_123',
         baseUrl: 'https://custom-gateway.example.com',
       });
     });
@@ -557,25 +770,22 @@ describe('resolveModel', () => {
       resolveModel('mastra/anthropic/claude-sonnet-4');
 
       expect(MastraGateway).toHaveBeenCalledWith({
-        apiKey: 'msk_gateway_key_123',
         baseUrl: 'https://gateway-api.mastra.ai',
       });
     });
 
-    it('passes harness headers to ModelRouterLanguageModel for explicit mastra-prefixed models', () => {
+    it('passes controller headers to the gateway-resolved model', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
-      resolveModel('mastra/anthropic/claude-sonnet-4', {
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4', {
         requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
-      });
+      }) as Record<string, unknown>;
 
-      expect(ModelRouterLanguageModel).toHaveBeenCalledWith(
-        {
-          id: 'mastra/anthropic/claude-sonnet-4',
-          headers: { 'x-thread-id': 'thread-123', 'x-resource-id': 'resource-456' },
-        },
-        expect.any(Array),
-      );
+      expect((result.args as Record<string, unknown>).headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
+      expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
     });
 
     it('skips gateway when no API key is stored and no env var', () => {
@@ -585,8 +795,8 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4');
 
-      expect(MastraGateway).not.toHaveBeenCalled();
-      // Falls through to normal flow
+      expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
+      // Falls through through the MastraCode gateway to normal provider logic.
       expect(opencodeClaudeMaxProvider).toHaveBeenCalled();
     });
 
@@ -597,7 +807,7 @@ describe('resolveModel', () => {
 
       resolveModel('anthropic/claude-sonnet-4');
 
-      expect(MastraGateway).not.toHaveBeenCalled();
+      expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', { headers: undefined });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
@@ -609,9 +819,14 @@ describe('resolveModel', () => {
 
       const result = resolveModel('mastra/anthropic/claude-sonnet-4') as Record<string, unknown>;
 
-      expect(result.__provider).toBe('model-router');
-      expect(result.modelId).toBe('mastra/anthropic/claude-sonnet-4');
-      expect(MastraGateway).toHaveBeenCalledWith({ apiKey: 'msk_env_key', baseUrl: 'https://gateway-api.mastra.ai' });
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toEqual({
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4',
+        apiKey: 'msk_env_key',
+        headers: undefined,
+      });
+      expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });
   });
@@ -652,6 +867,17 @@ describe('getAnthropicApiKey', () => {
 });
 
 describe('getOpenAIApiKey', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.OPENAI_API_KEY;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
   it('returns stored API key when set', () => {
     mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-openai-key' });
     expect(getOpenAIApiKey()).toBe('sk-openai-key');

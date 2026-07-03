@@ -1,14 +1,17 @@
 import { ChevronsRightIcon } from 'lucide-react';
+import * as React from 'react';
 import {
   Drawer,
   DrawerBackdrop,
   DrawerClose,
   DrawerDescription,
+  DrawerInteractive,
   DrawerPopup,
   DrawerPortal,
   DrawerTitle,
   DrawerViewport,
 } from '@/ds/components/Drawer';
+import { PortalContainerProvider } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +37,15 @@ export function SideDialogRoot({
   className,
 }: SideDialogRootProps) {
   const isConfirmation = variant === 'confirmation';
+
+  // Mount point for nested popups (Select, Popover, …). It sits *inside* Base
+  // UI's modal `FloatingFocusManager` region (so a `document.body` portal can't
+  // leave them unclickable) AND is a `DrawerInteractive` (`data-drawer-content`)
+  // node, which Base UI's Drawer excludes from swipe-to-dismiss. Without that
+  // exclusion, a `pointerdown` on a dropdown option starts a drawer swipe and
+  // captures the pointer, so the option never receives `pointerup` and the
+  // click never commits. See `portal-container.tsx`.
+  const [portalHost, setPortalHost] = React.useState<HTMLDivElement | null>(null);
 
   return (
     <Drawer
@@ -79,13 +91,18 @@ export function SideDialogRoot({
               />
             )}
 
-            <div
-              className={cn('grid h-full', {
-                'grid-rows-[auto_1fr]': !isConfirmation,
-              })}
-            >
-              {children}
-            </div>
+            {/* Swipe-exempt, out-of-flow mount point for nested popups. */}
+            <DrawerInteractive render={<div ref={setPortalHost} className="absolute" />} />
+
+            <PortalContainerProvider container={portalHost}>
+              <div
+                className={cn('grid h-full', {
+                  'grid-rows-[auto_1fr]': !isConfirmation,
+                })}
+              >
+                {children}
+              </div>
+            </PortalContainerProvider>
           </DrawerPopup>
         </DrawerViewport>
       </DrawerPortal>

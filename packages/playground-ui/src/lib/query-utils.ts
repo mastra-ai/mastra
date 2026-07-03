@@ -65,6 +65,31 @@ export function is403ForbiddenError(error: unknown): boolean {
 }
 
 /**
+ * Check if error is a 404 Not Found response.
+ * Handles both direct status property and client-js error message format.
+ */
+export function is404NotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  if ('status' in error && (error as { status: number }).status === 404) {
+    return true;
+  }
+
+  if ('statusCode' in error && (error as { statusCode: number }).statusCode === 404) {
+    return true;
+  }
+
+  if ('message' in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return /\bstatus:\s*404\b/.test(message);
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if an error came from a storage provider that does not implement `listBranches`.
  *
  * The server's `handleError` strips the original MastraError's `code`/`id` before serializing,
@@ -76,6 +101,26 @@ export function isBranchesNotSupportedError(error: unknown): boolean {
   const message = (error as { message: unknown }).message;
   if (typeof message !== 'string') return false;
   return message.includes('does not support listing trace branches');
+}
+
+export type UnsupportedObservabilityOperation = 'logs' | 'metrics' | 'scores' | 'feedback';
+
+/**
+ * Check if an error came from an observability storage provider that does not
+ * implement a list operation. These are capability gaps, not transient failures.
+ *
+ * The server serializes these as plain HTTP errors, so the original MastraError
+ * ID is not available in the browser. Match the stable base-storage message text
+ * instead, like the trace branch support check above.
+ */
+export function isUnsupportedObservabilityOperationError(
+  error: unknown,
+  operation: UnsupportedObservabilityOperation,
+): boolean {
+  if (!error || typeof error !== 'object' || !('message' in error)) return false;
+  const message = (error as { message: unknown }).message;
+  if (typeof message !== 'string') return false;
+  return message.includes(`does not support listing ${operation}`);
 }
 
 /**

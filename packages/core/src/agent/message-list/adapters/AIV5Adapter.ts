@@ -11,6 +11,7 @@ import type {
   MessageSource,
 } from '../state/types';
 import type { AIV5Type } from '../types';
+import { findToolCallArgs } from '../utils/provider-compat';
 import { sanitizeToolName } from '../utils/tool-name';
 
 /**
@@ -73,18 +74,23 @@ function toSignalDataPart(message: MastraDBMessage): AIV5Type.DataUIPart<AIV5.UI
     signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
       ? (signal.metadata as Record<string, unknown>)
       : {};
+  const attributes =
+    signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : {};
 
   const type = getSignalType(message) ?? 'signal';
   const tagName = getSignalTagName(message) ?? type;
-  const dataPartTagName = type === 'user' && tagName === 'user' ? 'user-message' : tagName;
   return {
-    type: `data-${dataPartTagName}`,
+    type: type === 'user' ? 'data-user-message' : 'data-signal',
     data: {
       id: typeof signal.id === 'string' ? signal.id : message.id,
       type,
       tagName,
       contents: 'contents' in signal ? signal.contents : getTextContent(message),
       createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(Object.keys(attributes).length ? { attributes } : {}),
       ...(Object.keys(metadata).length ? { metadata } : {}),
     },
   } as AIV5Type.DataUIPart<AIV5.UIDataTypes>;
@@ -322,6 +328,19 @@ export class AIV5Adapter {
                 transformToolPayloads,
               ) as string,
               state: 'output-error',
+              callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
+              providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
+            } satisfies AIV5Type.ToolUIPart);
+          } else if (inv.state === 'output-denied') {
+            // v5 has no denied state. Downgrade to a single output-available part whose output is
+            // the denial reason, so v5 UI consumers — and the next LLM turn's prompt, which is
+            // built through this adapter — see a tool result instead of a dangling tool call.
+            parts.push({
+              type: `tool-${inv.toolName}`,
+              toolCallId: inv.toolCallId,
+              input: getDisplayTransform(part.providerMetadata, 'input-available', inv.args, transformToolPayloads),
+              output: inv.approval?.reason ?? 'Tool call was not approved by the user',
+              state: 'output-available',
               callProviderMetadata: mergeMastraCreatedAt(part.providerMetadata, part.createdAt),
               providerExecuted: (part as { providerExecuted?: boolean }).providerExecuted,
             } satisfies AIV5Type.ToolUIPart);
@@ -653,7 +672,7 @@ export class AIV5Adapter {
         if (p.type === 'reasoning') {
           return {
             type: 'reasoning' as const,
-            reasoning: '',
+            reasoning: p.text,
             details: [
               {
                 type: 'text' as const,
@@ -791,7 +810,11 @@ export class AIV5Adapter {
   /**
    * Direct conversion from AIV5 ModelMessage to MastraDBMessage
    */
-  static fromModelMessage(modelMsg: AIV5Type.ModelMessage, _messageSource?: MessageSource): MastraDBMessage {
+  static fromModelMessage(
+    modelMsg: AIV5Type.ModelMessage,
+    _messageSource?: MessageSource,
+    context: { dbMessages?: MastraDBMessage[] } = {},
+  ): MastraDBMessage {
     const content = Array.isArray(modelMsg.content)
       ? modelMsg.content
       : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
@@ -853,6 +876,19 @@ export class AIV5Adapter {
               : toolResultPart.output;
         };
 
+        // When the matching tool-call isn't in this same model message (e.g. the
+        // server resume path or an AG-UI host replaying a tool-result on its own),
+        // recover the original args from prior persisted messages before falling
+        // back to the tool-result's own `input` field, then finally to `{}`.
+        // Persisting `args: {}` poisons the LLM via in-context learning (issue #16017).
+        const recoveredArgs = context.dbMessages
+          ? findToolCallArgs(context.dbMessages, toolResultPart.toolCallId)
+          : undefined;
+        const fallbackArgs =
+          recoveredArgs && Object.keys(recoveredArgs).length > 0
+            ? recoveredArgs
+            : ((toolResultPart as AIV5Type.ToolResultPart & { input?: Record<string, unknown> }).input ?? {});
+
         if (matchingCall) {
           updateMatchingCallInvocationResult(toolResultPart, matchingCall);
         } else {
@@ -860,7 +896,7 @@ export class AIV5Adapter {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
             toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
+            args: fallbackArgs,
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
           toolInvocations.push(call);
@@ -878,7 +914,7 @@ export class AIV5Adapter {
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
-              args: {},
+              args: fallbackArgs,
               state: 'call',
             },
           };
@@ -892,7 +928,7 @@ export class AIV5Adapter {
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: '',
+          reasoning: part.text,
           details: [{ type: 'text', text: part.text }],
         };
         if (part.providerOptions) {

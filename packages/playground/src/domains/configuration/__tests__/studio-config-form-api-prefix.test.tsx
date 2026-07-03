@@ -1,10 +1,9 @@
-// @vitest-environment jsdom
 import { render, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { StudioConfigForm } from '../components/studio-config-form';
-import { StudioConfigContext } from '../context/studio-config-context';
-import type { StudioConfigContextType } from '../context/studio-config-context';
+import { StudioConfigContext } from '../context/studio-config-state';
+import type { StudioConfigContextType } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 
 vi.mock('@/lib/toast', () => ({

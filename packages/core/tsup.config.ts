@@ -49,7 +49,6 @@ export default defineConfig({
     'src/utils.ts',
     '!src/action/index.ts',
     'src/*/index.ts',
-    'src/harness/v1/index.ts',
     'src/observability/context-storage.ts',
     'src/tools/is-vercel-tool.ts',
     'src/workflows/constants.ts',
@@ -62,6 +61,7 @@ export default defineConfig({
     'src/a2a/client.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
+    'src/utils/collect-tool-mocks.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
@@ -101,6 +101,9 @@ export default defineConfig({
         '@internal/external-types',
         '@internal/core',
         '@internal/voice',
+        'hono',
+        'hono-openapi',
+        '@internal/auth',
       ]),
     );
 

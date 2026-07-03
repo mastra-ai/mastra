@@ -1,6 +1,5 @@
-// @vitest-environment jsdom
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
-import type { MastraUIMessage } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -37,48 +36,64 @@ const Providers = ({ children }: { children: ReactNode }) => {
 // Assistant message suspended on a tool that requires approval. The runId on the
 // metadata entry is what `extractRunIdFromMessages` recovers so a subsequent
 // approve/decline can hit the network.
-const pendingApprovalMessage = (): MastraUIMessage => ({
-  id: 'assistant-pending',
-  role: 'assistant',
-  parts: [
-    {
-      type: 'dynamic-tool',
-      toolCallId: TOOL_CALL_ID,
-      toolName: TOOL_NAME,
-      state: 'input-available',
-      input: { foo: 'bar' },
-    },
-  ] as MastraUIMessage['parts'],
-  metadata: {
-    mode: 'stream',
-    requireApprovalMetadata: {
-      [TOOL_NAME]: {
-        toolCallId: TOOL_CALL_ID,
-        toolName: TOOL_NAME,
-        args: { foo: 'bar' },
-        runId: RUN_ID,
+const pendingApprovalMessage = (): MastraDBMessage =>
+  ({
+    id: 'assistant-pending',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            step: 0,
+            toolCallId: TOOL_CALL_ID,
+            toolName: TOOL_NAME,
+            args: { foo: 'bar' },
+          },
+        },
+      ],
+      metadata: {
+        mode: 'stream',
+        requireApprovalMetadata: {
+          [TOOL_NAME]: {
+            toolCallId: TOOL_CALL_ID,
+            toolName: TOOL_NAME,
+            args: { foo: 'bar' },
+            runId: RUN_ID,
+          },
+        },
       },
     },
-  } as MastraUIMessage['metadata'],
-});
+  }) as unknown as MastraDBMessage;
 
 // A normal completed tool message that carries NO approval metadata.
-const normalToolMessage = (): MastraUIMessage => ({
-  id: 'assistant-normal',
-  role: 'assistant',
-  parts: [
-    {
-      type: 'dynamic-tool',
-      toolCallId: 'call-normal',
-      toolName: 'some-other-tool',
-      state: 'output-available',
-      input: {},
-      output: { success: true },
+const normalToolMessage = (): MastraDBMessage =>
+  ({
+    id: 'assistant-normal',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            step: 0,
+            toolCallId: 'call-normal',
+            toolName: 'some-other-tool',
+            args: {},
+            result: { success: true },
+          },
+        },
+      ],
     },
-  ] as MastraUIMessage['parts'],
-});
+  }) as unknown as MastraDBMessage;
 
-const renderWithMessages = async (initialMessages: MastraUIMessage[]) => {
+const renderWithMessages = async (initialMessages: MastraDBMessage[]) => {
   await act(async () => {
     render(
       <Providers>

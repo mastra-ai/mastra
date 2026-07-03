@@ -29,9 +29,9 @@ import TabItem from "@theme/TabItem";
 
 Mastra's Voice system provides a unified interface for voice interactions, enabling text-to-speech (TTS), speech-to-text (STT), and real-time speech-to-speech (STS) capabilities in your applications.
 
-## Adding voice to agents
+## Add voice to agents
 
-To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](/docs/agents/adding-voice) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
+Pass a voice provider to an agent with the `voice` property. The same property supports text-to-speech (TTS), speech-to-text (STT), and real-time speech-to-speech (STS), depending on the provider you configure.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -732,7 +732,7 @@ For detailed configuration options and advanced features, check out [Speech to S
       id: 'voice-agent',
       name: 'Voice Agent',
       instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       voice: new InworldRealtimeVoice({
         apiKey: process.env.INWORLD_API_KEY,
         model: 'inworld/models/gemma-4-26b-a4b-it',
@@ -1176,7 +1176,7 @@ Each voice provider can be configured with different models and options. Below a
   </TabItem>
 </Tabs>
 
-### Using Multiple Voice Providers
+### Using multiple voice providers
 
 This example demonstrates how to create and use two different voice providers in Mastra: OpenAI for speech-to-text (STT) and PlayAI for text-to-speech (TTS).
 

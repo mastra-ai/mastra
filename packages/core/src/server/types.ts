@@ -1,4 +1,5 @@
-import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
+import type { MastraAuthConfig as InternalMastraAuthConfig } from '@internal/auth/types';
+import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { ZodError } from 'zod/v4';
@@ -7,11 +8,13 @@ import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions
 import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { MastraAuthProvider } from './auth';
+import type { IMastraAuthProvider } from './auth';
 
 type RouteFGAConfig = FGARouteConfig;
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL';
+
+export type ApiRouteHandler = (c: any) => Response | Promise<Response>;
 
 export type ApiRoute =
   | {
@@ -30,7 +33,7 @@ export type ApiRoute =
   | {
       path: string;
       method: Methods;
-      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
+      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
       cors?: CorsOptions;
@@ -53,56 +56,7 @@ export type ContextWithMastra = Context<{
   };
 }>;
 
-export type MastraAuthConfig<TUser = unknown> = {
-  /**
-   * Protected paths for the server
-   */
-  protected?: (RegExp | string | [string, Methods | Methods[]])[];
-
-  /**
-   * Public paths for the server
-   */
-  public?: (RegExp | string | [string, Methods | Methods[]])[];
-
-  /**
-   * Public paths for the server
-   */
-  authenticateToken?: (token: string, request: HonoRequest) => Promise<TUser>;
-
-  /**
-   * Maps the authenticated user to a resource ID for memory/thread scoping.
-   * When provided, the returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context
-   * after successful authentication, enabling per-user memory isolation.
-   */
-  mapUserToResourceId?(user: TUser): string | undefined | null;
-
-  /**
-   * Authorization function for the server
-   */
-  authorize?: (path: string, method: string, user: TUser, context: ContextWithMastra) => Promise<boolean>;
-
-  /**
-   * Rules for the server
-   */
-  rules?: {
-    /**
-     * Path for the rule
-     */
-    path?: RegExp | string | string[];
-    /**
-     * Method for the rule
-     */
-    methods?: Methods | Methods[];
-    /**
-     * Condition for the rule
-     */
-    condition?: (user: TUser) => Promise<boolean> | boolean;
-    /**
-     * Allow the rule
-     */
-    allow?: boolean;
-  }[];
-};
+export type MastraAuthConfig<TUser = unknown> = InternalMastraAuthConfig<TUser, ContextWithMastra>;
 
 export type HttpLoggingConfig = {
   /**
@@ -335,7 +289,7 @@ export type ServerConfig = {
    * Handles WHO the user is (authentication only).
    * For authorization (WHAT the user can do), use the `rbac` option.
    */
-  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+  auth?: MastraAuthConfig<any> | IMastraAuthProvider<any>;
 
   /**
    * Role-based access control (RBAC) provider for EE (Enterprise Edition).
@@ -466,4 +420,65 @@ export type ServerConfig = {
    * ```
    */
   onValidationError?: ValidationErrorHook;
+};
+
+/**
+ * Configuration for Mastra Studio authentication and authorization.
+ *
+ * Studio authentication is independent from server (API) authentication,
+ * allowing you to use different providers for internal team members (Studio)
+ * vs external customers (API).
+ *
+ * @example Using separate providers for Studio and API
+ * ```typescript
+ * const mastra = new Mastra({
+ *   server: {
+ *     // API authentication for external customers
+ *     auth: new MastraAuthWorkos({ ... }),
+ *     rbac: new MastraRBACWorkos({ ... }),
+ *   },
+ *   studio: {
+ *     // Studio authentication for internal team
+ *     auth: new MastraAuthOkta({ ... }),
+ *     rbac: new StaticRBACProvider({
+ *       roles: DEFAULT_ROLES,
+ *       getUserRoles: (user) => [user.role],
+ *     }),
+ *   },
+ * });
+ * ```
+ */
+export type StudioConfig = {
+  /**
+   * Authentication provider for Studio UI.
+   *
+   * Handles WHO can access Studio (authentication only).
+   * For authorization (WHAT users can do in Studio), use the `rbac` option.
+   *
+   * When not configured, Studio operates without authentication (development mode).
+   */
+  auth?: MastraAuthConfig<any> | IMastraAuthProvider<any>;
+
+  /**
+   * Role-based access control (RBAC) provider for Studio.
+   *
+   * Handles WHAT authenticated Studio users can do.
+   * Controls access to Studio features like team management, user listing, etc.
+   *
+   * @example
+   * ```typescript
+   * rbac: new StaticRBACProvider({
+   *   roles: DEFAULT_ROLES,
+   *   getUserRoles: (user) => [user.role],
+   * }),
+   * ```
+   */
+  rbac?: IRBACProvider<any>;
+
+  /**
+   * FGA provider for fine-grained authorization in Studio.
+   *
+   * Enables relationship-based access control for Studio resources.
+   */
+  fga?: IFGAProvider<any>;
 };

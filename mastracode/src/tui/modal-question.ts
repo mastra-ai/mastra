@@ -1,4 +1,4 @@
-import type { OverlayOptions, TUI } from '@mariozechner/pi-tui';
+import type { OverlayOptions, TUI } from '@earendil-works/pi-tui';
 
 import { AskQuestionDialogComponent } from './components/ask-question-dialog.js';
 import { showModalOverlay } from './overlay.js';

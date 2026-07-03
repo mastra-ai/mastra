@@ -207,11 +207,12 @@ export const serializedAgentSchema = z.object({
   provider: z.string().optional(),
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
+  supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
-  source: z.enum(['code', 'stored']).optional(),
+  source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
   hasDraft: z.boolean().optional(),
@@ -245,6 +246,8 @@ export const providerSchema = z.object({
 export const providersResponseSchema = z.object({
   providers: z.array(providerSchema),
 });
+
+export type ProviderListItem = z.infer<typeof providerSchema>;
 
 /**
  * Schema for list agents endpoint response
@@ -375,6 +378,9 @@ export const agentExecutionBodySchema = z
         fallbackValue: z.any().optional(),
       })
       .optional(),
+
+    // Idle-loop streaming (collapses streamUntilIdle into stream)
+    untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
   })
   .passthrough(); // Allow additional fields for forward compatibility
 
@@ -390,6 +396,7 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
+  untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
 });
 
 export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
@@ -467,6 +474,49 @@ export const sendToolApprovalResponseSchema = z.object({
   accepted: z.literal(true),
   runId: z.string(),
   toolCallId: z.string().optional(),
+});
+
+/**
+ * Query schema for listing suspended agent runs
+ */
+export const listSuspendedRunsQuerySchema = z
+  .object({
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+    fromDate: z.coerce.date().optional(),
+    toDate: z.coerce.date().optional(),
+    perPage: z.coerce.number().int().positive().optional(),
+    // page is zero-indexed, so 0 is valid
+    page: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine(data => !data.fromDate || !data.toDate || data.fromDate <= data.toDate, {
+    message: 'fromDate must be less than or equal to toDate',
+    path: ['fromDate'],
+  });
+
+/**
+ * Response schema for listing suspended agent runs
+ */
+export const listSuspendedRunsResponseSchema = z.object({
+  runs: z.array(
+    z.object({
+      runId: z.string(),
+      status: z.literal('suspended'),
+      threadId: z.string().optional(),
+      resourceId: z.string().optional(),
+      suspendedAt: z.date(),
+      toolCalls: z.array(
+        z.object({
+          toolCallId: z.string().optional(),
+          toolName: z.string().optional(),
+          args: z.unknown().optional(),
+          requiresApproval: z.boolean(),
+          suspendPayload: z.unknown().optional(),
+        }),
+      ),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
 });
 
 // ============================================================================
@@ -622,7 +672,10 @@ export const sendToolApprovalBodySchema = z.object({
   requestContext: z.record(z.string(), z.any()).optional(),
   toolCallId: z.string(),
   approved: z.boolean(),
+  resumeData: z.any().optional(),
   format: z.string().optional(),
+  messages: z.array(coreMessageSchema).optional(),
+  streamOptions: z.any().optional(),
 });
 
 export const abortAgentThreadResponseSchema = z.object({

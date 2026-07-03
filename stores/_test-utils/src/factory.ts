@@ -12,6 +12,7 @@ import { createFavoritesTests } from './domains/favorites';
 import { createSchedulesTests } from './domains/schedules';
 import { createChannelsTests } from './domains/channels';
 import { createToolProviderConnectionsTests } from './domains/tool-provider-connections';
+import { createSkillsTests } from './domains/skills';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -32,6 +33,14 @@ export * from './domains/tool-provider-connections/data';
 export type TestCapabilities = {
   /** Whether the adapter supports listing scores by span (defaults to true) */
   listScoresBySpan?: boolean;
+  /** Whether scorer-based pagination is guaranteed to be ordered newest-first. */
+  deterministicScorePagination?: boolean;
+  /**
+   * Whether the adapter persists item-level tool mocks and experiment tool mock
+   * reports (defaults to true). Adapters that reject them (e.g. MySQL) set this
+   * to false so the round-trip suite asserts rejection instead of persistence.
+   */
+  toolMocks?: boolean;
 };
 
 export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
@@ -115,10 +124,11 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage });
     createAgentsTests({ storage });
-    createDatasetsTests({ storage });
-    createExperimentsTests({ storage });
+    createDatasetsTests({ storage, capabilities });
+    createExperimentsTests({ storage, capabilities });
     createBackgroundTasksTests({ storage });
     createFavoritesTests({ storage });
+    createSkillsTests({ storage });
     createSchedulesTests({ storage });
     createChannelsTests({ storage });
     createToolProviderConnectionsTests({ storage });

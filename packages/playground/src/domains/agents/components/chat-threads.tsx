@@ -1,7 +1,5 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog, Icon, Skeleton } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -9,36 +7,41 @@ import {
   ThreadListItems,
   ThreadListNewItem,
   ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui/components/ThreadList';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];
-  isLoading: boolean;
   threadId: string;
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
+  embedded?: boolean;
 }
 
-export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+export const ChatThreads = ({
+  threads,
+  threadId,
+  onDelete,
+  resourceId,
+  resourceType,
+  embedded = false,
+}: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
 
   const canDeleteThread = canDelete('memory');
-
-  if (isLoading) {
-    return <ChatThreadSkeleton />;
-  }
-
   const newThreadLink =
     resourceType === 'agent' ? paths.agentNewThreadLink(resourceId) : paths.networkNewThreadLink(resourceId);
 
   return (
     <>
-      <ThreadList>
+      <ThreadList embedded={embedded}>
         <ThreadListNewItem as={Link} to={newThreadLink}>
           <Icon>
             <Plus />
@@ -113,30 +116,20 @@ const DeleteThreadDialog = ({ open, onOpenChange, onDelete }: DeleteThreadDialog
   );
 };
 
-const ChatThreadSkeleton = () => (
-  <div className="p-4 w-full h-full space-y-2">
-    <div className="flex justify-end">
-      <Skeleton className="h-9 w-9" />
-    </div>
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-    <Skeleton className="h-4" />
-  </div>
-);
-
 function isDefaultThreadName(name: string): boolean {
   const defaultPattern = /^New Thread \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
   return defaultPattern.test(name);
 }
 
 function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; createdAt?: Date }) {
-  if (!title || isDefaultThreadName(title)) {
-    return <span>{createdAt ? formatDay(createdAt) : `Thread ${id ? id.substring(id.length - 5) : ''}`}</span>;
-  }
+  const titleText =
+    title && !isDefaultThreadName(title)
+      ? title
+      : createdAt
+        ? formatDay(createdAt)
+        : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
-  return <span className="truncate">{title}</span>;
+  return <span className="block truncate">{titleText}</span>;
 }
 
 const formatDay = (date: Date) => {

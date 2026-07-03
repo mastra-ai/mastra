@@ -91,7 +91,7 @@ When a user mentions the agent mid-conversation in a channel thread, the agent m
 1. On the **first mention** in a thread, the agent fetches recent messages from the platform.
 1. These messages are prepended to the user's message as conversation context.
 1. After responding, the agent subscribes to the thread and has full history via Mastra's memory.
-1. Subsequent messages in that thread do **not** re-fetch from the platform.
+1. Subsequent messages in that thread **don't** re-fetch from the platform.
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
 
@@ -121,7 +121,7 @@ const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve/Deny buttons. The tool only executes after approval.
 
-Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context, since hidden mode does not post approval buttons.
+Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context, since hidden mode doesn't post approval buttons.
 
 ## Multi-user awareness
 
@@ -142,6 +142,7 @@ import { createDiscordAdapter } from '@chat-adapter/discord'
 import { google } from '@ai-sdk/google'
 
 export const visionAgent = new Agent({
+  id: 'vision-agent',
   name: 'Vision Agent',
   instructions: 'You can see images, watch videos, and listen to audio.',
   model: google('gemini-3.1-flash-image-preview'),
@@ -174,6 +175,57 @@ By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupporte
 See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced mime types.
 
 :::
+
+## Serverless deployment
+
+On serverless platforms like Vercel, each request runs in a separate, short-lived instance. Channels need two things to work reliably in that environment: a way to keep the function alive while the agent responds, and a shared pub/sub so instances can coordinate.
+
+### Keep the function alive with `waitUntil`
+
+A channel webhook returns a `200` response right away, then the agent runs in the background to post its reply. On most serverless platforms the function is frozen as soon as it responds, which kills the run before the agent answers. Pass a `waitUntil` function so the platform keeps the instance alive until the run finishes.
+
+On Vercel, pass `waitUntil` from `@vercel/functions`:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+// highlight-next-line
+import { waitUntil } from '@vercel/functions'
+
+export const agent = new Agent({
+  id: 'agent',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    // highlight-next-line
+    waitUntil,
+  },
+})
+```
+
+Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soon as the response is sent. Cloudflare Workers and Netlify Functions are detected automatically from the request context, so they don't need it. For runtimes where `waitUntil` lives on the request context but isn't detected automatically, use `resolveWaitUntil`. See the [Channels reference](/reference/agents/channels#parameters) for details.
+
+### Coordinate instances with a shared pub/sub
+
+Channels route messages through the agent's signal pipeline, and each run acquires a lease on its thread so a single run owns the conversation at a time. The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+
+Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
+
+```typescript
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  agents: { agent },
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL,
+    keyPrefix: 'mastra:my-app',
+  }),
+})
+```
+
+Vercel's one-click Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
 
 ## Related
 

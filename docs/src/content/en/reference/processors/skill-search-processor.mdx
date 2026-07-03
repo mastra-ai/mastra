@@ -11,7 +11,7 @@ The `SkillSearchProcessor` is an **input processor** that enables on-demand skil
 
 By default, when you attach only `SkillSearchProcessor` to an agent with a skill-enabled `Workspace`, the agent treats skills as on-demand:
 
-- The default eager `SkillsProcessor` is not auto-added.
+- The default eager `SkillsProcessor` isn't auto-added.
 - `search_skills` and `load_skill` are exposed for discovery and instruction loading.
 - Overlapping `skill` and `skill_search` tools are hidden.
 - `skill_read` remains available so the agent can read supporting skill files such as references, scripts, and assets.
@@ -140,6 +140,7 @@ const skillSearch = new SkillSearchProcessor({
 })
 
 const agent = new Agent({
+  id: 'skill-agent',
   name: 'skill-agent',
   instructions:
     'You are a helpful assistant. Use search_skills to find relevant skills, then load_skill to load their instructions.',
@@ -159,11 +160,11 @@ The agent workflow is:
 
 ## Workspace file tools
 
-`SkillSearchProcessor` loads skill instructions into the conversation. It does not block workspace file tools from reading files.
+`SkillSearchProcessor` loads skill instructions into the conversation. It doesn't block workspace file tools from reading files.
 
 Use `skill_read` for supporting files that belong to a loaded skill, such as files under `references/`, `scripts/`, or `assets/`.
 
-Reserve workspace file tools such as `mastra_workspace_read_file` for explicit file inspection or editing workflows. During normal task execution, the agent does not need to read the same `SKILL.md` file after `load_skill` succeeds.
+Reserve workspace file tools such as `mastra_workspace_read_file` for explicit file inspection or editing workflows. During normal task execution, the agent doesn't need to read the same `SKILL.md` file after `load_skill` succeeds.
 
 ## Compared to SkillsProcessor
 
