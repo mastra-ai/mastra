@@ -24,7 +24,7 @@ export function resolveWorkerEntryPath(entry: string | URL): string {
  *
  * ```ts
  * import { fileURLToPath } from 'node:url';
- * import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit';
+ * import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
  * import { mastra } from './index';
  *
  * export default createLiveKitWorker({ mastra, agent: 'support' });

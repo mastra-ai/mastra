@@ -2,7 +2,7 @@
 // memory). This is the default, lowest-friction path. For the workflow-driven entrypoint, see
 // voice-worker-workflow.ts. Run one worker at a time — both register as `mastra-voice`.
 import { fileURLToPath } from 'node:url';
-import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit';
+import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { recordContact } from './backend';
 import { mastra } from './index';
 import { flushObservationalMemory } from './memory';

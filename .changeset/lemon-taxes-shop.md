@@ -8,13 +8,12 @@ LiveKit's agents framework runs the audio loop — WebRTC transport, voice activ
 
 **Build a voice worker**
 
-- `createLiveKitWorker()` builds a LiveKit worker that answers voice sessions with your Mastra agents; `runLiveKitWorker()` starts its CLI (`dev`/`start`).
-- `liveKitConnectionRoute()` is an API route that mints LiveKit tokens and dispatches the voice agent into a room; `dispatchVoiceSession()` does the same programmatically for server-initiated sessions like outbound calls.
-- `createMastraVoiceAgent()` is the lower-level bridge for custom worker setups.
+- `createLiveKitWorker()` builds a LiveKit worker that answers voice sessions with your Mastra agents; `runLiveKitWorker()` starts its CLI (`dev`/`start`). Both live on the `@mastra/livekit/worker` entry point.
+- `liveKitConnectionRoute()` is an API route that mints LiveKit tokens and dispatches the voice agent into a room; `dispatchVoiceSession()` does the same programmatically for server-initiated sessions like outbound calls. These live on the `@mastra/livekit` entry point, which is safe to import from Mastra server code — it never loads the LiveKit agents runtime.
 
 ```ts
 // src/mastra/voice-worker.ts
-import { createLiveKitWorker } from '@mastra/livekit';
+import { createLiveKitWorker } from '@mastra/livekit/worker';
 import { mastra } from './index';
 
 export default createLiveKitWorker({
@@ -32,7 +31,7 @@ Each turn's reply can come from a Mastra agent (the default) or a Mastra workflo
 
 - `workflow` / `workflowInput` options on `createLiveKitWorker()` drive replies with a workflow.
 - `pipeAgentReplyToWriter(agentStream, writer)` streams an agent's reply from inside a workflow step, forwarding both its words and its tool calls (piping only the text would drop the tool calls).
-- `generate` is an escape hatch to plug in any custom reply generator; `createWorkflowReplyGenerator()` and `createAgentReplyGenerator()` expose the per-turn generation seam directly.
+- `generate` is an escape hatch to plug in any custom reply generator.
 
 ```ts
 export default createLiveKitWorker({

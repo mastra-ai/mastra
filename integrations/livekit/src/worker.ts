@@ -329,7 +329,7 @@ async function resolveInstructions(
  * ```ts
  * // src/mastra/voice-worker.ts
  * import { fileURLToPath } from 'node:url';
- * import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit';
+ * import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
  * import { mastra } from './index';
  *
  * export default createLiveKitWorker({

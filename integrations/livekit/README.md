@@ -33,6 +33,11 @@ Peer dependencies (`@mastra/core` and `@livekit/agents` are required; the two pl
 | `@livekit/agents-plugin-silero`  | the default `vad: 'silero'`                  |
 | `@livekit/agents-plugin-livekit` | `turnDetection: 'multilingual' \| 'english'` |
 
+The package has two entry points, one per process:
+
+- `@mastra/livekit` — server-side helpers (`liveKitConnectionRoute`, `dispatchVoiceSession`, `pipeAgentReplyToWriter`). Safe to import from Mastra server code; never loads the `@livekit/agents` runtime.
+- `@mastra/livekit/worker` — the worker runtime (`createLiveKitWorker`, `runLiveKitWorker`). Import it only from the worker entry file.
+
 ## Quick start
 
 A worker is a standalone Node process that connects to LiveKit and answers sessions. Define it with `createLiveKitWorker` and run it with `runLiveKitWorker`:
@@ -40,7 +45,7 @@ A worker is a standalone Node process that connects to LiveKit and answers sessi
 ```typescript
 // src/mastra/voice-worker.ts
 import { fileURLToPath } from 'node:url';
-import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit';
+import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { mastra } from './index';
 
 export default createLiveKitWorker({
@@ -91,7 +96,7 @@ Pass `agent` (a key/id, an `Agent` instance, or a resolver). The agent runs its 
 Pass `workflow` + `workflowInput` instead of `agent` (mutually exclusive). LiveKit owns the turn boundary, so the workflow runs **once to completion per turn** — no suspend/resume. Use it for deterministic per-turn structure (e.g. classify intent, then reply).
 
 ```typescript
-import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit';
+import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker';
 
 export default createLiveKitWorker({
   mastra,
@@ -217,6 +222,72 @@ Starts the LiveKit agent worker CLI (`dev` / `start` / `connect`) for your entry
 ## Observability
 
 When the Mastra instance has observability configured, the worker opens one `voice call` span per session, nests every turn's Mastra run under it, and adds child spans for LiveKit pipeline metrics — STT, TTS, end-of-utterance, VAD, and LLM time-to-first-token — closing with a per-model token/character/audio usage roll-up. On by default; pass `observability: false` to disable.
+
+## Deployment
+
+A voice deployment is **two long-running processes** plus a LiveKit media server:
+
+| Component                | What runs it                                                        | Notes                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **LiveKit media server** | LiveKit Cloud, or self-hosted `livekit-server` + Redis              | WebRTC transport. Both processes below need its `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET`. |
+| **Mastra HTTP server**   | `mastra build` → `node .mastra/output/index.mjs`                    | Your agents/workflows + `liveKitConnectionRoute` (mints tokens, dispatches the worker).                   |
+| **LiveKit worker**       | your worker entry → `runLiveKitWorker` (LiveKit Agents CLI `start`) | Connects **outbound** to the media server and answers calls. Not an HTTP server.                          |
+
+The worker is a **separate process**: `mastra build` bundles only your `Mastra` instance and `src/mastra/tools/**` — never the worker entry, because nothing imports it. `liveKitConnectionRoute`, by contrast, is an `apiRoute`, so it ships inside the server build automatically. The server and worker therefore build and run independently and can live on different hosts, as long as they share a LiveKit project and the same `agentName`.
+
+> Note: `mastra worker build` is unrelated — it bundles Mastra's own pubsub/scheduler workflow workers (`mastra.startWorkers()`), not this LiveKit worker.
+
+### Building the worker
+
+The worker imports `@livekit/agents` (plus the optional plugins) and your `Mastra` instance, then runs the LiveKit Agents CLI. Two build-time essentials:
+
+- **Run `start`, not `dev`, in production** — `dev` is hot-reload only.
+- **Pre-download the model files** so they're baked into the image instead of fetched on cold start:
+
+```bash
+node --import tsx src/mastra/voice-worker.ts download-files   # Silero VAD + turn-detector ONNX
+```
+
+Running the worker with `tsx` against source avoids bundling LiveKit's native deps (onnxruntime, …). If you do, make `tsx` and the `@livekit/agents*` packages **real** dependencies (not devDependencies) in the deployed image.
+
+### Docker
+
+Build the server with `mastra build`, bake the model files, then run the two processes. **Recommended: one image, two services** — workers scale by call volume and the HTTP server scales by request volume, so keep them independent:
+
+```dockerfile
+FROM node:22-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npx mastra build
+RUN node --import tsx src/mastra/voice-worker.ts download-files
+
+FROM node:22-slim
+WORKDIR /app
+COPY --from=build /app /app
+ENV NODE_ENV=production
+EXPOSE 4111
+# server service: CMD ["node", ".mastra/output/index.mjs"]
+# worker service: CMD ["node", "--import", "tsx", "src/mastra/voice-worker.ts", "start"]
+```
+
+To run **both in one container** (single-tenant boxes, demos), supervise them with `bash` so the container exits — and is restarted by the orchestrator — if either dies:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+node .mastra/output/index.mjs &
+node --import tsx src/mastra/voice-worker.ts start &
+wait -n
+exit 1
+```
+
+This is simpler, but it couples two processes that have opposite scaling curves and no independent autoscaling — prefer the split for anything beyond a demo.
+
+### Managed platforms (Mastra Cloud, Railway, Cloud Run, …)
+
+Single-process HTTP hosts run the **Mastra server** as-is (`node .mastra/output/index.mjs`). They can't host the worker — it isn't an HTTP server, it isn't in the build output, and it's a long-lived outbound connection. Deploy the **hybrid**: the server on the managed platform (it still mints tokens and dispatches via the bundled connection route), and the worker on any plain process host (a dedicated Railway/Fly/Render service, a VM, a Kubernetes `Deployment`, ECS, …). Point both at the same LiveKit project, keep ≥1 always-on worker instance (no scale-to-zero, so it stays registered), and inject the shared `LIVEKIT_*` env into both.
 
 ## Runnable example
 

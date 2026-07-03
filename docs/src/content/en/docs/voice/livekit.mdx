@@ -62,11 +62,11 @@ These steps take you from an empty project to a voice agent you can talk to. A v
   </StepItem>
 
   <StepItem>
-    Create the worker. It runs as a separate process, answers LiveKit sessions, and calls your agent each turn. This example uses LiveKit Inference model strings for speech-to-text and text-to-speech, so no provider plugins are required:
+    Create the worker. It runs as a separate process, answers LiveKit sessions, and calls your agent each turn. Worker APIs live on the `@mastra/livekit/worker` entry point, so the Mastra server never loads the LiveKit agents runtime. This example uses LiveKit Inference model strings for speech-to-text and text-to-speech, so no provider plugins are required:
 
     ```typescript title="src/mastra/voice-worker.ts"
     import { fileURLToPath } from 'node:url'
-    import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit'
+    import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker'
     import { mastra } from './index'
 
     export default createLiveKitWorker({
@@ -180,7 +180,7 @@ By default the worker generates each reply with a Mastra agent. To run multi-ste
 LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn. There is no suspend or resume, and no conversation state is carried between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
 
 ```typescript title="src/mastra/voice-worker.ts"
-import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit'
+import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker'
 import { mastra } from './index'
 
 export default createLiveKitWorker({

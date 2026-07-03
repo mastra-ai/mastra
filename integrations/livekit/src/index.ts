@@ -1,40 +1,13 @@
-export { createMastraVoiceAgent, MastraVoiceAgent, createAgentReplyGenerator } from './bridge';
-export type {
-  MastraVoiceAgentOptions,
-  MastraVoiceAgentMemory,
-  VoiceToolCall,
-  VoiceReplyGenerator,
-  VoiceTurnContext,
-  VoiceTurnResult,
-  VoiceTurnCompleteContext,
-  VoiceTurnCompleteHook,
-  AgentReplyGeneratorOptions,
-} from './bridge';
-export {
-  createWorkflowReplyGenerator,
-  pipeAgentReplyToWriter,
-  unwrapStepText,
-  unwrapStepToolCall,
-} from './workflow-generator';
-export type { WorkflowReplyGeneratorOptions, AgentReplyStreamLike } from './workflow-generator';
-export { createLiveKitWorker } from './worker';
-export type {
-  CreateLiveKitWorkerOptions,
-  ResolveMastraAgentArgs,
-  SessionStartArgs,
-  VoiceCallEndArgs,
-  VoiceCallEndHook,
-} from './worker';
-export { runLiveKitWorker, resolveWorkerEntryPath } from './run';
-export type { RunLiveKitWorkerOptions } from './run';
-export { startVoiceCallObservability } from './observability';
-export type { VoiceCallObservability, VoiceCallObservabilityOptions } from './observability';
+// Server-safe entry point. This module is imported by Mastra server code and by
+// agent/workflow definition files that the worker process also loads, so nothing
+// here may pull in the `@livekit/agents` runtime (worker-only code lives in
+// `@mastra/livekit/worker`). `src/index.test.ts` enforces this.
 export { liveKitConnectionRoute } from './routes';
 export type { LiveKitConnectionRouteOptions, LiveKitConnectionDetails, ConnectionRequestArgs } from './routes';
 export { dispatchVoiceSession } from './dispatch';
 export type { DispatchVoiceSessionOptions } from './dispatch';
-export { parseSessionMetadata, serializeSessionMetadata } from './metadata';
+export { serializeSessionMetadata } from './metadata';
 export type { LiveKitSessionMetadata } from './metadata';
-export { extractNewTurnMessages, chatContextToMessages } from './messages';
-export type { VoiceTurnMessage } from './messages';
+export { pipeAgentReplyToWriter } from './workflow-generator';
+export type { AgentReplyStreamLike } from './workflow-generator';
 export { DEFAULT_LIVEKIT_AGENT_NAME } from './constants';

@@ -5,7 +5,7 @@
 // tool feedback, and post-turn CRM log all work here too. Run one worker at a time — both
 // register as `mastra-voice`.
 import { fileURLToPath } from 'node:url';
-import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit';
+import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { recordContact } from './backend';
 import { mastra } from './index';
 import { callCenterMemory, flushObservationalMemory } from './memory';
