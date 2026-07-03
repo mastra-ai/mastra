@@ -9,12 +9,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { createMastraCode } from '../../mastracode/src/index.js';
-import { runHeadless } from '../../mastracode/src/headless.js';
-import { processSlashCommand } from '../../mastracode/src/utils/slash-command-processor.js';
-import type { SlashCommandMetadata } from '../../mastracode/src/utils/slash-command-loader.js';
-import { releaseAllThreadLocks } from '../../mastracode/src/utils/thread-lock.js';
-import { setupDebugLogging } from '../../mastracode/src/utils/debug-log.js';
+import { createMastraCode } from '../../mastracode/core/src/index.js';
+import { runHeadless } from '../../mastracode/core/src/headless/index.js';
+import { processSlashCommand } from '../../mastracode/core/src/utils/slash-command-processor.js';
+import type { SlashCommandMetadata } from '../../mastracode/core/src/utils/slash-command-loader.js';
+import { releaseAllThreadLocks } from '../../mastracode/core/src/utils/thread-lock.js';
+import { setupDebugLogging } from '../../mastracode/core/src/utils/debug-log.js';
 
 // Supported commands and their corresponding .claude/commands/ file names
 const SUPPORTED_COMMANDS: Record<string, string> = {
