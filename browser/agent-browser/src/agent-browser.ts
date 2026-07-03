@@ -840,6 +840,10 @@ export class AgentBrowser extends MastraBrowser {
       const timeout = input.timeout ?? this.defaultTimeout;
 
       const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+      // Attach a noop handler so a navigation timeout can't become an unhandled
+      // rejection (crashing the process) while the click below is still pending.
+      // `await navigation` still observes the original rejection.
+      navigation?.catch(() => {});
 
       await locator.click({
         button: input.button ?? 'left',
@@ -945,6 +949,10 @@ export class AgentBrowser extends MastraBrowser {
       const page = await this.getPage(threadId);
       const timeout = input.timeout ?? this.defaultTimeout;
       const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+      // Attach a noop handler so a navigation timeout can't become an unhandled
+      // rejection (crashing the process) while the key press below is still pending.
+      // `await navigation` still observes the original rejection.
+      navigation?.catch(() => {});
 
       await page.keyboard.press(input.key);
 
@@ -987,6 +995,10 @@ export class AgentBrowser extends MastraBrowser {
 
       const timeout = input.timeout ?? this.defaultTimeout;
       const navigation = input.waitUntil ? page.waitForNavigation({ waitUntil: input.waitUntil, timeout }) : undefined;
+      // Attach a noop handler so a navigation timeout can't become an unhandled
+      // rejection (crashing the process) while the selection below is still pending.
+      // `await navigation` still observes the original rejection.
+      navigation?.catch(() => {});
 
       const selected = await locator.selectOption(selectValue, { timeout });
 
