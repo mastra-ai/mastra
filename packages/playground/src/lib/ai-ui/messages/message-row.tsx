@@ -36,7 +36,7 @@ type MessagePart = MastraDBMessage['content']['parts'][number];
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
-/** Read an optional field off a loosely-typed message part (or nested value) without an `as` cast. */
+/** Read an optional field off a loosely-typed message part or nested value. */
 const readField = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
 
 /** The stored `content.metadata` is a freeform record; treat any object as our playground metadata shape. */
