@@ -260,12 +260,12 @@ export function createDurableLLMMappingStep() {
       }
 
       // 3. Determine if we should continue
-      // Preserve the LLM step's isContinued (which respects finishReason).
-      // Keep ToolNotFoundError recoverable so the model can see the error and
-      // retry with one of the currently available tool names.
-      const allToolsErrored = toolResults.length > 0 && toolResults.every(r => r.error !== undefined);
-      const allToolsNotFound = allToolsErrored && toolResults.every(r => r.error?.name === 'ToolNotFoundError');
-      const isContinued = llmOutput.stepResult.isContinued && (!allToolsErrored || allToolsNotFound);
+      // When tool errors occur, always continue the agentic loop so the model
+      // can see the error messages (already added to messageList above) and
+      // self-correct. This matches the regular agent's behaviour where both
+      // ToolNotFoundError and generic tool execution errors are recoverable.
+      const hasToolErrors = toolResults.some(r => r.error !== undefined);
+      const isContinued = hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The bail flag is
       // communicated via requestContext because Zod output validation strips

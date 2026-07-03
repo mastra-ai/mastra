@@ -157,8 +157,9 @@ describeForAllEngines(
       expect(result.path).toBe('/tmp/test.conf');
     });
 
-    // TODO(durable-parity): durable agent does not persist tool-invocation
-    // parts with output-denied state to memory yet.
+    // Durable: output-denied state is updated in the messageList during llm-mapping
+    // but the memory flush after the resumed workflow completes does not include the
+    // declined tool-invocation parts (messageList reconstruction gap).
     it.skipIf(engine === 'durable')(
       'declined tool is recorded as output-denied with the not-approved reason',
       async () => {

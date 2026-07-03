@@ -16,12 +16,16 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  * This pins the regression class where tool-level opt-in breaks and tools run
  * synchronously, blocking the agent loop.
  */
-describeForAllEngines(
-  'background-task-tool-level scenario',
-  engine => {
-    const getMock = useLoopScenarioAimock();
+describeForAllEngines('background-task-tool-level scenario', engine => {
+  const getMock = useLoopScenarioAimock();
 
-    it('emits background-task-started/completed when tool opts in at tool level', async () => {
+  // Durable: bg-task-check step never waits (retryCount always 0), so onChunk
+  // fires after the workflow emits finish and pubsub is cleaned up → tool-result
+  // chunk is lost. Needs bg-task wait infrastructure in the durable loop.
+
+  it.skipIf(engine === 'durable')(
+    'emits background-task-started/completed when tool opts in at tool level',
+    async () => {
       // Track whether the tool executed
       let toolExecuted = false;
 
@@ -71,10 +75,6 @@ describeForAllEngines(
       const toolResultChunk = chunks?.find(c => c.type === 'tool-result');
       expect(toolResultChunk).toBeDefined();
       expect(toolResultChunk?.payload?.toolName).toBe('background-work');
-    });
-  },
-  // TODO(durable-parity): unskip after Phase 4 wires `runOutputProcessorsForToolChunks`
-  // into durable `llm-mapping` — the durable path currently doesn't emit a
-  // `tool-result` chunk for background-task tool results.
-  { skip: ['durable'] },
-);
+    },
+  );
+});

@@ -113,5 +113,10 @@ describeForAllEngines(
       expect(requests.length).toBeGreaterThanOrEqual(3);
     });
   },
-  { skip: ['durable', 'fs'] },
+  // fs: no FS engine variant for this test (it's already FS-assembled).
+  // durable: sharedAgent bypass skips DurableAgent wrapping, so the harness
+  // accesses rawResult.output on a regular MastraModelOutput → undefined.
+  // Fixing requires re-registering a DurableAgent wrapper on the shared Mastra
+  // instance, which is non-trivial with FS-assembly delegation.
+  { skip: ['fs', 'durable'] },
 );
