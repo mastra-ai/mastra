@@ -109,6 +109,39 @@ describe('useBuilderFilteredProviders', () => {
       await waitFor(() => expect(result.current).toHaveLength(1));
       expect(result.current[0].id).toBe('acme/gateway');
     });
+
+    it('keeps a gateway-prefixed local provider when the available set uses the unprefixed provider id', async () => {
+      const localProviders: Provider[] = [
+        {
+          id: 'desktop-local/ollama',
+          name: 'Ollama Local',
+          envVar: 'MASTRA_DESKTOP_MODEL_API_KEY',
+          connected: true,
+          models: ['glm-ocr:latest'],
+        },
+      ];
+      setAvailable([
+        {
+          id: 'ollama',
+          name: 'Ollama Local',
+          envVar: 'MASTRA_DESKTOP_MODEL_API_KEY',
+          connected: true,
+          models: ['glm-ocr:latest'],
+        },
+      ]);
+      const policy: BuilderModelPolicy = {
+        active: true,
+        pickerVisible: true,
+        allowed: [{ kind: 'custom', provider: 'ollama' }],
+      };
+      const { result } = renderHook(() => useBuilderFilteredProviders(localProviders, policy), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current).toHaveLength(1));
+      expect(result.current[0].id).toBe('desktop-local/ollama');
+      expect(result.current[0].models).toEqual(['glm-ocr:latest']);
+    });
   });
 
   describe('when the available set excludes every provider', () => {
@@ -227,6 +260,33 @@ describe('useBuilderFilteredModels', () => {
       );
       expect(result.current.find(m => m.model === 'claude-haiku-4-5')).toBeUndefined();
       expect(result.current.find(m => m.model === 'acme-mini')).toBeUndefined();
+    });
+
+    it('matches gateway-prefixed model providers against unprefixed local provider availability', async () => {
+      const localModels: ModelInfo[] = [
+        { provider: 'desktop-local/ollama', providerName: 'Ollama Local', model: 'glm-ocr:latest' },
+      ];
+      setAvailable([
+        {
+          id: 'ollama',
+          name: 'Ollama Local',
+          envVar: 'MASTRA_DESKTOP_MODEL_API_KEY',
+          connected: true,
+          models: ['glm-ocr:latest'],
+        },
+      ]);
+      const policy: BuilderModelPolicy = {
+        active: true,
+        pickerVisible: true,
+        allowed: [{ kind: 'custom', provider: 'ollama' }],
+      };
+      const { result } = renderHook(() => useBuilderFilteredModels(localModels, policy), { wrapper: createWrapper() });
+
+      await waitFor(() =>
+        expect(result.current).toEqual([
+          { provider: 'desktop-local/ollama', providerName: 'Ollama Local', model: 'glm-ocr:latest' },
+        ]),
+      );
     });
   });
 });

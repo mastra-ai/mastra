@@ -51,6 +51,22 @@ describe('DesktopLocalModelGateway', () => {
       expect(gateway.handlesModel('ollama/llama3.2')).toBe(true);
       expect(gateway.handlesModel('ollama-cloud/gpt-oss:120b')).toBe(false);
     });
+
+    it('exposes the configured local Ollama model as a gateway provider', async () => {
+      process.env.MASTRA_DESKTOP_MODEL_URL = 'http://localhost:11434/v1';
+      process.env.MASTRA_DESKTOP_MODEL_ID = 'glm-ocr:latest';
+      process.env.MASTRA_DESKTOP_MODEL_API_KEY = 'ollama';
+      const gateway = new DesktopLocalModelGateway();
+
+      await expect(gateway.fetchProviders()).resolves.toEqual({
+        ollama: {
+          apiKeyEnvVar: 'MASTRA_DESKTOP_MODEL_API_KEY',
+          gateway: 'desktop-local',
+          models: ['glm-ocr:latest'],
+          name: 'Ollama Local',
+        },
+      });
+    });
   });
 });
 

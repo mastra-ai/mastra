@@ -84,7 +84,15 @@ export class DesktopLocalModelGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    return {};
+    const config = getDesktopModelConfig();
+    return {
+      [config.providerId]: {
+        apiKeyEnvVar: 'MASTRA_DESKTOP_MODEL_API_KEY',
+        gateway: this.id,
+        models: [config.modelId],
+        name: config.providerName,
+      },
+    };
   }
 
   buildUrl(): string {
