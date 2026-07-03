@@ -1,4 +1,6 @@
 import type { RequestContext } from '../../di';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { Mastra } from '../../mastra';
@@ -91,6 +93,28 @@ export class EventedExecutionEngine extends ExecutionEngine {
     const pubsub = this.mastra?.pubsub;
     if (!pubsub) {
       throw new Error('No Pubsub adapter configured on the Mastra instance');
+    }
+
+    // The evented engine only makes progress when something is consuming
+    // `workflow.start`/`workflow.resume` events on the `workflows` topic —
+    // either the OrchestrationWorker or the push subscription wired up by
+    // `mastra.startWorkers()`. The default pubsub is strictly in-process, so
+    // if nothing has subscribed yet, no process anywhere can ever pick this
+    // run up: publishing would hang forever instead of failing loudly (e.g.
+    // a serverless route that never calls `startWorkers()`). Fail fast here
+    // instead. Adapters that support out-of-process consumers (Redis, etc.)
+    // are intentionally not checked, since their consumer may simply not
+    // have started yet in this process.
+    if (pubsub instanceof EventEmitterPubSub && !pubsub.hasSubscribers('workflows')) {
+      throw new MastraError({
+        id: 'EVENTED_WORKFLOW_NO_EVENT_CONSUMER',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text:
+          `Workflow "${params.workflowId}" runs on the evented execution engine (enabled by declaring \`schedule\`), but no event consumer is running to process run "${params.runId}". ` +
+          `Call \`await mastra.startWorkers()\` during startup so the workflow event processor is wired up, or remove the \`schedule\` field from this workflow's definition to use the default in-process engine.`,
+        details: { workflowId: params.workflowId, runId: params.runId },
+      });
     }
 
     // Set up promise that will resolve when workflow finishes

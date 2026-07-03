@@ -207,6 +207,18 @@ export class EventEmitterPubSub extends PubSub implements LeaseProvider {
     }
   }
 
+  /**
+   * True when at least one listener is registered for `topic`, across both
+   * fan-out subscribers and worker groups (group and batched subscribers all
+   * end up registered on `this.emitter`, so a single `listenerCount` check
+   * covers every `subscribe()` path). Since this pubsub is strictly
+   * in-process, a `false` here means a `publish()` for that topic can never
+   * be observed by anyone.
+   */
+  hasSubscribers(topic: string): boolean {
+    return this.emitter.listenerCount(topic) > 0;
+  }
+
   async flush(): Promise<void> {
     // A batched cb can nack mid-delivery, which schedules a redelivery via
     // setTimeout(0). The redelivered event lands back in `batchBuffers`
