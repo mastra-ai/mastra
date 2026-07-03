@@ -16,8 +16,7 @@ const NPM_REGISTRY_URL = `https://registry.npmjs.org/${PACKAGE_NAME}/latest`;
 /** Timeout for the npm registry fetch (ms). */
 const FETCH_TIMEOUT_MS = 5_000;
 
-// On Windows, package managers and vp are .cmd shims that execFile can only
-// launch through a shell (plain spawns of .cmd files fail with EINVAL).
+// Package managers and vp are .cmd shims on Windows; execFile can't spawn those without a shell (EINVAL).
 const USE_SHELL = process.platform === 'win32';
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
@@ -289,7 +288,6 @@ function buildInstallArgs(pm: PackageManager, version: string): string[] {
 /** Max stderr lines to surface when an update fails. */
 const MAX_UPDATE_ERROR_LINES = 5;
 
-/** Last few non-empty stderr lines, or null when there is nothing to show. */
 function formatUpdaterError(stderr: string | undefined): string | null {
   if (!stderr) return null;
   const lines = stderr
@@ -402,8 +400,7 @@ async function isOwnInstallManagedBy(pm: PackageManager, install: { dir: string 
   try {
     return realpathSync(resolve(root, PACKAGE_NAME)) === install.dir;
   } catch {
-    // The package doesn't exist in the pm's global root — installing there
-    // can't affect the running binary.
+    // Package absent from the pm's global root: installing there can't affect the running binary.
     return false;
   }
 }
@@ -413,7 +410,6 @@ interface InstallOwner {
   name: string;
   /** Command to run to delegate the update; omitted when we only suggest `command` to the user. */
   exec?: { cmd: string; args: string[] };
-  /** Manual update command shown to the user. */
   command: string;
 }
 
@@ -425,8 +421,7 @@ function findInstallOwner(dir: string, version: string): InstallOwner | null {
       command: `vp install -g ${PACKAGE_NAME}@${version}`,
     };
   }
-  // Homebrew keeps formulas under <prefix>/Cellar/ for any prefix (/opt/homebrew,
-  // /usr/local, linuxbrew, custom HOMEBREW_PREFIX), so match the path segment.
+  // Homebrew keeps formulas under <prefix>/Cellar/ whatever the prefix, so match the path segment.
   if (dir.split(sep).includes('Cellar')) {
     // Suggest-only: brew formulas lag npm, and `brew upgrade` can pull unrelated updates.
     return { name: 'Homebrew', command: `brew upgrade ${PACKAGE_NAME}` };
