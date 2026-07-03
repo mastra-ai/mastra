@@ -29,6 +29,17 @@ correctness or the no-existence-leak contract.
 No new named exports from `@mastra/core/storage`, so store adapters do not need
 a peer-floor bump.
 
+**Round-trip cost.**
+
+`DatasetsManager.delete` always fires the probe `getDatasetById` before the
+adapter delete, on both scoped and unscoped paths. This is not a regression:
+the previous server handler already did a preflight `mastra.datasets.get()`
+before the delete to preserve the legacy 404 semantics on the unscoped path,
+so the total round-trip count (`get` + `delete`) is unchanged. The probe has
+simply moved from the server handler into the manager, so the manager can
+own the full boolean contract in one place and downstream callers of
+`mastra.datasets.delete(...)` see the same semantics as the HTTP layer.
+
 **Wire behavior change on `DELETE /datasets/:id`.**
 
 The server handler now returns `{ success: boolean }` reflecting whether a row
