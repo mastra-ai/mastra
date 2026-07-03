@@ -85,7 +85,7 @@ export class StepContentExtractor {
     }
 
     // Count total steps (1 + number of step-start markers)
-    const totalSteps = stepBoundaries.length + 1;
+    const totalSteps = stepBoundaries.length;
 
     // Get the content for the last step using the regular step logic
     if (totalSteps === 1 && !hasStepStart) {
@@ -115,13 +115,15 @@ export class StepContentExtractor {
     stepBoundaries: number[],
     stepContentFn: (message?: AIV5Type.ModelMessage) => AIV5Type.StepResult<any>['content'],
   ): AIV5Type.StepResult<any>['content'] {
-    const firstStepStart = stepBoundaries[0] ?? uiMessagesParts.length;
-    if (firstStepStart === 0) {
-      // No content before first step-start
-      return [];
+    if (stepBoundaries.length === 0) {
+      return StepContentExtractor.convertPartsToContent(uiMessagesParts, 'step-1', stepContentFn);
     }
 
-    const stepParts = uiMessagesParts.slice(0, firstStepStart);
+    // step-start is a step prefix, not a separator.
+    // Step 1 content is everything after the first marker up to the next boundary.
+    const firstStepStart = stepBoundaries[0];
+    const secondStepStart = stepBoundaries[1];
+    const stepParts = uiMessagesParts.slice(firstStepStart + 1, secondStepStart ?? uiMessagesParts.length);
     return StepContentExtractor.convertPartsToContent(stepParts, 'step-1', stepContentFn);
   }
 
@@ -134,12 +136,13 @@ export class StepContentExtractor {
     stepNumber: number,
     stepContentFn: (message?: AIV5Type.ModelMessage) => AIV5Type.StepResult<any>['content'],
   ): AIV5Type.StepResult<any>['content'] {
-    const stepIndex = stepNumber - 2; // -2 because step 2 is at index 0 in boundaries
+    // step-start is a prefix, so step N content is between boundary[N-1] and boundary[N]
+    const stepIndex = stepNumber - 1;
     if (stepIndex < 0 || stepIndex >= stepBoundaries.length) {
       return [];
     }
 
-    const startIndex = (stepBoundaries[stepIndex] ?? 0) + 1; // Start after the step-start marker
+    const startIndex = stepBoundaries[stepIndex] + 1; // Start after the step-start marker
     const endIndex = stepBoundaries[stepIndex + 1] ?? uiMessagesParts.length;
 
     if (startIndex >= endIndex) {
