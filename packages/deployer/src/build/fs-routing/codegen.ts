@@ -48,6 +48,22 @@ async function emitAgentEntry(
     toolIdents.push({ key: tool.key, ident });
   }
 
+  const inputProcessorIdents: string[] = [];
+  for (let p = 0; p < agent.inputProcessors.length; p++) {
+    const proc = agent.inputProcessors[p]!;
+    const ident = sanitizeIdentifier(`${agent.name}_inputProc_${proc.key}`, 'proc', `${idPath}_ip${p}`);
+    lines.push(`import ${ident} from ${JSON.stringify(proc.path)};`);
+    inputProcessorIdents.push(ident);
+  }
+
+  const outputProcessorIdents: string[] = [];
+  for (let p = 0; p < agent.outputProcessors.length; p++) {
+    const proc = agent.outputProcessors[p]!;
+    const ident = sanitizeIdentifier(`${agent.name}_outputProc_${proc.key}`, 'proc', `${idPath}_op${p}`);
+    lines.push(`import ${ident} from ${JSON.stringify(proc.path)};`);
+    outputProcessorIdents.push(ident);
+  }
+
   // Skills: `createSkill(...)` modules are imported and used directly;
   // packaged `SKILL.md` skills are inlined via `createSkill({...})`.
   const skillExprs: string[] = [];
@@ -101,6 +117,12 @@ async function emitAgentEntry(
   }
   if (skillExprs.length > 0) {
     entryFields.push(`skills: [${skillExprs.join(', ')}]`);
+  }
+  if (inputProcessorIdents.length > 0) {
+    entryFields.push(`inputProcessors: [${inputProcessorIdents.join(', ')}]`);
+  }
+  if (outputProcessorIdents.length > 0) {
+    entryFields.push(`outputProcessors: [${outputProcessorIdents.join(', ')}]`);
   }
   if (subagentExprs.length > 0) {
     entryFields.push(`subagents: [${subagentExprs.join(', ')}]`);
