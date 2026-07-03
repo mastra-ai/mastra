@@ -166,3 +166,17 @@ export function requestContextQueryString(
   const queryString = searchParams.toString();
   return queryString ? `${delimiter}${queryString}` : '';
 }
+
+/**
+ * Build a `?organizationId=...&projectId=...` query string fragment from
+ * optional tenancy scope fields. Returns an empty string when neither field
+ * is supplied so callers can safely concatenate it to a URL.
+ */
+export function buildTenancyQuery(tenancy?: { organizationId?: string; projectId?: string }): string {
+  if (!tenancy) return '';
+  const searchParams = new URLSearchParams();
+  if (tenancy.organizationId) searchParams.set('organizationId', tenancy.organizationId);
+  if (tenancy.projectId) searchParams.set('projectId', tenancy.projectId);
+  const queryString = searchParams.toString();
+  return queryString ? `?${queryString}` : '';
+}

@@ -10,14 +10,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 /**
  * Vite config for the MastraCode web UI.
  *
- * In dev, `pnpm web:dev` runs `mastracode web` (the API server on :4111) and
- * Vite (:5173) side by side; `/api` is proxied to the server so the browser
- * uses same-origin streaming requests without CORS.
+ * In dev, `pnpm web:dev` runs `mastra dev` (the API server from
+ * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
+ * proxied to that server so the browser uses same-origin requests in dev.
  *
- * The production build outputs to `dist/web/ui`, which `mastracode web` serves
- * as static files alongside the controller routes. It lives in its own `ui`
- * subdirectory so the Vite build (emptyOutDir) doesn't clobber the compiled
- * server entry that tsup emits at `dist/web/server.js`.
+ * The production build outputs the static SPA to `dist/web/ui`. It is hosted
+ * separately (static host / CDN) and talks to the deployed API cross-origin —
+ * the Mastra server no longer serves the SPA itself.
  */
 export default defineConfig({
   root: resolve(here, 'ui'),
@@ -30,6 +29,13 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
+        target: 'http://localhost:4111',
+        changeOrigin: true,
+      },
+      // Web surface routes (fs/config/github) live under `/web/*` on the API
+      // server after the `/api/web` → `/web` path migration. Proxy them so the
+      // dev UI (:5173) can reach them on :4111.
+      '/web': {
         target: 'http://localhost:4111',
         changeOrigin: true,
       },

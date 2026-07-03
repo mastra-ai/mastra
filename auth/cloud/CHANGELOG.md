@@ -1,5 +1,12 @@
 # @mastra/auth-cloud
 
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [[`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed)]:
+  - @mastra/auth@1.1.2
+
 ## 1.2.2-alpha.0
 
 ### Patch Changes

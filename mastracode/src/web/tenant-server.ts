@@ -207,10 +207,10 @@ export class TenantDispatcher {
    */
   middleware() {
     return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
-      // Custom web-only routes (`/api/web/...`: config, fs, GitHub) live on the
+      // Custom web-only routes (`/web/...`: config, fs, GitHub) live on the
       // outer app and use the app DB + webAuthUser, not tenant Mastra storage.
       // They must NOT be forwarded to the tenant app (which has no such routes).
-      if (c.req.path.startsWith('/api/web/')) {
+      if (c.req.path.startsWith('/web/')) {
         return next();
       }
       const identity = webAuthTenant(c);

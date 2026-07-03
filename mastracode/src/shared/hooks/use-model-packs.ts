@@ -18,7 +18,7 @@ export function useModelPacksQuery(resourceId: string | undefined) {
     queryKey: queryKeys.modelPacks(resourceId),
     queryFn: () => {
       const qs = resourceId ? `?resourceId=${encodeURIComponent(resourceId)}` : '';
-      return client.get<ModelPacksResponse>(`/api/web/config/model-packs${qs}`);
+      return client.get<ModelPacksResponse>(`/web/config/model-packs${qs}`);
     },
   });
 }
@@ -32,7 +32,7 @@ export function useActivateModelPack(resourceId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: ActivateModelPackArgs) =>
-      client.post<ActivateModelPackResponse>(`/api/web/config/model-packs/${encodeURIComponent(id)}/activate`, {
+      client.post<ActivateModelPackResponse>(`/web/config/model-packs/${encodeURIComponent(id)}/activate`, {
         resourceId,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacks(resourceId) }),
@@ -43,7 +43,7 @@ export function useSaveModelPack() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: SaveModelPackBody) => client.post<{ ok: true }>('/api/web/config/model-packs', body),
+    mutationFn: (body: SaveModelPackBody) => client.post<{ ok: true }>('/web/config/model-packs', body),
     // Custom-pack CRUD is global: invalidate every cached model-packs entry, not just this resource's.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
   });
@@ -58,7 +58,7 @@ export function useRemoveModelPack() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: RemoveModelPackArgs) =>
-      client.del<OkResponse>(`/api/web/config/model-packs/${encodeURIComponent(id)}`),
+      client.del<OkResponse>(`/web/config/model-packs/${encodeURIComponent(id)}`),
     // Custom-pack CRUD is global: invalidate every cached model-packs entry, not just this resource's.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
   });

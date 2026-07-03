@@ -101,6 +101,7 @@ vi.mock('./db', () => ({
   }),
 }));
 
+import { mountApiRoutes } from '../test-utils';
 import type * as RoutesModule from './routes';
 import {
   __resetLiveSandboxCount,
@@ -238,7 +239,7 @@ describe('S7 — sandbox fleet budget', () => {
 // never touch user 1's sandbox.
 
 describe('S7 — cross-user teardown isolation (route level)', () => {
-  let mountGithubRoutes: (typeof RoutesModule)['mountGithubRoutes'];
+  let buildGithubRoutes: (typeof RoutesModule)['buildGithubRoutes'];
 
   beforeEach(async () => {
     tables.projects = [
@@ -256,7 +257,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
     // a recordable sandbox instead of hitting Railway.
     setSandboxFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? 'fresh'));
 
-    ({ mountGithubRoutes } = await import('./routes'));
+    ({ buildGithubRoutes } = await import('./routes'));
   });
 
   afterEach(() => {
@@ -271,13 +272,13 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
       (c as any).set('webAuthUser', { id: workosId, workosId, organizationId: 'org1', name: 'Test', email: 't@e.co' });
       await next();
     });
-    mountGithubRoutes(app as any, {});
+    mountApiRoutes(app as any, buildGithubRoutes({}));
     return app;
   }
 
   it("user 2's teardown never touches user 1's sandbox binding", async () => {
     const app = buildApp('u2');
-    const res = await app.request('/api/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    const res = await app.request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
 
     // u2 has no provisioned binding → idempotent no-op success.
     expect(res.status).toBe(200);
@@ -294,7 +295,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
   it('user 1 can tear down their own sandbox', async () => {
     __resetLiveSandboxCount(1); // u1 has one live sandbox
     const app = buildApp('u1');
-    const res = await app.request('/api/web/github/projects/p1/sandbox', { method: 'DELETE' });
+    const res = await app.request('/web/github/projects/p1/sandbox', { method: 'DELETE' });
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ tornDown: true });

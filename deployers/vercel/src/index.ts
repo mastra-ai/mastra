@@ -4,7 +4,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { injectStudioHtmlConfig } from '@mastra/deployer/build';
+import { escapeStudioHtmlValue, injectStudioHtmlConfig } from '@mastra/deployer/build';
 import { copy, move } from 'fs-extra/esm';
 import { getVercelRoutes } from './routes';
 import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';
@@ -112,9 +112,9 @@ export const HEAD = handle(app);
       experimentalUI: `'false'`,
       agentSignals: process.env.MASTRA_AGENT_SIGNALS === 'false' ? `'false'` : `'true'`,
       signalsUI: process.env.MASTRA_SIGNALS_UI === 'true' ? `'true'` : `'false'`,
-      organizationId: `'${process.env.MASTRA_ORGANIZATION_ID || ''}'`,
-      platformProjectId: `'${process.env.MASTRA_PLATFORM_PROJECT_ID || ''}'`,
-      platformObservabilityEndpoint: `'${process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || ''}'`,
+      organizationId: `'${escapeStudioHtmlValue(process.env.MASTRA_ORGANIZATION_ID || '')}'`,
+      platformProjectId: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_PROJECT_ID || '')}'`,
+      platformObservabilityEndpoint: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '')}'`,
     });
 
     writeFileSync(indexPath, html);
