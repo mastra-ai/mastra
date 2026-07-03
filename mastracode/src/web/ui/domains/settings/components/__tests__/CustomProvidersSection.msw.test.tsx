@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web
 import type { CustomProviderInfo } from '../../../../../../shared/api/types';
 import { CustomProvidersSection } from '../CustomProvidersSection';
 
-const LIST_URL = `${TEST_BASE_URL}/api/web/config/custom-providers`;
+const LIST_URL = `${TEST_BASE_URL}/web/config/custom-providers`;
 const itemUrl = (id: string) => `${LIST_URL}/${encodeURIComponent(id)}`;
 
 function listResponse(providers: CustomProviderInfo[]) {

@@ -231,7 +231,7 @@ export function useAgentControllerSession({
     }
 
     (async () => {
-      const client = new MastraClient({ baseUrl });
+      const client = new MastraClient({ baseUrl, credentials: 'include' });
       const controller = client.getAgentController(agentControllerId);
       const session = controller.session(resourceId);
       sessionRef.current = session;

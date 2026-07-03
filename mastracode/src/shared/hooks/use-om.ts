@@ -18,7 +18,7 @@ export function useOMQuery(resourceId: string | undefined) {
   const { client } = useApiConfig();
   return useQuery<OMResponse>({
     queryKey: queryKeys.om(resourceId),
-    queryFn: () => client.get<OMResponse>(`/api/web/config/om?resourceId=${encodeURIComponent(resourceId as string)}`),
+    queryFn: () => client.get<OMResponse>(`/web/config/om?resourceId=${encodeURIComponent(resourceId as string)}`),
     enabled: !!resourceId,
   });
 }
@@ -34,7 +34,7 @@ export function useUpdateOMModel(resourceId: string | undefined, role: OMRole) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ modelId }: UpdateOMModelArgs) =>
-      client.put<UpdateOMResponse>(`/api/web/config/om/${role}/model`, { resourceId, modelId }),
+      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, { resourceId, modelId }),
     onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), { config: res.config }),
   });
 }
@@ -49,7 +49,7 @@ export function useUpdateOMThresholds(resourceId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (args: UpdateOMThresholdsArgs) =>
-      client.put<UpdateOMResponse>('/api/web/config/om/thresholds', { resourceId, ...args }),
+      client.put<UpdateOMResponse>('/web/config/om/thresholds', { resourceId, ...args }),
     onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), { config: res.config }),
   });
 }
@@ -63,7 +63,7 @@ export function useUpdateOMObserveAttachments(resourceId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ value }: UpdateOMObserveAttachmentsArgs) =>
-      client.put<UpdateOMResponse>('/api/web/config/om/observe-attachments', { resourceId, value }),
+      client.put<UpdateOMResponse>('/web/config/om/observe-attachments', { resourceId, value }),
     onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId), { config: res.config }),
   });
 }

@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web
 import type { DirectoryListing } from '../../../../../../shared/api/types';
 import { DirectoryBrowser } from '../DirectoryPicker';
 
-const FS_URL = `${TEST_BASE_URL}/api/web/fs/list`;
+const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
 
 const rootListing: DirectoryListing = {
   root: '/projects',

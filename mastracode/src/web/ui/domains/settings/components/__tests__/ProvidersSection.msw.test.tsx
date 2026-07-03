@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web
 import type { ProviderInfo } from '../../../../../../shared/api/types';
 import { ProvidersSection } from '../ProvidersSection';
 
-const PROVIDERS_URL = `${TEST_BASE_URL}/api/web/config/providers`;
+const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 const keyUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/key`;
 
 function providersResponse(providers: ProviderInfo[]) {
