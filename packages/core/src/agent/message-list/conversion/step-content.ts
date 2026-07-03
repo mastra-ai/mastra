@@ -84,12 +84,13 @@ export class StepContentExtractor {
       return StepContentExtractor.convertPartsToContent(stepParts, 'last-step', stepContentFn);
     }
 
-    // Count total steps (1 + number of step-start markers)
+    // A leading step-start marker is a prefix for step 1, not a separate step,
+    // so the total step count equals the number of markers (not markers + 1).
     const totalSteps = stepBoundaries.length;
 
     // Get the content for the last step using the regular step logic
-    if (totalSteps === 1 && !hasStepStart) {
-      // Only one step, return all content
+    if (totalSteps === 0) {
+      // No step-start markers: return all content as the single (last) step
       return StepContentExtractor.convertPartsToContent(uiMessagesParts, 'last-step', stepContentFn);
     }
 
@@ -116,14 +117,22 @@ export class StepContentExtractor {
     stepContentFn: (message?: AIV5Type.ModelMessage) => AIV5Type.StepResult<any>['content'],
   ): AIV5Type.StepResult<any>['content'] {
     if (stepBoundaries.length === 0) {
+      // No step-start markers: all content belongs to step 1
       return StepContentExtractor.convertPartsToContent(uiMessagesParts, 'step-1', stepContentFn);
     }
 
-    // step-start is a step prefix, not a separator.
-    // Step 1 content is everything after the first marker up to the next boundary.
-    const firstStepStart = stepBoundaries[0];
-    const secondStepStart = stepBoundaries[1];
-    const stepParts = uiMessagesParts.slice(firstStepStart + 1, secondStepStart ?? uiMessagesParts.length);
+    const firstBoundary = stepBoundaries[0];
+
+    if (firstBoundary === 0) {
+      // Prefix layout: a leading step-start marker begins step 1.
+      // Step 1 content is everything after the leading marker up to the next marker.
+      const secondBoundary = stepBoundaries[1];
+      const stepParts = uiMessagesParts.slice(1, secondBoundary ?? uiMessagesParts.length);
+      return StepContentExtractor.convertPartsToContent(stepParts, 'step-1', stepContentFn);
+    }
+
+    // Separator layout: no leading marker, so step 1 is the content before the first marker.
+    const stepParts = uiMessagesParts.slice(0, firstBoundary);
     return StepContentExtractor.convertPartsToContent(stepParts, 'step-1', stepContentFn);
   }
 
@@ -136,8 +145,11 @@ export class StepContentExtractor {
     stepNumber: number,
     stepContentFn: (message?: AIV5Type.ModelMessage) => AIV5Type.StepResult<any>['content'],
   ): AIV5Type.StepResult<any>['content'] {
-    // step-start is a prefix, so step N content is between boundary[N-1] and boundary[N]
-    const stepIndex = stepNumber - 1;
+    // Indexing depends on layout. A leading step-start marker (prefix layout) begins
+    // step 1, so step N maps to boundary[N-1]. Without a leading marker (separator
+    // layout), markers separate steps, so step N maps to boundary[N-2].
+    const hasLeadingMarker = stepBoundaries.length > 0 && stepBoundaries[0] === 0;
+    const stepIndex = hasLeadingMarker ? stepNumber - 1 : stepNumber - 2;
     if (stepIndex < 0 || stepIndex >= stepBoundaries.length) {
       return [];
     }
