@@ -1,5 +1,29 @@
 # @mastra/observability
 
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added `flush()` to `ObservabilityEntrypoint` so `mastra.observability.flush()` works directly in serverless environments. ([#18873](https://github.com/mastra-ai/mastra/pull/18873))
+
+  Previously, `flush()` only existed on individual `ObservabilityInstance` objects, requiring users to call `mastra.observability.getDefaultInstance()?.flush()`. The entrypoint-level `flush()` delegates to all registered instances, matching the existing `shutdown()` pattern.
+
+  ```ts
+  // Before (broken — getObservability() didn't exist, flush() wasn't on the entrypoint)
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  // After
+  await mastra.observability.flush();
+  ```
+
+  Fixed the serverless flush docs in the observability config guide and Vercel deployment guide to use the correct API.
+
+### Patch Changes
+
+- Updated dependencies [[`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964)]:
+  - @mastra/core@1.50.0-alpha.1
+
 ## 1.15.2
 
 ### Patch Changes

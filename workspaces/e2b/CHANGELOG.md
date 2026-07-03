@@ -1,5 +1,14 @@
 # @mastra/e2b
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed S3 mount race condition when mounting multiple S3 filesystems concurrently. Each mount now uses a unique per-path credentials file, preventing credentials from being overwritten mid-mount. Also added validation that rejects partial credential pairs with a clear error message. ([#14950](https://github.com/mastra-ai/mastra/pull/14950))
+
+- Updated dependencies [[`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964)]:
+  - @mastra/core@1.50.0-alpha.1
+
 ## 0.5.0
 
 ### Minor Changes
