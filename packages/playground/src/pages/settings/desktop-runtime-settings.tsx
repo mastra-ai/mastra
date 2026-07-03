@@ -324,7 +324,11 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
       return desktopRequest<DesktopRuntimeState>(endpoint, '/restart-runtime', { method: 'POST' });
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] }),
+        queryClient.invalidateQueries({ queryKey: ['desktop-runtime-models', endpoint] }),
+        queryClient.invalidateQueries({ queryKey: ['builder-available-models'] }),
+      ]);
       toast.success('Local model settings applied');
     },
     onError: error => {

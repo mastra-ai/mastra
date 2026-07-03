@@ -46,15 +46,20 @@ export const useAgentBuilderAllowedModels = ({
     enabled,
   });
 
-  const { data: desktopState, isLoading: isDesktopStateLoading } = useQuery({
+  const {
+    data: desktopState,
+    isFetching: isDesktopStateFetching,
+    isLoading: isDesktopStateLoading,
+  } = useQuery({
     enabled: enabled && Boolean(endpoint),
     queryFn: () => {
       if (!endpoint) throw new Error('Desktop endpoint is not configured.');
       return desktopRequest<DesktopRuntimeState>(endpoint, '/state');
     },
     queryKey: ['desktop-runtime-state', endpoint],
+    refetchOnMount: 'always',
     retry: false,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   const modelUrl = desktopState?.settings.modelUrl;
@@ -67,7 +72,7 @@ export const useAgentBuilderAllowedModels = ({
     error: desktopProbeError,
     isFetching: isDesktopProbeFetching,
   } = useQuery({
-    enabled: enabled && Boolean(endpoint && modelUrl?.trim()),
+    enabled: enabled && Boolean(endpoint && modelUrl?.trim()) && !isDesktopStateFetching,
     queryFn: () => {
       if (!endpoint || !modelUrl) throw new Error('Desktop model endpoint is not configured.');
       return desktopRequest<ProbeModelsResult>(endpoint, '/probe-models', {
@@ -81,12 +86,14 @@ export const useAgentBuilderAllowedModels = ({
       });
     },
     queryKey: ['desktop-runtime-models', endpoint, probeProviderId, modelUrl, modelApiKey],
+    refetchOnMount: 'always',
     retry: false,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   const desktopProbeFailed =
     Boolean(endpoint && modelUrl?.trim()) &&
+    !isDesktopStateFetching &&
     !isDesktopProbeFetching &&
     (desktopProbe?.ok === false || Boolean(desktopProbeError));
   const desktopModelMissingSettings = Boolean(
@@ -104,9 +111,10 @@ export const useAgentBuilderAllowedModels = ({
 
   const providers = useMemo<Provider[]>(() => {
     const serverProviders = (data?.providers as Provider[]) ?? [];
-    const desktopProvider = desktopProbeFailed
-      ? undefined
-      : buildDesktopLocalProvider({ probe: desktopProbe, state: desktopState });
+    const desktopProvider =
+      desktopProbeFailed || isDesktopStateFetching
+        ? undefined
+        : buildDesktopLocalProvider({ probe: desktopProbe, state: desktopState });
 
     if (!desktopProvider) return serverProviders.filter(provider => !provider.id.startsWith('desktop-local/'));
 
@@ -116,13 +124,13 @@ export const useAgentBuilderAllowedModels = ({
         provider => provider.id !== desktopProvider.id && !provider.id.startsWith('desktop-local/'),
       ),
     ];
-  }, [data, desktopProbe, desktopProbeFailed, desktopState]);
+  }, [data, desktopProbe, desktopProbeFailed, desktopState, isDesktopStateFetching]);
   const models = useAllModels(providers);
 
   return {
     providers,
     models,
-    isLoading: isLoading || isDesktopStateLoading || isDesktopProbeFetching,
+    isLoading: isLoading || isDesktopStateLoading || isDesktopStateFetching || isDesktopProbeFetching,
     ...(desktopModelStatus ? { desktopModelStatus } : {}),
   };
 };

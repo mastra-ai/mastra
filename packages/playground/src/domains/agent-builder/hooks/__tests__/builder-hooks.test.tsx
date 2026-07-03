@@ -21,6 +21,7 @@ import {
   useBuilderSettings,
   useIsBuilderEnabled,
 } from '@/domains/agent-builder/hooks/use-builder-settings';
+import type { DesktopRuntimeState } from '@/lib/desktop-runtime';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -28,8 +29,7 @@ const SETTINGS_URL = `${BASE_URL}/api/editor/builder/settings`;
 const MODELS_URL = `${BASE_URL}/api/editor/builder/models/available`;
 const CAPABILITIES_URL = `${BASE_URL}/api/auth/capabilities`;
 
-const createWrapper = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const createWrapper = (queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) => {
   return ({ children }: PropsWithChildren) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -147,6 +147,77 @@ describe('useAgentBuilderAllowedModels', () => {
         { provider: 'ollama', providerName: 'Ollama Local', model: 'qwen2.5' },
         { provider: 'ollama-cloud', providerName: 'Ollama Cloud', model: 'gpt-oss:120b' },
       ]);
+      expect(probeRequests).toEqual([
+        {
+          apiKey: 'ollama',
+          modelUrl: 'http://localhost:11434/v1',
+          providerId: 'ollama',
+          providerName: 'Ollama Local',
+        },
+      ]);
+    });
+
+    it('refreshes a cached LM Studio state before probing models', async () => {
+      const stateRequests = vi.fn<() => void>();
+      const probeRequests: unknown[] = [];
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const staleLmStudioState: DesktopRuntimeState = {
+        runtime: { state: 'running', url: 'http://127.0.0.1:4112' },
+        settings: {
+          environmentVariables: {},
+          modelApiKey: 'not-needed',
+          modelId: 'lmstudio/openai/gpt-oss-20b',
+          modelUrl: 'http://localhost:1234/v1',
+        },
+      };
+      queryClient.setQueryData(['desktop-runtime-state', '/__desktop'], staleLmStudioState);
+
+      server.use(
+        http.get(MODELS_URL, () =>
+          HttpResponse.json(
+            availableModelsResponse([
+              {
+                id: 'ollama-cloud',
+                name: 'Ollama Cloud',
+                envVar: 'OLLAMA_API_KEY',
+                connected: true,
+                models: ['gpt-oss:120b'],
+              },
+            ]),
+          ),
+        ),
+        http.get('*/__desktop/state', () => {
+          stateRequests();
+          return HttpResponse.json({
+            runtime: { state: 'running', url: 'http://127.0.0.1:4112' },
+            settings: {
+              environmentVariables: {},
+              modelApiKey: 'ollama',
+              modelId: 'glm-ocr:latest',
+              modelUrl: 'http://localhost:11434/v1',
+            },
+          });
+        }),
+        http.post('*/__desktop/probe-models', async ({ request }) => {
+          probeRequests.push(await request.json());
+          return HttpResponse.json({
+            ok: true,
+            modelUrl: 'http://localhost:11434/v1',
+            models: ['glm-ocr:latest'],
+          });
+        }),
+      );
+
+      const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper(queryClient) });
+
+      await waitFor(() => expect(result.current.providers.find(provider => provider.id === 'ollama')).toBeDefined());
+      expect(stateRequests).toHaveBeenCalledTimes(1);
+      expect(result.current.desktopModelStatus?.unavailable).toBe(false);
+      expect(result.current.providers[0]).toEqual(
+        expect.objectContaining({ id: 'ollama', name: 'Ollama Local', models: ['glm-ocr:latest'] }),
+      );
       expect(probeRequests).toEqual([
         {
           apiKey: 'ollama',
