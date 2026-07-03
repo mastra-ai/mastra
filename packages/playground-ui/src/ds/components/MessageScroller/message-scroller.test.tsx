@@ -76,17 +76,32 @@ const renderScroller = () =>
     </MessageScrollerProvider>,
   );
 
+const createRect = ({ top = 0, height = 40, width = 100 }: { top?: number; height?: number; width?: number } = {}) => ({
+  top,
+  bottom: top + height,
+  left: 0,
+  right: width,
+  width,
+  height,
+  x: 0,
+  y: top,
+  toJSON: () => ({}),
+});
+
 const setTop = (element: Element, top: number) => {
-  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
-    top,
-    bottom: top + 40,
-    left: 0,
-    right: 100,
-    width: 100,
-    height: 40,
-    x: 0,
-    y: top,
-    toJSON: () => ({}),
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: vi.fn(() => createRect({ top })),
+  });
+};
+
+const mockPreviewSizerHeight = () => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.dataset.testid === 'thread-rail-preview-sizer') {
+      return createRect({ height: this.textContent?.includes('Second turn') ? 52 : 96 });
+    }
+
+    return createRect();
   });
 };
 
@@ -176,6 +191,7 @@ describe('MessageScroller', () => {
   });
 
   it('keeps one preview shell while animating enter, switch, and exit', async () => {
+    mockPreviewSizerHeight();
     renderScroller();
 
     const firstTurn = screen.getByRole('button', { name: 'Jump to First turn' });
@@ -193,13 +209,15 @@ describe('MessageScroller', () => {
     const viewport = screen.getByTestId('thread-rail-preview-viewport');
     expect(firstTurn.getAttribute('aria-describedby')).toBe(previewId);
     expect(preview.className).toContain('overflow-hidden');
-    expect(preview.className).toContain('transition-[translate,opacity]');
-    expect(preview.className).toContain('duration-[360ms]');
+    expect(preview.className).toContain('transition-[height,translate,opacity]');
+    expect(preview.className).toContain('duration-360');
     expect(preview.className).toContain('ease-out-custom');
     expect(preview.className).toContain('opacity-0');
     expect(preview.style.translate).toBe('0 calc(40px - 50%)');
+    expect(preview.style.height).toBe('96px');
     expect(viewport.className).not.toContain('overflow-hidden');
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-[360ms]');
+    expect(within(screen.getByTestId('thread-rail-preview-sizer')).getByText('First turn')).toBeTruthy();
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-360');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('ease-in-out');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
@@ -219,6 +237,11 @@ describe('MessageScroller', () => {
     expect(screen.getByTestId('thread-rail-preview')).toBe(preview);
     expect(secondTurn.getAttribute('aria-describedby')).toBe(previewId);
     expect(preview.style.translate).toBe('0 calc(100px - 50%)');
+    await waitFor(() => {
+      expect(preview.style.height).toBe('52px');
+    });
+    expect(within(screen.getByTestId('thread-rail-preview-sizer')).queryByText('First turn')).toBeNull();
+    expect(within(screen.getByTestId('thread-rail-preview-sizer')).getByText('Second turn')).toBeTruthy();
 
     const switchCurrentLayer = screen.getByTestId('thread-rail-preview-current');
     const switchPreviousLayer = screen.getByTestId('thread-rail-preview-previous');

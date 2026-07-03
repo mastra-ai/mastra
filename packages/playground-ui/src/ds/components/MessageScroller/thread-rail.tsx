@@ -6,6 +6,7 @@ import { useOptionalMessageScrollerVisibility } from './message-scroller-context
 import type { ThreadRailTurn } from './thread-rail-turns';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
 type ThreadRailPreviewPhase = 'hidden' | 'entering' | 'visible' | 'exiting';
@@ -299,12 +300,21 @@ function ThreadRailPreview({
   phase: ThreadRailPreviewPhase;
   top: number;
 }) {
+  const {
+    ref: previewSizerRef,
+    heightStyle: previewHeightStyle,
+    measure: measurePreviewHeight,
+  } = useMeasuredAutoHeight<HTMLDivElement>();
   const containerVisible = phase === 'visible' || (phase === 'entering' && Boolean(previousTurn));
   // Entering and exiting share the same off-screen resting style.
   const hiddenLayerClassName = 'scale-95 opacity-0 blur-xs';
   const visibleLayerClassName = 'scale-100 opacity-100 blur-none';
   const layerClassName =
-    'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-[360ms] ease-in-out will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
+    'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-360 ease-in-out will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
+
+  React.useLayoutEffect(() => {
+    measurePreviewHeight();
+  }, [currentTurn.key, phase, measurePreviewHeight]);
 
   return (
     <div
@@ -312,32 +322,33 @@ function ThreadRailPreview({
       data-testid="thread-rail-preview"
       data-visible={containerVisible ? 'true' : undefined}
       className={cn(
-        'pointer-events-none absolute left-full top-0 z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[translate,opacity] duration-[360ms] ease-out-custom will-change-[translate,opacity] motion-reduce:transition-none',
+        'pointer-events-none absolute left-full top-0 z-30 ml-3 w-72 overflow-hidden rounded-xl border border-border1 bg-surface3 text-left shadow-dialog transition-[height,translate,opacity] duration-360 ease-out-custom will-change-[height,translate,opacity] motion-reduce:transition-none',
         containerVisible ? 'opacity-100' : 'opacity-0',
       )}
-      style={{ translate: `0 calc(${top}px - 50%)` }}
+      style={{ ...previewHeightStyle, translate: `0 calc(${top}px - 50%)` }}
     >
-      <div data-testid="thread-rail-preview-viewport" className="relative">
-        <div aria-hidden className="invisible grid">
-          {previousTurn && <ThreadRailPreviewContent turn={previousTurn} className="col-start-1 row-start-1 p-3.5" />}
-          <ThreadRailPreviewContent turn={currentTurn} className="col-start-1 row-start-1 p-3.5" />
-        </div>
-        {previousTurn && (
+      <div ref={previewSizerRef} data-testid="thread-rail-preview-sizer" aria-hidden className="invisible grid">
+        <ThreadRailPreviewContent turn={currentTurn} className="col-start-1 row-start-1 p-3.5" />
+      </div>
+      <div data-testid="thread-rail-preview-viewport" className="absolute inset-0">
+        <div className="relative h-full">
+          {previousTurn && (
+            <div
+              key={previousTurn.key}
+              data-testid="thread-rail-preview-previous"
+              aria-hidden
+              className={cn(layerClassName, phase === 'entering' ? visibleLayerClassName : hiddenLayerClassName)}
+            >
+              <ThreadRailPreviewContent turn={previousTurn} className="p-3.5" />
+            </div>
+          )}
           <div
-            key={previousTurn.key}
-            data-testid="thread-rail-preview-previous"
-            aria-hidden
-            className={cn(layerClassName, phase === 'entering' ? visibleLayerClassName : hiddenLayerClassName)}
+            key={currentTurn.key}
+            data-testid="thread-rail-preview-current"
+            className={cn(layerClassName, phase === 'visible' ? visibleLayerClassName : hiddenLayerClassName)}
           >
-            <ThreadRailPreviewContent turn={previousTurn} className="p-3.5" />
+            <ThreadRailPreviewContent turn={currentTurn} className="p-3.5" />
           </div>
-        )}
-        <div
-          key={currentTurn.key}
-          data-testid="thread-rail-preview-current"
-          className={cn(layerClassName, phase === 'visible' ? visibleLayerClassName : hiddenLayerClassName)}
-        >
-          <ThreadRailPreviewContent turn={currentTurn} className="p-3.5" />
         </div>
       </div>
     </div>
