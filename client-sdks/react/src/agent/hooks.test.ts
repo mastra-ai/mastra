@@ -819,6 +819,61 @@ describe('useChat forwards clientTools', () => {
     expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1);
   });
 
+  // Regression test for https://github.com/mastra-ai/mastra/issues/18768.
+  //
+  // Two compounding bugs in ensureThreadSubscription (hooks.ts):
+  //
+  // 1. Its .catch() only clears _threadSubscription{Key,Abort,Promise}Ref
+  //    when isThreadSignalUnsupportedError(error) is true. For an AbortError
+  //    (or any other error) the refs are left pointing at the dead, rejected
+  //    promise/key, so every later call with the same key just re-awaits
+  //    that stale rejection instead of retrying the subscribe fetch. This is
+  //    the "retry never completes" behavior from the issue's HAR: no new
+  //    POST /threads/subscribe is even attempted.
+  // 2. `await ensureThreadSubscription(...)` in stream() (hooks.ts:739) sits
+  //    above the try/catch that wraps sendMessage/sendSignal (:766), so the
+  //    error escapes stream() -> sendMessage() uncaught. setIsRunning(true)
+  //    from the top of stream() is never undone, so the chat is stuck
+  //    "pending" until a full reload.
+  it('retries an aborted thread subscription on send and never leaves isRunning stuck', async () => {
+    const abortError = Object.assign(new Error('signal is aborted without reason'), { name: 'AbortError' });
+    // Reject both the mount-time subscribe AND the send-time retry so we
+    // exercise the retry (bug 1) and the isRunning cleanup on failure (bug 2).
+    subscribeToThreadMock.mockRejectedValueOnce(abortError).mockRejectedValueOnce(abortError);
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    // Mount-time subscription attempt fails and is swallowed (isAbortError).
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    expect(result.current.isRunning).toBe(false);
+
+    let sendError: unknown;
+    await act(async () => {
+      try {
+        await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+      } catch (error) {
+        sendError = error;
+      }
+    });
+
+    // Bug 1 fixed: the send path releases the dead cached rejection and retries
+    // the subscribe fetch instead of re-awaiting the stale promise.
+    expect(subscribeToThreadMock).toHaveBeenCalledTimes(2);
+    expect((sendError as Error | undefined)?.name).toBe('AbortError');
+    // Bug 2 fixed: isRunning was flipped true when stream() started; the aborted
+    // ensureThreadSubscription no longer escapes uncaught, so it is reset.
+    expect(result.current.isRunning).toBe(false);
+  });
+
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {
     const { result } = renderHook(
       () =>

@@ -498,20 +498,27 @@ export const useChat = ({
             });
         })
         .catch(error => {
-          if (isThreadSignalUnsupportedError(error)) {
+          const unsupported = isThreadSignalUnsupportedError(error);
+          if (unsupported) {
             markThreadSignalsUnsupported();
-            if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-              _threadSubscriptionRef.current = null;
-              _threadSubscriptionAbortRef.current = null;
-              _threadSubscriptionKeyRef.current = undefined;
-              _threadSubscriptionPromiseRef.current = null;
-            }
-            return;
-          }
-
-          if (!isAbortError(error)) {
+          } else if (!isAbortError(error)) {
             console.error('[useChat] Thread subscription failed', error);
             setIsRunning(false);
+          }
+
+          // Always release the cached subscription state so the next call
+          // retries with a fresh fetch instead of re-awaiting this rejected
+          // promise. Without this, an aborted mount-time subscribe strands the
+          // channel and the reply never arrives until reload (issue #18768).
+          if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
+            _threadSubscriptionRef.current = null;
+            _threadSubscriptionAbortRef.current = null;
+            _threadSubscriptionKeyRef.current = undefined;
+            _threadSubscriptionPromiseRef.current = null;
+          }
+
+          if (unsupported) {
+            return;
           }
           throw error;
         });
@@ -736,7 +743,15 @@ export const useChat = ({
 
     _onChunk.current = onChunk;
 
-    await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
+    try {
+      await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
+    } catch (error) {
+      // Establishing the subscription failed (e.g. an aborted retry). Clear the
+      // running flag so the chat is not stranded in a "pending" state until a
+      // reload (issue #18768) before surfacing the error.
+      setIsRunning(false);
+      throw error;
+    }
 
     if (_threadSignalsUnsupportedRef.current) {
       await streamWithLegacyRoute();
