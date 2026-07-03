@@ -8,7 +8,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -499,27 +499,13 @@ describe('DurableAgent background tasks via stream()', () => {
       },
     });
 
-    // Wait a bit for the workflow to progress
-    await new Promise(r => setTimeout(r, 3000));
-
-    // Debug: check bg task state
-    const bgMgr = localMastra.backgroundTaskManager;
-    if (bgMgr) {
-      const allTasks = await bgMgr.listTasks({ agentId: 'bg-loop-agent' });
-      console.log(
-        '[TEST] bg tasks:',
-        JSON.stringify(allTasks?.tasks?.map((t: any) => ({ id: t.id, status: t.status })) ?? 'none'),
-      );
-    }
-    console.log(
-      '[TEST] finished:',
-      finished,
-      'callCount:',
-      callCount,
-      'chunks:',
-      chunks.map(c => c.type),
+    // Poll until the workflow finishes instead of a fixed sleep
+    await vi.waitFor(
+      () => {
+        expect(finished).toBe(true);
+      },
+      { timeout: 10_000, interval: 100 },
     );
-    expect(finished).toBe(true);
 
     const textDeltas = chunks.filter(c => c.type === 'text-delta');
     expect(textDeltas.length).toBeGreaterThanOrEqual(1);

@@ -601,8 +601,9 @@ export function createDurableToolCallStep() {
         resumeData !== null &&
         (requiresApproval ? !('approved' in resumeData) : true);
 
-      // Remove suspension metadata when resuming a non-approval suspended tool
-      if (!requiresApproval && isResumingFromSuspension) {
+      // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
+      // `isResumingFromSuspension` already excludes the approval-decision case above.
+      if (isResumingFromSuspension) {
         await removeToolMetadata('suspension');
       }
 

@@ -377,7 +377,8 @@ export function createDurableLLMMappingStep() {
               type: 'tool-result',
               toolCallId: tr.toolCallId,
               toolName: tr.toolName,
-              result: tr.result,
+              result: tr.error ? tr.error.message : tr.result,
+              ...(tr.error ? { isError: true } : {}),
             });
           }
 

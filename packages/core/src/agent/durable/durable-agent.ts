@@ -929,7 +929,7 @@ export class DurableAgent<
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
-      messageList: globalEntry?.messageList,
+      messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready, then resume workflow
@@ -1413,7 +1413,7 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
-      messageList: globalRunRegistry.get(runId)?.messageList,
+      messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready

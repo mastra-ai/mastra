@@ -21,17 +21,14 @@ const bgCheckOutputSchema = z.any();
  *
  * Mirrors the regular agent's backgroundTaskCheckStep pattern:
  * - After tool calls complete, checks if any background tasks are still running
- * - First iteration (iterationCount === 0) or no waitTimeoutMs configured:
- *   returns immediately with backgroundTaskPending=true so the loop can
- *   re-enter without blocking
- * - Later iterations with waitTimeoutMs: waits for the next task to complete,
- *   then sets isContinued=true so the LLM processes the result
+ * - Always waits for the next running background task to complete (up to
+ *   waitTimeoutMs, or a 1s default), then sets isContinued=true so the LLM
+ *   processes the result. This applies even on the first iteration, unlike
+ *   the regular agent, because the durable agent's stream closes on FINISH
+ *   and cannot pick up late tool-result chunks.
+ * - skipBgTaskWait option: returns immediately with backgroundTaskPending=true
+ *   when the outer caller drives continuation externally (e.g. streamUntilIdle)
  * - If no running tasks: passes through unchanged
- *
- * Note: uses iterationCount instead of retryCount because the durable
- * dowhile loop gives every step a fresh execution context (retryCount
- * always 0), unlike the regular agent's DefaultExecutionEngine which
- * maintains a persistent retryCounts map.
  */
 export function createDurableBackgroundTaskCheckStep() {
   return createStep({
@@ -46,7 +43,6 @@ export function createDurableBackgroundTaskCheckStep() {
       const initData = getInitData<{
         runId: string;
         agentId: string;
-        iterationCount: number;
         options?: { skipBgTaskWait?: boolean };
         state?: { threadId?: string; resourceId?: string };
       }>();
@@ -83,20 +79,12 @@ export function createDurableBackgroundTaskCheckStep() {
       const managerConfig = bgManager.config;
       const waitTimeoutMs = bgConfig?.waitTimeoutMs ?? managerConfig?.waitTimeoutMs;
 
-      // The regular agent's DefaultExecutionEngine maintains a persistent
-      // retryCounts map across loop iterations, so the same step ID gets
-      // retryCount=0 on the first invocation and retryCount=1+ on later
-      // ones.  The durable agent's dowhile loop gives every step a fresh
-      // context (retryCount always 0), so we use iterationCount from the
-      // loop state instead — it tracks the same concept: "how many times
-      // has the agentic loop iterated."
-      //
       // Unlike the regular agent (which keeps its ReadableStream controller
       // alive so background task onChunk callbacks can enqueue tool-result
       // chunks even after backgroundTaskCheckStep returns), the durable
       // agent closes its stream on the FINISH pubsub event. Any tool-result
       // emitted after that is silently dropped. So the durable agent must
-      // always wait for background tasks, even on the first invocation.
+      // always wait for background tasks on every invocation.
       //
       // Use the configured waitTimeoutMs if available; otherwise use a
       // short default (1s) that's long enough for typical fast background
