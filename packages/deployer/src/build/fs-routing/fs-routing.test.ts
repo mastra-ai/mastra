@@ -423,7 +423,7 @@ describe('generateFsAgentsModule', () => {
     // tool key preserved.
     expect(source).toContain(`key: "get_weather"`);
     expect(source).toContain(`mastra.__registerFsAgents`);
-    expect(source).toContain(`export const mastra = __userEntry.mastra;`);
+    expect(source).toContain(`export const mastra = __mastra;`);
   });
 
   it('omits instructionsMd when there is no markdown file', async () => {
@@ -539,6 +539,7 @@ describe('prepareFsAgentsEntry', () => {
     const result = await prepareFsAgentsEntry(dir, '/project/index.ts', out);
     expect(result).toEqual({
       entryFile: '/project/index.ts',
+      standalone: false,
       toolPaths: [],
       agentCount: 0,
       workflowCount: 0,
@@ -589,6 +590,57 @@ describe('prepareFsAgentsEntry', () => {
     const out = join(dir, '.mastra');
     const result = await prepareFsAgentsEntry(dir, '/project/index.ts', out);
     await expect(writeFsAgentsEntry(result)).resolves.toBeUndefined();
+  });
+});
+
+describe('standalone auto-construction (no index.ts)', () => {
+  it('auto-constructs a Mastra instance when entryFile is undefined and primitives exist', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, undefined, out);
+    expect(result.standalone).toBe(true);
+    expect(result.agentCount).toBe(1);
+    expect(result.moduleSource).toBeTruthy();
+    expect(result.moduleSource).toContain(`import { Mastra } from '@mastra/core'`);
+    expect(result.moduleSource).toContain(`new Mastra({})`);
+    expect(result.moduleSource).not.toContain('__userEntry');
+  });
+
+  it('throws when no index.ts and no fs primitives exist', async () => {
+    const out = join(dir, '.mastra');
+    await expect(prepareFsAgentsEntry(dir, undefined, out)).rejects.toThrow(
+      /No index\.ts and no file-based primitives/,
+    );
+  });
+
+  it('standalone module registers discovered singletons', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    await writeFile(join(dir, 'storage.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, undefined, out);
+    expect(result.standalone).toBe(true);
+    expect(result.hasStorage).toBe(true);
+    expect(result.moduleSource).toContain('__registerFsStorage');
+    expect(result.moduleSource).toContain(`new Mastra({})`);
+  });
+
+  it('standalone module includes workflow registration', async () => {
+    await mkdir(join(dir, 'workflows'), { recursive: true });
+    await writeFile(join(dir, 'workflows', 'pipeline.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, undefined, out);
+    expect(result.standalone).toBe(true);
+    expect(result.workflowCount).toBe(1);
+    expect(result.moduleSource).toContain('__registerFsWorkflows');
   });
 });
 
@@ -757,7 +809,7 @@ describe('generateFsAgentsModule with workflows', () => {
 
     expect(source).toContain(`import workflow_0_onboarding from`);
     expect(source).toContain(`__registerFsWorkflows`);
-    expect(source).toContain(`export const mastra = __userEntry.mastra;`);
+    expect(source).toContain(`export const mastra = __mastra;`);
     // Agent registration still present but with empty entries
     expect(source).toContain('__registerFsAgents');
   });

@@ -1,7 +1,7 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
 import { prepareFsAgentsEntry, writeFsAgentsEntry, mirrorFsAgentWorkspaces } from '@mastra/deployer/build';
-import { FileService } from '../../services/service.file';
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
@@ -32,15 +32,24 @@ export async function build({
   logPeerDepWarnings(peerDepMismatches);
 
   try {
-    const fs = new FileService();
-    const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+    // Look for the user's mastra entry file. When it doesn't exist (fully
+    // file-based project), prepareFsAgentsEntry auto-constructs a Mastra
+    // instance from discovered primitives.
+    const candidateEntries = [join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')];
+    const mastraEntryFile = candidateEntries.find(f => existsSync(f));
 
     // Discover fs-routed agents under agents/* and, if any exist, wrap the entry
     // so they are registered onto the user's mastra instance during the build.
     const fsAgents = await prepareFsAgentsEntry(mastraDir, mastraEntryFile, outputDirectory);
     const bundleEntryFile = fsAgents.entryFile;
 
-    const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
+    if (fsAgents.standalone) {
+      logger.info('No index.ts found — auto-constructing Mastra instance from file-based primitives.');
+    }
+
+    const platformDeployer = mastraEntryFile
+      ? await getDeployer(mastraEntryFile, outputDirectory)
+      : undefined;
 
     if (!platformDeployer) {
       const deployer = new BuildBundler({ studio });

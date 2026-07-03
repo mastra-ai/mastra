@@ -1,9 +1,9 @@
 import type { ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
 import devcert from '@expo/devcert';
-import { FileService } from '@mastra/deployer';
 import {
   getServerOptions,
   normalizeStudioBase,
@@ -442,8 +442,10 @@ export async function dev({
   await mkdir(dotMastraPath, { recursive: true });
   await acquireDevLock(dotMastraPath);
 
-  const fileService = new FileService();
-  const userEntryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
+  // Look for the user's mastra entry file. When it doesn't exist (fully
+  // file-based project), prepareFsAgentsEntry auto-constructs a Mastra instance.
+  const candidateEntries = [join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')];
+  const userEntryFile = candidateEntries.find(f => existsSync(f));
 
   const bundler = new DevBundler(env);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
@@ -482,7 +484,7 @@ export async function dev({
     }
   }
 
-  const serverOptions = await getServerOptions(userEntryFile, join(dotMastraPath, 'output'));
+  const serverOptions = userEntryFile ? await getServerOptions(userEntryFile, join(dotMastraPath, 'output')) : null;
   let portToUse = serverOptions?.port ?? process.env.PORT;
   let hostToUse = serverOptions?.host ?? process.env.HOST ?? 'localhost';
   const studioBasePathToUse = normalizeStudioBase(serverOptions?.studioBase ?? '/');

@@ -141,7 +141,7 @@ async function emitAgentEntry(
  * @param agents discovered fs-routed agents (absolute, slash-normalized paths).
  */
 export async function generateFsAgentsModule(
-  userEntry: string,
+  userEntry: string | undefined,
   agents: DiscoveredFsAgent[],
   options?: {
     workflows?: DiscoveredFsWorkflow[];
@@ -156,6 +156,7 @@ export async function generateFsAgentsModule(
   const observability = options?.observability;
   const server = options?.server;
   const studio = options?.studio;
+  const standalone = userEntry === undefined;
   const lines: string[] = [];
 
   const hasInlineSkills = (function check(list: DiscoveredFsAgent[]): boolean {
@@ -166,10 +167,15 @@ export async function generateFsAgentsModule(
   if (hasInlineSkills) {
     lines.push(`import { createSkill as __createSkill } from '@mastra/core/skills';`);
   }
+  if (standalone) {
+    lines.push(`import { Mastra } from '@mastra/core';`);
+  }
   lines.push(`import { fileURLToPath as __fileURLToPath } from 'node:url';`);
   lines.push(`import { dirname as __dirname, join as __join } from 'node:path';`);
-  lines.push(`import * as __userEntry from ${JSON.stringify(userEntry)};`);
-  lines.push(`export * from ${JSON.stringify(userEntry)};`);
+  if (userEntry) {
+    lines.push(`import * as __userEntry from ${JSON.stringify(userEntry)};`);
+    lines.push(`export * from ${JSON.stringify(userEntry)};`);
+  }
   lines.push(``);
   // Resolve workspace base paths relative to this bundled module so they point
   // at `<bundle>/workspace/<name>` wherever the bundle is deployed. Seed files
@@ -215,6 +221,16 @@ export async function generateFsAgentsModule(
     entryExprs.push(expr);
   }
 
+  // In standalone mode (no user entry), auto-construct a Mastra instance.
+  // In wrapper mode, reference the user's exported instance.
+  if (standalone) {
+    lines.push(``);
+    lines.push(`const __mastra = new Mastra({});`);
+  } else {
+    lines.push(``);
+    lines.push(`const __mastra = __userEntry.mastra;`);
+  }
+
   lines.push(``);
   lines.push(`const __fsAgentEntries = [`);
   for (const expr of entryExprs) {
@@ -225,7 +241,7 @@ export async function generateFsAgentsModule(
   lines.push(`const __fsAgents = Object.create(null);`);
   lines.push(`for (const __entry of __fsAgentEntries) {`);
   lines.push(`  __fsAgents[__entry.name] = assembleAgentFromFsEntry(__entry, {`);
-  lines.push(`    onWarn: msg => __userEntry.mastra?.getLogger?.()?.warn?.(msg) ?? console.warn(msg),`);
+  lines.push(`    onWarn: msg => __mastra?.getLogger?.()?.warn?.(msg) ?? console.warn(msg),`);
   lines.push(`  });`);
   lines.push(`}`);
   lines.push(``);
@@ -236,47 +252,48 @@ export async function generateFsAgentsModule(
   // have to be in place first — otherwise fs-discovered agents/workflows would
   // stay bound to the default InMemoryStore.
   if (storage) {
-    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsStorage === 'function') {`);
-    lines.push(`  __userEntry.mastra.__registerFsStorage(__fsStorage);`);
+    lines.push(`if (__mastra && typeof __mastra.__registerFsStorage === 'function') {`);
+    lines.push(`  __mastra.__registerFsStorage(__fsStorage);`);
     lines.push(`}`);
     lines.push(``);
   }
 
   if (observability) {
-    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsObservability === 'function') {`);
-    lines.push(`  __userEntry.mastra.__registerFsObservability(__fsObservability);`);
+    lines.push(`if (__mastra && typeof __mastra.__registerFsObservability === 'function') {`);
+    lines.push(`  __mastra.__registerFsObservability(__fsObservability);`);
     lines.push(`}`);
     lines.push(``);
   }
 
   if (server) {
-    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsServer === 'function') {`);
-    lines.push(`  __userEntry.mastra.__registerFsServer(__fsServer);`);
+    lines.push(`if (__mastra && typeof __mastra.__registerFsServer === 'function') {`);
+    lines.push(`  __mastra.__registerFsServer(__fsServer);`);
     lines.push(`}`);
     lines.push(``);
   }
 
   if (studio) {
-    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsStudio === 'function') {`);
-    lines.push(`  __userEntry.mastra.__registerFsStudio(__fsStudio);`);
+    lines.push(`if (__mastra && typeof __mastra.__registerFsStudio === 'function') {`);
+    lines.push(`  __mastra.__registerFsStudio(__fsStudio);`);
     lines.push(`}`);
     lines.push(``);
   }
 
-  lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsAgents === 'function') {`);
-  lines.push(`  __userEntry.mastra.__registerFsAgents(__fsAgents);`);
+  lines.push(`if (__mastra && typeof __mastra.__registerFsAgents === 'function') {`);
+  lines.push(`  __mastra.__registerFsAgents(__fsAgents);`);
   lines.push(`}`);
 
   // Workflow registration (after agents, before final export).
   if (wfCodegen) {
     lines.push(``);
+
     for (const line of wfCodegen.registrationLines) {
       lines.push(line);
     }
   }
 
   lines.push(``);
-  lines.push(`export const mastra = __userEntry.mastra;`);
+  lines.push(`export const mastra = __mastra;`);
 
   return lines.join('\n');
 }
@@ -309,8 +326,8 @@ export function generateFsWorkflowsCodegen(workflows: DiscoveredFsWorkflow[]): {
     registrationLines.push(`__fsWorkflows[${JSON.stringify(wf.key)}] = ${ident};`);
   }
   registrationLines.push(``);
-  registrationLines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsWorkflows === 'function') {`);
-  registrationLines.push(`  __userEntry.mastra.__registerFsWorkflows(__fsWorkflows);`);
+  registrationLines.push(`if (__mastra && typeof __mastra.__registerFsWorkflows === 'function') {`);
+  registrationLines.push(`  __mastra.__registerFsWorkflows(__fsWorkflows);`);
   registrationLines.push(`}`);
 
   return { importLines, registrationLines };
