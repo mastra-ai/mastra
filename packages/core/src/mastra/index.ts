@@ -619,6 +619,7 @@ export class Mastra<
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
+  #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -1317,6 +1318,7 @@ export class Mastra<
 
     // Validate and assign observability instance
     if (config?.observability) {
+      this.#observabilityExplicit = true;
       if (typeof config.observability.getDefaultInstance === 'function') {
         this.#observability = config.observability;
         // Set logger early
@@ -2383,6 +2385,40 @@ export class Mastra<
     }
 
     this.setStorage(fsStorage);
+  }
+
+  /**
+   * Registers a file-system routed observability instance (discovered from
+   * `observability.ts`) into this Mastra instance.
+   *
+   * Code-registered observability wins: if the user already passed
+   * `observability` to the `new Mastra({observability})` constructor, the
+   * file-system instance is skipped with a warning.
+   *
+   * @internal
+   */
+  public __registerFsObservability(fsObservability: ObservabilityEntrypoint): void {
+    if (!fsObservability) {
+      return;
+    }
+
+    if (this.#observabilityExplicit) {
+      this.getLogger().warn(
+        `File-system routed observability conflicts with a code-registered observability. Keeping the code-registered observability.`,
+      );
+      return;
+    }
+
+    if (typeof fsObservability.getDefaultInstance !== 'function') {
+      this.getLogger().warn(
+        `File-system routed observability.ts did not export a valid ObservabilityEntrypoint. Ignoring.`,
+      );
+      return;
+    }
+
+    this.#observability = fsObservability;
+    this.#observability.setLogger({ logger: this.getLogger() as any });
+    this.#observability.setMastraContext({ mastra: this as any });
   }
 
   /**
