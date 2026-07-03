@@ -339,7 +339,7 @@ span[class*='categoryLinkLabel'] {
 }
 
 .theme-doc-sidebar-item-link-level-2 .menu__link {
-  padding-inline-start: 0.25rem;
+  padding-inline-start: 0;
 }
 
 .menu__caret {
@@ -803,9 +803,18 @@ article p {
   border-bottom: 0.5px solid var(--border) !important;
 }
 
+.theme-doc-sidebar-item-link-level-2 {
+  padding-inline-start: 0.75rem;
+  margin-block-end: calc(0.25rem * 1.5);
+}
+
 @media (min-width: 62.25rem) {
   #doc-item-container {
     gap: 2rem;
+  }
+
+  .theme-doc-sidebar-item-link-level-2 .menu__link {
+    padding-inline-start: 0.25rem;
   }
 
   [class*='docSidebarContainer'] {
@@ -1335,11 +1344,6 @@ article p {
 
   .menu__list-item-collapsible {
     margin-inline-start: -0.25rem;
-  }
-
-  .theme-doc-sidebar-item-link-level-2 {
-    padding-inline-start: 0.65rem;
-    margin-block-end: calc(0.25rem * 1.5);
   }
 
   .theme-doc-sidebar-item-link-level-3 > a,
