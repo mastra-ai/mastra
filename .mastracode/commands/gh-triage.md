@@ -15,7 +15,7 @@ Route one open GitHub issue or active PR. `/gh-triage` owns routing and handoff 
   - Issue handoff: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
 - [ ] Do not post comments, label, assign, close, tag, coordinate externally, implement fixes, or commit without explicit user approval.
 - [ ] Non-open issues, non-open PRs, and draft PRs stop with no handoff file.
-- [ ] Keep `/gh-triage` short: resolve the input, find closing/fixing PRs, choose a branch, seed the handoff file, and print the next command.
+- [ ] Keep `/gh-triage` short: resolve the input, find open closing/fixing PRs, choose a branch, seed the handoff file, and print the next command.
 - [ ] Do not perform downstream investigation or draft comments in `/gh-triage`. Put needed downstream outputs in the handoff file's instructions.
 - [ ] For PR handoffs, check whether maintainer notes already exist. Record only a pointer or one-line summary as prior context.
 
@@ -154,7 +154,7 @@ gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,c
 
 Gather only enough context to choose Branch A/B/C/D and seed a useful handoff.
 
-- [ ] For issue input, find PRs that explicitly close/fix the issue. These drive routing.
+- [ ] For issue input, find open PRs that explicitly close/fix the issue. These drive routing.
 - [ ] Treat mention-only/cross-referenced PRs as context, not as routing targets unless they clearly close/fix the issue.
 - [ ] For PR input, fetch linked/closing issues and changed file names.
 - [ ] For PR routes, inspect comments enough to identify whether an existing maintainer-notes comment is present.
@@ -175,9 +175,9 @@ gh pr view "$PR" --json number,title,state,isDraft,url,author,body,comments,revi
 ## Step 3: Choose one branch
 
 - Branch A — irrelevant/non-actionable input.
-- Branch B — exactly one closing/fixing PR, or input is a PR.
-- Branch C — multiple closing/fixing PRs.
-- Branch D — issue input with no closing/fixing PR.
+- Branch B — exactly one open/active fixing PR, or input is an active PR.
+- Branch C — multiple open/active fixing PRs.
+- Branch D — issue input with no open fixing PR.
 
 Follow only the selected branch.
 
@@ -190,7 +190,7 @@ Use for spam, unrelated, invalid, unsupported, or clearly non-actionable items.
 
 ### Branch B: One linked/input PR
 
-Use when exactly one PR clearly closes/fixes the issue, or when the input itself is a PR.
+Use when exactly one open PR clearly closes/fixes the issue, or when the input itself is an active PR.
 
 - [ ] Create/update `.pr-review/GH_TRIAGE_PR_<pr-number>.md` using the skeleton plus the PR handoff action block only.
 - [ ] Put issue/PR/link/check/comment facts in `Context`.
@@ -203,7 +203,7 @@ Use when exactly one PR clearly closes/fixes the issue, or when the input itself
 
 ### Branch C: Multiple linked PRs
 
-Use when multiple PRs clearly close/fix the issue.
+Use when multiple open PRs clearly close/fix the issue.
 
 - [ ] Record candidate PRs and routing facts concisely.
 - [ ] If one active fixing PR is unambiguous, select it and create/update `.pr-review/GH_TRIAGE_PR_<pr-number>.md`.

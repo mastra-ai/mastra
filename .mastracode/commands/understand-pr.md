@@ -56,7 +56,7 @@ If the PR changes any public API, exported interface, CLI command, configuration
 
 Then pause:
 
-```
+```text
 A) That matches my understanding — continue
 B) I think the goal is actually different — let me explain
 C) I'm not sure what this PR is solving — dig deeper
@@ -78,7 +78,7 @@ Now that the user understands the PR's goal, check whether this PR meets a minim
 
 If the PR doesn't meet the bar, tell the user directly:
 
-```
+```text
 This PR isn't ready for detailed review yet:
 - [specific reasons]
 
@@ -144,7 +144,7 @@ Capture what you learned:
 
 Present the history to the user interactively — one file or logical area at a time. After each chunk, offer follow-up options:
 
-```
+```text
 A) Why was [specific thing] added originally?
 B) Who else has changed this recently?
 C) Show me the related code that depends on this
@@ -166,7 +166,7 @@ For each chunk:
 - Flag anything that contradicts established patterns, seems risky, or raises questions
 - Offer follow-up options
 
-```
+```text
 A) What breaks if this change is wrong?
 B) Are there tests covering this path?
 C) Show me the surrounding code
@@ -181,7 +181,7 @@ For large PRs with many files, group changes by logical area and let the user ch
 
 Once the walkthrough is complete, offer the user a choice:
 
-```
+```text
 We've been through all the changes. Want to:
 A) Quick quiz to test your understanding
 B) Revisit a specific area
@@ -194,7 +194,7 @@ If the user picks the quiz, ask 3-5 multiple-choice questions about the PR — w
 
 Once the user understands the PR, ask for their opinion first:
 
-```
+```text
 I've formed my own opinion on this PR, but I'd like to hear yours first.
 What do you think — is this ready to merge? Any concerns?
 ```
@@ -210,7 +210,7 @@ Wait for the user's response. Then share your opinion — be direct and honest. 
 
 After the opinion exchange, offer to draft a review comment:
 
-```
+```text
 Want me to draft a review comment? Options:
 A) Draft a full review comment
 B) Draft a short approval/comment
@@ -219,7 +219,7 @@ C) No comment needed
 
 If the user wants a comment, draft it and present the full text directly in your message. Then:
 
-```
+```text
 A) Post this comment as-is
 B) Make it shorter
 C) Make it more detailed

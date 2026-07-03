@@ -120,7 +120,7 @@ State your assessment clearly. If you think the issue is misframed, say so with 
 
 **If the cause is clear** (one obvious chain of causality), say so directly:
 
-```
+```text
 Based on the investigation, I think this is [genuine bug / config issue / docs gap / XY problem].
 
 Here's what's happening: [concise explanation of the causal chain, grounded in the code and history you traced].
@@ -137,7 +137,7 @@ D) I need to see more evidence before I can form an opinion
 
 **If there's genuine ambiguity** (multiple plausible causes, or you're not sure), present the candidates and let the user help narrow it down:
 
-```
+```text
 I see [N] possible explanations for this:
 
 1. **[area/explanation]** — [history + architecture context]. This would mean [implication].
@@ -165,7 +165,7 @@ For each area:
 2. Check test coverage for the relevant paths
 3. Form a hypothesis and present it with evidence
 
-```
+```text
 This area was last changed in [commit] to fix [issue]. The current code assumes [X] but the reported bug suggests [Y] is happening instead.
 
 A) That sounds like the cause — dig deeper here
@@ -191,7 +191,7 @@ Present a concise summary of what you've learned:
 
 Then check:
 
-```
+```text
 A) That matches my understanding — write it up
 B) I'm not convinced about [specific part] — let's revisit
 C) I think the cause is actually different — let me explain
@@ -219,7 +219,7 @@ Present the key findings to the user interactively before finalizing the file.
 
 Offer to post the analysis to the GitHub issue:
 
-```
+```text
 A) Post a summary of this analysis as an issue comment
 B) I'll handle it myself
 C) This issue needs more info first — help me draft a comment asking for clarification
