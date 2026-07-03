@@ -79,6 +79,7 @@ describe('ManagedMastraRuntime', () => {
         env: expect.objectContaining({
           ELECTRON_RUN_AS_NODE: '1',
           HOST: '127.0.0.1',
+          MASTRA_DEV: 'true',
           OPENAI_API_KEY: 'sk-local',
           PORT: '4112',
           MASTRA_TELEMETRY_DISABLED: 'true',

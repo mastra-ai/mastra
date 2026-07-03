@@ -5,11 +5,19 @@ import type { Server } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell, WebContentsView } from 'electron';
-import type { CreateDevTabInput, DesktopSettings, DesktopState, DesktopTab, PlatformState } from '../shared/types';
+import type {
+  CreateDevTabInput,
+  CreateManagedTabInput,
+  DesktopSettings,
+  DesktopState,
+  DesktopTab,
+  PlatformState,
+} from '../shared/types';
 import { DEFAULT_RUNTIME_PORT, DEFAULT_STUDIO_PORT, LOCALHOST } from './defaults';
 import { probeLmStudioModels, probeLocalModels } from './lmstudio';
 import { probeMastraServer } from './local-dev';
 import { LogBuffer } from './log-buffer';
+import { applyManagedStudioRoute } from './managed-route';
 import { resolveAppIconPath, resolveStarterOutputPath, resolveStudioDistPath } from './paths';
 import {
   buildHostedStudioLoginUrl,
@@ -540,11 +548,12 @@ async function restartManagedRuntime() {
   return snapshotState();
 }
 
-async function createManagedTab() {
+async function createManagedTab(input: CreateManagedTabInput = {}) {
+  const isCreateAgentRoute = input.route === '/agent-builder/agents/create';
   const tab: DesktopTab = {
     id: randomUUID(),
     kind: 'managed',
-    title: 'Bundled Template',
+    title: isCreateAgentRoute ? 'Create agent' : 'Bundled Template',
     subtitle: 'Starting local runtime',
     status: 'loading',
   };
@@ -552,10 +561,10 @@ async function createManagedTab() {
   upsertTab(tab);
 
   try {
-    const url = await ensureManagedStudio();
+    const url = applyManagedStudioRoute(await ensureManagedStudio(), input.route);
     replaceTab({
       ...tab,
-      subtitle: 'Local starter runtime',
+      subtitle: isCreateAgentRoute ? 'Local Agent Builder' : 'Local starter runtime',
       url,
       sourceUrl: activeServerUrl,
       externalUrl: url,
@@ -1057,7 +1066,7 @@ function installIpc() {
   });
 
   ipcMain.handle('desktop:create-launcher-tab', () => createLauncherTab());
-  ipcMain.handle('desktop:create-managed-tab', () => createManagedTab());
+  ipcMain.handle('desktop:create-managed-tab', (_event, input?: CreateManagedTabInput) => createManagedTab(input));
   ipcMain.handle('desktop:create-dev-tab', (_event, input: CreateDevTabInput) => createDevTab(input));
   ipcMain.handle('desktop:create-platform-tab', (_event, projectId: string) => createPlatformTab(projectId));
   ipcMain.handle('desktop:activate-tab', (_event, tabId: string) => {

@@ -122,6 +122,9 @@ function launcherActions(): LauncherActions {
         api.createDevTab({ serverUrl: state?.settings.devServerUrl || '4111' }),
       );
     },
+    onCreateAgent: () => {
+      void runAction('create-agent', () => api.createManagedTab({ route: '/agent-builder/agents/create' }));
+    },
     onOpenManualLocal: () => {
       void runAction('open-manual-local', () => api.createDevTab({ serverUrl: manualServerUrl }));
     },

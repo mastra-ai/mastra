@@ -102,6 +102,10 @@ export interface UpdateSettingsResult {
   state: DesktopState;
 }
 
+export interface CreateManagedTabInput {
+  route?: string;
+}
+
 export interface CreateDevTabInput {
   serverUrl: string;
 }
@@ -110,7 +114,7 @@ export interface MastraDesktopApi {
   getState: () => Promise<DesktopState>;
   updateSettings: (settings: Partial<DesktopSettings>) => Promise<UpdateSettingsResult>;
   createLauncherTab: () => Promise<DesktopState>;
-  createManagedTab: () => Promise<DesktopState>;
+  createManagedTab: (input?: CreateManagedTabInput) => Promise<DesktopState>;
   createDevTab: (input: CreateDevTabInput) => Promise<DesktopState>;
   createPlatformTab: (projectId: string) => Promise<DesktopState>;
   activateTab: (tabId: string) => Promise<DesktopState>;

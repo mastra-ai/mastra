@@ -1,4 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+import type { DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
 import { MastraModelGateway } from '@mastra/core/llm';
 import type { GatewayLanguageModel, ProviderConfig } from '@mastra/core/llm';
 
@@ -44,6 +45,32 @@ export function getDesktopModelConfig() {
     providerId: provider.id,
     providerName: provider.name,
     url,
+  };
+}
+
+export type DesktopModelConfig = ReturnType<typeof getDesktopModelConfig>;
+
+export function getDesktopAgentModelConfig(config: DesktopModelConfig = getDesktopModelConfig()) {
+  return {
+    apiKey: config.apiKey,
+    modelId: config.modelId,
+    providerId: config.providerId,
+    url: config.url,
+  };
+}
+
+export function getDesktopModelAllowlistEntry(config: DesktopModelConfig = getDesktopModelConfig()): ProviderModelEntry {
+  return {
+    kind: 'custom',
+    provider: config.providerId,
+  };
+}
+
+export function getDesktopDefaultModelEntry(config: DesktopModelConfig = getDesktopModelConfig()): DefaultModelEntry {
+  return {
+    kind: 'custom',
+    provider: config.providerId,
+    modelId: config.modelId,
   };
 }
 

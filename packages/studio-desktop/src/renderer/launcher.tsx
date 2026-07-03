@@ -10,6 +10,7 @@ import type { DesktopState, DesktopTab, PlatformProject } from '../shared/types'
 
 export interface LauncherActions {
   onManualServerUrlChange: (value: string) => void;
+  onCreateAgent: () => void;
   onOpenActiveExternal: () => void;
   onOpenDefaultLocal: () => void;
   onOpenManualLocal: () => void;
@@ -87,6 +88,13 @@ function LocalStudioSection(props: LauncherProps) {
           subtitle="Local starter runtime with the default desktop assistant"
           action="Open"
           onClick={actions.onOpenTemplate}
+        />
+
+        <SourceRow
+          title="Create agent"
+          subtitle="Build a local agent with the selected Ollama or LM Studio model"
+          action="Create"
+          onClick={actions.onCreateAgent}
         />
 
         <SourceRow

@@ -22,7 +22,11 @@ export const AgentBuilderStarter = () => {
   const { createStoredAgent } = useStoredAgentMutations(undefined);
   const defaultVisibility = useDefaultVisibility();
   const { data: authCapabilities } = useAuthCapabilities();
-  const { models: allowedModels } = useAgentBuilderAllowedModels();
+  const {
+    desktopModelStatus,
+    isLoading: isAllowedModelsLoading,
+    models: allowedModels,
+  } = useAgentBuilderAllowedModels();
   const modelPolicy = useBuilderModelPolicy();
   // While builder settings are still loading, useBuilderModelPolicy falls back
   // to an inactive policy — submitting in that window would skip the admin
@@ -31,7 +35,13 @@ export const AgentBuilderStarter = () => {
 
   const trimmed = message.trim();
   const isCreating = createStoredAgent.isPending;
-  const isSubmitBlocked = trimmed.length === 0 || isCreating || isBuilderSettingsLoading;
+  const isDesktopModelUnavailable = desktopModelStatus?.unavailable === true;
+  const isSubmitBlocked =
+    trimmed.length === 0 ||
+    isCreating ||
+    isBuilderSettingsLoading ||
+    isAllowedModelsLoading ||
+    isDesktopModelUnavailable;
 
   const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -126,6 +136,19 @@ export const AgentBuilderStarter = () => {
             </Button>
           </div>
         </form>
+
+        {isDesktopModelUnavailable ? (
+          <div className="flex flex-col items-center gap-3 text-center text-ui-sm text-neutral4">
+            <span className="font-medium text-neutral6">Local model unavailable</span>
+            <span>
+              Start {desktopModelStatus.providerName ?? 'your local model server'}, refresh models in Settings, then try
+              again.
+            </span>
+            <Button type="button" variant="outline" size="sm" onClick={() => navigate('/settings')}>
+              Open Settings
+            </Button>
+          </div>
+        ) : null}
 
         <ExampleList onExampleClick={handleExampleClick} />
       </div>

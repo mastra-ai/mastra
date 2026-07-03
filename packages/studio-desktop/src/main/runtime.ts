@@ -69,6 +69,7 @@ export class ManagedMastraRuntime {
         ...process.env,
         ...settings.environmentVariables,
         ELECTRON_RUN_AS_NODE: '1',
+        MASTRA_DEV: 'true',
         NODE_ENV: 'production',
         HOST: LOCALHOST,
         PORT: String(port),

@@ -1,3 +1,4 @@
+import type { CreateStoredAgentParams } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
@@ -9,6 +10,7 @@ import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../../constants/default-request-context-schema';
 import { AgentBuilderStarter } from '../agent-builder-starter';
+import type { DesktopRuntimeState } from '@/lib/desktop-runtime';
 import { server } from '@/test/msw-server';
 
 const navigateMock = vi.fn();
@@ -60,6 +62,7 @@ describe('AgentBuilderStarter', () => {
   });
 
   afterEach(() => {
+    delete window.MASTRA_DESKTOP_ENDPOINT;
     cleanup();
     navigateMock.mockReset();
   });
@@ -262,6 +265,90 @@ describe('AgentBuilderStarter', () => {
 
     await waitFor(() => expect(capturedBody).not.toBeNull());
     expect(capturedBody.model).toEqual({ provider: DEFAULT_MODEL_PROVIDER, name: DEFAULT_MODEL_ID });
+  });
+
+  describe('when Mastra Studio Desktop has a reachable local model runtime', () => {
+    it('creates the starter agent with the detected local model', async () => {
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+      const desktopState: DesktopRuntimeState = {
+        runtime: { state: 'running', url: 'http://127.0.0.1:4112' },
+        settings: {
+          environmentVariables: {},
+          modelApiKey: 'ollama',
+          modelId: 'llama3.2',
+          modelUrl: 'http://localhost:11434/v1',
+        },
+      };
+      let capturedBody: CreateStoredAgentParams | null = null;
+
+      server.use(
+        http.get('*/__desktop/state', () => HttpResponse.json(desktopState)),
+        http.post('*/__desktop/probe-models', () =>
+          HttpResponse.json({
+            ok: true,
+            modelUrl: 'http://localhost:11434/v1',
+            models: ['llama3.2'],
+          }),
+        ),
+        http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
+          const body: CreateStoredAgentParams = await request.json();
+          capturedBody = body;
+          return HttpResponse.json({ id: body.id });
+        }),
+      );
+
+      const { getByTestId } = renderStarter();
+      fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'build a local helper' } });
+      await waitFor(() =>
+        expect((getByTestId('agent-builder-starter-submit') as HTMLButtonElement).disabled).toBe(false),
+      );
+
+      await act(async () => {
+        fireEvent.click(getByTestId('agent-builder-starter-submit'));
+      });
+
+      await waitFor(() => expect(capturedBody).not.toBeNull());
+      expect(capturedBody?.model).toEqual({ provider: 'ollama', name: 'llama3.2' });
+    });
+  });
+
+  describe('when Mastra Studio Desktop cannot reach the selected local model runtime', () => {
+    it('blocks starter creation and points the user to Settings', async () => {
+      window.MASTRA_DESKTOP_ENDPOINT = '/__desktop';
+      const desktopState: DesktopRuntimeState = {
+        runtime: { state: 'running', url: 'http://127.0.0.1:4112' },
+        settings: {
+          environmentVariables: {},
+          modelApiKey: 'ollama',
+          modelId: 'llama3.2',
+          modelUrl: 'http://localhost:11434/v1',
+        },
+      };
+      const createAgent = vi.fn();
+
+      server.use(
+        http.get('*/__desktop/state', () => HttpResponse.json(desktopState)),
+        http.post('*/__desktop/probe-models', () =>
+          HttpResponse.json({
+            ok: false,
+            modelUrl: 'http://localhost:11434/v1',
+            models: [],
+            error: 'fetch failed',
+          }),
+        ),
+        http.post(`${BASE_URL}/api/stored/agents`, () => {
+          createAgent();
+          return HttpResponse.json({ id: 'agent-id' });
+        }),
+      );
+
+      const { getByTestId, getByText } = renderStarter();
+      fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'build a local helper' } });
+
+      await waitFor(() => expect(getByText('Local model unavailable')).toBeTruthy());
+      expect((getByTestId('agent-builder-starter-submit') as HTMLButtonElement).disabled).toBe(true);
+      expect(createAgent).not.toHaveBeenCalled();
+    });
   });
 
   it('does not navigate when the create request fails', async () => {

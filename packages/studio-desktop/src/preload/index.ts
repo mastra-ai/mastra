@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { IpcRendererEvent } from 'electron';
 import type {
   CreateDevTabInput,
+  CreateManagedTabInput,
   DesktopSettings,
   DesktopState,
   MastraDesktopApi,
@@ -14,7 +15,8 @@ const api: MastraDesktopApi = {
   updateSettings: (settings: Partial<DesktopSettings>) =>
     ipcRenderer.invoke('desktop:update-settings', settings) as Promise<UpdateSettingsResult>,
   createLauncherTab: () => ipcRenderer.invoke('desktop:create-launcher-tab') as Promise<DesktopState>,
-  createManagedTab: () => ipcRenderer.invoke('desktop:create-managed-tab') as Promise<DesktopState>,
+  createManagedTab: (input?: CreateManagedTabInput) =>
+    ipcRenderer.invoke('desktop:create-managed-tab', input) as Promise<DesktopState>,
   createDevTab: (input: CreateDevTabInput) =>
     ipcRenderer.invoke('desktop:create-dev-tab', input) as Promise<DesktopState>,
   createPlatformTab: (projectId: string) =>

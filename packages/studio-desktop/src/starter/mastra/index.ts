@@ -2,6 +2,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { FilesystemStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
 import { desktopAssistant } from './agents/desktop-assistant';
+import { desktopBuilderAgent, getDesktopBuilderConfig } from './desktop-builder';
 import { DesktopLocalModelGateway } from './local-model-gateway';
 
 export const mastra = new Mastra({
@@ -9,6 +10,7 @@ export const mastra = new Mastra({
     externals: false,
   },
   agents: {
+    builderAgent: desktopBuilderAgent,
     desktopAssistant,
   },
   gateways: {
@@ -17,5 +19,7 @@ export const mastra = new Mastra({
   storage: new FilesystemStore({
     dir: process.env.MASTRA_DESKTOP_STORAGE_DIR || './mastra-desktop-storage',
   }),
-  editor: new MastraEditor(),
+  editor: new MastraEditor({
+    builder: getDesktopBuilderConfig(),
+  }),
 });

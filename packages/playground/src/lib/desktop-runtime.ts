@@ -115,6 +115,7 @@ export function buildDesktopLocalProvider({
 }): Provider | undefined {
   const settings = state?.settings;
   if (!settings?.modelUrl.trim()) return undefined;
+  if (probe && !probe.ok) return undefined;
 
   const providerConfig = DESKTOP_LOCAL_PROVIDERS[desktopLocalProviderIdForModelUrl(settings.modelUrl)];
   const models =
