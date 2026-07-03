@@ -169,9 +169,10 @@ export async function generateFsAgentsModule(
   lines.push(`const __workspaceBasePath = name => __join(__bundleDir, 'workspace', ...name.split('/'));`);
   lines.push(``);
 
+  const wfCodegen = workflows.length > 0 ? generateFsWorkflowsCodegen(workflows) : undefined;
+
   // Workflow imports (placed alongside other imports, before agent entries).
-  if (workflows.length > 0) {
-    const wfCodegen = generateFsWorkflowsCodegen(workflows);
+  if (wfCodegen) {
     for (const line of wfCodegen.importLines) {
       lines.push(line);
     }
@@ -204,9 +205,8 @@ export async function generateFsAgentsModule(
   lines.push(`}`);
 
   // Workflow registration (after agents, before final export).
-  if (workflows.length > 0) {
+  if (wfCodegen) {
     lines.push(``);
-    const wfCodegen = generateFsWorkflowsCodegen(workflows);
     for (const line of wfCodegen.registrationLines) {
       lines.push(line);
     }

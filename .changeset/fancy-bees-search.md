@@ -3,4 +3,11 @@
 '@mastra/core': minor
 ---
 
-Added file-system routed workflows support. Workflows placed in `workflows/*.ts` under the mastra directory are now auto-discovered and registered during `mastra dev` / `mastra build`, matching the existing file-based agents convention. Code-registered workflows win on name collisions.
+Added file-system-routed workflows support. Workflows placed in `workflows/*.ts` under the mastra directory are now auto-discovered and registered during `mastra dev` / `mastra build`, matching the existing file-based agents convention. Code-registered workflows win on name collisions.
+
+```ts
+// src/mastra/workflows/onboarding.ts
+import { createWorkflow } from '@mastra/core/workflows';
+
+export default createWorkflow({ id: 'onboarding' /* ...steps */ });
+```

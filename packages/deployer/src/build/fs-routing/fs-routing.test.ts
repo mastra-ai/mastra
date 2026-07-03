@@ -656,7 +656,8 @@ describe('discoverFsWorkflows', () => {
   });
 
   it('skips directories inside workflows/', async () => {
-    await mkdir(join(dir, 'workflows', 'not-a-workflow'), { recursive: true });
+    // Use a .ts extension so it passes the extension filter and reaches isDirectory()
+    await mkdir(join(dir, 'workflows', 'not-a-workflow.ts'), { recursive: true });
     await mkdir(join(dir, 'workflows'), { recursive: true });
     await writeFile(join(dir, 'workflows', 'real.ts'), `export default {};`);
 
