@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformApiError } from './client.js';
 import { PlatformClient } from './client.js';
 
@@ -7,12 +7,16 @@ function response(body: string, init?: ResponseInit) {
 }
 
 describe('PlatformClient', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('builds project-scoped proxy requests with bearer auth', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test/');
     const fetchMock = vi.fn().mockResolvedValue(response('{}', { status: 200 }));
     const client = new PlatformClient({
       accessToken: 'sk_test',
       projectId: 'proj_123',
-      proxyUrl: 'https://proxy.test/',
       fetch: fetchMock,
     });
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlatformFilesystem } from './filesystem.js';
 
 function response(body?: BodyInit | null, init?: ResponseInit) {
@@ -6,7 +6,12 @@ function response(body?: BodyInit | null, init?: ResponseInit) {
 }
 
 describe('PlatformFilesystem', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('writes and reads files through bucket-scoped proxy routes', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response(null, { status: 204 }))
@@ -16,7 +21,6 @@ describe('PlatformFilesystem', () => {
       accessToken: 'sk_test',
       projectId: 'proj_123',
       bucketName: 'dev-bucket',
-      proxyUrl: 'https://proxy.test',
       fetch: fetchMock,
     });
     await fs._init();

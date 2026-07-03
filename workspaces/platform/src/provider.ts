@@ -18,7 +18,6 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
       },
       projectId: { type: 'string', description: 'Platform project ID (falls back to MASTRA_PROJECT_ID)' },
       environmentId: { type: 'string', description: 'Platform environment ID (falls back to MASTRA_ENVIRONMENT_ID)' },
-      proxyUrl: { type: 'string', description: 'Workspace proxy URL (falls back to MASTRA_WORKSPACE_PROXY_URL)' },
       sandboxId: { type: 'string', description: 'Reattach to an existing Platform sandbox by ID' },
       idleTimeoutMinutes: { type: 'number', description: 'Minutes before the sandbox can be destroyed while idle' },
       networkIsolation: {
@@ -51,7 +50,6 @@ export const platformFilesystemProvider: FilesystemProvider<PlatformFilesystemOp
         type: 'string',
         description: 'Platform workspace bucket name (falls back to MASTRA_PLATFORM_BUCKET_NAME)',
       },
-      proxyUrl: { type: 'string', description: 'Workspace proxy URL (falls back to MASTRA_WORKSPACE_PROXY_URL)' },
       readOnly: { type: 'boolean', description: 'Mount as read-only', default: false },
     },
   },

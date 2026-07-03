@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlatformSandbox } from './sandbox.js';
 
 function json(body: unknown, init?: ResponseInit) {
@@ -6,7 +6,12 @@ function json(body: unknown, init?: ResponseInit) {
 }
 
 describe('PlatformSandbox', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('creates a sandbox and executes commands through the proxy', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
@@ -16,7 +21,6 @@ describe('PlatformSandbox', () => {
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
-      proxyUrl: 'https://proxy.test',
       fetch: fetchMock,
     });
 
@@ -30,13 +34,13 @@ describe('PlatformSandbox', () => {
   });
 
   it('forwards template selection as the `template` wire field', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
 
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
-      proxyUrl: 'https://proxy.test',
       template: 'python',
       fetch: fetchMock,
     });

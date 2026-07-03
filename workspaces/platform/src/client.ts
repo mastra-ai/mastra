@@ -1,7 +1,6 @@
 export interface PlatformClientOptions {
   accessToken?: string;
   projectId?: string;
-  proxyUrl?: string;
   fetch?: typeof fetch;
 }
 
@@ -9,7 +8,7 @@ export interface PlatformRequestOptions extends RequestInit {
   query?: Record<string, string | number | boolean | undefined>;
 }
 
-const DEFAULT_PROXY_URL = 'https://workspace-proxy.mastra.ai';
+const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
 
 export function requireOption(value: string | undefined, name: string): string {
   if (!value) throw new Error(`${name} is required`);
@@ -20,7 +19,7 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
   return {
     accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
-    proxyUrl: (options.proxyUrl ?? process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
     fetch: options.fetch ?? fetch,
   };
 }
