@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import type { DiscoveredFsAgent } from './discover';
+import type { DiscoveredFsAgent, DiscoveredFsWorkflow } from './discover';
 
 function sanitizeIdentifier(name: string, prefix: string, index: string): string {
   const cleaned = name.replace(/[^a-zA-Z0-9_$]/g, '_');
@@ -140,7 +140,12 @@ async function emitAgentEntry(
  * @param userEntry slash-normalized absolute path to the user's mastra entry.
  * @param agents discovered fs-routed agents (absolute, slash-normalized paths).
  */
-export async function generateFsAgentsModule(userEntry: string, agents: DiscoveredFsAgent[]): Promise<string> {
+export async function generateFsAgentsModule(
+  userEntry: string,
+  agents: DiscoveredFsAgent[],
+  options?: { workflows?: DiscoveredFsWorkflow[] },
+): Promise<string> {
+  const workflows = options?.workflows ?? [];
   const lines: string[] = [];
 
   const hasInlineSkills = (function check(list: DiscoveredFsAgent[]): boolean {
@@ -163,6 +168,15 @@ export async function generateFsAgentsModule(userEntry: string, agents: Discover
   lines.push(`const __bundleDir = __dirname(__fileURLToPath(import.meta.url));`);
   lines.push(`const __workspaceBasePath = name => __join(__bundleDir, 'workspace', ...name.split('/'));`);
   lines.push(``);
+
+  // Workflow imports (placed alongside other imports, before agent entries).
+  if (workflows.length > 0) {
+    const wfCodegen = generateFsWorkflowsCodegen(workflows);
+    for (const line of wfCodegen.importLines) {
+      lines.push(line);
+    }
+    lines.push(``);
+  }
 
   const entryExprs: string[] = [];
   for (let i = 0; i < agents.length; i++) {
@@ -188,8 +202,53 @@ export async function generateFsAgentsModule(userEntry: string, agents: Discover
   lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsAgents === 'function') {`);
   lines.push(`  __userEntry.mastra.__registerFsAgents(__fsAgents);`);
   lines.push(`}`);
+
+  // Workflow registration (after agents, before final export).
+  if (workflows.length > 0) {
+    lines.push(``);
+    const wfCodegen = generateFsWorkflowsCodegen(workflows);
+    for (const line of wfCodegen.registrationLines) {
+      lines.push(line);
+    }
+  }
+
   lines.push(``);
   lines.push(`export const mastra = __userEntry.mastra;`);
 
   return lines.join('\n');
+}
+
+/**
+ * Generate the workflow-registration lines to splice into the generated wrapper
+ * module. Emits import statements for each discovered workflow module and a
+ * registration block that calls `__registerFsWorkflows` on the user's mastra.
+ *
+ * Returns `{ importLines, registrationLines }` so the caller can place them at
+ * the correct positions in the wrapper source.
+ */
+export function generateFsWorkflowsCodegen(workflows: DiscoveredFsWorkflow[]): {
+  importLines: string[];
+  registrationLines: string[];
+} {
+  const importLines: string[] = [];
+  const registrationLines: string[] = [];
+
+  for (let i = 0; i < workflows.length; i++) {
+    const wf = workflows[i]!;
+    const ident = sanitizeIdentifier(wf.key, 'workflow', `${i}`);
+    importLines.push(`import ${ident} from ${JSON.stringify(wf.path)};`);
+  }
+
+  registrationLines.push(`const __fsWorkflows = Object.create(null);`);
+  for (let i = 0; i < workflows.length; i++) {
+    const wf = workflows[i]!;
+    const ident = sanitizeIdentifier(wf.key, 'workflow', `${i}`);
+    registrationLines.push(`__fsWorkflows[${JSON.stringify(wf.key)}] = ${ident};`);
+  }
+  registrationLines.push(``);
+  registrationLines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsWorkflows === 'function') {`);
+  registrationLines.push(`  __userEntry.mastra.__registerFsWorkflows(__fsWorkflows);`);
+  registrationLines.push(`}`);
+
+  return { importLines, registrationLines };
 }
