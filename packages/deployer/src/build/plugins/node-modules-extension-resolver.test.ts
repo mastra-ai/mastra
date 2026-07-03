@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
-import { getPackageInfo } from 'local-pkg';
 import type { Plugin, PluginContext } from 'rollup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { getPackageRootPath } from '../package-info';
 
 const mockNodeResolveHandler = vi.fn();
 
@@ -10,8 +10,8 @@ vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
 }));
 
-vi.mock('local-pkg', () => ({
-  getPackageInfo: vi.fn(),
+vi.mock('../package-info', () => ({
+  getPackageRootPath: vi.fn(),
 }));
 
 vi.mock('@rollup/plugin-node-resolve', () => ({
@@ -86,8 +86,7 @@ describe('nodeModulesExtensionResolver', () => {
 
     it('imports with an extension that have exports mapping', async () => {
       const pkgJson = { name: 'hono', exports: { 'hono/utils/mime.js': './dist/utils/mime.js' } };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'hono', rootPath: '/project/node_modules/hono' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/hono');
       // @ts-expect-error  type should be correct
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
@@ -100,8 +99,7 @@ describe('nodeModulesExtensionResolver', () => {
   describe('imports with JS extension', () => {
     it('It will resolve the import to the correct path if no exports present', async () => {
       const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/lodash');
       // @ts-expect-error  type should be correct
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
@@ -117,8 +115,7 @@ describe('nodeModulesExtensionResolver', () => {
 
     it('handles .mjs extension', async () => {
       const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/lodash');
       // @ts-expect-error  type should be correct
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
@@ -134,8 +131,7 @@ describe('nodeModulesExtensionResolver', () => {
 
     it('handles .cjs extension', async () => {
       const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/lodash');
       // @ts-expect-error  type should be correct
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
@@ -153,8 +149,7 @@ describe('nodeModulesExtensionResolver', () => {
   describe('imports without extension', () => {
     it('resolves the import to the correct path if no exports present', async () => {
       const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/lodash');
       // @ts-expect-error  type should be correct
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
@@ -180,8 +175,7 @@ describe('nodeModulesExtensionResolver', () => {
   describe('scoped packages', () => {
     it('handles scoped package subpath imports with exports', async () => {
       const pkgJson = { name: '@my/lodash', exports: {} };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/@my/lodash');
       // @ts-expect-error  type should be correct
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
@@ -194,8 +188,7 @@ describe('nodeModulesExtensionResolver', () => {
 
     it('adds extension for scoped package without exports', async () => {
       const pkgJson = { name: '@my/lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/@my/lodash');
       // @ts-expect-error  type should be correct
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
       // @ts-expect-error Partial input is fine
@@ -211,8 +204,7 @@ describe('nodeModulesExtensionResolver', () => {
     it('handles package.json read failure gracefully', async () => {
       // ts-expect-error @typescript-eslint/no-unused-vars
       const _pkgJson = { name: '@my/lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
+      vi.mocked(getPackageRootPath).mockResolvedValue('/project/node_modules/@my/lodash');
 
       vi.mocked(readFile).mockImplementation(() => {
         throw new Error('ENOENT');
