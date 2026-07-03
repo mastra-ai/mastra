@@ -289,7 +289,7 @@ function ThreadRailPreview({
   top: number;
 }) {
   const containerVisible = phase === 'visible' || (phase === 'entering' && Boolean(previousTurn));
-  const hiddenLayerClassName = 'scale-95 opacity-0 blur-md';
+  const hiddenLayerClassName = 'scale-95 opacity-0 blur-xs';
   const visibleLayerClassName = 'scale-100 opacity-100 blur-none';
   const layerClassName =
     'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-[360ms] ease-in-out will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
@@ -312,6 +312,7 @@ function ThreadRailPreview({
         </div>
         {previousTurn && (
           <div
+            key={previousTurn.key}
             data-testid="thread-rail-preview-previous"
             aria-hidden
             className={cn(layerClassName, phase === 'entering' ? visibleLayerClassName : hiddenLayerClassName)}
@@ -320,6 +321,7 @@ function ThreadRailPreview({
           </div>
         )}
         <div
+          key={currentTurn.key}
           data-testid="thread-rail-preview-current"
           className={cn(layerClassName, phase === 'visible' ? visibleLayerClassName : hiddenLayerClassName)}
         >
