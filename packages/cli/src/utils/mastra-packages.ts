@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getPackageInfo } from 'local-pkg';
+
+import { getPackageInfo } from './package-info.js';
 
 interface PackageJson {
   dependencies?: Record<string, string>;
@@ -12,9 +13,9 @@ export interface MastraPackageInfo {
   version: string;
 }
 
-async function getResolvedVersion(packageName: string, specifiedVersion: string): Promise<string> {
+async function getResolvedVersion(packageName: string, specifiedVersion: string, rootDir: string): Promise<string> {
   try {
-    const packageInfo = await getPackageInfo(packageName);
+    const packageInfo = getPackageInfo(packageName, rootDir);
     return packageInfo?.version ?? specifiedVersion;
   } catch {
     // Fall back to the specified version if we can't resolve the installed version
@@ -40,7 +41,7 @@ export async function getMastraPackages(rootDir: string): Promise<MastraPackageI
     const packages = await Promise.all(
       mastraDeps.map(async ([name, specifiedVersion]) => ({
         name,
-        version: await getResolvedVersion(name, specifiedVersion),
+        version: await getResolvedVersion(name, specifiedVersion, rootDir),
       })),
     );
 

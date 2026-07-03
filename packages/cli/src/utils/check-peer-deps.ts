@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs';
 
-import { getPackageInfo } from 'local-pkg';
 import pc from 'picocolors';
 import { satisfies, gtr } from 'semver';
 
 import type { MastraPackageInfo } from './mastra-packages.js';
+import { getPackageInfo } from './package-info.js';
 
 export interface PeerDepMismatch {
   package: string;
@@ -20,7 +20,7 @@ export interface PeerDepMismatch {
  *
  * Set MASTRA_SKIP_PEERDEP_CHECK=1 to skip this check.
  */
-export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promise<PeerDepMismatch[]> {
+export async function checkMastraPeerDeps(packages: MastraPackageInfo[], rootDir: string): Promise<PeerDepMismatch[]> {
   if (process.env.MASTRA_SKIP_PEERDEP_CHECK === '1' || process.env.MASTRA_SKIP_PEERDEP_CHECK === 'true') {
     return [];
   }
@@ -36,7 +36,7 @@ export async function checkMastraPeerDeps(packages: MastraPackageInfo[]): Promis
   // Check each package's peer dependencies against installed versions
   for (const pkg of packages) {
     try {
-      const packageInfo = await getPackageInfo(pkg.name);
+      const packageInfo = getPackageInfo(pkg.name, rootDir);
       if (!packageInfo?.packageJson?.peerDependencies) {
         continue;
       }
