@@ -1,0 +1,100 @@
+---
+title: "Observational Memory status (data-om-status)"
+description: "How to consume the ephemeral data-om-status data part to drive polling progress UIs for Observational Memory, and why it is never persisted as a message."
+packages:
+  - "@mastra/memory"
+---
+
+# Observational Memory status (`data-om-status`)
+
+When Observational Memory (OM) is active, Mastra streams an ephemeral **status** data part during a generation so polling UIs (for example, Studio) can render live progress for observation and reflection. This page documents the shape of that part and how to consume it.
+
+:::note
+The `data-om-status` part is intended only for ephemeral progress UIs. Channels intentionally do **not** render it, and it is **not** persisted as a standalone assistant message.
+:::
+
+## Why it is transient
+
+`data-om-status` is emitted with the `transient: true` flag, exactly like every other OM lifecycle marker. Mastra's persistence layer treats any `data-*` chunk that is **not** marked transient as a standalone assistant message and persists it. Marking the status part transient prevents status snapshots from polluting `mastra_messages` and crowding out real conversation messages from paginated history reads.
+
+OM persists the durable marker explicitly through its own storage path; the streamed status is purely an ephemeral view of the current window usage.
+
+## Shape
+
+The part has `type: 'data-om-status'` and a `data` payload describing the current observation/reflection window usage:
+
+```typescript
+type DataOmStatusPart = {
+  type: 'data-om-status';
+  transient?: true;
+  data: {
+    windows: {
+      active: {
+        messages: { tokens: number; threshold: number };
+        observations: { tokens: number; threshold: number };
+      };
+      buffered: {
+        observations: {
+          chunks: number;
+          messageTokens: number;
+          projectedMessageRemoval: number;
+          observationTokens: number;
+          status: 'idle' | 'running' | 'complete';
+        };
+        reflection: {
+          inputObservationTokens: number;
+          observationTokens: number;
+          status: 'idle' | 'running' | 'complete';
+        };
+      };
+    };
+    recordId: string;
+    threadId: string;
+    stepNumber: number;
+    generationCount: number;
+  };
+};
+```
+
+| Field | Meaning |
+| --- | --- |
+| `windows.active.messages` | Pending message tokens against the `messageTokens` threshold |
+| `windows.active.observations` | Current observation tokens against the effective observation-token threshold |
+| `windows.buffered.observations` | Buffered observation chunks and their projected removal once an observation commits |
+| `windows.buffered.reflection` | Buffered reflection input/output tokens and lifecycle status |
+| `recordId` | The OM record id for this thread/resource |
+| `threadId` | The thread the status snapshot belongs to |
+| `stepNumber` | The agent step the snapshot was emitted during |
+| `generationCount` | How many observation generations have run for this record |
+
+## Consuming it in a polling UI
+
+To render live progress bars while the agent is observing or reflecting, filter the streamed data parts for `data-om-status` and read the `status` fields. The `status` values cycle through `idle` -> `running` -> `complete` as the background observation/reflection work progresses.
+
+```typescript
+for await (const part of stream) {
+  if (part.type === 'data-om-status') {
+    const { windows } = part.data;
+    const obsStatus = windows.buffered.observations.status;
+    const refStatus = windows.buffered.reflection.status;
+
+    updateProgress({
+      observations: {
+        current: windows.active.observations.tokens,
+        threshold: windows.active.observations.threshold,
+        running: obsStatus === 'running',
+      },
+      reflection: {
+        running: refStatus === 'running',
+      },
+    });
+  }
+}
+```
+
+You do not need to persist anything you receive here - it is a transient snapshot of window usage at the moment it was emitted.
+
+## Related
+
+- [Observational Memory](/docs/memory/observational-memory)
+- [Memory overview](/docs/memory/overview)
