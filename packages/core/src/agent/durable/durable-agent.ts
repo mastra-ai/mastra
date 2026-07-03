@@ -1387,7 +1387,11 @@ export class DurableAgent<
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId },
+          tracingOptions: {
+            traceId: origTraceId,
+            metadata: entry.agentSpan?.metadata,
+            tags: entry.agentSpan?.tags,
+          },
           requestContext,
           mastra: this.#mastra,
         });

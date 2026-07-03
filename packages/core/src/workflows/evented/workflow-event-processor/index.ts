@@ -287,12 +287,32 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   private resolveSuspendTracingContext(
     runId: string,
-  ): { traceId?: string; spanId?: string; parentSpanId?: string } | undefined {
+  ):
+    | {
+        traceId?: string;
+        spanId?: string;
+        parentSpanId?: string;
+        tracingMetadata?: Record<string, any>;
+        tracingTags?: string[];
+      }
+    | undefined {
     const span = this.resolveRunTracingContext(runId)?.currentSpan as
-      | { id?: string; traceId?: string; getParentSpanId?: () => string | undefined }
+      | {
+          id?: string;
+          traceId?: string;
+          getParentSpanId?: () => string | undefined;
+          metadata?: Record<string, any>;
+          tags?: string[];
+        }
       | undefined;
     if (!span) return undefined;
-    return { traceId: span.traceId, spanId: span.id, parentSpanId: span.getParentSpanId?.() };
+    return {
+      traceId: span.traceId,
+      spanId: span.id,
+      parentSpanId: span.getParentSpanId?.(),
+      ...(span.metadata ? { tracingMetadata: span.metadata } : {}),
+      ...(span.tags?.length ? { tracingTags: span.tags } : {}),
+    };
   }
 
   /**

@@ -6739,7 +6739,13 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
+          | {
+              traceId?: string;
+              spanId?: string;
+              parentSpanId?: string;
+              tracingMetadata?: Record<string, any>;
+              tracingTags?: string[];
+            }
           | undefined)
       : undefined;
 
@@ -6756,6 +6762,8 @@ export class Agent<
       isResume && persistedTracingContext?.traceId
         ? {
             ...options.tracingOptions,
+            metadata: { ...persistedTracingContext?.tracingMetadata, ...options.tracingOptions?.metadata },
+            tags: options.tracingOptions?.tags ?? persistedTracingContext?.tracingTags,
             traceId: effectiveTraceId,
             parentSpanId: shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : userProvidedParentSpanId,
           }

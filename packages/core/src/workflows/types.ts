@@ -317,6 +317,8 @@ export type WorkflowStateTracingContext = {
   traceId?: string;
   spanId?: string;
   parentSpanId?: string;
+  tracingMetadata?: Record<string, any>;
+  tracingTags?: string[];
 };
 
 /**

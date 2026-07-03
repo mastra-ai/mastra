@@ -600,4 +600,128 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       spy.mockRestore();
     }
   }, 30000);
+
+  it('restores persisted tracingOptions.metadata and tags on resume when caller does not re-supply them', async () => {
+    const { spy, agentRunCalls } = await spyOnAgentRunSpans();
+
+    try {
+      const findUserTool = createFindUserTool();
+      const userAgent = new Agent({
+        id: 'user-agent',
+        name: 'User Agent',
+        instructions: 'Find users.',
+        model: createMockModel(),
+        tools: { findUserTool },
+      });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { userAgent }, logger: false, storage });
+      const agent = mastra.getAgent('userAgent');
+
+      // Initial stream to create a suspended run
+      const stream = await agent.stream('Find Dero Israel', { requireToolApproval: true });
+      await drainFullStream(stream);
+
+      // Seed the snapshot with tracingMetadata and tracingTags (simulating what
+      // the workflow span save does in production, where the span inherits
+      // parent metadata via BaseSpan constructor)
+      const workflowsStore = await storage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId: stream.runId,
+      });
+      if (snapshot) {
+        await workflowsStore?.persistWorkflowSnapshot({
+          workflowName: 'agentic-loop',
+          runId: stream.runId,
+          snapshot: {
+            ...snapshot,
+            tracingContext: {
+              ...(snapshot.tracingContext ?? {}),
+              tracingMetadata: { sessionId: 'session-abc', userId: 'user-xyz', custom: 'value' },
+              tracingTags: ['production', 'experiment-v2'],
+            },
+          },
+        });
+      }
+
+      // Resume WITHOUT re-supplying tracingOptions
+      const resumeStream = await agent.resumeStream({ approved: true }, { runId: stream.runId });
+      await drainFullStream(resumeStream);
+
+      expect(agentRunCalls.length).toBe(2);
+      const resumedCall = agentRunCalls[1];
+      expect(resumedCall.tracingOptions?.metadata).toMatchObject({
+        sessionId: 'session-abc',
+        userId: 'user-xyz',
+        custom: 'value',
+      });
+      expect(resumedCall.tracingOptions?.tags).toEqual(['production', 'experiment-v2']);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('caller-provided tracingOptions.metadata on resume overrides persisted values', async () => {
+    const { spy, agentRunCalls } = await spyOnAgentRunSpans();
+
+    try {
+      const findUserTool = createFindUserTool();
+      const userAgent = new Agent({
+        id: 'user-agent',
+        name: 'User Agent',
+        instructions: 'Find users.',
+        model: createMockModel(),
+        tools: { findUserTool },
+      });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { userAgent }, logger: false, storage });
+      const agent = mastra.getAgent('userAgent');
+
+      const stream = await agent.stream('Find Dero Israel', { requireToolApproval: true });
+      await drainFullStream(stream);
+
+      // Seed snapshot with persisted metadata
+      const workflowsStore = await storage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId: stream.runId,
+      });
+      if (snapshot) {
+        await workflowsStore?.persistWorkflowSnapshot({
+          workflowName: 'agentic-loop',
+          runId: stream.runId,
+          snapshot: {
+            ...snapshot,
+            tracingContext: {
+              ...(snapshot.tracingContext ?? {}),
+              tracingMetadata: { sessionId: 'original-session', userId: 'original-user' },
+              tracingTags: ['original-tag'],
+            },
+          },
+        });
+      }
+
+      // Resume WITH new tracingOptions — caller values should override persisted
+      const resumeStream = await agent.resumeStream(
+        { approved: true },
+        {
+          runId: stream.runId,
+          tracingOptions: {
+            metadata: { sessionId: 'overridden-session' },
+            tags: ['overridden-tag'],
+          },
+        },
+      );
+      await drainFullStream(resumeStream);
+
+      expect(agentRunCalls.length).toBe(2);
+      const resumedCall = agentRunCalls[1];
+      // Caller-provided sessionId overrides persisted; persisted userId preserved
+      expect(resumedCall.tracingOptions?.metadata?.sessionId).toBe('overridden-session');
+      expect(resumedCall.tracingOptions?.metadata?.userId).toBe('original-user');
+      expect(resumedCall.tracingOptions?.tags).toEqual(['overridden-tag']);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
 });

@@ -4116,6 +4116,8 @@ export class Run<
 
     const resumeTracingOptions = {
       ...params.tracingOptions,
+      metadata: { ...persistedTracingContext?.tracingMetadata, ...params.tracingOptions?.metadata },
+      tags: params.tracingOptions?.tags ?? persistedTracingContext?.tracingTags,
       traceId: effectiveTraceId,
       parentSpanId: shouldUsePersistedParentSpan
         ? persistedTracingContext?.spanId
