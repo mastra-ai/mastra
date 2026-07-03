@@ -73,7 +73,6 @@ Realtime voice providers can use tools configured on the agent. Add the tools to
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
-import { RequestContext } from '@mastra/core/request-context'
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
 import { calculate, search } from '../tools'
 
@@ -118,6 +117,7 @@ Provide `voice` as a resolver when each live session needs its own voice instanc
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
+import { RequestContext } from '@mastra/core/request-context'
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
 
 export const agent = new Agent({

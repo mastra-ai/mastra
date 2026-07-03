@@ -59,7 +59,7 @@ const IGNORED_PATTERNS = [
   // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
   /\/mastra-platform\/.*/,
   /\/agents\/networks/,
-  /\/license/,
+  /\/license\.mdx$/,
 ]
 
 function extractDocIds(items: SidebarItem[]): Set<string> {
