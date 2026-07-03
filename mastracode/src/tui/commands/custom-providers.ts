@@ -1,7 +1,12 @@
+import { removeCustomProviderFromSettings, upsertCustomProviderInSettings } from '../../onboarding/custom-providers.js';
 import { getCustomProviderId, loadSettings, saveSettings, toCustomProviderModelId } from '../../onboarding/settings.js';
-import type { CustomProviderSetting, GlobalSettings } from '../../onboarding/settings.js';
+import type { GlobalSettings } from '../../onboarding/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
+
+// Re-exported for existing importers/tests; the implementations live in
+// onboarding/custom-providers.ts so non-TUI surfaces (web routes) can share them.
+export { removeCustomProviderFromSettings, upsertCustomProviderInSettings };
 
 function isValidUrl(value: string): boolean {
   try {
@@ -10,35 +15,6 @@ function isValidUrl(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-function normalizeProvider(input: CustomProviderSetting): CustomProviderSetting {
-  return {
-    name: input.name.trim(),
-    url: input.url.trim(),
-    apiKey: input.apiKey?.trim() || undefined,
-    models: [...new Set(input.models.map(model => model.trim()).filter(Boolean))],
-  };
-}
-
-export function upsertCustomProviderInSettings(
-  settings: GlobalSettings,
-  provider: CustomProviderSetting,
-  previousProviderId?: string,
-): void {
-  const next = normalizeProvider(provider);
-  const nextProviderId = getCustomProviderId(next.name);
-  const filteredProviders = settings.customProviders.filter(existing => {
-    const id = getCustomProviderId(existing.name);
-    return id !== nextProviderId && (!previousProviderId || id !== previousProviderId);
-  });
-  settings.customProviders = [...filteredProviders, next];
-}
-
-export function removeCustomProviderFromSettings(settings: GlobalSettings, providerId: string): void {
-  settings.customProviders = settings.customProviders.filter(
-    provider => getCustomProviderId(provider.name) !== providerId,
-  );
 }
 
 export function addModelToCustomProviderInSettings(

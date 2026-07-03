@@ -1,43 +1,13 @@
-import type { GlobalSettings } from '../../onboarding/settings.js';
+import { applyOmRoleOverride, persistOmObserveAttachments } from '../../onboarding/om-settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { OMSettingsComponent } from '../components/om-settings.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
-/**
- * Apply a role-specific OM model override to an in-memory `GlobalSettings`.
- *
- * When switching `activeOmPackId` from a built-in pack to `'custom'` we also
- * snapshot the *other* role's currently-resolved model into its override
- * field. Without this, the other role would silently lose its model on next
- * startup because `resolveOmRoleModel` would no longer resolve it from the
- * (now-overridden) pack.
- *
- * Exported for unit testing; `persistOmRoleOverride` is the disk-backed wrapper.
- */
-export function applyOmRoleOverride(
-  settings: GlobalSettings,
-  role: 'observer' | 'reflector',
-  modelId: string,
-  otherRoleCurrentModelId: string | null,
-): void {
-  const wasBuiltinPack = settings.models.activeOmPackId !== null && settings.models.activeOmPackId !== 'custom';
-
-  if (role === 'observer') {
-    if (wasBuiltinPack && otherRoleCurrentModelId && !settings.models.reflectorModelOverride) {
-      settings.models.reflectorModelOverride = otherRoleCurrentModelId;
-    }
-    settings.models.observerModelOverride = modelId;
-  } else {
-    if (wasBuiltinPack && otherRoleCurrentModelId && !settings.models.observerModelOverride) {
-      settings.models.observerModelOverride = otherRoleCurrentModelId;
-    }
-    settings.models.reflectorModelOverride = modelId;
-  }
-
-  settings.models.activeOmPackId = 'custom';
-}
+// Re-exported for existing importers/tests; the implementations live in
+// onboarding/om-settings.ts so non-TUI surfaces (web routes) can share them.
+export { applyOmRoleOverride, persistOmObserveAttachments };
 
 function persistOmRoleOverride(
   role: 'observer' | 'reflector',
@@ -69,12 +39,6 @@ function persistOmThresholds({
 function persistOmCavemanObservations(enabled: boolean): void {
   const settings = loadSettings();
   settings.models.omCavemanObservations = enabled;
-  saveSettings(settings);
-}
-
-export function persistOmObserveAttachments(value: 'auto' | boolean): void {
-  const settings = loadSettings();
-  settings.models.omObserveAttachments = value;
   saveSettings(settings);
 }
 

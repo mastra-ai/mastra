@@ -22,8 +22,8 @@ import { Readable } from 'node:stream';
 import { DeepgramVoice } from '@mastra/voice-deepgram';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import type { AuthStorage } from '../../auth/storage.js';
-import { DEFAULT_STT_MODEL, resolveSTTModel } from './stt-registry.js';
-import type { STTModel } from './stt-registry.js';
+import { DEFAULT_STT_MODEL, resolveSTTModel } from '../../voice/stt-registry.js';
+import type { STTModel } from '../../voice/stt-registry.js';
 
 /**
  * The minimal surface of a `MastraVoice` we use here. Declared structurally to

@@ -6,6 +6,8 @@
 import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 
+import { mastraBrand } from '../theme-palette.js';
+
 // =============================================================================
 // Theme Mode
 // =============================================================================
@@ -22,15 +24,7 @@ export function getThemeMode(): ThemeMode {
 // Mastra Brand Palette (immutable — stays constant regardless of theme)
 // =============================================================================
 
-export const mastraBrand = {
-  purple: '#7f45e0', // #b588fe brand is too washed out for terminal
-  green: '#16c858', // brand green (dark mode primary)
-  orange: '#fdac53',
-  pink: '#ff69cc',
-  blue: '#2563eb', // #6ccdfb brand is to washed out
-  red: '#DC5663', // #ff4758 too intense
-  yellow: '#e7e67b',
-} as const;
+export { mastraBrand };
 
 // =============================================================================
 // Extended Color Palette (additional colors for future use)

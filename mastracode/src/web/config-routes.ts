@@ -2,6 +2,9 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 
 import type { AuthStorage } from '../auth/storage.js';
+import { removeCustomPackFromSettings } from '../onboarding/custom-packs.js';
+import { removeCustomProviderFromSettings, upsertCustomProviderInSettings } from '../onboarding/custom-providers.js';
+import { applyOmRoleOverride, persistOmObserveAttachments } from '../onboarding/om-settings.js';
 import { getAvailableModePacks } from '../onboarding/packs.js';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '../onboarding/packs.js';
 import {
@@ -11,9 +14,6 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '../onboarding/settings.js';
 import type { CustomProviderSetting } from '../onboarding/settings.js';
-import { removeCustomProviderFromSettings, upsertCustomProviderInSettings } from '../tui/commands/custom-providers.js';
-import { removeCustomPackFromSettings } from '../tui/commands/models-pack.js';
-import { applyOmRoleOverride, persistOmObserveAttachments } from '../tui/commands/om.js';
 
 /**
  * Server-side configuration routes for the web app.

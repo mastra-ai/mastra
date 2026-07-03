@@ -82,7 +82,7 @@ import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
-import { mastra } from './tui/theme.js';
+import { mastraBrand } from './theme-palette.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import {
   detectProject,
@@ -635,21 +635,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...buildMode,
       metadata: {
         ...buildMode.metadata,
-        color: mastra.green,
+        color: mastraBrand.green,
       },
     },
     {
       ...planMode,
       metadata: {
         ...planMode.metadata,
-        color: mastra.purple,
+        color: mastraBrand.purple,
       },
     },
     {
       ...fastMode,
       metadata: {
         ...fastMode.metadata,
-        color: mastra.orange,
+        color: mastraBrand.orange,
       },
     },
   ];

@@ -11,12 +11,15 @@ vi.mock('../modal-question.js', () => ({
 }));
 
 vi.mock('../../onboarding/index.js', () => ({
-  OnboardingInlineComponent: class {},
   getAvailableModePacks: vi.fn(() => []),
   getAvailableOmPacks: vi.fn(() => []),
   ONBOARDING_VERSION: 1,
   loadSettings: mocks.loadSettings,
   saveSettings: mocks.saveSettings,
+}));
+
+vi.mock('../onboarding-inline.js', () => ({
+  OnboardingInlineComponent: class {},
 }));
 
 import type { GlobalSettings } from '../../onboarding/settings.js';

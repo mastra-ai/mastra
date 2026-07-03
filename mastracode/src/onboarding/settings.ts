@@ -10,8 +10,8 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage } from '../auth/storage.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
-import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../tui/voice/stt-registry.js';
 import { getAppDataDir } from '../utils/project.js';
+import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
 export interface CustomPack {

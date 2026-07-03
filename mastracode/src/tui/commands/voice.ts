@@ -1,9 +1,14 @@
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import type { VoiceEngine, VoiceSettings } from '../../onboarding/settings.js';
+import {
+  defaultModelForProvider,
+  resolveSTTModel,
+  sttModelsForProvider,
+  sttProviders,
+} from '../../voice/stt-registry.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { PermissionGuidance } from '../voice/engines/types.js';
 import { openMacSettings } from '../voice/native/open-settings.js';
-import { defaultModelForProvider, resolveSTTModel, sttModelsForProvider, sttProviders } from '../voice/stt-registry.js';
 import { hasProviderCredential } from '../voice/transcribe.js';
 import type { SlashCommandContext } from './types.js';
 

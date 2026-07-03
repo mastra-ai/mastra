@@ -11,14 +11,13 @@ import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
-  OnboardingInlineComponent,
   getAvailableModePacks,
   getAvailableOmPacks,
   ONBOARDING_VERSION,
   loadSettings,
   saveSettings,
 } from '../onboarding/index.js';
-import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
+import type { ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
@@ -50,6 +49,8 @@ import { dispatchEvent } from './event-dispatch.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
+import type { OnboardingResult } from './onboarding-inline.js';
+import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 

@@ -13,7 +13,6 @@ import type { MastraCodeAnalytics } from '../analytics.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
-import type { OnboardingInlineComponent } from '../onboarding/onboarding-inline.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { PluginManager } from '../plugins/manager.js';
 import { detectProject } from '../utils/project.js';
@@ -39,6 +38,7 @@ import type { UserMessageComponent } from './components/user-message.js';
 import { showError, showInfo } from './display.js';
 
 import { GoalManager } from './goal-manager.js';
+import type { OnboardingInlineComponent } from './onboarding-inline.js';
 import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
