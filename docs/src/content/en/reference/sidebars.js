@@ -651,7 +651,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Tools & MCP',
+      label: 'Tools and MCP',
       collapsed: true,
       items: [
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },

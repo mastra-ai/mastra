@@ -6,13 +6,12 @@ import { useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 
 import { useCreateWorkspaceMutation, useSelectWorkspaceMutation, useWorkspacesQuery } from '../hooks/useWorkspaces';
+import type { WorkspaceSession } from '../hooks/useWorkspaces';
 import type { Project, Worktree } from '../services/projects';
 
 interface WorkspacesSectionProps {
   activeProject: Project | null | undefined;
-  session: {
-    setState: (updates: Record<string, unknown>) => Promise<unknown>;
-  };
+  session: WorkspaceSession;
   agentControllerId?: string;
   resourceId?: string;
 }

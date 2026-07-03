@@ -28,7 +28,6 @@ const composerPanelClass = 'mx-auto w-full max-w-[80ch] shrink-0';
 export type WebAuthViewModel = {
   state?: WebAuthState;
   loading: boolean;
-  onSignIn: () => void;
   onSignOut: () => void;
 };
 

@@ -5,17 +5,14 @@ import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderWithProviders } from '../../../../../../../e2e/web-ui/render';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
+import type { WorkspaceSession } from '../../hooks/useWorkspaces';
 import type { Project } from '../../services/projects';
 import { loadProjects, saveProjects } from '../../services/projects';
 import { WorkspacesSection } from '../WorkspacesSection';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
-
-interface SessionStub {
-  setState: (updates: Record<string, unknown>) => Promise<void>;
-}
 
 const githubProject: Project = {
   id: 'project-gh',
@@ -41,8 +38,8 @@ const localProject: Project = {
   createdAt: 1,
 };
 
-function sessionStub(): SessionStub {
-  return { setState: vi.fn<SessionStub['setState']>().mockResolvedValue(undefined) };
+function sessionStub() {
+  return { setState: vi.fn<WorkspaceSession['setState']>().mockResolvedValue(undefined) };
 }
 
 function renderSection(project: Project) {
@@ -91,7 +88,7 @@ describe('WorkspacesSection', () => {
     saveProjects([githubProject]);
     let received: unknown;
     server.use(
-      http.post(`${ORIGIN}/api/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
         received = await request.json();
         return HttpResponse.json({
           branch: 'feat-new',
@@ -117,7 +114,7 @@ describe('WorkspacesSection', () => {
   it('shows an error and keeps the current selection when create fails', async () => {
     saveProjects([githubProject]);
     server.use(
-      http.post(`${ORIGIN}/api/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
         HttpResponse.json({ error: 'Invalid branch', message: 'branch name is invalid' }, { status: 400 }),
       ),
     );

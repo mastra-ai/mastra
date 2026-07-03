@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderHookWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
+import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../services/projects';
 import { loadProjects, saveProjects } from '../../services/projects';
 import { useProjectsQuery } from '../useProjects';
@@ -13,14 +13,11 @@ import {
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
 } from '../useWorkspaces';
+import type { WorkspaceSession } from '../useWorkspaces';
 
-const ORIGIN = 'http://localhost:3000';
+const ORIGIN = TEST_BASE_URL;
 const PROJECT_ID = 'project-gh';
 const GITHUB_PROJECT_ID = 'github-project-1';
-
-interface SessionStub {
-  setState: (updates: Record<string, unknown>) => Promise<void>;
-}
 
 const rootProject: Project = {
   id: PROJECT_ID,
@@ -42,8 +39,8 @@ function saveProject(project: Project) {
   saveProjects([project]);
 }
 
-function sessionStub(): SessionStub {
-  return { setState: vi.fn<SessionStub['setState']>().mockResolvedValue(undefined) };
+function sessionStub() {
+  return { setState: vi.fn<WorkspaceSession['setState']>().mockResolvedValue(undefined) };
 }
 
 describe('workspaces query hooks', () => {
@@ -91,7 +88,7 @@ describe('workspaces query hooks', () => {
     let received: unknown;
 
     server.use(
-      http.post(`${ORIGIN}/api/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
         received = await request.json();
         return HttpResponse.json({
           branch: 'feat-new',
@@ -133,7 +130,7 @@ describe('workspaces query hooks', () => {
     const session = sessionStub();
 
     server.use(
-      http.post(`${ORIGIN}/api/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
         HttpResponse.json({ error: 'Invalid branch', message: 'branch name is invalid' }, { status: 400 }),
       ),
     );

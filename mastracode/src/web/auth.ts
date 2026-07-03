@@ -8,10 +8,12 @@ import type { Context, Hono } from 'hono';
  *
  * When `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are both set, every route on the
  * web server is placed behind WorkOS AuthKit authentication: unauthenticated
- * browser navigations are redirected to the WorkOS hosted login, API/XHR calls
- * receive a 401, and a small set of public `/auth/*` routes drive the
- * login/callback/logout flow. When the env vars are absent, `mountWebAuth` is a
- * no-op and the server behaves exactly as it does without auth.
+ * browser navigations are redirected to the SPA's `/signin` page (whose button
+ * starts the `/auth/login` hosted-login flow), API/XHR calls receive a 401, and
+ * a small set of public routes stay reachable while signed out — the `/auth/*`
+ * login/callback/logout/me routes plus the `/signin` page and its `/assets/*`
+ * bundle. When the env vars are absent, `mountWebAuth` is a no-op and the
+ * server behaves exactly as it does without auth.
  *
  * The actual AuthKit session encryption, code exchange and token validation are
  * delegated to the existing `@mastra/auth-workos` provider (`MastraAuthWorkos`).
@@ -342,7 +344,7 @@ function getBearerToken(authorization: string | undefined): string {
 
 /**
  * Decide whether a request is a top-level browser navigation (which should be
- * redirected to login) versus an API/XHR call (which should get a 401 JSON
+ * redirected to `/signin`) versus an API/XHR call (which should get a 401 JSON
  * response the SPA can react to).
  */
 function isNavigationRequest(path: string, accept: string | undefined): boolean {
@@ -506,6 +508,11 @@ export function createWebAuthGate(provider: MastraAuthWorkos) {
     if (path.startsWith('/auth/')) {
       return next();
     }
+    // The SPA sign-in page and the static bundle it needs must be reachable
+    // while signed out; no user is stashed, so `/api/*` stays protected.
+    if (path === '/signin' || path.startsWith('/assets/')) {
+      return next();
+    }
 
     const token = getBearerToken(c.req.header('Authorization'));
     let user: WebAuthUser | null = null;
@@ -529,7 +536,7 @@ export function createWebAuthGate(provider: MastraAuthWorkos) {
     if (isNavigationRequest(path, c.req.header('Accept'))) {
       const url = new URL(c.req.url);
       const returnTo = sanitizeReturnTo(url.pathname + url.search);
-      return c.redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
+      return c.redirect(`/signin?returnTo=${encodeURIComponent(returnTo)}`);
     }
 
     return c.json({ error: 'unauthorized' }, 401);
