@@ -12,7 +12,6 @@ import {
   filterByDateRange,
   jsonValueEquals,
 } from './utils';
-import type { StoreName } from './utils';
 
 describe('safelyParseJSON', () => {
   const sampleObject = {
