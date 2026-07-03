@@ -48,8 +48,7 @@ describeForAllEngines('AIMock loop scenario: Mastra-distinctive behaviors', engi
     expect(toolNames).not.toContain('blocked_tool');
   });
 
-  // Durable: call-time outputProcessors not on DurableAgentStreamOptions (constructor-level only).
-  it.skipIf(engine === 'durable')('applies an output processor that redacts loop text', async () => {
+  it('applies an output processor that redacts loop text', async () => {
     const redactSecret: Processor = {
       id: 'redact-secret',
       async processOutputStream({ part }) {

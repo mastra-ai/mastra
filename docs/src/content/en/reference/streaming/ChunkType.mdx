@@ -1173,7 +1173,7 @@ Contains output from workflow step execution, used primarily for usage tracking 
 
 ## Background task chunks
 
-Emitted when a tool call is dispatched as a [background task](/docs/agents/background-tasks) and `streamUntilIdle()` is used.
+Emitted when a tool call is dispatched as a [background task](/docs/long-running-agents/background-tasks) and `streamUntilIdle()` is used.
 
 ### background-task-started
 
@@ -1762,7 +1762,7 @@ Contains monitoring and observability data from agent execution. Can include wor
 
 ### goal
 
-Emitted on every evaluation of an agent [goal](/docs/agents/goals). Consumers use this to render judge progress and the result mid-run. A goal that has no judge model configured produces no `goal` chunk.
+Emitted on every evaluation of an agent [goal](/docs/long-running-agents/goals). Consumers use this to render judge progress and the result mid-run. A goal that has no judge model configured produces no `goal` chunk.
 
 <PropertiesTable
   content={[

@@ -41,7 +41,10 @@ export function createApiClient({ baseUrl, fetchImpl }: ApiClientConfig): ApiCli
   const doFetch = fetchImpl ?? globalThis.fetch;
 
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const init: RequestInit = { method };
+    // `credentials: 'include'` so cross-site session cookies are sent when the
+    // SPA is hosted on a different origin than the API (platform deploy). It is
+    // a no-op for same-origin local dev.
+    const init: RequestInit = { method, credentials: 'include' };
     if (body !== undefined) {
       init.headers = { 'Content-Type': 'application/json' };
       init.body = JSON.stringify(body);

@@ -1096,6 +1096,13 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
+  /**
+   * When true, force text/finishReason promise resolution at step-finish even
+   * when `isLLMExecutionStep` is set.  Durable agents have a single
+   * MastraModelOutput for the entire run that needs both per-chunk output
+   * processor processing (isLLMExecutionStep) AND final promise resolution.
+   */
+  resolveFinalPromises?: boolean;
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
