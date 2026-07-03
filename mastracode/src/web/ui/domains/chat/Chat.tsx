@@ -2,19 +2,17 @@ import type { PlanResume } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useCallback, useState } from 'react';
 
-import { useApiConfig } from '../../shared/api/config';
-import { AppLayout } from './AppLayout';
-import { redirectToLogout, useWebAuth } from './domains/auth';
-import type { SlashCommand } from './domains/chat';
-import { SLASH_COMMANDS, useAgentControllerSession, useGlobalShortcuts, useTranscriptScroll } from './domains/chat';
-import { useDensityPreference } from './domains/settings';
-import {
-  deriveProjectPath,
-  useProjectModalAutoOpen,
-  useProjectSessionSync,
-  useActiveProject,
-} from './domains/workspaces';
-import { useToast } from './ui';
+import { useApiConfig } from '../../../../shared/api/config';
+import { AppLayout } from '../../AppLayout';
+import { useToast } from '../../ui';
+import { redirectToLogout, useWebAuth } from '../auth';
+import { useDensityPreference } from '../settings';
+import { deriveProjectPath, useProjectSessionSync, useActiveProject } from '../workspaces';
+import { useAgentControllerSession } from './hooks/useAgentControllerSession';
+import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useTranscriptScroll } from './hooks/useTranscriptScroll';
+import type { SlashCommand } from './services/commands';
+import { SLASH_COMMANDS } from './services/commands';
 
 export default function Chat() {
   const { toast } = useToast();
@@ -77,10 +75,11 @@ export default function Chat() {
     onSignOut,
   };
 
-  useProjectModalAutoOpen(projects.length, setProjectsOpen);
+  // Derived: with zero projects the modal is forced open (closing is a no-op).
+  const projectsModalOpen = projectsOpen || projects.length === 0;
   useGlobalShortcuts({
     busy,
-    projectsOpen,
+    projectsOpen: projectsModalOpen,
     settingsOpen,
     shortcutsOpen,
     paletteOpen,
@@ -195,7 +194,7 @@ export default function Chat() {
       sidebarOpen={sidebarOpen}
       setSidebarOpen={setSidebarOpen}
       closeSidebar={closeSidebar}
-      projectsOpen={projectsOpen}
+      projectsOpen={projectsModalOpen}
       setProjectsOpen={setProjectsOpen}
       settingsOpen={settingsOpen}
       setSettingsOpen={setSettingsOpen}

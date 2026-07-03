@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,6 +18,7 @@ import { assertReplicaStableStateSecret, isGithubFeatureEnabled } from './github
 import { ensureAppDbReady } from './github/db.js';
 import { mountGithubRoutes } from './github/routes.js';
 import { isSandboxEnabled } from './github/sandbox.js';
+import { injectRuntimeConfig } from './html-config.js';
 import { TenantDispatcher } from './tenant-server.js';
 import { assertRemoteTenantDbIfRequired } from './tenant-storage.js';
 
@@ -159,12 +160,23 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
     process.stderr.write('MastraCode GitHub: disabled\n');
   }
 
-  // Serve the built UI when available (production / `mastracode web`).
+  // Serve the built UI when available (production / `mastracode web`). The
+  // served index.html carries `window.__MASTRACODE_CONFIG__` so the SPA knows
+  // at boot whether auth is enabled and can skip the `/auth/me` probe when it
+  // is not (the route isn't mounted then, so probing it would just hit this
+  // SPA fallback and return ambiguous HTML).
   const resolvedUiDir = uiDir ?? defaultUiDir();
   if (resolvedUiDir && existsSync(join(resolvedUiDir, 'index.html'))) {
+    const indexHtml = injectRuntimeConfig(readFileSync(join(resolvedUiDir, 'index.html'), 'utf8'), {
+      authEnabled: webAuthEnabled,
+    });
+    // Registered BEFORE the static middleware so it never serves the raw
+    // (uninjected) index.html for these paths.
+    app.get('/', c => c.html(indexHtml));
+    app.get('/index.html', c => c.html(indexHtml));
     app.use('/*', serveStatic({ root: relativeFromCwd(resolvedUiDir) }));
-    // SPA fallback: any non-API route serves index.html.
-    app.get('*', serveStatic({ path: relativeFromCwd(join(resolvedUiDir, 'index.html')) }));
+    // SPA fallback: any non-API route serves the injected index.html.
+    app.get('*', c => c.html(indexHtml));
   }
 
   const server = serve({ fetch: app.fetch, port, hostname });

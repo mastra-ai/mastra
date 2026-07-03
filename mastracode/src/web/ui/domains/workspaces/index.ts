@@ -3,7 +3,6 @@ export { GithubConnectModal } from './components/GithubConnectModal';
 export { ProjectsModal } from './components/ProjectsModal';
 export { WorkspacesSection } from './components/WorkspacesSection';
 export { useActiveProject } from './hooks/useActiveProject';
-export { useProjectModalAutoOpen } from './hooks/useProjectModalAutoOpen';
 export { useProjectSessionSync } from './hooks/useProjectSessionSync';
 export * from './hooks/useEnsureRepoMaterialized';
 export * from './hooks/useGithubGitOps';

@@ -8,7 +8,7 @@ import { ChevronsUpDown, Circle, Folder, LogOut, MoreHorizontal, Plus, Settings 
 import { useEffect, useRef, useState } from 'react';
 
 import type { WebAuthViewModel } from './AppLayout';
-import type { Project } from './domains/workspaces';
+import type { Project, WorkspaceSession } from './domains/workspaces';
 import { WorkspacesSection } from './domains/workspaces';
 import { useKeyDown } from './lib/hooks';
 
@@ -32,9 +32,7 @@ interface SidebarProps {
   projects: Project[];
   activeProjectId: string | null;
   auth?: WebAuthViewModel;
-  session: {
-    setState: (updates: Record<string, unknown>) => Promise<unknown>;
-  };
+  session: WorkspaceSession;
   resourceId?: string;
   onManageProjects: () => void;
   onOpenSettings: () => void;

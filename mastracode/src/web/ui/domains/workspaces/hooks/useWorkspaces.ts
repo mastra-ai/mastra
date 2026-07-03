@@ -7,7 +7,7 @@ import { createWorktree } from '../services/github';
 import type { Project, Worktree } from '../services/projects';
 import { loadProjects, projectWorktrees, selectedWorktree, selectWorktree, upsertWorktree } from '../services/projects';
 
-interface SessionLike {
+export interface WorkspaceSession {
   setState: (updates: Record<string, unknown>) => Promise<unknown>;
 }
 
@@ -53,17 +53,21 @@ function workspacesData(project: Project): WorkspacesData {
 }
 
 export function useWorkspacesQuery(project: Project | null | undefined) {
+  const githubProject = project?.source === 'github' ? project : undefined;
   return useQuery({
     queryKey: queryKeys.workspaces(project?.id),
-    queryFn: async (): Promise<WorkspacesData> => workspacesData(project!),
-    enabled: project?.source === 'github',
-    initialData: project?.source === 'github' ? () => workspacesData(project) : undefined,
+    queryFn: async (): Promise<WorkspacesData> => {
+      if (!githubProject) throw new Error('Workspaces query requires a GitHub project');
+      return workspacesData(githubProject);
+    },
+    enabled: !!githubProject,
+    initialData: githubProject ? () => workspacesData(githubProject) : undefined,
   });
 }
 
 export function useSelectWorkspaceMutation(
   project: Project | null | undefined,
-  session: SessionLike | null | undefined,
+  session: WorkspaceSession | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
   const queryClient = useQueryClient();
@@ -80,7 +84,7 @@ export function useSelectWorkspaceMutation(
 
 export function useCreateWorkspaceMutation(
   project: Project | null | undefined,
-  session: SessionLike | null | undefined,
+  session: WorkspaceSession | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
   const { baseUrl } = useApiConfig();

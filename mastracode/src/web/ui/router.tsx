@@ -1,67 +1,60 @@
 /**
  * SPA route table (React Router v7, data mode).
  *
- * Auth gating happens in route loaders: the root layout loader resolves
- * `/auth/me` through the shared React Query cache (`queryClient.fetchQuery`
- * under the same key `useWebAuth` reads, so the sidebar reuses the entry
- * without a second fetch) and redirects unauthenticated sessions to `/signin`
- * when web auth is enabled. `/signin` mirrors the guard: signed-in (or
- * auth-disabled) visitors are sent back to `/chat`.
+ * Auth gating happens in React layout components, not loaders: `RequireAuth`
+ * wraps the app routes and reads `/auth/me` through the `useWebAuth` custom
+ * React Query hook (shared cache key with the rest of the UI), redirecting
+ * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
+ * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
+ * `/chat`.
  */
-import type { QueryClient } from '@tanstack/react-query';
-import { createBrowserRouter, Outlet, redirect } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { queryKeys } from '../../shared/api/keys';
-import Chat from './Chat';
-import { fetchAuthState, SignInPage } from './domains/auth';
+import { SignInPage, useWebAuth } from './domains/auth';
+import Chat from './domains/chat/Chat';
 
 /**
- * Loaders on `/` and `/signin` can both run for one navigation; the staleTime
- * lets `fetchQuery` serve the second call (and StrictMode re-runs) from cache
- * instead of hitting `/auth/me` again.
+ * Root layout guard. Renders nothing while the auth state resolves (one
+ * cached query, shared with the sidebar identity UI) so the app neither
+ * flashes protected content nor bounces through /signin on refresh.
  */
-const AUTH_STALE_TIME_MS = 30_000;
-
-function loadAuthState(queryClient: QueryClient, baseUrl: string) {
-  return queryClient.fetchQuery({
-    queryKey: queryKeys.webAuth(),
-    queryFn: () => fetchAuthState(baseUrl),
-    staleTime: AUTH_STALE_TIME_MS,
-  });
+function RequireAuth() {
+  const auth = useWebAuth();
+  if (auth.isPending) return null;
+  const state = auth.data;
+  if (state?.authEnabled && !state.authenticated) return <Navigate to="/signin" replace />;
+  return <Outlet />;
 }
 
-export function createAppRoutes(queryClient: QueryClient, baseUrl: string): RouteObject[] {
+/** Inverse guard for /signin: only unauthenticated (auth-enabled) users stay. */
+function SignInGate() {
+  const auth = useWebAuth();
+  if (auth.isPending) return null;
+  const state = auth.data;
+  if (!state?.authEnabled || state.authenticated) return <Navigate to="/chat" replace />;
+  return <SignInPage />;
+}
+
+export function createAppRoutes(): RouteObject[] {
+  // NOTE: route paths must not (case-insensitively) match a file at the Vite
+  // root (src/web/ui), or dev deep-links serve the module source instead of
+  // the app (e.g. /chat used to resolve to a root-level Chat.tsx).
   return [
     {
       path: '/',
-      element: <Outlet />,
-      loader: async () => {
-        const state = await loadAuthState(queryClient, baseUrl);
-        if (state.authEnabled && !state.authenticated) throw redirect('/signin');
-        return state;
-      },
+      element: <RequireAuth />,
       children: [
-        { index: true, loader: () => redirect('/chat') },
+        { index: true, element: <Navigate to="/chat" replace /> },
         { path: 'chat', element: <Chat /> },
         // Legacy deep links (the app used to serve everything at any path).
-        // `element: null` keeps React Router from warning about a leaf route
-        // with no element; the loader always redirects before render.
-        { path: '*', element: null, loader: () => redirect('/chat') },
+        { path: '*', element: <Navigate to="/chat" replace /> },
       ],
     },
-    {
-      path: '/signin',
-      element: <SignInPage />,
-      loader: async () => {
-        const state = await loadAuthState(queryClient, baseUrl);
-        if (!state.authEnabled || state.authenticated) throw redirect('/chat');
-        return state;
-      },
-    },
+    { path: '/signin', element: <SignInGate /> },
   ];
 }
 
-export function createAppRouter(queryClient: QueryClient, baseUrl: string) {
-  return createBrowserRouter(createAppRoutes(queryClient, baseUrl));
+export function createAppRouter() {
+  return createBrowserRouter(createAppRoutes());
 }

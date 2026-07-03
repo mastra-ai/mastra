@@ -1,9 +1,10 @@
 /**
  * BDD coverage for the SPA route table (`src/web/ui/router.tsx`).
  *
- * Drives the real route components (auth-guard layout + redirects) through a
- * memory router with MSW stubbing `/auth/me` and the agent-controller API,
- * mirroring how the browser entry wires `createBrowserRouter`.
+ * Drives the real route components (auth-guard layout + redirects, powered by
+ * the `useWebAuth` React Query hook) through a memory router with MSW stubbing
+ * `/auth/me` and the agent-controller API, mirroring how the browser entry
+ * wires `createBrowserRouter`.
  */
 import type { AgentControllerSessionState } from '@mastra/client-js';
 import { QueryClient } from '@tanstack/react-query';
@@ -22,7 +23,7 @@ import { createAppRoutes } from '../router';
 
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helper is stubbed instead; `loginUrl` (asserted
-// separately) stays real, as does `fetchAuthState` for the route loaders.
+// separately) stays real, as does `fetchAuthState` for the auth-guard hook.
 vi.mock('../domains/auth/services/auth', async importOriginal => {
   const actual = await importOriginal<typeof AuthService>();
   return { ...actual, redirectToLogin: vi.fn() };
@@ -100,7 +101,7 @@ function renderRoutes(initialEntry: string, authMe: () => Response) {
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const router = createMemoryRouter(createAppRoutes(client, TEST_BASE_URL), { initialEntries: [initialEntry] });
+  const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
   return { router, client };
 }

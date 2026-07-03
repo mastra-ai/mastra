@@ -12,19 +12,22 @@ import '@mastra/playground-ui/style.css';
 import './tailwind.css';
 import { ToastProvider } from './ui';
 
-// The web app talks to the Mastra server same-origin (Vite proxies `/api`), so
-// it injects an empty base URL. A future React Native entry mounts the same
-// providers with its own absolute base URL and fetch implementation.
-const baseUrl = '';
+// The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
+// the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
+// to :4111. The served index.html also carries `window.__MASTRACODE_CONFIG__`
+// (injected by the server in prod, by the Vite plugin in dev) so the UI knows
+// whether auth is enabled without probing `/auth/me`. A future React Native
+// entry mounts the same providers with its own absolute base URL and fetch
+// implementation.
 const queryClient = createQueryClient();
-const router = createAppRouter(queryClient, baseUrl);
+const router = createAppRouter();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider defaultTheme="dark" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
-          <ApiConfigProvider baseUrl={baseUrl}>
+          <ApiConfigProvider baseUrl="">
             <ToastProvider>
               <RouterProvider router={router} />
             </ToastProvider>

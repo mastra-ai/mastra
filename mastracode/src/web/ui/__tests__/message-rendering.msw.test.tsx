@@ -8,8 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import Chat from '../Chat';
 import { loginUrl, logoutUrl } from '../domains/auth';
+import Chat from '../domains/chat/Chat';
 import type { Project } from '../domains/workspaces';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
