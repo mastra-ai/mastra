@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-The web server now injects a runtime config flag into the served UI telling it whether auth is enabled, so the web UI skips the `/auth/me` probe entirely when auth is disabled instead of receiving an ambiguous HTML response.
+The web UI now reads a `window.__MASTRACODE_CONFIG__` runtime flag (injected by the Vite dev server from the WorkOS env vars) telling it whether auth is enabled, so it skips the `/auth/me` probe entirely when auth is disabled instead of relying on an ambiguous response.
