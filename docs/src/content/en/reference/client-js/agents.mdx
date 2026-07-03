@@ -704,6 +704,8 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
+Saves auto-publish by default. Pass `publishOnSave: false` to keep the initial version a draft until you call `activateVersion()`.
+
 With all options:
 
 ```typescript
@@ -733,6 +735,7 @@ const agent = await mastraClient.createStoredAgent({
   defaultOptions: {
     maxSteps: 10,
   },
+  publishOnSave: false,
   metadata: {
     version: '1.0',
     team: 'engineering',
@@ -771,6 +774,8 @@ const updated = await storedAgent.update({
   instructions: 'New instructions for the agent.',
 })
 ```
+
+Pass `publishOnSave: false` to keep the version created by an update in draft until you call `activateVersion()`.
 
 ```typescript
 // Update just the tools
@@ -872,6 +877,14 @@ Set a version as the active published version:
 
 ```typescript
 await agent.activateVersion('version-123')
+```
+
+### `unpublishVersion()`
+
+Clear the active published version. A code-defined agent falls back to its code configuration, and saved versions remain available for restore.
+
+```typescript
+await agent.unpublishVersion()
 ```
 
 ### `restoreVersion()`

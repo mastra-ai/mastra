@@ -230,7 +230,9 @@ Each version has one of three statuses:
 | Published | The active version used in production. Only one version can be published at a time. |
 | Archived | A previous version that's no longer active. You can restore any archived version. |
 
-The typical flow is: Edit the draft, test it, then activate it to make it the published version. The previously published version becomes archived so you can restore it if needed. You can do this through Studio or programmatically through the API.
+The typical flow is: Edit the draft, test it, then activate it to make it the published version. The previously published version becomes archived so you can restore it if needed. You can also unpublish to clear the active version. A code-defined agent then falls back to its code configuration, and saved versions stay available.
+
+Saves through the API auto-publish by default. Pass `publishOnSave: false` on create or update to keep drafts unpublished until you activate them. You can do this through Studio or programmatically through the API. See [version management](/reference/client-js/agents#version-management) for the Client SDK methods and code examples.
 
 This lifecycle makes it safe to experiment. Non-technical team members can iterate on a draft without affecting production traffic, then publish when ready. If something goes wrong, restoring a previous version is a single API call.
 

@@ -53,6 +53,15 @@ export const activateVersionResponseSchema = z.object({
 });
 
 /**
+ * Unpublish version response (shared)
+ */
+export const unpublishVersionResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  activeVersionId: z.null(),
+});
+
+/**
  * Delete version response (shared)
  */
 export const deleteVersionResponseSchema = z.object({

@@ -11,6 +11,7 @@ import {
   getVersionResponseSchema,
   createVersionResponseSchema,
   activateVersionResponseSchema,
+  unpublishVersionResponseSchema,
   restoreVersionResponseSchema,
   deleteVersionResponseSchema,
   compareVersionsResponseSchema,
@@ -310,6 +311,57 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error activating agent version');
+    }
+  },
+});
+
+/**
+ * POST /stored/agents/:agentId/versions/unpublish - Clear the active published version
+ */
+export const UNPUBLISH_AGENT_VERSION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/stored/agents/:agentId/versions/unpublish',
+  requiresAuth: true,
+  responseType: 'json',
+  pathParamSchema: agentVersionPathParams,
+  responseSchema: unpublishVersionResponseSchema,
+  summary: 'Unpublish agent version',
+  description: 'Clears the active editor version so the default agent route falls back to the code-defined agent',
+  tags: ['Agent Versions'],
+  handler: async ({ mastra, agentId, requestContext }) => {
+    try {
+      const storage = mastra.getStorage();
+
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage is not configured' });
+      }
+
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+      }
+
+      const agent = await agentsStore.getById(agentId);
+      if (!agent) {
+        throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
+      }
+      assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
+
+      await agentsStore.update({
+        id: agentId,
+        activeVersionId: null,
+        status: 'draft',
+      });
+
+      mastra.getEditor()?.agent.clearCache(agentId);
+
+      return {
+        success: true,
+        message: 'Published version cleared',
+        activeVersionId: null,
+      };
+    } catch (error) {
+      return handleError(error, 'Error unpublishing agent version');
     }
   },
 });

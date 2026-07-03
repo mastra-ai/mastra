@@ -348,6 +348,12 @@ export const createStoredAgentBodySchema = z
       .enum(['private', 'public'])
       .optional()
       .describe('Agent visibility: private (owner/admin only) or public (any reader)'),
+    publishOnSave: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether to auto-publish (activate) the initial version. Defaults to true. Pass false to keep the save a draft until explicitly published.',
+      ),
   })
   .merge(snapshotConfigCreateSchema);
 
@@ -375,6 +381,12 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
       .max(500)
       .optional()
       .describe('Optional message describing the changes for the auto-created version'),
+    publishOnSave: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether to auto-publish (activate) the version created by this update. Defaults to true. Pass false to keep the save a draft until explicitly published.',
+      ),
   });
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
@@ -410,7 +422,7 @@ export const storedAgentSchema = z.object({
   // Thin agent record fields
   id: z.string(),
   status: z.string().describe('Agent status: draft or published'),
-  activeVersionId: z.string().optional(),
+  activeVersionId: z.string().nullable().optional(),
   authorId: z.string().optional(),
   author: resolvedAuthorSchema.optional().describe('Resolved author identity (when an auth provider is configured)'),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -508,7 +520,7 @@ export const updateStoredAgentResponseSchema = z.union([
   z.object({
     id: z.string(),
     status: z.string(),
-    activeVersionId: z.string().optional(),
+    activeVersionId: z.string().nullable().optional(),
     authorId: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
     visibility: z.enum(['private', 'public']).optional(),

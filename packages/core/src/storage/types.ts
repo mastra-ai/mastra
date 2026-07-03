@@ -498,7 +498,7 @@ export interface StorageAgentType {
   /** Agent status: 'draft' on creation, 'published' when a version is activated */
   status: 'draft' | 'published' | 'archived';
   /** FK to agent_versions.id - the currently active version */
-  activeVersionId?: string;
+  activeVersionId?: string | null;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
   /**
@@ -558,7 +558,7 @@ export type StorageUpdateAgentInput = {
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
-  activeVersionId?: string;
+  activeVersionId?: string | null;
   /** Agent status: 'draft' or 'published' */
   status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {

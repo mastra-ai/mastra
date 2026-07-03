@@ -1278,7 +1278,7 @@ export interface StoredAgentResponse {
   // Thin agent record fields
   id: string;
   status: string;
-  activeVersionId?: string;
+  activeVersionId?: string | null;
   authorId?: string;
   author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
@@ -1411,6 +1411,8 @@ export interface CreateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /** Auto-publish (activate) the created version immediately. Defaults to `true`; pass `false` to keep the save a draft. */
+  publishOnSave?: boolean;
 }
 
 /**
@@ -1470,6 +1472,8 @@ export interface UpdateStoredAgentParams {
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
+  /** Auto-publish (activate) the version created by this update. Defaults to `true`; pass `false` to keep the save a draft. */
+  publishOnSave?: boolean;
 }
 
 /**
@@ -1790,6 +1794,12 @@ export interface ActivateAgentVersionResponse {
   success: boolean;
   message: string;
   activeVersionId: string;
+}
+
+export interface UnpublishAgentVersionResponse {
+  success: boolean;
+  message: string;
+  activeVersionId: null;
 }
 
 export interface RestoreAgentVersionResponse {

@@ -59,7 +59,7 @@ interface MockStoredAgent {
   authorId?: string;
   visibility?: 'public' | 'private';
   metadata?: Record<string, unknown>;
-  activeVersionId?: string;
+  activeVersionId?: string | null;
 }
 
 // Define the mock agents store interface
@@ -74,6 +74,7 @@ interface MockAgentsStore {
   getVersion: ReturnType<typeof vi.fn>;
   createVersion: ReturnType<typeof vi.fn>;
   listVersions: ReturnType<typeof vi.fn>;
+  deleteVersion: ReturnType<typeof vi.fn>;
   useProviderRef: ReturnType<typeof vi.fn>;
 }
 
@@ -205,6 +206,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
     listVersions: vi.fn().mockImplementation(async () => {
       return { versions: [], total: 0 };
     }),
+    deleteVersion: vi.fn().mockResolvedValue(undefined),
     useProviderRef: vi.fn(),
   };
 }
@@ -233,11 +235,17 @@ interface MockEditor {
     preview: ReturnType<typeof vi.fn>;
   };
   getSourceControlProvider?: ReturnType<typeof vi.fn>;
+  getSource?: ReturnType<typeof vi.fn>;
 }
 
-function createMockEditor(agentsStore?: MockAgentsStore, sourceControlProvider?: unknown): MockEditor {
+function createMockEditor(
+  agentsStore?: MockAgentsStore,
+  sourceControlProvider?: unknown,
+  source?: 'code' | 'stored',
+): MockEditor {
   return {
     getSourceControlProvider: sourceControlProvider ? vi.fn().mockReturnValue(sourceControlProvider) : undefined,
+    getSource: vi.fn().mockReturnValue(source),
     agent: {
       clearCache: vi.fn(),
       // Delegate to storage so existing assertions work
@@ -776,6 +784,47 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
+    it('auto-publishes the initial version by default so the agent is immediately usable', async () => {
+      mockAgentsStore.listVersions.mockResolvedValue({
+        versions: [{ id: 'v-create-pub-1', versionNumber: 1 }],
+        total: 1,
+      });
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: 'create-pub',
+        name: 'Create Pub',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      const stored = mockAgentsData.get('create-pub');
+      expect(stored?.activeVersionId).toBe('v-create-pub-1');
+    });
+
+    it('does not auto-publish the initial version when saving as a draft (publishOnSave: false)', async () => {
+      mockAgentsStore.listVersions.mockResolvedValue({
+        versions: [{ id: 'v-create-draft-1', versionNumber: 1 }],
+        total: 1,
+      });
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        id: 'create-draft',
+        name: 'Create Draft',
+        instructions: 'Be helpful',
+        model: { name: 'gpt-4', provider: 'openai' },
+        publishOnSave: false,
+      });
+
+      const stored = mockAgentsData.get('create-draft');
+      expect(stored?.activeVersionId).toBeUndefined();
+      const activatedCall = mockAgentsStore.update.mock.calls.find(
+        ([arg]) => arg && typeof arg === 'object' && 'activeVersionId' in arg,
+      );
+      expect(activatedCall).toBeUndefined();
+    });
+
     it('should reject empty instructions when creating an override for a code agent that owns instructions', async () => {
       const mastra = createMockMastra({
         storage: mockStorage,
@@ -1260,6 +1309,121 @@ describe('Stored Agents Handlers', () => {
       // Verify activeVersionId was updated to the latest version
       const stored = mockAgentsData.get('autopub-test');
       expect(stored?.activeVersionId).toBe(newVersionId);
+    });
+
+    // The version editor splits "Save" (create a draft snapshot) from "Publish"
+    // (activate a version). A draft save must NOT auto-publish — otherwise the
+    // explicit Publish button is meaningless and every save goes live instantly.
+    describe('when saving as a draft (publishOnSave: false)', () => {
+      it('does not auto-publish: leaves activeVersionId pointing at the previously published version', async () => {
+        mockAgentsData.set('draft-save-test', {
+          id: 'draft-save-test',
+          name: 'Original Name',
+          instructions: 'Original instructions',
+          model: { name: 'gpt-4', provider: 'openai' },
+          activeVersionId: 'v-draft-1',
+        });
+
+        const { handleAutoVersioning } = await import('./version-helpers');
+        vi.mocked(handleAutoVersioning).mockImplementationOnce(async (_store, _id, _existing, updatedAgent) => ({
+          agent: updatedAgent as any,
+          versionCreated: true,
+        }));
+        mockAgentsStore.listVersions.mockResolvedValue({
+          versions: [{ id: 'v-draft-2', versionNumber: 2 }],
+          total: 2,
+        });
+
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'draft-save-test',
+          name: 'Updated Name',
+          instructions: 'Updated instructions',
+          publishOnSave: false,
+        });
+
+        // The freshly created version stays a draft; the active version is unchanged.
+        const stored = mockAgentsData.get('draft-save-test');
+        expect(stored?.activeVersionId).toBe('v-draft-1');
+        // No store update should carry an activeVersionId mutation.
+        const activatedCall = mockAgentsStore.update.mock.calls.find(
+          ([arg]) => arg && typeof arg === 'object' && 'activeVersionId' in arg,
+        );
+        expect(activatedCall).toBeUndefined();
+      });
+
+      it('does not collapse history: keeps the previous version instead of deleting it (code source)', async () => {
+        mockEditor = createMockEditor(mockAgentsStore, undefined, 'code');
+        mockMastra = createMockMastra({ storage: mockStorage, editor: mockEditor });
+        mockAgentsData.set('collapse-test', {
+          id: 'collapse-test',
+          name: 'Original Name',
+          instructions: 'Original instructions',
+          model: { name: 'gpt-4', provider: 'openai' },
+          activeVersionId: 'v-collapse-1',
+        });
+
+        const { handleAutoVersioning } = await import('./version-helpers');
+        vi.mocked(handleAutoVersioning).mockImplementationOnce(async (_store, _id, _existing, updatedAgent) => ({
+          agent: updatedAgent as any,
+          versionCreated: true,
+        }));
+        mockAgentsStore.listVersions.mockResolvedValue({
+          versions: [
+            { id: 'v-collapse-2', versionNumber: 2 },
+            { id: 'v-collapse-1', versionNumber: 1 },
+          ],
+          total: 2,
+        });
+
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(mockMastra),
+          storedAgentId: 'collapse-test',
+          name: 'Updated Name',
+          instructions: 'Updated instructions',
+          publishOnSave: false,
+        });
+
+        // The previous snapshot must survive — a draft save is not a rolling collapse.
+        expect(mockAgentsStore.deleteVersion).not.toHaveBeenCalled();
+      });
+    });
+
+    // Locks the pre-existing Agent Builder behaviour: when the caller does NOT
+    // opt out (no publishOnSave flag) a code-source save still collapses the
+    // rolling snapshot. This is the behaviour the draft opt-out must preserve.
+    it('still collapses the previous version on a default (non-draft) code-source save', async () => {
+      mockEditor = createMockEditor(mockAgentsStore, undefined, 'code');
+      mockMastra = createMockMastra({ storage: mockStorage, editor: mockEditor });
+      mockAgentsData.set('collapse-default-test', {
+        id: 'collapse-default-test',
+        name: 'Original Name',
+        instructions: 'Original instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-cd-1',
+      });
+
+      const { handleAutoVersioning } = await import('./version-helpers');
+      vi.mocked(handleAutoVersioning).mockImplementationOnce(async (_store, _id, _existing, updatedAgent) => ({
+        agent: updatedAgent as any,
+        versionCreated: true,
+      }));
+      mockAgentsStore.listVersions.mockResolvedValue({
+        versions: [
+          { id: 'v-cd-2', versionNumber: 2 },
+          { id: 'v-cd-1', versionNumber: 1 },
+        ],
+        total: 2,
+      });
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'collapse-default-test',
+        name: 'Updated Name',
+        instructions: 'Updated instructions',
+      });
+
+      expect(mockAgentsStore.deleteVersion).toHaveBeenCalledWith('v-cd-1');
     });
 
     it('threads toolProviders into the auto-versioning snapshot config', async () => {

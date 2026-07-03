@@ -90,7 +90,7 @@ export interface ListVersionsOutputBase<TVersion> {
 
 export interface VersionedEntityBase {
   id: string;
-  activeVersionId?: string;
+  activeVersionId?: string | null;
 }
 
 // ============================================================================
