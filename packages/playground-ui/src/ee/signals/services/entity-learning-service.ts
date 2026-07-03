@@ -42,7 +42,12 @@ export type EntityLearningOutlierExamplesParams = {
 
 export type EntityLearningService = ReturnType<typeof createEntityLearningService>;
 
-const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+// Index scan instead of regex to avoid backtracking (CodeQL js/polynomial-redos)
+const trimTrailingSlash = (value: string) => {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
+};
 
 /**
  * Network layer for the platform Agent Learning API served by the
