@@ -205,6 +205,21 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.clearTable({ tableName: TABLE_DATASETS });
   }
 
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const [rows] = await this.database.run({
+        sql: `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
+              WHERE TABLE_SCHEMA = "" AND TABLE_NAME IN (@a, @b)`,
+        params: { a: TABLE_EXPERIMENTS, b: TABLE_EXPERIMENT_RESULTS },
+        json: true,
+      });
+      const row = rows?.[0] as { c?: number | string } | undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
+  }
+
   // ==========================================================================
   // Dataset CRUD
   // ==========================================================================
@@ -350,36 +365,61 @@ export class DatasetsSpanner extends DatasetsStorage {
 
   async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing dataset. Never throws
-      // so we don't leak cross-tenant existence via error timing/text. Cascade
-      // deletes below are datasetId-scoped, so gating the parent is sufficient.
-      const gate = await this.getDatasetById({ id: args.id, filters: args.filters });
-      if (!gate) return;
-
-      // Best-effort detach of experiments referencing this dataset. These tables
-      // may not exist when datasets is used standalone, so failures are swallowed.
-      try {
-        await this.db.runDml({
-          sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
-                WHERE ${quoteIdent('experimentId', 'column name')} IN (
-                  SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
-                  WHERE ${quoteIdent('datasetId', 'column name')} = @id)`,
-          params: { id: args.id },
-        });
-        await this.db.runDml({
-          sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
-                SET ${quoteIdent('datasetId', 'column name')} = NULL,
-                    ${quoteIdent('datasetVersion', 'column name')} = NULL
-                WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
-          params: { id: args.id },
-        });
-      } catch {
-        // Experiments tables absent — nothing to detach.
+      // Atomic gate + cascade inside a single read-write transaction. The
+      // gate SELECT locks the parent row within the tx, and the tenancy
+      // predicate is folded into the parent DELETE, so a concurrent
+      // delete/recreate under a different tenant cannot let a scoped delete
+      // hit another tenant's row. Silent no-op on mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: Record<string, any> = {};
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        tenancyParams.organizationId = args.filters.organizationId;
       }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        tenancyParams.projectId = args.filters.projectId;
+      }
+      const scopedWhere = [`${quoteIdent('id', 'column name')} = @id`, ...tenancyConditions].join(' AND ');
+
+      // Probe for experiment tables outside the transaction. Once any statement
+      // fails inside a Spanner read-write transaction, the transaction is left
+      // in a state where subsequent statements can't be trusted to run (the
+      // batch-DML contract halts on the first error, and a client-side try/catch
+      // around a DML doesn't put the tx back into a usable shape). Checking
+      // existence up front avoids running detach DMLs against missing tables.
+      const experimentTablesExist = await this.experimentTablesExist();
 
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            const [rows] = await tx.run({
+              sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${scopedWhere}`,
+              params: { id: args.id, ...tenancyParams },
+              json: true,
+            });
+            if (!rows || rows.length === 0) {
+              await tx.commit();
+              return;
+            }
+
+            if (experimentTablesExist) {
+              await tx.runUpdate({
+                sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
+                      WHERE ${quoteIdent('experimentId', 'column name')} IN (
+                        SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                        WHERE ${quoteIdent('datasetId', 'column name')} = @id)`,
+                params: { id: args.id },
+              });
+              await tx.runUpdate({
+                sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                      SET ${quoteIdent('datasetId', 'column name')} = NULL,
+                          ${quoteIdent('datasetVersion', 'column name')} = NULL
+                      WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
+                params: { id: args.id },
+              });
+            }
+
             for (const table of [TABLE_DATASET_VERSIONS, TABLE_DATASET_ITEMS]) {
               await tx.runUpdate({
                 sql: `DELETE FROM ${quoteIdent(table, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
@@ -387,8 +427,8 @@ export class DatasetsSpanner extends DatasetsStorage {
               });
             }
             await tx.runUpdate({
-              sql: `DELETE FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${quoteIdent('id', 'column name')} = @id`,
-              params: { id: args.id },
+              sql: `DELETE FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${scopedWhere}`,
+              params: { id: args.id, ...tenancyParams },
             });
             await tx.commit();
           } catch (err) {

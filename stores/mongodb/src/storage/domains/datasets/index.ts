@@ -35,21 +35,12 @@ import type {
   DatasetTenancyFilters,
 } from '@mastra/core/storage';
 
-/**
- * Merge tenancy read-scope conditions into a MongoDB filter document. Fields
- * with `undefined` filter values are omitted (no predicate). Defined values
- * become equality matches — matches the pattern already used by listDatasets.
- */
-function applyTenancyFilter(filter: Record<string, any>, filters: DatasetTenancyFilters | undefined): void {
-  if (!filters) return;
-  if (filters.organizationId !== undefined) filter.organizationId = filters.organizationId;
-  if (filters.projectId !== undefined) filter.projectId = filters.projectId;
-}
 import type { Collection } from 'mongodb';
 
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+import { applyTenancyFilter } from '../utils';
 
 const MANAGED_COLLECTIONS = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
 
@@ -340,9 +331,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // Tenancy gate: silent no-op on mismatch or missing dataset. Never throws
-      // so we don't leak cross-tenant existence via error timing/text. Cascade
-      // deletes below are datasetId-scoped, so gating the parent is sufficient.
+      // Tenancy predicate is applied on the destructive parent deleteOne (not
+      // only the pre-check), so a concurrent delete/recreate under a different
+      // tenant cannot let a scoped delete hit another tenant's row. Silent
+      // no-op on mismatch.
       const datasetsCollectionForGate = await this.getCollection(TABLE_DATASETS);
       const gateQuery: Record<string, any> = { id };
       applyTenancyFilter(gateQuery, filters);
@@ -382,7 +374,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       await versionsCollection.deleteMany({ datasetId: id });
       await itemsCollection.deleteMany({ datasetId: id });
-      await datasetsCollection.deleteOne({ id });
+      const parentDeleteQuery: Record<string, any> = { id };
+      applyTenancyFilter(parentDeleteQuery, filters);
+      await datasetsCollection.deleteOne(parentDeleteQuery);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
