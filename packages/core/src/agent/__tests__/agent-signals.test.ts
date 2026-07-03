@@ -2848,7 +2848,10 @@ describe('Agent signals', () => {
     ownerRuntime.registerRun(
       owner,
       output,
-      { runId: 'stale-remote-run-1', memory: { resource: 'stale-remote-resource', thread: 'stale-remote-thread' } } as any,
+      {
+        runId: 'stale-remote-run-1',
+        memory: { resource: 'stale-remote-resource', thread: 'stale-remote-thread' },
+      } as any,
       pubsub,
     );
     await waitForCondition(() => senderSubscription.activeRunId() === 'stale-remote-run-1');
