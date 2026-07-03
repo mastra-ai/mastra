@@ -123,14 +123,13 @@ export class PlatformSandbox extends MastraSandbox {
 
   private readonly client: PlatformClient;
   private readonly environmentId: string;
-  private readonly sandboxId?: string;
+  private sandboxId?: string;
   private readonly idleTimeoutMinutes?: number;
   private readonly networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly env: Record<string, string>;
   private readonly template?: PlatformSandboxTemplate;
   private readonly timeout?: number;
   private readonly instructionsOverride?: InstructionsOption;
-  private platformSandboxId?: string;
   private createdAt: Date | null = null;
 
   constructor(options: PlatformSandboxOptions = {}) {
@@ -140,7 +139,6 @@ export class PlatformSandbox extends MastraSandbox {
     this.environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this.environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this.sandboxId = options.sandboxId;
-    this.platformSandboxId = options.sandboxId;
     this.idleTimeoutMinutes = options.idleTimeoutMinutes;
     this.networkIsolation = options.networkIsolation;
     this.env = options.env ?? {};
@@ -150,7 +148,7 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async start(): Promise<void> {
-    if (this.platformSandboxId) {
+    if (this.sandboxId) {
       this.createdAt = new Date();
       return;
     }
@@ -167,7 +165,7 @@ export class PlatformSandbox extends MastraSandbox {
       }),
     });
     const json = (await response.json()) as CreateSandboxResponse;
-    this.platformSandboxId = json.id;
+    this.sandboxId = json.id;
     this.createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
   }
 
@@ -176,17 +174,17 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async destroy(): Promise<void> {
-    if (!this.platformSandboxId) return;
-    await this.client.request(`/sandbox/${encodeURIComponent(this.platformSandboxId)}`, { method: 'DELETE' });
+    if (!this.sandboxId) return;
+    await this.client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}`, { method: 'DELETE' });
   }
 
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     await this.ensureRunning();
-    if (!this.platformSandboxId) throw new SandboxNotReadyError(this.id);
+    if (!this.sandboxId) throw new SandboxNotReadyError(this.id);
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
-    const response = await this.client.request(`/sandbox/${encodeURIComponent(this.platformSandboxId)}/exec`, {
+    const response = await this.client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}/exec`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -211,7 +209,7 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async getInfo(): Promise<SandboxInfo> {
-    if (!this.platformSandboxId) {
+    if (!this.sandboxId) {
       return {
         id: this.id,
         name: this.name,
@@ -220,7 +218,7 @@ export class PlatformSandbox extends MastraSandbox {
         createdAt: this.createdAt ?? new Date(),
       };
     }
-    const response = await this.client.request(`/sandbox/${encodeURIComponent(this.platformSandboxId)}`);
+    const response = await this.client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}`);
     const json = (await response.json()) as CreateSandboxResponse;
     return {
       id: json.id,
@@ -236,7 +234,7 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   getInstructions(): string {
-    const defaultInstructions = `Platform sandbox${this.platformSandboxId ? ` ${this.platformSandboxId}` : ''}. Execute commands with the sandbox command APIs.`;
+    const defaultInstructions = `Platform sandbox${this.sandboxId ? ` ${this.sandboxId}` : ''}. Execute commands with the sandbox command APIs.`;
     if (typeof this.instructionsOverride === 'function') {
       return this.instructionsOverride({ defaultInstructions });
     }
