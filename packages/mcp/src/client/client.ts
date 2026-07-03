@@ -795,7 +795,10 @@ export class InternalMastraMCPClient extends MastraBase {
     const jsonSchema = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
 
     if (this.coerceSchemasTo === 'zod') {
-      return convertJsonSchemaToZod(jsonSchema as Record<string, unknown>);
+      // Double assertion: zod/v4's ZodTypeAny (any, any) is structurally compatible with
+      // PublicSchema's z4.ZodType (unknown, unknown) but TS can't prove it due to
+      // recursive generic depth (TS2589) across module boundaries.
+      return convertJsonSchemaToZod(jsonSchema as Record<string, unknown>) as unknown as PublicSchema;
     }
 
     return jsonSchema;
