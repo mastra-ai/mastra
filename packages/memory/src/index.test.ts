@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { createSignal, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
@@ -461,6 +461,64 @@ describe('Memory', () => {
 
       expect(stored.messages).toHaveLength(1);
       expect(stored.messages[0]?.id).toBe('raw-user-msg');
+    });
+
+    it('should not save transient signals through saveMessages', async () => {
+      const threadId = 'thread-transient-save-test';
+      const resourceId = 'resource-transient-save-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      const transientSignal = createSignal({
+        id: 'transient-sig',
+        type: 'reactive',
+        contents: 'Steering reminder — not retained',
+        transient: true,
+      }).toDBMessage({ threadId, resourceId });
+      const persistedSignal = createSignal({
+        id: 'persisted-sig',
+        type: 'reactive',
+        contents: 'Regular signal — stored',
+      }).toDBMessage({ threadId, resourceId });
+
+      const result = await memory.saveMessages({ messages: [transientSignal, persistedSignal] });
+
+      expect(result.messages.map(m => m.id)).toEqual(['persisted-sig']);
+
+      const recalled = await memory.recall({ threadId, resourceId, perPage: false, includeSystemReminders: true });
+      expect(recalled.messages.map(m => m.id)).toEqual(['persisted-sig']);
+    });
+
+    it('should not persist transient signals through raw persistMessages', async () => {
+      const storage = new InMemoryStore();
+      const memory = new Memory({ storage });
+      const threadId = 'thread-transient-raw-persist-test';
+      const resourceId = 'resource-transient-raw-persist-test';
+
+      await memory.createThread({ threadId, resourceId });
+
+      await memory.persistMessages([
+        createSignal({
+          id: 'raw-transient-sig',
+          type: 'reactive',
+          contents: 'not retained',
+          transient: true,
+        }).toDBMessage({ threadId, resourceId }),
+        {
+          id: 'raw-user-msg-2',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+        },
+      ]);
+
+      const memoryStore = await storage.getStore('memory');
+      const stored = await memoryStore!.listMessages({ threadId, resourceId, perPage: false });
+
+      expect(stored.messages).toHaveLength(1);
+      expect(stored.messages[0]?.id).toBe('raw-user-msg-2');
     });
   });
 

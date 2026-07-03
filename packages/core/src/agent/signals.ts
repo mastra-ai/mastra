@@ -69,6 +69,15 @@ export type AgentSignalInput = {
    * message (also visible to UI consumers via `useChat` message metadata).
    */
   providerOptions?: MastraProviderMetadata;
+  /**
+   * Whether this signal is transient. Defaults to `false`.
+   *
+   * A transient signal is delivered to the model for the current call (it appears in the prompt
+   * for this turn), but it is not retained as part of the conversation: it is not written to
+   * storage and never re-enters the prompt on later turns. Re-send it each turn from a processor
+   * to keep a single fresh copy near the latest message instead of an accumulating history.
+   */
+  transient?: boolean;
 };
 
 /**
@@ -105,6 +114,26 @@ export type CreatedAgentSignal = AgentSignalInput & {
 
 export function isMastraSignalMessage(message: MastraDBMessage): message is MastraDBMessage & { role: 'signal' } {
   return message.role === 'signal';
+}
+
+/**
+ * True for a signal DB message created with `transient: true`. Save paths use this to drop the
+ * message before writing to storage — the signal still reaches the model (the prompt is projected
+ * from the live message list, not the persisted set), it is just never retained.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export function isTransientSignalMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal') return false;
+  const metadata = message.content?.metadata;
+  if (!metadata || typeof metadata !== 'object') return false;
+  const signal = (metadata as Record<string, unknown>).signal;
+  return (
+    !!signal &&
+    typeof signal === 'object' &&
+    !Array.isArray(signal) &&
+    (signal as Record<string, unknown>).transient === true
+  );
 }
 
 function normalizeSignalType(input: Pick<AgentSignalInput, 'type' | 'tagName'>): {
@@ -488,6 +517,7 @@ function signalToDBMessage(
           ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
           ...(signal.attributes ? { attributes: signal.attributes } : {}),
           ...(signal.metadata ? { metadata: signal.metadata } : {}),
+          ...(signal.transient ? { transient: true } : {}),
         },
       },
     },
@@ -586,6 +616,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
         ? (providerMetadata as MastraProviderMetadata)
         : undefined,
+    transient: signalMetadata?.transient === true ? true : undefined,
   };
 
   return createSignal({ ...base, type, tagName, contents });

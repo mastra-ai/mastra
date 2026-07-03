@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import { isTransientSignalMessage } from '../agent/signals';
 import type { IMastraLogger } from '../logger';
 import { ProcessorRunner } from './runner';
 import type { ProcessorStreamWriter } from './index';
@@ -407,5 +408,79 @@ describe('sendSignal integration through ProcessorRunner', () => {
     const signals = messageList.get.all.db().filter(m => m.role === 'signal');
     expect(signals).toHaveLength(1);
     expect(signals[0]!.content.parts[0]).toEqual(expect.objectContaining({ type: 'text', text: 'no rotate test' }));
+  });
+
+  it('threads transient: true from a processor sendSignal through to the DB message', async () => {
+    // Regression: MessageList.addSignal rebuilds the signal via createSignal, so it must forward
+    // the transient flag. Otherwise transient signals sent from a processor (the main use case)
+    // lose the flag before toDBMessage() and get persisted.
+    const runner = new ProcessorRunner({
+      inputProcessors: [
+        {
+          id: 'transient-signal',
+          processInputStep: async ({ sendSignal }) => {
+            await sendSignal?.({
+              type: 'system-reminder',
+              contents: 'transient steering reminder',
+              transient: true,
+            });
+          },
+        },
+      ],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    await runner.runProcessInputStep({
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      model: {} as any,
+      tools: {},
+      retryCount: 0,
+      messageId: 'response-1',
+      writer: { custom: async () => {} },
+    });
+
+    const signals = messageList.get.all.db().filter(m => m.role === 'signal');
+    expect(signals).toHaveLength(1);
+    // The flag survived addSignal → the save-time filters will drop this from storage.
+    expect((signals[0]!.content.metadata?.signal as Record<string, unknown>).transient).toBe(true);
+    expect(isTransientSignalMessage(signals[0]!)).toBe(true);
+  });
+
+  it('does not mark a normal processor sendSignal as transient', async () => {
+    const runner = new ProcessorRunner({
+      inputProcessors: [
+        {
+          id: 'normal-signal',
+          processInputStep: async ({ sendSignal }) => {
+            await sendSignal?.({
+              type: 'system-reminder',
+              contents: 'persisted reminder',
+            });
+          },
+        },
+      ],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    await runner.runProcessInputStep({
+      messageList,
+      stepNumber: 0,
+      steps: [],
+      model: {} as any,
+      tools: {},
+      retryCount: 0,
+      messageId: 'response-1',
+      writer: { custom: async () => {} },
+    });
+
+    const signals = messageList.get.all.db().filter(m => m.role === 'signal');
+    expect(signals).toHaveLength(1);
+    expect(isTransientSignalMessage(signals[0]!)).toBe(false);
   });
 });

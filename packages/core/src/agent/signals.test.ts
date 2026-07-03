@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'vitest';
+import { createSignal, isTransientSignalMessage, mastraDBMessageToSignal } from './signals';
+
+describe('transient signals (transient: true)', () => {
+  it('marks the DB message with content.metadata.signal.transient when transient is true', () => {
+    const dbMessage = createSignal({
+      type: 'reactive',
+      contents: 'steering reminder',
+      transient: true,
+    }).toDBMessage();
+
+    const signalMeta = dbMessage.content.metadata?.signal as Record<string, unknown> | undefined;
+    expect(signalMeta?.transient).toBe(true);
+    expect(isTransientSignalMessage(dbMessage)).toBe(true);
+  });
+
+  it('does not mark the DB message when transient is omitted (default) or false', () => {
+    const defaultMessage = createSignal({ type: 'reactive', contents: 'kept' }).toDBMessage();
+    const explicitMessage = createSignal({ type: 'reactive', contents: 'kept', transient: false }).toDBMessage();
+
+    const defaultMeta = defaultMessage.content.metadata?.signal as Record<string, unknown> | undefined;
+    const explicitMeta = explicitMessage.content.metadata?.signal as Record<string, unknown> | undefined;
+
+    expect(defaultMeta?.transient).toBeUndefined();
+    expect(explicitMeta?.transient).toBeUndefined();
+    expect(isTransientSignalMessage(defaultMessage)).toBe(false);
+    expect(isTransientSignalMessage(explicitMessage)).toBe(false);
+  });
+
+  it('still projects a transient signal into the LLM message (delivery is unaffected)', () => {
+    const signal = createSignal({ type: 'reactive', contents: 'remember the rules', transient: true });
+    const llmMessage = signal.toLLMMessage();
+
+    const text = typeof llmMessage.content === 'string' ? llmMessage.content : JSON.stringify(llmMessage.content);
+    expect(text).toContain('remember the rules');
+  });
+
+  it('round-trips transient: true through mastraDBMessageToSignal', () => {
+    const dbMessage = createSignal({ type: 'reactive', contents: 'ephemeral', transient: true }).toDBMessage();
+    const restored = mastraDBMessageToSignal(dbMessage);
+    expect(restored.transient).toBe(true);
+    expect(isTransientSignalMessage(restored.toDBMessage())).toBe(true);
+  });
+
+  it('isTransientSignalMessage returns false for non-signal messages', () => {
+    expect(
+      isTransientSignalMessage({
+        id: 'u1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+        createdAt: new Date(),
+      }),
+    ).toBe(false);
+  });
+});

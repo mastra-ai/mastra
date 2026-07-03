@@ -250,6 +250,7 @@ export class MessageList {
       attributes: signal.attributes,
       metadata: signal.metadata,
       providerOptions: signal.providerOptions,
+      transient: signal.transient,
       createdAt,
       acceptedAt,
     });

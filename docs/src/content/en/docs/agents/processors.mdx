@@ -18,7 +18,7 @@ You can use individual [`Processor`](/reference/processors/processor-interface) 
 
 Some processors implement both input and output logic and can be used in either array depending on where the transformation should occur.
 
-Some built-in processors also send hidden system reminder signals. These signals are persisted in raw memory history and converted to `<system-reminder>...</system-reminder>` context before the next model call, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in.
+Some built-in processors also send hidden system reminder signals. These signals are persisted in raw memory history and converted to `<system-reminder>...</system-reminder>` context before the next model call, but standard UI-facing message conversions and default memory recall hide them unless you explicitly opt in. To deliver a signal for the current call without retaining it, send it with `transient: true`.
 
 ## When to use processors
 
@@ -651,6 +651,30 @@ await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 :::note
 Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/long-running-agents/signals#send-processor-context) for more on processor-emitted signals.
 :::
+
+### Deliver a reminder without retaining it
+
+By default, a signal sent from a processor becomes part of the conversation: it's written to storage and re-enters the prompt on later turns. For an instruction you re-inject on every turn, that's unwanted, because copies pile up and the model starts treating its own past reminders as prior context to imitate. Set `transient: true` to deliver the signal to the model for the current call only, without retaining it.
+
+**When to use it:** you want to keep a short steering instruction in the model's recency window as the conversation grows, for example "stay on the current task", "keep answers under three sentences", or a per-turn constraint that depends on live application state. Re-inject it each turn so it stays near the latest message.
+
+```typescript title="src/mastra/processors/steering-reminder.ts" {10}
+import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
+
+export class SteeringReminderProcessor implements Processor {
+  readonly id = 'steering-reminder'
+
+  async processInputStep({ sendSignal }: ProcessInputStepArgs) {
+    await sendSignal?.({
+      type: 'reactive',
+      contents: 'Stay on the current task and keep answers under three sentences.',
+      transient: true,
+    })
+  }
+}
+```
+
+A transient signal still appears in the prompt for the current call, so the model sees it near the latest turn. It's not retained, so re-sending it each turn keeps a single fresh copy in context instead of an accumulating history, and it never appears in stored thread history. Because nothing is written, it also keeps a stable prompt cache prefix across turns.
 
 ### Emit custom stream events
 
