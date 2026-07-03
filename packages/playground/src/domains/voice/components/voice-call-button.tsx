@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Loader2, Phone, PhoneOff } from 'lucide-react';
 import type { VoiceCallControls } from '../types';
 

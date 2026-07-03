@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { VoiceAgentState, VoiceCallControls, VoiceCaptionSegment } from '../types';
 
 const AGENT_STATE_LABELS: Record<VoiceAgentState, string> = {
