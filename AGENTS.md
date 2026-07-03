@@ -4,7 +4,6 @@ For work in packages read package local packages/<name>/AGENTS.md first
 
 turborepo pnpm workspace
 packages use strict TypeScript
-Do not add new `asChild` usage; prefer Base UI's native `render` prop for stronger type safety.
 vitest tests are colocated with source
 When adding a model name or ID to changesets or comments, use a literal value from docs/src/plugins/remark-model-tokens/models.ts (do not use placeholder tokens, remark does not replace them in changesets/comments)
 
