@@ -69,7 +69,7 @@ Action items:
   - `🟢 low` — minor bug, typo, small docs gap, support/question, duplicate, invalid, unsupported, spam, unrelated, or low-risk test/coverage work.
 - Evaluate issue summary, PR relevance, evidence checked, changed areas, checks/local verification, and unresolved risks.
 - For merge confidence, weigh code correctness, integration with existing patterns, unresolved review comments, local verification, approved/required remote checks that actually ran, and release/user impact.
-- Treat unapproved remote CI checks as neutral for merge confidence; do not count them as missing verification or as failures. Prefer narrow local checks/lint/typecheck/tests for confidence evidence.
+- Treat unapproved remote CI checks and Vercel/auth deployment failures as neutral for merge confidence; do not count them as missing verification or failures. Prefer narrow local checks/lint/typecheck/tests for confidence evidence.
 - In `Why not higher`, name the specific gap/risk, its merge impact, and whether it is blocking. Avoid generic limits like "needs maintainer review" or "tests not run" unless tied to specific missing evidence and impact.
 - Identify maintainer fix-up candidates from the old triage path, such as conflicts, relevant check/lint/CI failures, or inline suggestions.
 - Prepare maintainer notes using this structure:
@@ -158,7 +158,7 @@ Gather only enough context to choose Branch A/B/C/D and seed a useful handoff.
 - [ ] Treat mention-only/cross-referenced PRs as context, not as routing targets unless they clearly close/fix the issue.
 - [ ] For PR input, fetch linked/closing issues and changed file names.
 - [ ] For PR routes, inspect comments enough to identify whether an existing maintainer-notes comment is present.
-- [ ] Record obvious route blockers only when they affect handoff selection, such as closed/non-open state, draft PR, conflicts, or clearly failing relevant checks. Do not diagnose or fix them here.
+- [ ] Record obvious route blockers only when they affect handoff selection, such as closed/non-open state, draft PR, conflicts, or clearly failing relevant checks excluding Vercel/auth deployment failures. Do not diagnose or fix blockers here.
 
 ```bash
 # Closing/fixing refs for an issue
