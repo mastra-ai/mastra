@@ -461,15 +461,25 @@ const SINGLETON_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
  * Check for a singleton config file (e.g. `storage.ts`, `storage.js`) directly
  * under `<mastraDir>`. Returns the first matching file path or `undefined`.
  * Symlinks are rejected for security.
+ *
+ * Convention: only files with `export default` are fs-routed singletons. Files
+ * using named exports are assumed to be manually imported into the user's
+ * `index.ts`, so they are ignored to remain backward-compatible with existing
+ * project structures.
  */
 export async function discoverFsSingleton(mastraDir: string, name: string): Promise<DiscoveredFsSingleton | undefined> {
   for (const ext of SINGLETON_EXTENSIONS) {
     const candidate = join(mastraDir, `${name}${ext}`);
     try {
       const stats = await lstat(candidate);
-      if (stats.isFile() && !stats.isSymbolicLink()) {
-        return { path: slash(candidate) };
+      if (!stats.isFile() || stats.isSymbolicLink()) {
+        continue;
       }
+      const source = await readFile(candidate, 'utf-8');
+      if (!/\bexport\s+default\b/.test(source)) {
+        return undefined;
+      }
+      return { path: slash(candidate) };
     } catch {
       // not present
     }

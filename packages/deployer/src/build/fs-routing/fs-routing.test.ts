@@ -841,6 +841,15 @@ describe('discoverFsSingleton', () => {
     expect(result).toBeTruthy();
     expect(result!.path).toMatch(/observability\.ts$/);
   });
+
+  it('skips singleton files without export default (named exports only)', async () => {
+    await writeFile(
+      join(dir, 'storage.ts'),
+      `export const storage = new LibSQLStore({});\nexport async function initStorage() {}`,
+    );
+
+    expect(await discoverFsSingleton(dir, 'storage')).toBeUndefined();
+  });
 });
 
 describe('generateFsAgentsModule with storage', () => {
