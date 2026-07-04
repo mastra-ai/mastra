@@ -270,11 +270,21 @@ describe('discoverFsAgents', () => {
     await writeAgent('weather', {
       config: `export default { model: 'openai/gpt-4o' };`,
       instructions: 'hi',
-      skills: { 'faq.md': `# FAQ\nAnswer questions.` },
+      skills: { 'faq.md': `---\ndescription: Answer common questions.\n---\n\n# FAQ\nAnswer questions.` },
     });
 
     const skill = (await discoverFsAgents(dir))[0]!.skills[0]!;
-    expect(skill).toMatchObject({ kind: 'packaged', name: 'faq' });
+    expect(skill).toMatchObject({ kind: 'packaged', name: 'faq', description: 'Answer common questions.' });
+  });
+
+  it('throws when a flat markdown skill is missing a description', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      skills: { 'faq.md': `# FAQ\nAnswer questions.` },
+    });
+
+    await expect(discoverFsAgents(dir)).rejects.toThrow(/missing a required "description"/);
   });
 
   it('discovers a createSkill module as a module skill', async () => {
