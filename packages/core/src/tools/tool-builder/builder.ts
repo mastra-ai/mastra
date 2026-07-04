@@ -342,8 +342,9 @@ export class CoreToolBuilder extends MastraBase {
         z.object({});
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
-        schema = schema();
+      const maybeFunction: unknown = schema;
+      if (typeof maybeFunction === 'function') {
+        schema = maybeFunction() as typeof schema;
       }
 
       return schema;
@@ -357,8 +358,9 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     // If schema is a function, call it to get the actual schema
-    if (typeof schema === 'function') {
-      schema = schema();
+    const maybeFunction: unknown = schema;
+    if (typeof maybeFunction === 'function') {
+      schema = maybeFunction() as typeof schema;
     }
 
     return schema;
@@ -373,8 +375,9 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
-        schema = schema();
+      const maybeFunction: unknown = schema;
+      if (typeof maybeFunction === 'function') {
+        schema = maybeFunction() as typeof schema;
       }
 
       return schema;
@@ -388,8 +391,9 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.resumeSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
-        schema = schema();
+      const maybeFunction: unknown = schema;
+      if (typeof maybeFunction === 'function') {
+        schema = maybeFunction() as typeof schema;
       }
 
       return schema;
@@ -402,8 +406,9 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.suspendSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
-        schema = schema();
+      const maybeFunction: unknown = schema;
+      if (typeof maybeFunction === 'function') {
+        schema = maybeFunction() as typeof schema;
       }
 
       return schema;

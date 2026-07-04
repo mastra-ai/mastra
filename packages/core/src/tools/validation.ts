@@ -155,11 +155,13 @@ export function validateToolSuspendData<T = unknown>(
   const validation = safeValidate(schema, suspendData);
 
   if ('value' in validation) {
-    return { data: validation.value };
+    return { data: validation.value as T };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map((e: StandardSchemaIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -483,7 +485,7 @@ export function validateToolInput<T = unknown>(
   const validation = safeValidate(schema, normalizedInput);
 
   if ('value' in validation) {
-    return { data: validation.value };
+    return { data: validation.value as T };
   }
 
   // Step 4: Retry with stringified JSON values coerced (GitHub #12757)
@@ -493,7 +495,7 @@ export function validateToolInput<T = unknown>(
   if (coercedInput !== normalizedInput) {
     const coercedValidation = safeValidate(schema, coercedInput);
     if ('value' in coercedValidation) {
-      return { data: coercedValidation.value };
+      return { data: coercedValidation.value as T };
     }
   }
 
@@ -513,7 +515,13 @@ export function validateToolInput<T = unknown>(
         const value = getValueAtPath(normalizedInput, issue.path);
         return value === null || value === undefined;
       })
-      .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
+      .map(issue =>
+        issue.path
+          ?.map((p: PropertyKey | { key: PropertyKey }) =>
+            typeof p === 'object' && 'key' in p ? String(p.key) : String(p),
+          )
+          .join('.'),
+      )
       .filter((p): p is string => !!p),
   );
   const strippedInput =
@@ -522,7 +530,7 @@ export function validateToolInput<T = unknown>(
   const retryValidation = safeValidate(schema, normalizedStripped);
 
   if ('value' in retryValidation) {
-    return { data: retryValidation.value };
+    return { data: retryValidation.value as T };
   }
 
   // Step 6: Retry with common prompt alias normalization (GitHub #14154)
@@ -549,7 +557,7 @@ export function validateToolInput<T = unknown>(
         const coercedPromptInput = { ...obj, prompt: alias };
         const coercedPromptValidation = safeValidate(schema, coercedPromptInput);
         if ('value' in coercedPromptValidation) {
-          return { data: coercedPromptValidation.value };
+          return { data: coercedPromptValidation.value as T };
         }
       }
     }
@@ -557,7 +565,9 @@ export function validateToolInput<T = unknown>(
 
   // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map((e: StandardSchemaIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -591,11 +601,13 @@ export function validateToolOutput<T = unknown>(
   const validation = safeValidate(schema, output);
 
   if ('value' in validation) {
-    return { data: validation.value };
+    return { data: validation.value as T };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map((e: StandardSchemaIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -671,11 +683,13 @@ export function validateRequestContext<T = any>(
   }
 
   if ('value' in validation) {
-    return { data: validation.value };
+    return { data: validation.value as T };
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map((e: StandardSchemaIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   // Redact sensitive keys before including in error message
   const redactedContext = redactSensitiveKeys(contextValues);

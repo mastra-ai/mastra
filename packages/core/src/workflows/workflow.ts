@@ -45,7 +45,13 @@ import {
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
 import { toStandardSchema } from '../schema';
-import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type {
+  InferPublicSchema,
+  InferStandardSchemaOutput,
+  PublicSchema,
+  StandardSchemaWithJSON,
+  StandardSchemaIssue,
+} from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
@@ -3141,7 +3147,8 @@ export class Run<
 
     if (validatedInputData.issues) {
       throw new Error(
-        `Invalid ${type}: \n` + validatedInputData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+        `Invalid ${type}: \n` +
+          validatedInputData.issues.map((e: StandardSchemaIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
       );
     }
 
@@ -3178,8 +3185,10 @@ export class Run<
         throw new Error(
           `Request context validation failed for workflow '${this.workflowId}': \n` +
             errors
-              .map(e => {
-                const pathStr = e.path?.map(p => (typeof p === 'object' ? p.key : p)).join('.');
+              .map((e: StandardSchemaIssue) => {
+                const pathStr = e.path
+                  ?.map((p: PropertyKey | { key: PropertyKey }) => (typeof p === 'object' ? p.key : p))
+                  .join('.');
                 return `- ${pathStr}: ${e.message}`;
               })
               .join('\n'),
@@ -4375,7 +4384,7 @@ export class Run<
     return result;
   }
 
-  async timeTravel<TInput>(
+  async timeTravel(
     args: {
       inputData?: TInput;
       resumeData?: any;
@@ -4404,7 +4413,7 @@ export class Run<
     return this._timeTravel(args);
   }
 
-  timeTravelStream<TTravelInput>({
+  timeTravelStream({
     inputData,
     resumeData,
     initialState,
@@ -4418,7 +4427,7 @@ export class Run<
     actor,
     ...rest
   }: {
-    inputData?: TTravelInput;
+    inputData?: TInput;
     initialState?: TState;
     resumeData?: any;
     step:

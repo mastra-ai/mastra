@@ -127,7 +127,7 @@ export const askUserTool = createTool({
       // execution paths still expose the question and available choices to the model.
       return {
         content: `[Question for user]: ${question}${
-          options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
+          options?.length ? '\nOptions: ' + options.map((o: { label: string }) => o.label).join(', ') : ''
         }${resolvedSelectionMode ? '\nSelection mode: ' + resolvedSelectionMode : ''}`,
         isError: false,
       };

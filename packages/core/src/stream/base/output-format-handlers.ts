@@ -4,7 +4,7 @@ import { isZodType } from '@mastra/schema-compat';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { IMastraLogger } from '../../logger';
-import type { ZodType, PublicSchema, StandardSchemaWithJSON } from '../../schema';
+import type { ZodType, PublicSchema, StandardSchemaWithJSON, StandardSchemaIssue } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ValidationResult } from '../aisdk/v5/compat';
 import { ChunkFrom } from '../types';
@@ -218,7 +218,9 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
         };
       }
 
-      const errorMessages = ssResult.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+      const errorMessages = ssResult.issues
+        .map((e: StandardSchemaIssue) => `- ${e.path?.join('.') || 'root'}: ${e.message}`)
+        .join('\n');
 
       return {
         success: false,
@@ -556,7 +558,11 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
+function createOutputHandler<OUTPUT = undefined>({
+  schema,
+}: {
+  schema?: PublicSchema<OUTPUT>;
+}): BaseFormatHandler<OUTPUT> {
   // Direct transformer callers can pass any PublicSchema; normalize it before
   // selecting the format-specific handler.
   const normalizedSchema = schema ? toStandardSchema(schema) : undefined;
@@ -631,13 +637,14 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         controller.enqueue(chunk);
 
         if (accumulatedText?.trim() && !finalResult) {
-          finalResult = await handler.validateAndTransformFinal(accumulatedText);
-          if (finalResult.success) {
+          const result = await handler.validateAndTransformFinal(accumulatedText);
+          finalResult = result;
+          if (result.success) {
             controller.enqueue({
               from: ChunkFrom.AGENT,
               runId: currentRunId ?? '',
               type: 'object-result',
-              object: finalResult.value,
+              object: result.value,
             });
           }
         }
@@ -655,16 +662,17 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
       // Safety net: If text-end was never emitted, validate now as fallback
       // This handles edge cases where providers might not emit text-end
       if (accumulatedText?.trim() && !finalResult) {
-        finalResult = await handler.validateAndTransformFinal(accumulatedText);
-        if (finalResult.success) {
+        const result = await handler.validateAndTransformFinal(accumulatedText);
+        finalResult = result;
+        if (result.success) {
           controller.enqueue({
             from: ChunkFrom.AGENT,
             runId: currentRunId ?? '',
             type: 'object-result',
-            object: finalResult.value,
+            object: result.value,
           });
         } else {
-          handleValidationError(finalResult.error, controller);
+          handleValidationError(result.error, controller);
         }
       }
     },
