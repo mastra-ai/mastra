@@ -15,7 +15,10 @@ import type { WorkflowRunState } from '../../workflows/types';
  * Rules:
  *  - steps in a terminal state never get resumed again: drop their
  *    `suspendPayload`/`suspendOutput`/`resumePayload` and strip heavy
- *    iteration fields from `payload`/`output`.
+ *    iteration fields from `payload`/`output` — except the AI SDK step
+ *    history (`output.output.steps`), which the evented engine re-reads as
+ *    `inputData` for the next LLM execution when a sibling step resumes in
+ *    the same run.
  *  - non-terminal (suspended/waiting/paused/running) steps keep their
  *    `suspendPayload` **intact** — it is the resume state (`__streamState`,
  *    `__agentId`, tool-approval info, `__workflow_meta` nested-run ids). Their
@@ -79,6 +82,40 @@ function stripHeavyIterationFields<T>(value: T): T {
   return pruned as T;
 }
 
+/**
+ * Lighter strip for a **terminal** step's `output`. On an evented same-run
+ * resume the engine rehydrates the loop from the snapshot, and the next LLM
+ * execution re-reads the last completed iteration's `output.steps` (step
+ * number, stopWhen input, processor step history) — resetting it to `[]`
+ * changes the next model request and breaks resume. Everything else follows
+ * the normal heavy-field rules (`messages`, `__` keys, request/response
+ * bodies).
+ */
+function stripTerminalOutputFields<T>(value: T): T {
+  if (!isPlainObject(value)) return value;
+  const pruned: Record<string, any> = { ...value };
+
+  delete pruned.messages;
+  for (const key of Object.keys(pruned)) {
+    if (key.startsWith('__')) delete pruned[key];
+  }
+
+  if (isPlainObject(pruned.output)) {
+    const output = { ...pruned.output };
+    delete output.messages;
+    pruned.output = output;
+  }
+
+  if (isPlainObject(pruned.metadata)) {
+    const metadata = { ...pruned.metadata };
+    delete metadata.request;
+    delete metadata.response;
+    pruned.metadata = metadata;
+  }
+
+  return pruned as T;
+}
+
 /** Applies the pruning rules to a single serialized step result. */
 function pruneStepResult(result: Record<string, any>): Record<string, any> {
   if (!isPlainObject(result) || typeof result.status !== 'string') return result;
@@ -94,7 +131,7 @@ function pruneStepResult(result: Record<string, any>): Record<string, any> {
     delete pruned.suspendPayload;
     delete pruned.suspendOutput;
     delete pruned.resumePayload;
-    if ('output' in pruned) pruned.output = stripHeavyIterationFields(pruned.output);
+    if ('output' in pruned) pruned.output = stripTerminalOutputFields(pruned.output);
     return pruned;
   }
 
