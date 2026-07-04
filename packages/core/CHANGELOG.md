@@ -1,5 +1,22 @@
 # @mastra/core
 
+## 1.50.0-alpha.2
+
+### Minor Changes
+
+- Added file-system-routed workflows support. Workflows placed in `workflows/*.ts` under the mastra directory are now auto-discovered and registered during `mastra dev` / `mastra build`, matching the existing file-based agents convention. Code-registered workflows win on name collisions. ([#18883](https://github.com/mastra-ai/mastra/pull/18883))
+
+  ```ts
+  // src/mastra/workflows/onboarding.ts
+  import { createWorkflow } from '@mastra/core/workflows';
+
+  export default createWorkflow({ id: 'onboarding' /* ...steps */ });
+  ```
+
+### Patch Changes
+
+- Fixed message hydration to backfill resource IDs when thread IDs are already present. ([#18931](https://github.com/mastra-ai/mastra/pull/18931))
+
 ## 1.50.0-alpha.1
 
 ### Patch Changes
