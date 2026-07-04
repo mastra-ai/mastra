@@ -194,7 +194,7 @@ async function parsePackagedSkill(
   const parsed = matter(raw);
   const frontmatter = parsed.data as { name?: string; description?: string };
   const name = frontmatter.name ?? fallbackName;
-  const description = frontmatter.description ?? '';
+  const description = frontmatter.description;
 
   if (!description) {
     throw new Error(
