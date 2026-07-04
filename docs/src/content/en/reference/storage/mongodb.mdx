@@ -65,6 +65,34 @@ const storage = new MongoDBStore({
     description: 'MongoDB client options for advanced configuration (SSL, connection pooling, etc.).',
     isOptional: true,
   },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description:
+      'When true, automatic initialization (collection creation) is disabled. Useful for CI/CD pipelines where you want to run migrations explicitly. You must call storage.init() manually when this is true.',
+    isOptional: true,
+  },
+  {
+    name: 'skipDefaultIndexes',
+    type: 'boolean',
+    description:
+      'When true, default indexes will not be created during initialization. Useful when managing indexes separately or using only custom indexes.',
+    isOptional: true,
+  },
+  {
+    name: 'indexes',
+    type: 'MongoDBIndexConfig[]',
+    description:
+      'Custom indexes to create during initialization. Each index must specify a collection, keys, and optional index options.',
+    isOptional: true,
+  },
+  {
+    name: 'connectorHandler',
+    type: 'ConnectorHandler',
+    description:
+      'Custom connection handler for advanced connection management. Alternative to providing uri/dbName directly.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -98,6 +126,26 @@ const store2 = new MongoDBStore({
     socketTimeoutMS: 45000,
   },
 })
+
+// With custom indexes
+const store3 = new MongoDBStore({
+  id: 'mongodb-storage-03',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+  indexes: [
+    { collection: 'mastra_threads', keys: { 'metadata.type': 1 } },
+    { collection: 'mastra_messages', keys: { 'metadata.status': 1 }, options: { sparse: true } },
+  ],
+})
+
+// For CI/CD with explicit initialization
+const store4 = new MongoDBStore({
+  id: 'mongodb-storage-04',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+  disableInit: true, // Disable auto-init
+})
+await store4.init() // Call init explicitly
 ```
 
 ## Additional notes
@@ -158,6 +206,25 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 :::warning
 If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
 :::
+
+### Connection Management
+
+The `close()` method closes the MongoDB client connection. Call this when shutting down your application:
+
+```typescript
+import { MongoDBStore } from '@mastra/mongodb'
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI,
+  dbName: process.env.MONGODB_DATABASE,
+})
+
+// Use storage...
+
+// Clean up on shutdown
+await storage.close()
+```
 
 ## Vector search capabilities
 
@@ -230,6 +297,7 @@ export const mongodbAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new MongoDBStore({
+      id: 'mongodb-storage',
       uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),

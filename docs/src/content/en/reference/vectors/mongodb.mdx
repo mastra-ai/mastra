@@ -83,6 +83,14 @@ const store = new MongoDBVector({
 
 ## Methods
 
+### `connect()`
+
+Establishes connection to the MongoDB server. This is called automatically on first use, but can be called explicitly if needed.
+
+```typescript
+await store.connect()
+```
+
 ### `createIndex()`
 
 Creates a new vector index (collection) in MongoDB.
@@ -105,6 +113,34 @@ Creates a new vector index (collection) in MongoDB.
     isOptional: true,
     defaultValue: 'cosine',
     description: 'Distance metric for similarity search',
+  },
+]}
+/>
+
+### `waitForIndexReady()`
+
+Waits for an index to become ready after creation. Useful when you need to ensure an index is ready before performing operations.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to wait for',
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description: 'Maximum time to wait in milliseconds',
+  },
+  {
+    name: 'checkIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Interval between status checks in milliseconds',
   },
 ]}
 />
@@ -136,6 +172,12 @@ Adds or updates vectors and their metadata in the collection.
     type: 'string[]',
     isOptional: true,
     description: 'Optional vector IDs (auto-generated if not provided)',
+  },
+  {
+    name: 'documents',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional document text content to store alongside vectors',
   },
 ]}
 />
