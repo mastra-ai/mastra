@@ -2314,6 +2314,7 @@ export type ProviderModelsMap = {
     'stepfun-ai/step-3.5-flash',
     'stepfun-ai/step-3.7-flash',
     'upstage/solar-10_7b-instruct',
+    'z-ai/glm-5.2',
   ];
   readonly evroc: readonly [
     'KBLab/kb-whisper-large',
