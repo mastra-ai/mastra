@@ -207,6 +207,18 @@ export async function generateFsAgentsModule(
   lines.push(`  });`);
   lines.push(`}`);
   lines.push(``);
+
+  // Singleton registration (storage, etc.) MUST run before agents/workflows.
+  // `addMemory`/`addAgent` bind the current store to storage-dependent primitives
+  // at registration time, so the fs storage has to be in place first — otherwise
+  // fs-discovered agents/workflows would stay bound to the default InMemoryStore.
+  if (storage) {
+    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsStorage === 'function') {`);
+    lines.push(`  __userEntry.mastra.__registerFsStorage(__fsStorage);`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsAgents === 'function') {`);
   lines.push(`  __userEntry.mastra.__registerFsAgents(__fsAgents);`);
   lines.push(`}`);
@@ -217,14 +229,6 @@ export async function generateFsAgentsModule(
     for (const line of wfCodegen.registrationLines) {
       lines.push(line);
     }
-  }
-
-  // Singleton registration (storage, etc.).
-  if (storage) {
-    lines.push(``);
-    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsStorage === 'function') {`);
-    lines.push(`  __userEntry.mastra.__registerFsStorage(__fsStorage);`);
-    lines.push(`}`);
   }
 
   lines.push(``);

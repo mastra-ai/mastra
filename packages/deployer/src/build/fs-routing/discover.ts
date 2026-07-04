@@ -457,6 +457,9 @@ export interface DiscoveredFsSingleton {
 
 const SINGLETON_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
 
+/** Safe singleton identifier: no path separators, `..`, or other traversal. */
+const SINGLETON_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
 /**
  * Check for a singleton config file (e.g. `storage.ts`, `storage.js`) directly
  * under `<mastraDir>`. Returns the first matching file path or `undefined`.
@@ -466,8 +469,15 @@ const SINGLETON_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
  * using named exports are assumed to be manually imported into the user's
  * `index.ts`, so they are ignored to remain backward-compatible with existing
  * project structures.
+ *
+ * `name` must be a bare identifier — path separators and traversal sequences are
+ * rejected so the lookup can never escape `<mastraDir>`.
  */
 export async function discoverFsSingleton(mastraDir: string, name: string): Promise<DiscoveredFsSingleton | undefined> {
+  if (!SINGLETON_NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid fs-singleton name ${JSON.stringify(name)}: expected a bare identifier.`);
+  }
+
   for (const ext of SINGLETON_EXTENSIONS) {
     const candidate = join(mastraDir, `${name}${ext}`);
     try {
@@ -476,8 +486,10 @@ export async function discoverFsSingleton(mastraDir: string, name: string): Prom
         continue;
       }
       const source = await readFile(candidate, 'utf-8');
+      // Only files with a default export are fs-routed. A named-export file with
+      // this name is user-managed, so skip it and keep scanning other extensions.
       if (!/\bexport\s+default\b/.test(source)) {
-        return undefined;
+        continue;
       }
       return { path: slash(candidate) };
     } catch {

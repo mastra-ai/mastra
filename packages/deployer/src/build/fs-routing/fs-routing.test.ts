@@ -850,6 +850,11 @@ describe('discoverFsSingleton', () => {
 
     expect(await discoverFsSingleton(dir, 'storage')).toBeUndefined();
   });
+
+  it('rejects names containing path traversal or separators', async () => {
+    await expect(discoverFsSingleton(dir, '../secret')).rejects.toThrow(/bare identifier/);
+    await expect(discoverFsSingleton(dir, 'foo/bar')).rejects.toThrow(/bare identifier/);
+  });
 });
 
 describe('generateFsAgentsModule with storage', () => {
@@ -860,6 +865,14 @@ describe('generateFsAgentsModule with storage', () => {
 
     expect(source).toContain(`import __fsStorage from "/project/src/mastra/storage.ts";`);
     expect(source).toContain(`mastra.__registerFsStorage`);
+  });
+
+  it('registers storage before agents so fs primitives bind to the fs store', async () => {
+    const source = await generateFsAgentsModule('/project/src/mastra/index.ts', [], {
+      storage: { path: '/project/src/mastra/storage.ts' },
+    });
+
+    expect(source.indexOf('__registerFsStorage')).toBeLessThan(source.indexOf('__registerFsAgents'));
   });
 
   it('omits storage registration when no storage is provided', async () => {
