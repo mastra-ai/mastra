@@ -3148,7 +3148,7 @@ export class Run<
     if (validatedInputData.issues) {
       throw new Error(
         `Invalid ${type}: \n` +
-          validatedInputData.issues.map((e: StandardSchemaIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n'),
+          validatedInputData.issues.map((e: StandardSchemaIssue) => `- ${e.path?.map((p: PropertyKey | { key: PropertyKey }) => (typeof p === 'object' ? p.key : p)).join('.')}: ${e.message}`).join('\n'),
       );
     }
 
