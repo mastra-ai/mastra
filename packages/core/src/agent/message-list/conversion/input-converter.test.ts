@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { MastraDBMessage } from '../state/types';
 import type { InputConversionContext } from './input-converter';
 import { hydrateMastraDBMessageFields } from './input-converter';
-import type { MastraDBMessage } from '../state/types';
 
 describe('hydrateMastraDBMessageFields', () => {
   it('backfills resourceId when the message already has a threadId', () => {
