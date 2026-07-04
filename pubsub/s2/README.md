@@ -52,7 +52,7 @@ Each durable-agent topic maps to one S2 stream: an event is appended per chunk. 
 
 ## Testing
 
-Set `S2_ACCESS_TOKEN` and run:
+Set `S2_ACCESS_TOKEN` and run (the suite provisions and deletes its own throwaway basin, so `S2_BASIN` isn't needed):
 
 ```bash
 S2_ACCESS_TOKEN=... pnpm --filter @mastra/s2 test

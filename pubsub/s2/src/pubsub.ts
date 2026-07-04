@@ -79,10 +79,11 @@ export class S2PubSub extends CachingPubSub {
     return JSON.stringify(value) ?? 'null';
   }
 
-  private deserialize(body: string): Record<string, unknown> {
+  private deserialize(body: string, topic: string, seqNum: number): Record<string, unknown> {
     try {
       return JSON.parse(body) as Record<string, unknown>;
     } catch {
+      (this.log ?? console).error(`[S2PubSub] malformed record in ${topic} at seqNum ${seqNum}; replaying as empty`);
       return {};
     }
   }
@@ -136,7 +137,7 @@ export class S2PubSub extends CachingPubSub {
         break;
       }
       for (const record of batch.records) {
-        out.push({ ...this.deserialize(record.body), index: record.seqNum } as Event);
+        out.push({ ...this.deserialize(record.body, topic, record.seqNum), index: record.seqNum } as Event);
         cursor = record.seqNum + 1;
       }
       if (batch.tail && cursor >= batch.tail.seqNum) {
