@@ -131,6 +131,31 @@ describe('Combobox', () => {
     expect(trigger.className).toContain('justify-between');
   });
 
+  it('supports custom trigger content with an explicit accessible label', () => {
+    render(
+      <Combobox
+        options={options}
+        value="openai"
+        placeholder="Pick provider"
+        triggerAriaLabel="Switch provider"
+        triggerContent={<span>Provider: OpenAI</span>}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
+    expect(trigger.textContent).toContain('Provider: OpenAI');
+  });
+
+  it('renders an optional popup footer below the options', async () => {
+    render(
+      <Combobox options={options} placeholder="Pick provider" popupFooter={<button type="button">Create</button>} />,
+    );
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    expect(await screen.findByRole('button', { name: 'Create' })).toBeTruthy();
+  });
+
   it('defaults to the filled default variant; outline is transparent-bordered; ghost drops the border', () => {
     const { rerender } = render(<Combobox options={options} placeholder="Pick provider" />);
     // Default === the Button `default`: a filled surface.
