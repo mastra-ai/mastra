@@ -1816,7 +1816,7 @@ describe('Memory Handlers', () => {
         );
       });
 
-      it('should list all threads when no MASTRA_RESOURCE_ID_KEY is set', async () => {
+      it('should list all threads when no MASTRA_RESOURCE_ID_KEY is set and auth is not configured', async () => {
         const mastra = new Mastra({
           logger: false,
           agents: { 'test-agent': mockAgent },
@@ -1825,16 +1825,42 @@ describe('Memory Handlers', () => {
         await mockMemory.createThread({ resourceId: 'user-a' });
         await mockMemory.createThread({ resourceId: 'user-b' });
 
-        // Without reserved key, client-provided value is used
+        // Without reserved key and without auth, no filter is applied
         const result = await LIST_THREADS_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
-          resourceId: undefined, // No filter
+          resourceId: undefined,
           page: 0,
           perPage: 10,
         });
 
         expect(result.threads).toHaveLength(2);
+      });
+
+      it('should throw 400 when auth is configured but no resourceId is available (prevents cross-user enumeration)', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+          server: {
+            auth: {
+              authenticateToken: async () => ({ id: 'user-bob' }),
+            },
+          },
+        });
+
+        await mockMemory.createThread({ resourceId: 'user-a' });
+        await mockMemory.createThread({ resourceId: 'user-b' });
+
+        // Auth is configured but mapUserToResourceId is absent, so effectiveResourceId is undefined
+        await expect(
+          LIST_THREADS_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            resourceId: undefined, // No filter, no identity
+            page: 0,
+            perPage: 10,
+          }),
+        ).rejects.toThrow(HTTPException);
       });
 
       it('should filter listed threads through FGA before returning them', async () => {

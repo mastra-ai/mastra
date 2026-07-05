@@ -838,6 +838,14 @@ export const LIST_THREADS_ROUTE = createRoute({
       // Use effective resourceId (context key takes precedence over client-provided value)
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
+      // When authentication is configured but no resourceId can be resolved,
+      // refuse to enumerate all threads — the caller has no proven identity to scope by.
+      // This prevents cross-user thread enumeration when mapUserToResourceId is omitted.
+      const authConfig = mastra.getServer?.()?.auth;
+      if (authConfig && typeof authConfig.authenticateToken === 'function' && !effectiveResourceId) {
+        throw new HTTPException(400, { message: 'resourceId is required when authentication is configured' });
+      }
+
       // Gateway proxy: list threads from gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       const isGateway = agent ? await isGatewayAgentAsync(agent) : false;
