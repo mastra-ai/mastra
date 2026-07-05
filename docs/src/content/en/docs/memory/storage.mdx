@@ -5,6 +5,7 @@ packages:
   - "@mastra/core"
   - "@mastra/libsql"
   - "@mastra/memory"
+  - "@mastra/mongodb"
   - "@mastra/pg"
   - "@mastra/pinecone"
 ---
@@ -71,21 +72,44 @@ Storage can be configured at the instance level (shared by all agents) or at the
 
 Add storage to your Mastra instance so all agents, workflows, observability traces, and scores share the same storage backend:
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { PostgresStore } from '@mastra/pg'
+<Tabs>
+  <TabItem value="postgresql" label="PostgreSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { PostgresStore } from '@mastra/pg'
 
-export const mastra = new Mastra({
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: process.env.DATABASE_URL,
-  }),
-})
+    export const mastra = new Mastra({
+      storage: new PostgresStore({
+        id: 'mastra-storage',
+        connectionString: process.env.DATABASE_URL,
+      }),
+    })
 
-// Both agents inherit storage from the Mastra instance above
-const agent1 = new Agent({ id: 'agent-1', memory: new Memory() })
-const agent2 = new Agent({ id: 'agent-2', memory: new Memory() })
-```
+    // Both agents inherit storage from the Mastra instance above
+    const agent1 = new Agent({ id: 'agent-1', memory: new Memory() })
+    const agent2 = new Agent({ id: 'agent-2', memory: new Memory() })
+    ```
+  </TabItem>
+
+  <TabItem value="mongodb" label="MongoDB">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { MongoDBStore } from '@mastra/mongodb'
+
+    export const mastra = new Mastra({
+      storage: new MongoDBStore({
+        id: 'mastra-storage',
+        uri: process.env.MONGODB_URI,
+        dbName: process.env.MONGODB_DATABASE,
+      }),
+    })
+
+    // Both agents inherit storage from the Mastra instance above
+    const agent1 = new Agent({ id: 'agent-1', memory: new Memory() })
+    const agent2 = new Agent({ id: 'agent-2', memory: new Memory() })
+    ```
+  </TabItem>
+</Tabs>
 
 This is useful when all primitives share the same storage backend and have similar performance, scaling, and operational requirements.
 
@@ -93,29 +117,63 @@ This is useful when all primitives share the same storage backend and have simil
 
 [Composite storage](/reference/storage/composite) is an alternative way to configure instance-level storage. Use `MastraCompositeStore` to route `memory` and any other [supported domains](/reference/storage/composite#storage-domains) to different storage providers.
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraCompositeStore } from '@mastra/core/storage'
-import { MemoryLibSQL } from '@mastra/libsql'
-import { WorkflowsPG } from '@mastra/pg'
-import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
+<Tabs>
+  <TabItem value="libsql-pg" label="LibSQL + PostgreSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { MastraCompositeStore } from '@mastra/core/storage'
+    import { MemoryLibSQL } from '@mastra/libsql'
+    import { WorkflowsPG } from '@mastra/pg'
+    import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
 
-export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite',
-    domains: {
-      // highlight-next-line
-      memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
-      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-      observability: new ObservabilityStorageClickhouse({
-        url: process.env.CLICKHOUSE_URL,
-        username: process.env.CLICKHOUSE_USERNAME,
-        password: process.env.CLICKHOUSE_PASSWORD,
+    export const mastra = new Mastra({
+      storage: new MastraCompositeStore({
+        id: 'composite',
+        domains: {
+          // highlight-next-line
+          memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
+          workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+          observability: new ObservabilityStorageClickhouse({
+            url: process.env.CLICKHOUSE_URL,
+            username: process.env.CLICKHOUSE_USERNAME,
+            password: process.env.CLICKHOUSE_PASSWORD,
+          }),
+        },
       }),
-    },
-  }),
-})
-```
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="mongodb-mixed" label="MongoDB + Others">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { MastraCompositeStore } from '@mastra/core/storage'
+    import { MemoryStorageMongoDB, WorkflowsStorageMongoDB } from '@mastra/mongodb'
+    import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
+
+    export const mastra = new Mastra({
+      storage: new MastraCompositeStore({
+        id: 'composite',
+        domains: {
+          memory: new MemoryStorageMongoDB({
+            uri: process.env.MONGODB_URI,
+            dbName: 'mastra_memory',
+          }),
+          workflows: new WorkflowsStorageMongoDB({
+            uri: process.env.MONGODB_URI,
+            dbName: 'mastra_workflows',
+          }),
+          observability: new ObservabilityStorageClickhouse({
+            url: process.env.CLICKHOUSE_URL,
+            username: process.env.CLICKHOUSE_USERNAME,
+            password: process.env.CLICKHOUSE_PASSWORD,
+          }),
+        },
+      }),
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
 
