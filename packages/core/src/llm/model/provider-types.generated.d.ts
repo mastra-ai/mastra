@@ -2508,6 +2508,7 @@ export type ProviderModelsMap = {
     'qwen3.7-max',
     'qwen3.7-plus',
   ];
+  readonly longcat: readonly ['LongCat-2.0'];
   readonly poe: readonly [
     'anthropic/claude-haiku-3',
     'anthropic/claude-haiku-3.5',

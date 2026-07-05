@@ -3148,6 +3148,15 @@
       "docUrl": "https://www.alibabacloud.com/help/en/model-studio/coding-plan",
       "gateway": "models.dev"
     },
+    "longcat": {
+      "url": "https://api.longcat.chat/openai",
+      "apiKeyEnvVar": "LONGCAT_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "LongCat",
+      "models": ["LongCat-2.0"],
+      "docUrl": "https://longcat.chat/platform/docs/",
+      "gateway": "models.dev"
+    },
     "poe": {
       "url": "https://api.poe.com/v1",
       "apiKeyEnvVar": "POE_API_KEY",
@@ -8283,6 +8292,7 @@
       "qwen3.7-max",
       "qwen3.7-plus"
     ],
+    "longcat": ["LongCat-2.0"],
     "poe": [
       "anthropic/claude-haiku-3",
       "anthropic/claude-haiku-3.5",
