@@ -2768,6 +2768,7 @@ describe('Agent signals', () => {
       pubsub,
     );
 
+    await pubsub.acquireLease('remote-resource\u0000remote-thread', 'remote-run-1', 15000);
     ownerRuntime.registerRun(
       owner,
       output,
@@ -2806,8 +2807,69 @@ describe('Agent signals', () => {
 
     finishRun();
     await waitForRemoteRun;
+    await pubsub.releaseLease('remote-resource\u0000remote-thread', 'remote-run-1');
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
+  });
+
+  it('wakes a new run instead of delivering to a stale remote active run id', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const owner = new Agent({
+      id: 'stale-remote-signal-agent',
+      name: 'Stale Remote Signal Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+    });
+    const sender = new Agent({
+      id: 'stale-remote-signal-agent',
+      name: 'Stale Remote Signal Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+    });
+    let finishRun!: () => void;
+    const output = {
+      runId: 'stale-remote-run-1',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+    } as any;
+
+    const senderSubscription = await senderRuntime.subscribeToThread(
+      sender,
+      {
+        resourceId: 'stale-remote-resource',
+        threadId: 'stale-remote-thread',
+      },
+      pubsub,
+    );
+    await pubsub.acquireLease('stale-remote-resource\u0000stale-remote-thread', 'stale-remote-run-1', 15000);
+    ownerRuntime.registerRun(
+      owner,
+      output,
+      {
+        runId: 'stale-remote-run-1',
+        memory: { resource: 'stale-remote-resource', thread: 'stale-remote-thread' },
+      } as any,
+      pubsub,
+    );
+    await waitForCondition(() => senderSubscription.activeRunId() === 'stale-remote-run-1');
+
+    senderSubscription.unsubscribe();
+    finishRun();
+    await nextTick();
+    await pubsub.releaseLease('stale-remote-resource\u0000stale-remote-thread', 'stale-remote-run-1');
+
+    const result = senderRuntime.sendSignal(
+      sender,
+      { type: 'user-message', contents: 'stale remote follow-up' },
+      { resourceId: 'stale-remote-resource', threadId: 'stale-remote-thread' },
+      pubsub,
+    );
+
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake' });
+    await expect(result.accepted).resolves.not.toMatchObject({ runId: 'stale-remote-run-1' });
   });
 
   it('grants the wake output to exactly one runtime when two race to wake an idle thread', async () => {

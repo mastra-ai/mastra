@@ -1754,9 +1754,15 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
-        // A run can be reserved before its stream record is registered. Keep the reserved
-        // id so early follow-ups still attach to the run that is starting.
-        runId = activeRunId;
+        if (state.threadKeysByRunId.get(activeRunId) === key) {
+          // A run can be reserved before its stream record is registered. Keep the reserved
+          // id so early follow-ups still attach to the run that is starting.
+          runId = activeRunId;
+        } else {
+          // Stale cross-pod entry. Clean it up from the local map, then let the lease decide
+          state.activeThreadRunIds.delete(key);
+          state.activeThreadStreamIds.delete(key);
+        }
       }
     }
 
