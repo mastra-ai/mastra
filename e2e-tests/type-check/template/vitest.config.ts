@@ -11,7 +11,7 @@ export default defineConfig({
           typecheck: {
             enabled: true,
             include: ['./**/*.test-d.ts'],
-            exclude: ['**/node_modules/**', './core/auth.test-d.ts'],
+            exclude: ['**/node_modules/**', './core/auth.test-d.ts', './core/agent-message-input.test-d.ts'],
           },
         },
       },
@@ -24,7 +24,7 @@ export default defineConfig({
           include: [],
           typecheck: {
             enabled: true,
-            include: ['./core/auth.test-d.ts'],
+            include: ['./core/auth.test-d.ts', './core/agent-message-input.test-d.ts'],
             exclude: ['**/node_modules/**'],
             tsconfig: './tsconfig.exact-optional.json',
           },
