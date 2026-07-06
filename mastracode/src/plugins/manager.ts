@@ -262,7 +262,12 @@ export class PluginManager {
 
     if (remoteOnly > 0 || localOnly > 0 || hasLocalChanges) {
       await execa('git', ['reset', '--hard', upstream], gitExecOptions(checkoutPath));
-      await installPluginDependencies(checkoutPath);
+      try {
+        await installPluginDependencies(checkoutPath);
+      } catch (error) {
+        await execa('git', ['reset', '--hard', currentHead], gitExecOptions(checkoutPath));
+        throw error;
+      }
       ensureMastraCodePackageLink(checkoutPath);
       return true;
     }

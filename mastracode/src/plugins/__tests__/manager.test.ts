@@ -414,7 +414,9 @@ describe('PluginManager', () => {
       if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
       if (args[0] === 'rev-list') return { stdout: '0\t1' };
       if (args[0] === 'status') return { stdout: '' };
-      if (args[0] === 'reset') writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+      if (args[0] === 'reset' && args[2] === 'origin/main')
+        writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+      if (args[0] === 'reset' && args[2] === 'old') writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
       return { stdout: '' };
     });
 
@@ -425,6 +427,11 @@ describe('PluginManager', () => {
     await expect(manager.pollGithubSourcesForUpdates()).rejects.toThrow(installError);
 
     expect(manager.getPluginTools().github_tool?.description).toBe('first');
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'old'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
   });
 
   it('removes GitHub checkout directories when uninstalling GitHub plugins', async () => {
