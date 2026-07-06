@@ -1,7 +1,23 @@
+import { createConsentTool } from '@mastra/livekit';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { checkServiceArea as checkServiceAreaBackend, reconcileIntake } from '../backend';
+import { checkServiceArea as checkServiceAreaBackend, reconcileIntake, recordSummaryConsent } from '../backend';
 import type { TradeId } from '../data';
+
+/**
+ * Captures the caller's consent decisions at runtime — the companion to the worker's
+ * `configuration.requireConsent`. `createConsentTool` reads the caller id from the tool execution
+ * context; we persist the decision to the mock backend consent store, which `onCallEnd` reads before
+ * distilling the call summary (observational memory). Restricted to the one item this demo requires.
+ */
+export const recordConsent = createConsentTool({
+  items: ['summaryStorage'],
+  onGrant: async ({ item, granted, resourceId }) => {
+    if (item === 'summaryStorage' && resourceId) {
+      await recordSummaryConsent(resourceId, granted);
+    }
+  },
+});
 
 const tradeSchema = z.enum(['plumbing', 'electrical', 'roofing', 'carpentry', 'painting']);
 

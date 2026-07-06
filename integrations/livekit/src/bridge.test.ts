@@ -3,7 +3,7 @@ import { llm } from '@livekit/agents';
 import type { voice } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
 import { describe, expect, it, vi } from 'vitest';
-import { MastraVoiceAgent } from './bridge';
+import { DEFAULT_DISCLOSURE_REMINDER, DisclosureReminder, MastraVoiceAgent, prependText } from './bridge';
 
 interface FakeChunk {
   type: string;
@@ -278,6 +278,68 @@ describe('MastraVoiceAgent reply generator seam', () => {
   it('throws when both agent and generate are provided', () => {
     const { agent } = fakeMastraAgent([]);
     expect(() => new MastraVoiceAgent({ agent, generate: vi.fn() })).toThrow(/not both/);
+  });
+});
+
+describe('DisclosureReminder', () => {
+  it('returns the reminder once the interval elapses, then resets the clock', () => {
+    const reminder = new DisclosureReminder(1000, 'AI reminder', 0);
+    expect(reminder.due(500)).toBeUndefined(); // 500ms < 1000ms
+    expect(reminder.due(1000)).toBe('AI reminder'); // due; clock resets to 1000
+    expect(reminder.due(1500)).toBeUndefined(); // only 500ms since the reset
+    expect(reminder.due(2000)).toBe('AI reminder'); // due again
+  });
+});
+
+describe('prependText', () => {
+  it('emits the prefix (with a trailing space) then pipes the source stream', async () => {
+    const source = new ReadableStream<string>({
+      start: controller => {
+        controller.enqueue('the answer');
+        controller.close();
+      },
+    });
+    expect(await readAll(prependText(source, 'Quick note.'))).toEqual(['Quick note. ', 'the answer']);
+  });
+
+  it('keeps an existing trailing space and works with an empty source', async () => {
+    const source = new ReadableStream<string>({ start: controller => controller.close() });
+    expect(await readAll(prependText(source, 'note '))).toEqual(['note ']);
+  });
+});
+
+describe('MastraVoiceAgent periodic re-disclosure', () => {
+  it('prefixes the turn reply with the reminder when the interval has elapsed', async () => {
+    const { agent } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'Sure thing.' } }]);
+    // everyMs: 0 → due on the first turn.
+    const voiceAgent = new MastraVoiceAgent({
+      agent,
+      greetingReminder: { everyMs: 0, text: 'You are speaking with an AI.' },
+    });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    expect(await readAll(result!)).toEqual(['You are speaking with an AI. ', 'Sure thing.']);
+  });
+
+  it('falls back to the default reminder text', async () => {
+    const { agent } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'Ok.' } }]);
+    const voiceAgent = new MastraVoiceAgent({ agent, greetingReminder: { everyMs: 0 } });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    expect(await readAll(result!)).toEqual([`${DEFAULT_DISCLOSURE_REMINDER} `, 'Ok.']);
+  });
+
+  it('does not re-disclose again before the interval elapses', async () => {
+    const { agent } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'Ok.' } }]);
+    // A long interval that cannot have elapsed since construction → no reminder this turn.
+    const voiceAgent = new MastraVoiceAgent({ agent, greetingReminder: { everyMs: 5 * 60_000, text: 'AI.' } });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    expect(await readAll(result!)).toEqual(['Ok.']);
+  });
+
+  it('does not re-disclose when re-disclosure is not configured', async () => {
+    const { agent } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'Ok.' } }]);
+    const voiceAgent = new MastraVoiceAgent({ agent });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    expect(await readAll(result!)).toEqual(['Ok.']);
   });
 });
 

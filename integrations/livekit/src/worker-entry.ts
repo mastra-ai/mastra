@@ -3,7 +3,13 @@
 // only from the worker process entry file.
 export { createLiveKitWorker } from './worker';
 export type {
+  ConsentConfiguration,
+  ConsentRequirement,
   CreateLiveKitWorkerOptions,
+  GreetingConfiguration,
+  GreetingContext,
+  GreetingText,
+  LiveKitWorkerConfiguration,
   ResolveMastraAgentArgs,
   SessionStartArgs,
   VoiceCallEndArgs,

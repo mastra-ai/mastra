@@ -8,6 +8,58 @@ import type { VoiceTurnMessage } from './messages';
 
 const DEFAULT_INSTRUCTIONS = 'You are a helpful voice assistant powered by a Mastra agent.';
 
+/** Default spoken text for periodic AI re-disclosure. See {@link MastraVoiceAgentOptions.greetingReminder}. */
+export const DEFAULT_DISCLOSURE_REMINDER = "Just a reminder, you're speaking with an AI assistant.";
+
+/**
+ * Tracks periodic AI re-disclosure for a single call. `due()` returns the reminder text once
+ * `everyMs` has elapsed since the last disclosure (resetting the clock), otherwise `undefined`.
+ * Time is injectable so the interval logic is deterministically testable.
+ */
+export class DisclosureReminder {
+  private lastAt: number;
+  constructor(
+    private readonly everyMs: number,
+    private readonly text: string,
+    now: number = Date.now(),
+  ) {
+    this.lastAt = now;
+  }
+  /** Call once per turn: the reminder text if it's due (resetting the clock), else `undefined`. */
+  due(now: number = Date.now()): string | undefined {
+    if (now - this.lastAt < this.everyMs) return undefined;
+    this.lastAt = now;
+    return this.text;
+  }
+}
+
+/**
+ * Wraps `source` in a stream that emits `text` as a single leading chunk (with a trailing space, so
+ * TTS pauses before the reply) before piping the rest of `source` through unchanged. Cancelling the
+ * wrapper cancels `source` — so barge-in still aborts the underlying generation.
+ */
+export function prependText(source: ReadableStream<string>, text: string): ReadableStream<string> {
+  const prefix = text.endsWith(' ') ? text : `${text} `;
+  const reader = source.getReader();
+  return new ReadableStream<string>({
+    start(controller) {
+      controller.enqueue(prefix);
+    },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) controller.close();
+        else controller.enqueue(value);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+}
+
 export type MastraStreamOptions = Partial<AgentExecutionOptionsBase<unknown>>;
 
 export interface VoiceToolCall {
@@ -214,6 +266,14 @@ export interface MastraVoiceAgentOptions {
    * workflow generator takes its own via `createWorkflowReplyGenerator`.
    */
   onTurnComplete?: VoiceTurnCompleteHook;
+  /**
+   * Periodic AI re-disclosure. When set, once `everyMs` has elapsed since the last disclosure the
+   * NEXT turn's reply is prefixed with `text` (spoken at the turn boundary, never mid-turn), so long
+   * calls keep re-disclosing the AI status. Applies to the agent and workflow/custom generators. The
+   * worker derives this from `configuration.greeting.repeatEvery` / `repeatText`; `text` defaults to
+   * {@link DEFAULT_DISCLOSURE_REMINDER}.
+   */
+  greetingReminder?: { everyMs: number; text?: string };
   /** Extra options merged into every `agent.stream()` call (agent generator only). */
   streamOptions?: MastraStreamOptions;
   /** LiveKit agent instructions. Unused for reply generation (the Mastra agent/workflow applies its own). */
@@ -270,6 +330,7 @@ export class MastraVoiceAgent extends voice.Agent {
   readonly requestContext?: RequestContext;
   readonly streamOptions?: MastraStreamOptions;
   private readonly replyGenerator: VoiceReplyGenerator;
+  private readonly reminder?: DisclosureReminder;
 
   constructor(options: MastraVoiceAgentOptions) {
     if (options.agent && options.generate) {
@@ -289,6 +350,12 @@ export class MastraVoiceAgent extends voice.Agent {
     this.memory = options.memory ?? false;
     this.requestContext = toRequestContext(options.requestContext);
     this.streamOptions = options.streamOptions;
+    if (options.greetingReminder) {
+      this.reminder = new DisclosureReminder(
+        options.greetingReminder.everyMs,
+        options.greetingReminder.text?.trim() || DEFAULT_DISCLOSURE_REMINDER,
+      );
+    }
 
     if (options.generate) {
       this.replyGenerator = options.generate;
@@ -314,13 +381,20 @@ export class MastraVoiceAgent extends voice.Agent {
       this.memory === false ? chatContextToMessages(chatCtx) : extractNewTurnMessages(chatCtx);
     if (messages.length === 0) return null;
 
-    return this.replyGenerator({
+    const reply = await this.replyGenerator({
       messages,
       chatCtx,
       memory: this.memory,
       requestContext: this.requestContext,
       tracingContext: this.streamOptions?.tracingContext,
     });
+    if (!reply) return null;
+
+    // Periodic AI re-disclosure: when the interval has elapsed, prefix this turn's spoken reply with
+    // the reminder. Done at the turn boundary (never mid-turn), riding the same stream so barge-in
+    // cancellation still propagates to the underlying generation.
+    const reminder = this.reminder?.due();
+    return reminder ? prependText(reply, reminder) : reply;
   }
 }
 

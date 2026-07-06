@@ -2,8 +2,14 @@ import { InferenceRunner } from '@livekit/agents';
 import type { JobContext, JobProcess } from '@livekit/agents';
 import type { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLiveKitWorker, resolveMemoryInstance } from './worker';
-import type { ResolveMastraAgentArgs } from './worker';
+import {
+  createLiveKitWorker,
+  resolveGreetingConfig,
+  resolveGreetingText,
+  resolveMemoryInstance,
+  speakGreeting,
+} from './worker';
+import type { GreetingContext, ResolveMastraAgentArgs } from './worker';
 import { workerSetupComplete } from './worker-setup';
 
 function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent' | 'getLogger', unknown>> = {}): Mastra {
@@ -173,6 +179,134 @@ describe('resolveMemoryInstance', () => {
 
   it('returns null when there is no agent and no memoryInstance', async () => {
     expect(await resolveMemoryInstance({ mastra }, undefined, args, undefined)).toBeNull();
+  });
+});
+
+describe('resolveGreetingConfig (backwards compatibility)', () => {
+  it('honors the deprecated top-level `greeting` string', () => {
+    expect(resolveGreetingConfig({ greeting: 'Hello there' })).toEqual({
+      text: 'Hello there',
+      persist: undefined,
+    });
+  });
+
+  it('honors the deprecated top-level `persistGreeting`', () => {
+    expect(resolveGreetingConfig({ greeting: 'Hi', persistGreeting: false })).toEqual({
+      text: 'Hi',
+      persist: false,
+    });
+  });
+
+  it('uses configuration.greeting when set', () => {
+    const greeting = { text: 'Welcome', allowInterruptions: false, awaitPlayout: true };
+    expect(resolveGreetingConfig({ configuration: { greeting } })).toEqual(greeting);
+  });
+
+  it('lets configuration.greeting.text take precedence over the deprecated top-level greeting', () => {
+    const resolved = resolveGreetingConfig({
+      greeting: 'legacy',
+      persistGreeting: true,
+      configuration: { greeting: { text: 'canonical' } },
+    });
+    expect(resolved.text).toBe('canonical');
+    // Legacy fields still fill gaps the canonical config leaves open (additive merge).
+    expect(resolved.persist).toBe(true);
+  });
+
+  it('merges: legacy provides the text, configuration adds the new behavior fields', () => {
+    const resolved = resolveGreetingConfig({
+      greeting: 'Disclosure line',
+      configuration: { greeting: { allowInterruptions: false, repeatEvery: 180000 } },
+    });
+    expect(resolved).toEqual({
+      text: 'Disclosure line',
+      persist: undefined,
+      allowInterruptions: false,
+      repeatEvery: 180000,
+    });
+  });
+
+  it('returns no greeting text when nothing is configured', () => {
+    expect(resolveGreetingConfig({}).text).toBeUndefined();
+  });
+});
+
+describe('resolveGreetingText', () => {
+  const context: GreetingContext = {
+    metadata: { requestContext: { tenant: 'meridian' } },
+    roomName: 'room-1',
+    ctx: fakeJobContext(),
+  };
+
+  it('returns a fixed string greeting as-is', async () => {
+    expect(await resolveGreetingText('Hello there', context)).toBe('Hello there');
+  });
+
+  it('invokes the resolver form with the call context for a per-tenant greeting', async () => {
+    const resolver = vi.fn((c: GreetingContext) => `Welcome to ${c.metadata.requestContext?.tenant}`);
+    expect(await resolveGreetingText(resolver, context)).toBe('Welcome to meridian');
+    expect(resolver).toHaveBeenCalledWith(context);
+  });
+
+  it('awaits an async resolver', async () => {
+    expect(await resolveGreetingText(async () => 'async greeting', context)).toBe('async greeting');
+  });
+
+  it('normalizes an undefined / empty resolver result to undefined (no greeting)', async () => {
+    expect(await resolveGreetingText(() => undefined, context)).toBeUndefined();
+    expect(await resolveGreetingText(() => '', context)).toBeUndefined();
+  });
+
+  it('treats undefined text as no greeting', async () => {
+    expect(await resolveGreetingText(undefined, context)).toBeUndefined();
+  });
+});
+
+describe('speakGreeting', () => {
+  // A fake AgentSession.say: records the options it was called with and returns a SpeechHandle
+  // whose waitForPlayout resolution is controllable per test.
+  function fakeSession(playout: Promise<void> = Promise.resolve()) {
+    const waitForPlayout = vi.fn(() => playout);
+    const say = vi.fn(() => ({ waitForPlayout }) as unknown as ReturnType<Parameters<typeof speakGreeting>[0]['say']>);
+    return { session: { say } as unknown as Parameters<typeof speakGreeting>[0], say, waitForPlayout };
+  }
+
+  it('speaks the greeting with LiveKit defaults when only text is given', async () => {
+    const { session, say, waitForPlayout } = fakeSession();
+    await speakGreeting(session, { text: 'hello there' });
+    // No override: undefined options object, so LiveKit keeps its own interruption default.
+    expect(say).toHaveBeenCalledWith('hello there', undefined);
+    expect(waitForPlayout).not.toHaveBeenCalled();
+  });
+
+  it('stays silent and returns undefined when there is no greeting text', async () => {
+    const { session, say } = fakeSession();
+    expect(await speakGreeting(session, {})).toBeUndefined();
+    expect(say).not.toHaveBeenCalled();
+  });
+
+  it('passes allowInterruptions:false so a disclosure greeting plays through', async () => {
+    const { session, say } = fakeSession();
+    await speakGreeting(session, { text: 'you are speaking with an AI', allowInterruptions: false });
+    expect(say).toHaveBeenCalledWith('you are speaking with an AI', { allowInterruptions: false });
+  });
+
+  it('passes allowInterruptions:true through explicitly when set', async () => {
+    const { session, say } = fakeSession();
+    await speakGreeting(session, { text: 'hi', allowInterruptions: true });
+    expect(say).toHaveBeenCalledWith('hi', { allowInterruptions: true });
+  });
+
+  it('awaits playout only when awaitPlayout is set', async () => {
+    const { session, waitForPlayout } = fakeSession();
+    await speakGreeting(session, { text: 'hi', allowInterruptions: false, awaitPlayout: true });
+    expect(waitForPlayout).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reject when an awaited greeting is interrupted mid-playout', async () => {
+    // waitForPlayout rejects when the greeting is interrupted; speakGreeting must swallow it.
+    const { session } = fakeSession(Promise.reject(new Error('interrupted')));
+    await expect(speakGreeting(session, { text: 'hi', awaitPlayout: true })).resolves.toBeDefined();
   });
 });
 

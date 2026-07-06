@@ -183,3 +183,35 @@ export async function recordContact(entry: Omit<ContactLogEntry, 'loggedAt'>): P
   await simulateBackendLatency();
   contactLog.push({ ...entry, loggedAt: new Date().toISOString() });
 }
+
+// --- Consent store (companion to configuration.requireConsent) ---------------
+
+/** Consent grants captured during a call, keyed by caller (the memory `resource`). */
+const summaryConsentByCaller = new Map<string, boolean>();
+
+/**
+ * Record whether the caller consented to storing a summary of the call. Wired to the `recordConsent`
+ * tool (see tools/intake-tools) via `createConsentTool`, which the agent calls once the caller
+ * answers the consent question — the runtime-capture companion to `configuration.requireConsent`.
+ */
+export async function recordSummaryConsent(resourceId: string, granted: boolean): Promise<void> {
+  await simulateBackendLatency();
+  summaryConsentByCaller.set(resourceId, granted);
+}
+
+/**
+ * Whether the caller granted consent to store a summary of the call. Defaults to NOT granted (no
+ * record → no consent → no summary), the correct compliance behavior: the agent must obtain and
+ * record consent during the call for the end-of-call summary distillation to run.
+ */
+export function hasSummaryConsent(resourceId: string): boolean {
+  return summaryConsentByCaller.get(resourceId) === true;
+}
+
+/** Whether the deployment requires consent before storing a call summary. */
+export function summaryStorageRequired(requireConsent?: {
+  summaryStorage?: boolean | { required?: boolean };
+}): boolean {
+  const req = requireConsent?.summaryStorage;
+  return req === true || (typeof req === 'object' && req?.required !== false);
+}

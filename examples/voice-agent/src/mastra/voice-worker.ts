@@ -3,7 +3,7 @@
 // voice-worker-workflow.ts. Run one worker at a time — both register as `mastra-voice`.
 import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
-import { recordContact } from './backend';
+import { hasSummaryConsent, recordContact, summaryStorageRequired } from './backend';
 import { mastra } from './index';
 import { flushObservationalMemory } from './memory';
 
@@ -13,7 +13,22 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-  greeting: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+  // Grouped conversation & compliance config. `greeting.text` is spoken at call start. For a
+  // legally-required AI disclosure, set `greeting.allowInterruptions: false` (and `awaitPlayout:
+  // true`) so the caller can't talk over it — see the @mastra/livekit README. This is single-tenant,
+  // so the greeting is a fixed string; `text` also accepts a resolver — `({ metadata }) => string` —
+  // to open differently per tenant off the dispatch metadata when one agent serves many.
+  configuration: {
+    greeting: {
+      text: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+      // Re-disclose the AI status every ~3 minutes on long calls, spoken at the next turn boundary
+      // (never mid-sentence). California SB 243 and similar rules expect periodic re-disclosure.
+      repeatEvery: 3 * 60_000,
+    },
+    // Consent this deployment requires — a named, extensible set (add more items over time). Here we
+    // require consent before storing a summary of the call (the end-of-call OM distillation).
+    requireConsent: { summaryStorage: true },
+  },
   // Scope memory for the call: `thread` is this call, `resource` is the caller so their
   // collected details and working memory persist across calls (returning callers are
   // recognized). In production `resource` would be the verified customer (from caller ID or
@@ -57,7 +72,14 @@ export default createLiveKitWorker({
   // non-blocking home for OM — rather than paying for it inline on a turn. `observe()` still
   // respects the `messageTokens` threshold, so a long enough call flushes here even if the inline
   // processor's last check was just under it.
-  onCallEnd: async ({ memory }) => {
+  //
+  // Consent-aware: `configuration.requireConsent.summaryStorage` DECLARES that storing a call
+  // summary needs consent; the `recordConsent` tool captures the caller's grant during the call (see
+  // tools/intake-tools). When consent is required and the caller hasn't granted it, skip the summary.
+  onCallEnd: async ({ memory, configuration }) => {
+    if (!memory) return;
+    const callerId = memory.resource ?? memory.thread;
+    if (summaryStorageRequired(configuration?.requireConsent) && !hasSummaryConsent(callerId)) return;
     await flushObservationalMemory(memory);
   },
 });

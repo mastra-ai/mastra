@@ -59,6 +59,12 @@ export interface VoiceCallEndArgs {
   metadata: LiveKitSessionMetadata;
   /** Request context for the call, if any. */
   requestContext?: RequestContext;
+  /**
+   * The worker's `configuration` (greeting, consent requirements, …). Read it here to honor policy
+   * at end-of-call — e.g. only flush a call summary to observational memory when
+   * `configuration.requireConsent.summaryStorage` isn't required, or the caller granted it.
+   */
+  configuration?: LiveKitWorkerConfiguration;
   /** The LiveKit room name. */
   roomName: string;
   /** The LiveKit job context, for advanced teardown needs. */
@@ -159,12 +165,25 @@ export interface CreateLiveKitWorkerOptions {
    * grace window; a thrown error is logged, not propagated. See {@link VoiceCallEndArgs}.
    */
   onCallEnd?: VoiceCallEndHook;
-  /** Static greeting spoken when the session starts. */
+  /**
+   * Grouped conversation & compliance configuration. Related policy knobs live here — rather than
+   * as many top-level worker options — so this call stays flat as more are added. Today it carries
+   * the greeting / AI-disclosure; it's the intended home for further compliance controls (recording
+   * notice, periodic re-disclosure, data retention, human handoff, …). See
+   * {@link LiveKitWorkerConfiguration}.
+   */
+  configuration?: LiveKitWorkerConfiguration;
+  /**
+   * Static greeting spoken when the session starts.
+   *
+   * @deprecated Prefer `configuration.greeting.text`. Still honored for backwards compatibility;
+   * when `configuration.greeting` is also set, its fields take precedence.
+   */
   greeting?: string;
   /**
-   * Save the spoken greeting to the memory thread as an assistant message, so the saved
-   * thread is a faithful call transcript. Defaults to `true`; only applies when a
-   * greeting is set and memory is enabled.
+   * Save the spoken greeting to the memory thread as an assistant message.
+   *
+   * @deprecated Prefer `configuration.greeting.persist`. Still honored for backwards compatibility.
    */
   persistGreeting?: boolean;
   /**
@@ -318,6 +337,181 @@ async function resolveInstructions(
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Context handed to a greeting resolver so it can produce a per-call / per-tenant greeting. Built
+ * post-connect, so the dispatch metadata, request context, and room name are all available to key
+ * the greeting off of.
+ */
+export interface GreetingContext {
+  /**
+   * Dispatch metadata for the call — the per-tenant routing signal (dialed number, tenant/agent id,
+   * thread/resource, and any `requestContext` entries) parsed from the LiveKit job metadata.
+   */
+  metadata: LiveKitSessionMetadata;
+  /** The request context built from the dispatch metadata, if any. */
+  requestContext?: RequestContext;
+  /** The LiveKit room name. */
+  roomName: string;
+  /** The LiveKit job context, for anything the metadata doesn't carry. */
+  ctx: JobContext;
+}
+
+/**
+ * The spoken greeting: a fixed string, or a resolver invoked once per call (post-connect) with the
+ * call {@link GreetingContext}. Use the resolver form for a per-tenant greeting derived from the
+ * dispatch metadata / request context — one multi-tenant agent, a different opening per tenant.
+ * Return `undefined` (or empty) for no greeting on that call.
+ */
+export type GreetingText =
+  | string
+  | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
+
+/**
+ * The opening greeting spoken when the session starts — and the vehicle for a required AI
+ * disclosure. Under the EU AI Act (Art. 50) a person interacting with an AI system must be told so
+ * at the first interaction; set `allowInterruptions: false` so that disclosure can't be talked over.
+ */
+export interface GreetingConfiguration {
+  /**
+   * What is spoken when the session starts. A fixed string, or a resolver invoked once per call
+   * (post-connect) with the call {@link GreetingContext} — return a per-tenant greeting built from
+   * the dispatch metadata / request context (e.g. `` `Thanks for calling ${tenant}, you're speaking
+   * with an AI assistant` ``). Omit, or return `undefined`, for no greeting.
+   */
+  text?: GreetingText;
+  /**
+   * Whether the caller can interrupt (barge over) the greeting. Defaults to LiveKit's behavior
+   * (interruptible). Set `false` to make the greeting play through — e.g. when it carries a
+   * disclosure the caller is legally required to hear ("you're speaking with an AI assistant"),
+   * so they can't talk over it and miss it.
+   */
+  allowInterruptions?: boolean;
+  /**
+   * Wait for the greeting to finish playing before continuing (greeting persistence and
+   * `onSessionStart`). Defaults to `false`. Pair with `allowInterruptions: false` when a
+   * disclosure must fully play out before any post-greeting work runs.
+   */
+  awaitPlayout?: boolean;
+  /**
+   * Save the spoken greeting to the memory thread as an assistant message, so the saved thread is
+   * a faithful call transcript. Defaults to `true`; only applies when memory is enabled.
+   */
+  persist?: boolean;
+  /**
+   * Periodically re-disclose the AI status on long calls (e.g. California SB 243). Once this many
+   * milliseconds have elapsed since the last disclosure, the next turn's reply is prefixed with a
+   * short reminder — spoken at the turn boundary, never mid-turn. Omit (or `0`) to disable. Example:
+   * `repeatEvery: 3 * 60_000` re-discloses roughly every three minutes.
+   */
+  repeatEvery?: number;
+  /** The short reminder spoken on each re-disclosure. Defaults to a generic AI-assistant reminder. */
+  repeatText?: string;
+}
+
+/**
+ * One consent item's requirement. `true` is shorthand for a required consent with defaults; the
+ * object form carries the metadata a production consent record needs (whether it's required, and a
+ * human-readable purpose for the spoken/logged prompt and the audit trail).
+ */
+export type ConsentRequirement =
+  | boolean
+  | {
+      /** Whether the caller's consent is required for this item. Defaults to `true` when present. */
+      required?: boolean;
+      /**
+       * Human-readable description of what is being consented to — for the spoken/logged consent
+       * prompt and the stored consent record. E.g. "storing a summary of this call".
+       */
+      purpose?: string;
+    };
+
+/**
+ * Consent requirements for the call, as a **named, extensible set** — each item independently
+ * required and independently granted at runtime, rather than one global "consented" flag. New
+ * consent items are added as named keys so the model grows without reshaping existing ones or
+ * conflating unrelated permissions (a production consent model, not one-size-fits-all). The
+ * requirements are declared here; capturing the caller's grant at runtime and enforcing it is the
+ * companion piece (a consent tool / recording gate) — see the package TODO.
+ */
+export interface ConsentConfiguration {
+  /**
+   * Consent to store a summary of the call (observational-memory distillation, CRM notes, etc.).
+   * When required, persist a call summary only if the caller has granted this consent.
+   */
+  summaryStorage?: ConsentRequirement;
+  // Further consent items (recording, dataSharing, marketing, …) are added as named keys here.
+}
+
+/**
+ * Grouped conversation & compliance configuration for {@link CreateLiveKitWorkerOptions.configuration}.
+ * A single home for related policy knobs so they don't each become a top-level worker option. Today
+ * it carries the greeting / AI-disclosure and consent requirements; it's the intended landing spot
+ * for further compliance controls (recording notice, data retention, human handoff, …).
+ */
+export interface LiveKitWorkerConfiguration {
+  /** The opening greeting / AI-disclosure, plus optional periodic re-disclosure. See {@link GreetingConfiguration}. */
+  greeting?: GreetingConfiguration;
+  /** Consent requirements for the call. See {@link ConsentConfiguration}. */
+  requireConsent?: ConsentConfiguration;
+}
+
+/**
+ * Resolves the effective greeting from the canonical `configuration.greeting` and the deprecated
+ * top-level `greeting` / `persistGreeting` options. The legacy options are the base so existing
+ * worker configs keep working unchanged; `configuration.greeting` overrides field-by-field. Exported
+ * for unit testing.
+ */
+export function resolveGreetingConfig(
+  options: Pick<CreateLiveKitWorkerOptions, 'greeting' | 'persistGreeting' | 'configuration'>,
+): GreetingConfiguration {
+  return {
+    text: options.greeting,
+    persist: options.persistGreeting,
+    ...options.configuration?.greeting,
+  };
+}
+
+/**
+ * Resolves the greeting text for a call: returns a fixed string as-is, or invokes the resolver form
+ * with the call context to produce a per-tenant greeting. Empty / whitespace-nothing results
+ * normalize to `undefined` (no greeting). Exported for unit testing.
+ */
+export async function resolveGreetingText(
+  text: GreetingText | undefined,
+  context: GreetingContext,
+): Promise<string | undefined> {
+  const resolved = typeof text === 'function' ? await text(context) : text;
+  return resolved || undefined;
+}
+
+/** A {@link GreetingConfiguration} whose `text` resolver has been resolved to a plain string. */
+type ResolvedGreetingConfiguration = Omit<GreetingConfiguration, 'text'> & { text?: string };
+
+/**
+ * Speaks the session's opening greeting, honoring the interruption / playout options. Takes the
+ * already-resolved greeting (see {@link resolveGreetingText}) and returns the LiveKit `SpeechHandle`,
+ * or `undefined` when there is no greeting text. Extracted and exported so the greeting behavior is
+ * unit-testable without a live room.
+ */
+export async function speakGreeting(
+  session: Pick<voice.AgentSession, 'say'>,
+  greeting: ResolvedGreetingConfiguration,
+): Promise<ReturnType<voice.AgentSession['say']> | undefined> {
+  if (!greeting.text) return undefined;
+  // Only pass a say-options object when we actually override a default, so an unset
+  // `allowInterruptions` keeps LiveKit's own default rather than forcing a value.
+  const handle = session.say(
+    greeting.text,
+    greeting.allowInterruptions === undefined ? undefined : { allowInterruptions: greeting.allowInterruptions },
+  );
+  if (greeting.awaitPlayout) {
+    // waitForPlayout rejects if the greeting is interrupted; that's a normal outcome for an
+    // interruptible greeting, not a session-level failure, so swallow it.
+    await handle.waitForPlayout().catch(() => {});
+  }
+  return handle;
 }
 
 /**
@@ -492,12 +686,30 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         const onCallEnd = options.onCallEnd;
         ctx.addShutdownCallback(async () => {
           try {
-            await onCallEnd({ memory, memoryInstance, metadata, requestContext, roomName, ctx });
+            await onCallEnd({
+              memory,
+              memoryInstance,
+              metadata,
+              requestContext,
+              configuration: options.configuration,
+              roomName,
+              ctx,
+            });
           } catch (error) {
             logger.warn('@mastra/livekit: onCallEnd hook threw', error);
           }
         });
       }
+
+      // Resolve the greeting: `configuration.greeting` is canonical, but the deprecated top-level
+      // `greeting` / `persistGreeting` options are still honored (additive), configuration winning.
+      const greetingConfig = resolveGreetingConfig(options);
+      // Periodic AI re-disclosure (disabled unless a positive interval is set). Handled at the turn
+      // boundary inside the voice agent, so it works on the agent and workflow/custom paths alike.
+      const greetingReminder =
+        greetingConfig.repeatEvery && greetingConfig.repeatEvery > 0
+          ? { everyMs: greetingConfig.repeatEvery, text: greetingConfig.repeatText }
+          : undefined;
 
       const agent = createMastraVoiceAgent({
         ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
@@ -506,6 +718,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         requestContext,
         toolFeedback: options.toolFeedback,
         onTurnComplete: options.onTurnComplete,
+        greetingReminder,
         streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
       });
 
@@ -528,18 +741,28 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           outputOptions: options.outputOptions,
         });
 
-        if (options.greeting) {
-          session.say(options.greeting);
-          if (options.persistGreeting !== false && memory && memoryInstance) {
-            try {
-              await persistSpokenGreeting({
-                memory: memoryInstance,
-                threadId: memory.thread,
-                resourceId: memory.resource ?? memory.thread,
-                greeting: options.greeting,
-              });
-            } catch (error) {
-              logger.warn('@mastra/livekit: failed to persist the greeting', error);
+        if (greetingConfig.text) {
+          // Resolve the greeting once (a fixed string, or a per-tenant resolver run post-connect),
+          // then use that same resolved text for both speaking and persistence.
+          const greetingText = await resolveGreetingText(greetingConfig.text, {
+            metadata,
+            requestContext,
+            roomName,
+            ctx,
+          });
+          if (greetingText) {
+            await speakGreeting(session, { ...greetingConfig, text: greetingText });
+            if (greetingConfig.persist !== false && memory && memoryInstance) {
+              try {
+                await persistSpokenGreeting({
+                  memory: memoryInstance,
+                  threadId: memory.thread,
+                  resourceId: memory.resource ?? memory.thread,
+                  greeting: greetingText,
+                });
+              } catch (error) {
+                logger.warn('@mastra/livekit: failed to persist the greeting', error);
+              }
             }
           }
         }

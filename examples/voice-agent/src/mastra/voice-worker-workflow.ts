@@ -6,7 +6,7 @@
 // register as `mastra-voice`.
 import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
-import { recordContact } from './backend';
+import { hasSummaryConsent, recordContact, summaryStorageRequired } from './backend';
 import { mastra } from './index';
 import { callCenterMemory, flushObservationalMemory } from './memory';
 
@@ -34,7 +34,15 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-  greeting: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+  configuration: {
+    greeting: {
+      text: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+      // Re-disclose the AI status every ~3 minutes on long calls, at the next turn boundary.
+      repeatEvery: 3 * 60_000,
+    },
+    // Require consent before storing a summary of the call (the end-of-call OM distillation).
+    requireConsent: { summaryStorage: true },
+  },
   // Spoken filler while a tool runs, so the caller isn't left in silence — same map as the agent
   // worker. On the workflow path it fires because the reply step pipes the agent's fullStream, so
   // tool-call chunks reach the package.
@@ -61,9 +69,13 @@ export default createLiveKitWorker({
       interrupted: result.interrupted,
     });
   },
-  // Same end-of-call OM flush as the agent worker — distill the call into durable memory once,
-  // after hang-up, off the audio path.
-  onCallEnd: async ({ memory }) => {
+  // Same consent-aware end-of-call OM flush as the agent worker — distill the call into durable
+  // memory once, after hang-up, off the audio path, and only when summary-storage consent isn't
+  // required or has been granted.
+  onCallEnd: async ({ memory, configuration }) => {
+    if (!memory) return;
+    const callerId = memory.resource ?? memory.thread;
+    if (summaryStorageRequired(configuration?.requireConsent) && !hasSummaryConsent(callerId)) return;
     await flushObservationalMemory(memory);
   },
 });
