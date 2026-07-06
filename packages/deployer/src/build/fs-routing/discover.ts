@@ -194,7 +194,16 @@ async function parsePackagedSkill(
   const parsed = matter(raw);
   const frontmatter = parsed.data as { name?: string; description?: string };
   const name = frontmatter.name ?? fallbackName;
-  const description = frontmatter.description ?? '';
+  const description = frontmatter.description;
+
+  if (!description) {
+    throw new Error(
+      `Skill "${name}" in ${skillMdPath} is missing a required "description". ` +
+        `Add a YAML frontmatter block with a "description:" field. ` +
+        `See https://agentskills.io/specification for the SKILL.md format.`,
+    );
+  }
+
   const instructions = parsed.content.trim();
   return { kind: 'packaged', name, description, instructions, references };
 }
