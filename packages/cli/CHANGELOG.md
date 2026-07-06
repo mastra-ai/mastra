@@ -1,5 +1,81 @@
 # mastra
 
+## 1.18.1
+
+### Patch Changes
+
+- Auto-construct a Mastra instance when no `index.ts` exists. If your `src/mastra` ([#18893](https://github.com/mastra-ai/mastra/pull/18893))
+  directory has file-based primitives but no entry file, `mastra dev` and
+  `mastra build` now build and run the project without any boilerplate — no
+  `new Mastra({...})` required.
+
+  ```
+  src/mastra/
+    storage.ts          // export default new LibSQLStore({ url: 'file:./mastra.db' })
+    observability.ts    // export default new Observability({ ... })
+    server.ts           // export default { port: 4111 }
+    studio.ts           // export default { ... }
+    agents/weather/     // file-based agent
+    workflows/report.ts // export default createWorkflow({ ... })
+  ```
+
+  ```sh
+  # No src/mastra/index.ts needed:
+  mastra dev
+  ```
+
+  Projects that already export a `mastra` instance from `index.ts` are unaffected.
+
+- Fixed Studio HTML config injection so platform environment values are escaped before they are embedded in served or deployed `index.html` files. This keeps organization IDs, project IDs, observability endpoints and telemetry flags intact when they contain quotes, angle brackets, newlines or `$` sequences, and exposes `escapeStudioHtmlValue` from `@mastra/deployer/build` for the shared injection paths. ([#18812](https://github.com/mastra-ai/mastra/pull/18812))
+
+- The `mastra api` route metadata now lists the unified `/api/schedules` routes instead of the removed `/api/heartbeats` routes. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Update `@mastra/core` peer dependency for the unified schedules API ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Fixed `mastra dev` and `mastra build` crashing with `Invalid comparator: workspace:^` when an installed Mastra package declares its peer dependencies with a non-semver range like `workspace:^` (for example when packages resolve to monorepo source via pnpm workspaces). The peer dependency check now skips ranges it cannot compare instead of throwing. ([#18912](https://github.com/mastra-ai/mastra/pull/18912))
+
+- Introduced `mastra deploy`, a unified deploy command that ships a Mastra project to a named environment on the Mastra platform in a single step. The command auto-resolves the target organization, project, and environment (creating the project and environment on first deploy, with an interactive prompt or `--yes` for headless CI), builds and zips the project, uploads the artifact, and streams platform build/runtime logs in real time until the environment is running. Pass `--env <name>` to target `production` (default), `staging`, or any named environment; when `--env-file` is not given, `.env.<name>` is picked up automatically. `--region` selects the region for newly created environments. ([#18752](https://github.com/mastra-ai/mastra/pull/18752))
+
+  New `mastra env` subcommands (`list`, `create`, `delete`) manage environments alongside deploys, and `--json` output makes the list and create commands scriptable for CI pipelines.
+
+  The unified deploy runs entirely against environment-scoped platform endpoints (`/v1/projects/:id/environments/...`), keeping the new runtime cleanly separate from the legacy `/v1/studio/*` surface so it can be retired independently. The existing `mastra studio deploy` and `mastra server deploy` commands continue to work unchanged for users who have not migrated; a previously landed deprecation warning on those commands has been removed so it doesn't fire before the unified path is generally available.
+
+  All three deploy commands now emit anonymous telemetry (timing, success/failure, and non-PII flag properties such as whether `--org`, `--project`, or `--env-file` were passed and whether the command ran headlessly) so regressions and adoption of the unified path can be measured. Telemetry honors `MASTRA_TELEMETRY_DISABLED`, and the platform API host is reported as a coarse label (`cloud`, `staging`, `localhost`, `custom`, or `unknown`) rather than a raw hostname so self-hosted deployments never leak their API URL.
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`bb1cf72`](https://github.com/mastra-ai/mastra/commit/bb1cf72fb3984c767db6d50f3d429d2515d4d8a8), [`9eb5549`](https://github.com/mastra-ai/mastra/commit/9eb5549da4f5fd72b85cb42b8dbd5e1cef5bef20), [`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`528adbd`](https://github.com/mastra-ai/mastra/commit/528adbd03f1e16192f9a7b675d930ae37205034d), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`2e7b597`](https://github.com/mastra-ai/mastra/commit/2e7b597a600941994ac6ab1269f952bfdbbcfbdc), [`259c1ac`](https://github.com/mastra-ai/mastra/commit/259c1acb9e8fc7bc0058a2a1942b2466bf20ed59), [`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0
+  - @mastra/deployer@1.50.0
+
+## 1.18.1-alpha.5
+
+### Patch Changes
+
+- Auto-construct a Mastra instance when no `index.ts` exists. If your `src/mastra` ([#18893](https://github.com/mastra-ai/mastra/pull/18893))
+  directory has file-based primitives but no entry file, `mastra dev` and
+  `mastra build` now build and run the project without any boilerplate — no
+  `new Mastra({...})` required.
+
+  ```
+  src/mastra/
+    storage.ts          // export default new LibSQLStore({ url: 'file:./mastra.db' })
+    observability.ts    // export default new Observability({ ... })
+    server.ts           // export default { port: 4111 }
+    studio.ts           // export default { ... }
+    agents/weather/     // file-based agent
+    workflows/report.ts // export default createWorkflow({ ... })
+  ```
+
+  ```sh
+  # No src/mastra/index.ts needed:
+  mastra dev
+  ```
+
+  Projects that already export a `mastra` instance from `index.ts` are unaffected.
+
+- Updated dependencies [[`bb1cf72`](https://github.com/mastra-ai/mastra/commit/bb1cf72fb3984c767db6d50f3d429d2515d4d8a8), [`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36)]:
+  - @mastra/deployer@1.50.0-alpha.5
+  - @mastra/core@1.50.0-alpha.5
+
 ## 1.18.1-alpha.4
 
 ### Patch Changes
