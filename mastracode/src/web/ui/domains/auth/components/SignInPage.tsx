@@ -11,7 +11,7 @@ import { redirectToLogin } from '../services/auth';
  * user to an external site after login. `//host` is protocol-relative, so it
  * is rejected too.
  */
-function safeReturnTo(raw: string | null): string {
+function safeReturnTo(raw?: string): string {
   if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
   return '/chat';
 }
@@ -25,7 +25,7 @@ function safeReturnTo(raw: string | null): string {
 export function SignInPage() {
   const { baseUrl } = useApiConfig();
   const [searchParams] = useSearchParams();
-  const returnTo = safeReturnTo(searchParams.get('returnTo'));
+  const returnTo = safeReturnTo(searchParams.get('returnTo')?.toString());
 
   return (
     <main className="grid h-dvh place-items-center">

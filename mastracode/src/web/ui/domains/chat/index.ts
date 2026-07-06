@@ -1,3 +1,7 @@
+export { ChatHeader } from './components/ChatHeader';
+export { ChatMessageList } from './components/ChatMessageList';
+export { ChatOverlays } from './components/ChatOverlays';
+export { ComposerPanel } from './components/ComposerPanel';
 export { Composer } from './components/Composer';
 export { CommandPalette } from './components/CommandPalette';
 export { GoalPanel } from './components/GoalPanel';
@@ -5,6 +9,10 @@ export { ShortcutsOverlay } from './components/ShortcutsOverlay';
 export { StatusLine } from './components/StatusLine';
 export { Transcript } from './components/Transcript';
 export { SLASH_COMMANDS } from './services/commands';
+export { ChatSessionProvider, useChatSession } from './context/ChatSessionProvider';
+export type { ChatSessionApi } from './context/ChatSessionProvider';
+export { ChatCommandsProvider, useChatCommands } from './context/ChatCommandsProvider';
+export type { ChatCommandsApi } from './context/ChatCommandsProvider';
 export { useAgentControllerSession } from './hooks/useAgentControllerSession';
 export { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 export { useTextareaAutoResize } from './hooks/useTextareaAutoResize';

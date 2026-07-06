@@ -7,10 +7,14 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronsUpDown, Circle, Folder, LogOut, MoreHorizontal, Plus, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import type { WebAuthViewModel } from './AppLayout';
-import type { Project, WorkspaceSession } from './domains/workspaces';
-import { WorkspacesSection } from './domains/workspaces';
+import { useApiConfig } from '../../shared/api/config';
+import { redirectToLogout, useWebAuth } from './domains/auth';
+import { useChatSession } from './domains/chat';
+import type { Project } from './domains/workspaces';
+import { useActiveProjectContext, WorkspacesSection } from './domains/workspaces';
 import { useKeyDown } from './lib/hooks';
+import { useOverlays } from './lib/overlays';
+import { useToast } from './ui';
 
 const MAX_THREADS = 5;
 
@@ -28,52 +32,32 @@ function relativeTime(iso: string): string {
   return new Date(then).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-interface SidebarProps {
-  projects: Project[];
-  activeProjectId: string | null;
-  auth?: WebAuthViewModel;
-  session: WorkspaceSession;
-  resourceId?: string;
-  onManageProjects: () => void;
-  onOpenSettings: () => void;
-  threads: AgentControllerThreadInfo[];
-  activeThreadId?: string;
-  onSwitchThread: (threadId: string) => void;
-  onCreateThread: (title?: string) => void;
-  onDeleteThread: (threadId: string) => void;
-  onRenameThread: (threadId: string, title: string) => void;
-  onCloneThread: (threadId: string) => void;
-  status?: string;
-  running?: boolean;
-  open?: boolean;
-}
+/**
+ * Propless sidebar: reads project selection, chat session, and overlay state
+ * from the domain contexts directly. Only the inner rows/sections below stay
+ * presentational (prop-driven).
+ */
+export function Sidebar() {
+  const session = useChatSession();
+  const { projects, activeProjectId, resourceId } = useActiveProjectContext();
+  const overlays = useOverlays();
+  const { toast } = useToast();
 
-export function Sidebar({
-  projects,
-  activeProjectId,
-  auth,
-  session,
-  resourceId,
-  onManageProjects,
-  onOpenSettings,
-  threads,
-  activeThreadId,
-  onSwitchThread,
-  onCreateThread,
-  onDeleteThread,
-  onRenameThread,
-  onCloneThread,
-  status = 'ready',
-  running = false,
-  open = false,
-}: SidebarProps) {
   const activeProject = projects.find(p => p.id === activeProjectId);
+  const open = overlays.isOpen('sidebar');
+  const closeSidebar = () => overlays.close('sidebar');
 
   return (
     <div
       className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-full md:max-w-none md:translate-x-0 md:border-r-0 md:bg-transparent md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
     >
-      <ProjectSwitcher activeProject={activeProject} onManageProjects={onManageProjects} />
+      <ProjectSwitcher
+        activeProject={activeProject}
+        onManageProjects={() => {
+          overlays.open('projects');
+          closeSidebar();
+        }}
+      />
 
       <WorkspacesSection
         activeProject={activeProject}
@@ -84,17 +68,40 @@ export function Sidebar({
 
       {activeProject && (
         <ThreadList
-          threads={threads}
-          activeThreadId={activeThreadId}
-          onSwitchThread={onSwitchThread}
-          onCreateThread={onCreateThread}
-          onDeleteThread={onDeleteThread}
-          onRenameThread={onRenameThread}
-          onCloneThread={onCloneThread}
+          threads={session.threads}
+          activeThreadId={session.transcript.threadId}
+          onSwitchThread={id => {
+            void session.switchThread(id);
+            closeSidebar();
+          }}
+          onCreateThread={title => {
+            void session.createThread(title);
+            toast('New thread created', 'success');
+            closeSidebar();
+          }}
+          onDeleteThread={id => {
+            void session.deleteThread(id);
+            toast('Thread deleted');
+          }}
+          onRenameThread={(id, title) => {
+            void session.renameThread(id, title);
+            toast('Thread renamed', 'success');
+          }}
+          onCloneThread={id => {
+            void session.cloneThread(id);
+            toast('Thread cloned', 'success');
+          }}
         />
       )}
 
-      <SidebarFooter status={status} running={running} auth={auth} onOpenSettings={onOpenSettings} />
+      <SidebarFooter
+        status={session.status}
+        running={session.busy}
+        onOpenSettings={() => {
+          overlays.open('settings');
+          closeSidebar();
+        }}
+      />
     </div>
   );
 }
@@ -146,6 +153,16 @@ function ProjectSwitcher({
   );
 }
 
+interface ThreadListProps {
+  threads: AgentControllerThreadInfo[];
+  activeThreadId?: string;
+  onSwitchThread: (threadId: string) => void;
+  onCreateThread: (title?: string) => void;
+  onDeleteThread: (threadId: string) => void;
+  onRenameThread: (threadId: string, title: string) => void;
+  onCloneThread: (threadId: string) => void;
+}
+
 function ThreadList({
   threads,
   activeThreadId,
@@ -154,16 +171,7 @@ function ThreadList({
   onDeleteThread,
   onRenameThread,
   onCloneThread,
-}: Pick<
-  SidebarProps,
-  | 'threads'
-  | 'activeThreadId'
-  | 'onSwitchThread'
-  | 'onCreateThread'
-  | 'onDeleteThread'
-  | 'onRenameThread'
-  | 'onCloneThread'
->) {
+}: ThreadListProps) {
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
@@ -412,9 +420,12 @@ function statusDotClass(status: string): string {
 function SidebarFooter({
   status = 'ready',
   running = false,
-  auth,
   onOpenSettings,
-}: Pick<SidebarProps, 'status' | 'running' | 'auth' | 'onOpenSettings'>) {
+}: {
+  status?: string;
+  running?: boolean;
+  onOpenSettings: () => void;
+}) {
   return (
     <div className="mt-auto flex flex-col gap-2 border-t border-border1 pt-2">
       <div
@@ -427,7 +438,7 @@ function SidebarFooter({
         </span>
         <span>{statusLabel(status, running)}</span>
       </div>
-      <SidebarAuth auth={auth} />
+      <SidebarAuth />
       <Button
         variant="ghost"
         size="sm"
@@ -444,10 +455,11 @@ function SidebarFooter({
   );
 }
 
-function SidebarAuth({ auth }: { auth?: WebAuthViewModel }) {
-  if (!auth) return null;
+function SidebarAuth() {
+  const auth = useWebAuth();
+  const { baseUrl } = useApiConfig();
 
-  if (auth.loading) {
+  if (auth.isLoading) {
     return (
       <Txt as="div" variant="ui-sm" className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-icon3">
         <span className="col-start-2">Checking sign-in…</span>
@@ -457,9 +469,10 @@ function SidebarAuth({ auth }: { auth?: WebAuthViewModel }) {
 
   // Unauthenticated sessions never reach the app (the router bounces them to
   // `/signin`), so the sidebar only renders the signed-in identity.
-  if (!auth.state?.authEnabled || !auth.state.authenticated) return null;
+  const state = auth.data;
+  if (!state?.authEnabled || !state.authenticated) return null;
 
-  const identity = auth.state.user?.name ?? auth.state.user?.email ?? 'Signed in';
+  const identity = state.user?.name ?? state.user?.email ?? 'Signed in';
 
   return (
     <div className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center">
@@ -469,7 +482,7 @@ function SidebarAuth({ auth }: { auth?: WebAuthViewModel }) {
       <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-icon6" title={identity}>
         {identity}
       </Txt>
-      <Button variant="ghost" size="icon-sm" onClick={auth.onSignOut} aria-label="Sign out">
+      <Button variant="ghost" size="icon-sm" onClick={() => redirectToLogout(baseUrl)} aria-label="Sign out">
         <LogOut size={15} />
       </Button>
     </div>
