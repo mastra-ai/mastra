@@ -76,7 +76,7 @@ Rules are prioritized by impact:
 
 **Type Safety:**
 
-- No `as` type assertions anywhere — production **or tests**; narrow with type guards, query generics (`querySelector<T>`, `getByRole<T>`), typed fixture factories, or `implements` on mocks. `as const` is the only allowed form (`types-no-type-assertions`)
+- No `as` type assertions anywhere — production **or tests**; narrow with real type guards, query generics (`querySelector<T>`, `getByRole<T>`), typed fixture factories, or `implements` on mocks. `as const` is the only allowed form. Do not replace a cast with a domain-type predicate that only checks `typeof value === 'object'`; call that an `isRecord` helper or validate the fields used (`types-no-type-assertions`)
 
 ### Rendering Patterns
 

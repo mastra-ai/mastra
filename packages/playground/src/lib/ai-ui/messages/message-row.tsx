@@ -9,7 +9,6 @@ import { forwardRef, useMemo } from 'react';
 
 import type { DataMessagePart } from '../tools/tool-card';
 import { DatasetSaveAction } from './dataset-save-action';
-import type { MessageMetadata } from './message-metadata';
 import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
 import { DataPartRenderer } from './renderers/data-part-renderer';
 import { DynamicToolPartRenderer } from './renderers/dynamic-tool-part-renderer';
@@ -39,9 +38,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /** Read an optional field off a loosely-typed message part or nested value. */
 const readField = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
-
-/** The stored `content.metadata` is a freeform record; treat any object as our playground metadata shape. */
-const isMessageMetadata = (value: unknown): value is MessageMetadata => isRecord(value);
 
 /**
  * Normalize the stored message role for display. A `signal`+`type:'user'` row
@@ -82,8 +78,8 @@ const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
   return { ...message, role: displayRole };
 };
 
-const getMessageMetadata = (message: MastraDBMessage): MessageMetadata | undefined =>
-  isMessageMetadata(message.content.metadata) ? message.content.metadata : undefined;
+const getMessageMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined =>
+  isRecord(message.content.metadata) ? message.content.metadata : undefined;
 
 /**
  * Collect `data-*` parts from the message so badges (file-tree, sandbox) can read
@@ -114,20 +110,21 @@ const getTextFromParts = (message: MastraDBMessage): string =>
  * Whether an assistant message has user-visible prose worth showing the action
  * bar for. Tool calls, reasoning, and completion-check text do not count.
  */
-const hasVisibleAssistantText = (message: MastraDBMessage, metadata: MessageMetadata | undefined): boolean =>
+const hasVisibleAssistantText = (message: MastraDBMessage, metadata: Record<string, unknown> | undefined): boolean =>
   message.content.parts.some(part => {
     if (part.type !== 'text') return false;
     const text = readField(part, 'text');
     if (typeof text !== 'string' || text.trim().length === 0) return false;
-    if (metadata?.completionResult || metadata?.isTaskCompleteResult) return false;
+    if (readField(metadata, 'completionResult') || readField(metadata, 'isTaskCompleteResult')) return false;
     return true;
   });
 
-const getModelMetadata = (metadata: MessageMetadata | undefined) => {
-  const modelMetadata = metadata?.custom?.modelMetadata;
-  const modelId = modelMetadata?.modelId;
-  const modelProvider = modelMetadata?.modelProvider;
-  if (!modelId || !modelProvider) return undefined;
+const getModelMetadata = (metadata: Record<string, unknown> | undefined) => {
+  const custom = readField(metadata, 'custom');
+  const modelMetadata = readField(custom, 'modelMetadata');
+  const modelId = readField(modelMetadata, 'modelId');
+  const modelProvider = readField(modelMetadata, 'modelProvider');
+  if (typeof modelId !== 'string' || typeof modelProvider !== 'string') return undefined;
   return { modelId, modelProvider };
 };
 

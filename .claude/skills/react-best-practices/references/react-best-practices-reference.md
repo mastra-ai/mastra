@@ -28,17 +28,17 @@ This catalog is an index for React performance and quality guidance used by agen
 
 ## Category Focus
 
-| Category                  | Focus                                                                                                                                                                                     |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Eliminating Waterfalls    | Waterfalls are the #1 performance killer. Each sequential await adds full network latency. Eliminating them yields the largest gains.                                                     |
-| Bundle Size Optimization  | Reducing initial bundle size improves Time to Interactive and Largest Contentful Paint.                                                                                                   |
-| Client-Side Data Fetching | Automatic deduplication and efficient data fetching patterns reduce redundant network requests.                                                                                           |
-| Re-render Optimization    | Reducing unnecessary re-renders minimizes wasted computation and improves UI responsiveness.                                                                                              |
-| Rendering Performance     | Optimizing the rendering process reduces the work the browser needs to do.                                                                                                                |
-| JavaScript Performance    | Micro-optimizations for hot paths can add up to meaningful improvements.                                                                                                                  |
-| Component Structure       | Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.                                                                                 |
-| Testing                   | Drive the real client + React Query stack and mock only the network, so a green test proves production behavior, not the mock.                                                            |
-| Type Safety               | Never cast with `as`; let production boundary types flow through and narrow with type guards, query generics, typed factories, or `implements` so the compiler still catches shape drift. |
+| Category                  | Focus                                                                                                                                                                                          |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Eliminating Waterfalls    | Waterfalls are the #1 performance killer. Each sequential await adds full network latency. Eliminating them yields the largest gains.                                                          |
+| Bundle Size Optimization  | Reducing initial bundle size improves Time to Interactive and Largest Contentful Paint.                                                                                                        |
+| Client-Side Data Fetching | Automatic deduplication and efficient data fetching patterns reduce redundant network requests.                                                                                                |
+| Re-render Optimization    | Reducing unnecessary re-renders minimizes wasted computation and improves UI responsiveness.                                                                                                   |
+| Rendering Performance     | Optimizing the rendering process reduces the work the browser needs to do.                                                                                                                     |
+| JavaScript Performance    | Micro-optimizations for hot paths can add up to meaningful improvements.                                                                                                                       |
+| Component Structure       | Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.                                                                                      |
+| Testing                   | Drive the real client + React Query stack and mock only the network, so a green test proves production behavior, not the mock.                                                                 |
+| Type Safety               | Never cast with `as`; let production boundary types flow through and narrow with real type guards, query generics, typed factories, or `implements` so the compiler still catches shape drift. |
 
 ## Rules
 
@@ -105,7 +105,7 @@ This catalog is an index for React performance and quality guidance used by agen
 
 | Rule                       | Title                                     | Impact | Summary                                                                                                                | Canonical file                                 |
 | -------------------------- | ----------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `types-no-type-assertions` | No `as` Type Assertions (Including Tests) | HIGH   | Never use `as` casts (production or tests); narrow with type guards, query generics, typed factories, or `implements`. | `references/rules/types-no-type-assertions.md` |
+| `types-no-type-assertions` | No `as` Type Assertions (Including Tests) | HIGH   | Never use `as` casts (production or tests); narrow with real guards, query generics, typed factories, or `implements`. | `references/rules/types-no-type-assertions.md` |
 
 ## External References
 

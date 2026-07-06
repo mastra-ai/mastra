@@ -2,7 +2,7 @@
 title: No `as` Type Assertions (Including Tests)
 impact: HIGH
 impactDescription: `as` casts silence the type checker and hide real shape mismatches, in production and test code alike
-tags: types, typescript, as, casts, assertions, test-quality
+tags: types, typescript, as, casts, assertions, type-guards, test-quality
 ---
 
 ## No `as` Type Assertions (Including Tests)
@@ -18,10 +18,11 @@ not assert a type).
 - An `as` cast is an unchecked claim; refactors that change the real type won't flag the cast site.
 - Test casts (`getByX(...) as HTMLInputElement`, `{...} as SomeMessage`) hide fixture drift and make tests assert against a shape the code no longer produces.
 - Every cast is a place a `null`, a missing field, or a wrong union member can slip through.
+- A weak type predicate can be the same problem under a better name: `typeof value === 'object' && value !== null` proves record-ness, not that `value is DomainType`.
 
 **Use instead:**
 
-- **Type guards** with a predicate return (`value is T`) to narrow `unknown`/loose values.
+- **Type guards** with a predicate return (`value is T`) to narrow `unknown`/loose values. The guard must prove the fields or discriminants the code uses; otherwise name it as a broad helper such as `isRecord`.
 - **Generic type arguments** on APIs that accept them (`querySelector<HTMLElement>(…)`, `screen.getByRole<HTMLTextAreaElement>(…)`, `closest<HTMLFormElement>(…)`).
 - **Typed factories / annotated locals** for fixtures, so the object is checked against the target type.
 - **`implements`** on class mocks so the instance genuinely satisfies the interface.
@@ -39,13 +40,30 @@ const msg = { id, role: 'signal', content } as MastraDBMessage;
 const textarea = screen.getByPlaceholderText('Message') as HTMLTextAreaElement;
 const el = document.querySelector('[data-x]') as HTMLElement;
 this.callback(entries as IntersectionObserverEntry[], this as unknown as IntersectionObserver);
+
+// Fake guard: this only proves "non-null object", not MessageMetadata.
+const isMessageMetadata = (value: unknown): value is MessageMetadata => typeof value === 'object' && value !== null;
 ```
 
 **Correct:**
 
 ```ts
 // Production: narrow with a guard, or annotate the built object
-const isMessageMetadata = (v: unknown): v is MessageMetadata => typeof v === 'object' && v !== null;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isMessageMetadata = (value: unknown): value is MessageMetadata => {
+  if (!isRecord(value)) return false;
+
+  const custom = value.custom;
+  if (custom !== undefined && !isRecord(custom)) return false;
+
+  const modelMetadata = custom?.modelMetadata;
+  if (modelMetadata !== undefined && !isRecord(modelMetadata)) return false;
+
+  return true;
+};
+
 const metadata = isMessageMetadata(message.content.metadata) ? message.content.metadata : undefined;
 const parts: MastraDBMessage['content']['parts'] = [{ type: 'data-signal', data }];
 return { ...message, role: 'assistant', content: { ...message.content, parts } };
@@ -66,6 +84,7 @@ class MockIO implements IntersectionObserver {
 }
 ```
 
-**Reviewer smell:** any `as` in a diff (except `as const`). A cast in a test is not
-a shortcut — it is the same defect as a cast in production, in the one place no one
-looks.
+**Reviewer smell:** any `as` in a diff (except `as const`), or a domain-type
+predicate whose body only checks `typeof value === 'object' && value !== null`.
+A cast in a test is not a shortcut — it is the same defect as a cast in
+production, in the one place no one looks.
