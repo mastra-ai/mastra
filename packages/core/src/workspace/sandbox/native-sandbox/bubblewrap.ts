@@ -83,7 +83,7 @@ export function buildBwrapCommand(
   if (config.allowSystemBinaries !== false) {
     // Include the Node.js binary location
     const nodePath = process.execPath;
-    const nodeDir = nodePath.substring(0, nodePath.lastIndexOf('/'));
+    const nodeDir = nodePath.includes('\\') ? nodePath.substring(0, nodePath.lastIndexOf('\\')) : nodePath.substring(0, nodePath.lastIndexOf('/'));
 
     // Mount the node directory if it's not already covered
     if (!DEFAULT_READONLY_BINDS.some(p => nodeDir.startsWith(p))) {
@@ -95,8 +95,12 @@ export function buildBwrapCommand(
     bwrapArgs.push('--ro-bind-try', '/snap', '/snap');
   }
 
-  // Mount workspace read-write
-  bwrapArgs.push('--bind', workspacePath, workspacePath);
+  // Mount workspace (read-only or read-write)
+  if (config.readOnlyWorkspace) {
+    bwrapArgs.push('--ro-bind', workspacePath, workspacePath);
+  } else {
+    bwrapArgs.push('--bind', workspacePath, workspacePath);
+  }
 
   // Mount custom read-write paths
   for (const path of config.readWritePaths ?? []) {

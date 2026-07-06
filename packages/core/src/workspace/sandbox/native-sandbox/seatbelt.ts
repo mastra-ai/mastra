@@ -125,7 +125,9 @@ export function generateSeatbeltProfile(workspacePath: string, config: NativeSan
   lines.push('; File write access (restricted to workspace and temp)');
 
   // Workspace
-  lines.push(`(allow file-write* (subpath ${escapePath(workspacePath)}))`);
+  if (!config.readOnlyWorkspace) {
+    lines.push(`(allow file-write* (subpath ${escapePath(workspacePath)}))`);
+  }
 
   // Temp directories (needed for many operations)
   lines.push('(allow file-write* (subpath "/private/tmp"))');

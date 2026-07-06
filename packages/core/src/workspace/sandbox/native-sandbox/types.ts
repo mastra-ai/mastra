@@ -56,6 +56,13 @@ export interface NativeSandboxConfig {
    * The command and its args are appended after these.
    */
   bwrapArgs?: string[];
+
+  /**
+   * Mount the workspace directory as read-only.
+   * Only used when isolation is 'seatbelt' or 'bwrap'.
+   * @default false
+   */
+  readOnlyWorkspace?: boolean;
 }
 
 /**
