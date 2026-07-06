@@ -559,6 +559,94 @@ if (output.finishReason === 'suspended') {
 }
 ```
 
+## Agent schedules
+
+Use the client SDK schedule methods to manage persisted agent schedules over the `/api/schedules` routes. For concepts and server-side examples, see [Schedules](/docs/long-running-agents/schedules) and the [`mastra.schedules` reference](/reference/schedules/schedules).
+
+### `createSchedule()`
+
+Create an agent schedule by passing `agentId`.
+
+```typescript
+const schedule = await mastraClient.createSchedule({
+  agentId: 'pinger',
+  cron: '0 * * * *',
+  prompt: 'Give me a status update.',
+})
+```
+
+### `listSchedules()`
+
+List agent schedules. Filter by fields such as `agentId`, `threadId`, `resourceId`, `name`, or `status`.
+
+```typescript
+const schedules = await mastraClient.listSchedules({
+  agentId: 'pinger',
+  status: 'active',
+})
+```
+
+### `getSchedule()`
+
+Fetch a single agent schedule by ID.
+
+```typescript
+const schedule = await mastraClient.getSchedule('agent_pinger')
+```
+
+### `updateSchedule()`
+
+Update an agent schedule. Agent schedules can update fields such as `cron`, `timezone`, `prompt`, `name`, signal delivery options, metadata, and `status`.
+
+```typescript
+const updated = await mastraClient.updateSchedule('agent_pinger', {
+  cron: '*/30 * * * *',
+  prompt: 'Give me a status update every 30 minutes.',
+})
+```
+
+### `deleteSchedule()`
+
+Delete an agent schedule.
+
+```typescript
+await mastraClient.deleteSchedule('agent_pinger')
+```
+
+### `runSchedule()`
+
+Fire an agent schedule once immediately without changing its cron cadence.
+
+```typescript
+const run = await mastraClient.runSchedule('agent_pinger')
+```
+
+### `pauseSchedule()`
+
+Pause an agent schedule so the scheduler stops firing it. Returns the updated schedule.
+
+```typescript
+await mastraClient.pauseSchedule('agent_pinger')
+```
+
+### `resumeSchedule()`
+
+Resume a paused agent schedule. The next fire time is recomputed from now, so a long-paused schedule doesn't fire a backlog. Returns the updated schedule.
+
+```typescript
+await mastraClient.resumeSchedule('agent_pinger')
+```
+
+### `listScheduleTriggers()`
+
+List the trigger history for an agent schedule, including the joined run summary for each fire.
+
+```typescript
+const { triggers } = await mastraClient.listScheduleTriggers('agent_pinger', {
+  limit: 50,
+})
+```
+
 ## Client tools
 
 Client-side tools allow you to execute custom functions on the client side when the agent requests them.

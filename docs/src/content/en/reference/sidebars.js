@@ -546,6 +546,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Schedules',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'schedules/overview', label: 'Overview' }],
+    },
+    {
+      type: 'category',
       label: 'Server',
       collapsed: true,
       items: [
