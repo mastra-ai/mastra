@@ -33,6 +33,7 @@ Rules are prioritized by impact:
 | 6        | JavaScript Performance    | LOW-MEDIUM                    |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) |
 | 8        | Testing                   | MEDIUM-HIGH (correctness)     |
+| 9        | Type Safety               | HIGH                          |
 
 ## Quick Reference
 

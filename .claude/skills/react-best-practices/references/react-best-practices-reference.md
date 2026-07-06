@@ -4,7 +4,7 @@
 Mastra Engineering
 January 2026
 
-This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 19 rules across 8 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
+This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 20 rules across 9 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
 
 ## How to Use This Catalog
 
@@ -24,19 +24,21 @@ This catalog is an index for React performance and quality guidance used by agen
 | 6        | JavaScript Performance    | LOW-MEDIUM                    | 3          |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 4          |
 | 8        | Testing                   | MEDIUM-HIGH (correctness)     | 1          |
+| 9        | Type Safety               | HIGH                          | 1          |
 
 ## Category Focus
 
-| Category                  | Focus                                                                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Eliminating Waterfalls    | Waterfalls are the #1 performance killer. Each sequential await adds full network latency. Eliminating them yields the largest gains. |
-| Bundle Size Optimization  | Reducing initial bundle size improves Time to Interactive and Largest Contentful Paint.                                               |
-| Client-Side Data Fetching | Automatic deduplication and efficient data fetching patterns reduce redundant network requests.                                       |
-| Re-render Optimization    | Reducing unnecessary re-renders minimizes wasted computation and improves UI responsiveness.                                          |
-| Rendering Performance     | Optimizing the rendering process reduces the work the browser needs to do.                                                            |
-| JavaScript Performance    | Micro-optimizations for hot paths can add up to meaningful improvements.                                                              |
-| Component Structure       | Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.                             |
-| Testing                   | Drive the real client + React Query stack and mock only the network, so a green test proves production behavior, not the mock.        |
+| Category                  | Focus                                                                                                                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Eliminating Waterfalls    | Waterfalls are the #1 performance killer. Each sequential await adds full network latency. Eliminating them yields the largest gains.                                                     |
+| Bundle Size Optimization  | Reducing initial bundle size improves Time to Interactive and Largest Contentful Paint.                                                                                                   |
+| Client-Side Data Fetching | Automatic deduplication and efficient data fetching patterns reduce redundant network requests.                                                                                           |
+| Re-render Optimization    | Reducing unnecessary re-renders minimizes wasted computation and improves UI responsiveness.                                                                                              |
+| Rendering Performance     | Optimizing the rendering process reduces the work the browser needs to do.                                                                                                                |
+| JavaScript Performance    | Micro-optimizations for hot paths can add up to meaningful improvements.                                                                                                                  |
+| Component Structure       | Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.                                                                                 |
+| Testing                   | Drive the real client + React Query stack and mock only the network, so a green test proves production behavior, not the mock.                                                            |
+| Type Safety               | Never cast with `as`; let production boundary types flow through and narrow with type guards, query generics, typed factories, or `implements` so the compiler still catches shape drift. |
 
 ## Rules
 
@@ -101,8 +103,8 @@ This catalog is an index for React performance and quality guidance used by agen
 
 ### 9. Type Safety
 
-| Rule                       | Title                                     | Impact | Summary                                                                                                   | Canonical file                                 |
-| -------------------------- | ----------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Rule                       | Title                                     | Impact | Summary                                                                                                                | Canonical file                                 |
+| -------------------------- | ----------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `types-no-type-assertions` | No `as` Type Assertions (Including Tests) | HIGH   | Never use `as` casts (production or tests); narrow with type guards, query generics, typed factories, or `implements`. | `references/rules/types-no-type-assertions.md` |
 
 ## External References

@@ -16,7 +16,45 @@ const createRect = (height: number) => ({
   toJSON: () => ({}),
 });
 
+class MockResizeObserver implements ResizeObserver {
+  static instances: MockResizeObserver[] = [];
+
+  readonly observedElements = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    MockResizeObserver.instances.push(this);
+  }
+
+  observe = (target: Element) => {
+    this.observedElements.add(target);
+  };
+
+  unobserve = (target: Element) => {
+    this.observedElements.delete(target);
+  };
+
+  disconnect = vi.fn(() => {
+    this.observedElements.clear();
+  });
+
+  takeRecords = () => [];
+
+  trigger(target: Element) {
+    const contentRect = target.getBoundingClientRect();
+    const entry = {
+      target,
+      contentRect,
+      borderBoxSize: [],
+      contentBoxSize: [],
+      devicePixelContentBoxSize: [],
+    } satisfies ResizeObserverEntry;
+
+    this.callback([entry], this);
+  }
+}
+
 afterEach(() => {
+  MockResizeObserver.instances = [];
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -56,6 +94,55 @@ describe('useMeasuredAutoHeight', () => {
     await waitFor(() => {
       expect(result.current.height).toBe(48);
       expect(result.current.heightStyle).toEqual({ height: 48 });
+    });
+  });
+
+  it('re-measures when ResizeObserver reports a size change', async () => {
+    let height = 72;
+    let frameCallback: FrameRequestCallback | undefined;
+    const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      frameCallback = callback;
+      return 1;
+    });
+    const cancelAnimationFrame = vi.fn();
+
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    vi.stubGlobal('requestAnimationFrame', requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame);
+
+    const element = document.createElement('div');
+    vi.spyOn(element, 'getBoundingClientRect').mockImplementation(() => createRect(height));
+
+    const { result } = renderHook(() => useMeasuredAutoHeight<HTMLDivElement>());
+
+    act(() => {
+      result.current.ref(element);
+    });
+
+    await waitFor(() => {
+      expect(result.current.height).toBe(72);
+      expect(result.current.heightStyle).toEqual({ height: 72 });
+    });
+
+    const observer = MockResizeObserver.instances[0];
+    if (!observer) throw new Error('ResizeObserver was not created.');
+
+    height = 96;
+
+    act(() => {
+      observer.trigger(element);
+    });
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+    if (!frameCallback) throw new Error('ResizeObserver did not schedule a measurement frame.');
+
+    act(() => {
+      frameCallback(0);
+    });
+
+    await waitFor(() => {
+      expect(result.current.height).toBe(96);
+      expect(result.current.heightStyle).toEqual({ height: 96 });
     });
   });
 });

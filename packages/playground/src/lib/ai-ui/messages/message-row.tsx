@@ -34,7 +34,8 @@ export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElemen
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** Read an optional field off a loosely-typed message part or nested value. */
 const readField = (value: unknown, key: string): unknown => (isRecord(value) ? value[key] : undefined);
