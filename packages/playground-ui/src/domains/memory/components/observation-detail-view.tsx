@@ -111,8 +111,11 @@ function parseItem(line: string): ParsedItem | null {
     let time: string | null = null;
     const timeMatch = rest.match(/^\((\d{1,2}:\d{2})\)/);
     if (timeMatch) {
-      time = timeMatch[1];
-      rest = rest.slice(timeMatch[0].length).trimStart();
+      const [matchedText, matchedTime] = timeMatch;
+      if (matchedText !== undefined && matchedTime !== undefined) {
+        time = matchedTime;
+        rest = rest.slice(matchedText.length).trimStart();
+      }
     }
     if (rest) {
       return { text: rest, time, priority, children: [] };
@@ -166,7 +169,7 @@ function parseObservations(raw: string): ParsedSection[] {
       current = { title: 'Recent', relativeTime: null, items: [] };
       sections.push(current);
     }
-    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
     const isNested = indent >= 2 && (trimmed.startsWith('* ->') || trimmed.startsWith('->') || trimmed.startsWith('-'));
     const item = parseItem(line);
     if (!item) continue;
@@ -298,8 +301,9 @@ export function ObservationDetailView({
   const previousRecord = selectedIndex > 0 ? sorted[selectedIndex - 1] : null;
 
   useEffect(() => {
-    if (!selectedRecordId && sorted.length > 0) {
-      onSelectRecord(sorted[sorted.length - 1].id);
+    const last = sorted.at(-1);
+    if (!selectedRecordId && last) {
+      onSelectRecord(last.id);
     }
   }, [selectedRecordId, sorted, onSelectRecord]);
 
