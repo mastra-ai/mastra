@@ -100,4 +100,20 @@ describe('getKeenableClient', () => {
     mockFetch.mockResolvedValue(jsonResponse({ message: 'rate limited' }, false, 429));
     await expect(getKeenableClient().search('x')).rejects.toThrow(/Keenable search failed \(429\): rate limited/);
   });
+
+  it('surfaces a non-JSON error body verbatim (body read once)', async () => {
+    // Real Response bodies can only be read once; readError must not call
+    // json() and then text(). Here json() would throw and text() is plain text.
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => {
+        throw new Error('Unexpected token S in JSON');
+      },
+      text: async () => 'Service Unavailable',
+    } as unknown as Response);
+    await expect(getKeenableClient().search('x')).rejects.toThrow(
+      /Keenable search failed \(503\): Service Unavailable/,
+    );
+  });
 });

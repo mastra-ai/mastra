@@ -5,7 +5,7 @@ import { getKeenableClient } from './client.js';
 import type { KeenableClient, KeenableClientOptions } from './client.js';
 
 const inputSchema = z.object({
-  url: z.string().url().describe('The URL of the page to fetch and extract as markdown'),
+  url: z.url().describe('The URL of the page to fetch and extract as markdown'),
 });
 
 const outputSchema = z.object({

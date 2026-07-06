@@ -52,19 +52,24 @@ export interface KeenableClient {
 }
 
 async function readError(res: Response): Promise<string> {
+  // Read the body exactly once: a Response stream can only be consumed a single
+  // time, so we cannot call json() and then fall back to text(). Read text and
+  // opportunistically parse it as JSON.
+  let raw = '';
   try {
-    const body: any = await res.json();
+    raw = await res.text();
+  } catch {
+    return '';
+  }
+  try {
+    const body: any = JSON.parse(raw);
     if (body && typeof body === 'object') {
       return String(body.message || body.error || body.detail || '');
     }
   } catch {
-    try {
-      return (await res.text()).trim();
-    } catch {
-      /* ignore */
-    }
+    // Not JSON; fall through to the raw text.
   }
-  return '';
+  return raw.trim();
 }
 
 /**
