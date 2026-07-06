@@ -163,13 +163,15 @@
     "@mastra/modal": "0.3.0",
     "@mastra/railway": "0.3.0",
     "@mastra/s3": "0.6.0",
-    "@mastra/vercel": "1.2.0"
+    "@mastra/vercel": "1.2.0",
+    "@mastra/livekit": "0.1.0"
   },
   "changesets": [
     "agent-browser-dangling-navigation",
     "agent-loop-minimal-snapshots",
     "agent-utils-tests",
     "automated-provider-registry-20260703-005802",
+    "beige-hoops-design",
     "beige-mammals-joke",
     "big-kings-run",
     "bumpy-cats-happen",
@@ -186,6 +188,7 @@
     "full-foxes-notice",
     "green-birds-knock",
     "huge-bugs-watch",
+    "lemon-taxes-shop",
     "lucky-plums-arrive",
     "metal-hoops-punch",
     "models-dev-per-model-provider-overrides",
@@ -196,6 +199,7 @@
     "proud-ghosts-film",
     "proud-mugs-appear",
     "quick-readers-thank",
+    "rare-hairs-jog",
     "real-mugs-heal",
     "sharp-tips-watch",
     "six-bars-stand",
