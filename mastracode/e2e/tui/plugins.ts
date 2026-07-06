@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +21,7 @@ let githubPollSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
 let githubInstallGhLogPath: string | undefined;
 let githubInstallGhPath: string | undefined;
+let githubInstallCheckoutDir: string | undefined;
 
 function resetPluginScenarioState(): void {
   currentTui = undefined;
@@ -29,6 +30,7 @@ function resetPluginScenarioState(): void {
   githubPollManager = undefined;
   githubInstallGhLogPath = undefined;
   githubInstallGhPath = undefined;
+  githubInstallCheckoutDir = undefined;
 }
 
 function writeLocalPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
@@ -168,6 +170,67 @@ export default defineMastraCodePlugin({
   );
 }
 
+function writeGithubInstallPluginSource(pluginDir: string): void {
+  const pluginSrcDir = join(pluginDir, 'src');
+  const dependencyDir = join(pluginDir, 'fixtures', 'dependency');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  mkdirSync(dependencyDir, { recursive: true });
+
+  writeFileSync(
+    join(pluginDir, 'package.json'),
+    JSON.stringify(
+      {
+        type: 'module',
+        dependencies: {
+          'e2e-plugin-installed-dependency': 'file:./fixtures/dependency',
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    join(dependencyDir, 'package.json'),
+    JSON.stringify(
+      {
+        name: 'e2e-plugin-installed-dependency',
+        version: '1.0.0',
+        type: 'module',
+        exports: './index.js',
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    join(dependencyDir, 'index.js'),
+    `export const installedDependencyResult = 'github-install-dependency';\n`,
+  );
+
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';
+import { installedDependencyResult } from 'e2e-plugin-installed-dependency';
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E GitHub install tests.',
+  tools: {
+    ${TOOL_NAME}: {
+      tool: createTool({
+        id: '${TOOL_NAME}',
+        description: 'Return a result from a dependency installed during GitHub plugin install.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async input => ({ query: input.query, result: installedDependencyResult }),
+      }),
+    },
+  },
+});
+`,
+  );
+}
+
 function writePluginPackageLink(pluginDir: string): void {
   const nodeModulesDir = join(pluginDir, 'node_modules');
   mkdirSync(nodeModulesDir, { recursive: true });
@@ -242,8 +305,9 @@ function prepareGithubInstallGhPlugin(projectDir: string): void {
   const fakeBinDir = join(projectDir, 'fixtures', 'bin');
   const fakeGhPath = join(fakeBinDir, 'gh');
   const ghLogPath = join(projectDir, 'fixtures', 'gh-calls.log');
+  const checkoutDir = join(projectDir, '.mastracode', 'plugins', 'sources', 'github', 'acme-github-install-plugin');
 
-  writeHotReloadPluginSource(sourceDir, 'github-install');
+  writeGithubInstallPluginSource(sourceDir);
   git(sourceDir, ['init', '-b', 'main']);
   git(sourceDir, ['config', 'user.email', 'e2e@example.com']);
   git(sourceDir, ['config', 'user.name', 'Mastra Code E2E']);
@@ -266,7 +330,7 @@ fi
 if [ "$#" -eq 2 ] && [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 0
 fi
-if [ "$#" -eq 4 ] && [ "$1" = "repo" ] && [ "$2" = "clone" ] && [ "$3" = "acme/github-install-plugin" ]; then
+if [ "$#" -ge 4 ] && [ "$1" = "repo" ] && [ "$2" = "clone" ] && [ "$3" = "acme/github-install-plugin" ]; then
   mkdir -p "$4"
   cp -R ${JSON.stringify(sourceDir)}/. "$4"/
   exit 0
@@ -278,6 +342,7 @@ exit 1
   chmodSync(fakeGhPath, 0o755);
   githubInstallGhPath = fakeGhPath;
   githubInstallGhLogPath = ghLogPath;
+  githubInstallCheckoutDir = checkoutDir;
 }
 
 function prepareGithubPollPlugin(projectDir: string): string {
@@ -549,6 +614,19 @@ export const pluginsGithubInstallGhCliScenario: McE2eScenario = {
     const ghCalls = readFileSync(githubInstallGhLogPath, 'utf8');
     if (!ghCalls.includes('repo clone acme/github-install-plugin')) {
       throw new Error(`Expected gh repo clone call. Calls:\n${ghCalls}`);
+    }
+    if (!ghCalls.includes('-- --depth 1')) {
+      throw new Error(`Expected gh repo clone to use shallow clone args. Calls:\n${ghCalls}`);
+    }
+    if (!githubInstallCheckoutDir) throw new Error('GitHub install checkout directory was not prepared');
+    const installedDependencyPackage = join(
+      githubInstallCheckoutDir,
+      'node_modules',
+      'e2e-plugin-installed-dependency',
+      'package.json',
+    );
+    if (!existsSync(installedDependencyPackage)) {
+      throw new Error(`Expected GitHub plugin dependency to be installed at ${installedDependencyPackage}`);
     }
 
     terminal.submit(PROMPT);
