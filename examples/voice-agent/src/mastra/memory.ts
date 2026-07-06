@@ -41,8 +41,9 @@ export const callCenterMemory = new Memory({
     //     reasoning *inline* every time it fired (measured), stalling the reply.
     //   - a `messageTokens` threshold high enough that it fires occasionally, not every turn.
     //     Lower it to see OM fire sooner in a short demo; raise it (toward the 30k default) in
-    //     production. For a truly off-the-clock distillation, trigger it once at call end instead
-    //     (see the onCallEnd discussion in the README / TODO) rather than inline per turn.
+    //     production. The workers also force-flush OM once at call end via `onCallEnd` +
+    //     `flushObservationalMemory` below, so this inline threshold is only a mid-call cap —
+    //     every call is distilled at hang-up regardless.
     observationalMemory: {
       scope: 'resource',
       model: 'openai/gpt-4.1-mini',
@@ -77,18 +78,15 @@ export const callCenterMemory = new Memory({
  * facts for the caller's NEXT call. Meant to run from the LiveKit worker's `onCallEnd` hook, which
  * fires after the caller hangs up (off the audio path), so this never adds to in-call latency.
  *
- * Note: `observe()` still respects the `messageTokens` threshold above — it only distills when the
- * call accumulated enough unobserved tokens. For a typical multi-turn call that's met; a very short
- * call has little to observe anyway.
- *
- * Future direction: an `observe({ force: true })` option in `@mastra/memory` would let this flush
- * distill regardless of length, so even a very short call is captured at hang-up and the inline
- * threshold could be raised high for zero in-call OM cost. Not available today — see the
- * `@mastra/livekit` TODO ("force-flush" follow-on).
+ * `force: true` bypasses the `messageTokens` threshold above, so even a very short call is
+ * distilled at hang-up (a call with nothing new to observe is still a no-op). With a guaranteed
+ * end-of-call flush, the inline threshold can be raised high (toward the 30k default) for zero
+ * in-call OM cost — the threshold then only matters for very long calls, where it caps how much
+ * unobserved context accumulates mid-call.
  */
 export async function flushObservationalMemory(mapping: { thread: string; resource?: string } | false): Promise<void> {
   if (!mapping) return;
   const om = await callCenterMemory.omEngine;
   if (!om) return;
-  await om.observe({ threadId: mapping.thread, resourceId: mapping.resource ?? mapping.thread });
+  await om.observe({ threadId: mapping.thread, resourceId: mapping.resource ?? mapping.thread, force: true });
 }

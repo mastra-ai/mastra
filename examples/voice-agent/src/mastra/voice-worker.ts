@@ -73,9 +73,8 @@ export default createLiveKitWorker({
   },
   // End-of-call hook: after the caller hangs up, distill the call into durable observational
   // memory ONCE, off the audio path (awaited within LiveKit's shutdown window). This is the
-  // non-blocking home for OM — rather than paying for it inline on a turn. `observe()` still
-  // respects the `messageTokens` threshold, so a long enough call flushes here even if the inline
-  // processor's last check was just under it.
+  // non-blocking home for OM — rather than paying for it inline on a turn. The flush passes
+  // `force: true`, so even a short call below the `messageTokens` threshold is distilled here.
   //
   // Consent-aware: `configuration.requireConsent.summaryStorage` DECLARES that storing a call
   // summary needs consent; the `recordConsent` tool captures the caller's grant during the call (see

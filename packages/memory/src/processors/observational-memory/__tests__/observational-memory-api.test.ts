@@ -427,6 +427,52 @@ name: Tyler
     });
   });
 
+  describe('force', () => {
+    it('should observe below-threshold provided messages when forced', async () => {
+      const messages = [createTestMessage('short')];
+
+      const unforced = await om.observe({ threadId, messages });
+      expect(unforced.observed).toBe(false);
+
+      const result = await om.observe({ threadId, messages, force: true });
+      expect(result.observed).toBe(true);
+      expect(result.record.activeObservations).toBeTruthy();
+      expect(result.record.lastObservedAt).toBeDefined();
+    });
+
+    it('should observe below-threshold storage messages when forced', async () => {
+      await storage.saveMessages({ messages: [{ ...createTestMessage('Hello'), threadId }] });
+
+      const result = await om.observe({ threadId, force: true });
+      expect(result.observed).toBe(true);
+      expect(result.record.activeObservations).toBeTruthy();
+    });
+
+    it('should skip when forced with no messages at all', async () => {
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      const result = await om.observe({ threadId, force: true, hooks });
+
+      expect(result.observed).toBe(false);
+      expect(result.record.activeObservations).toBeFalsy();
+      expect(hooks.onObservationStart).not.toHaveBeenCalled();
+      expect(hooks.onObservationEnd).not.toHaveBeenCalled();
+    });
+
+    it('should skip a second forced call when everything is already observed', async () => {
+      const messages = [createTestMessage('short')];
+
+      const first = await om.observe({ threadId, messages, force: true });
+      expect(first.observed).toBe(true);
+
+      const second = await om.observe({ threadId, messages, force: true });
+      expect(second.observed).toBe(false);
+    });
+  });
+
   describe('hooks', () => {
     it('should call all lifecycle hooks when observation triggers', async () => {
       const messages = createBulkMessages(10, threadId);

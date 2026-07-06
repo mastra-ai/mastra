@@ -14,7 +14,7 @@ caller speaks ─▶ VAD ─▶ STT ─▶ turn detection ─▶ [ Mastra agent 
 - **Two reply paths** — answer turns with a Mastra **agent** (the default, richest path) or a Mastra **workflow** (run-to-completion per turn, e.g. deterministic intent routing). A low-level `generate` escape hatch accepts any custom reply generator.
 - **Full speech stack, pluggable** — STT/TTS as LiveKit inference model strings (`'deepgram/nova-3'`, `'cartesia/sonic-3'`) or your own plugin instances; Silero VAD and LiveKit multilingual/English turn detection; barge-in cancels in-flight generation automatically.
 - **Memory, scoped to the call** — `thread` = call, `resource` = caller, so a returning caller is recognized across calls. Up-front thread creation and greeting persistence keep the saved thread a faithful transcript. Works on the agent path and the workflow path (via `memoryInstance`).
-- **Lifecycle hooks** — `toolFeedback` (speak filler while a tool runs), `onTurnComplete` (post-turn, fire-and-forget, off the audio path), and `onCallEnd` (end-of-call, awaited within LiveKit's shutdown window — the place to flush observational memory).
+- **Lifecycle hooks** — `toolFeedback` (speak filler while a tool runs), `onTurnComplete` (post-turn, fire-and-forget, off the audio path), and `onCallEnd` (end-of-call, awaited within LiveKit's shutdown window — the place to flush observational memory with `observe({ force: true })`).
 - **Observability** — one `voice call` trace per session with LiveKit pipeline metrics and every Mastra run nested under it.
 - **Connection + dispatch helpers** — `liveKitConnectionRoute` mints tokens and dispatches the worker so a frontend can join.
 
@@ -293,9 +293,14 @@ createLiveKitWorker({
   },
 
   // 3. End-of-call: runs when the caller hangs up, AWAITED within LiveKit's shutdown grace window
-  //    (so it finishes before the process exits). The place for end-of-call memory maintenance.
-  onCallEnd: async ({ memory, memoryInstance }) => {
-    // e.g. flush observational memory once for the whole call instead of paying for it per turn.
+  //    (so it finishes before the process exits). The place for end-of-call memory maintenance —
+  //    e.g. flush observational memory once for the whole call instead of paying for it per turn.
+  //    `force: true` (@mastra/memory) distills even a short call below the token threshold, so the
+  //    inline threshold can sit high (zero in-call OM cost) with a guaranteed hang-up flush.
+  onCallEnd: async ({ memory }) => {
+    if (!memory) return;
+    const om = await myMemory.omEngine; // your app's `Memory` (from @mastra/memory)
+    await om?.observe({ threadId: memory.thread, resourceId: memory.resource, force: true });
   },
 });
 ```
