@@ -1165,7 +1165,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return this.#agentOptions.getNotificationStreamOptions?.(target);
   }
 
-
   getInputProcessors(): InputProcessorOrWorkflow[] {
     return [this as unknown as InputProcessorOrWorkflow];
   }
