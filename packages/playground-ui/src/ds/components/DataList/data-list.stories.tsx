@@ -76,6 +76,42 @@ const VERY_LONG_BADGE =
   'production-critical-evaluation-run-with-an-extraordinarily-long-status-label-that-must-truncate-inside-the-cell';
 const MODEL_TOKEN_PLACEHOLDERS = ['__GATEWAY_OPENAI_MODEL_BASE__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'];
 
+function getElementByTestId<TElement extends HTMLElement>(canvasElement: HTMLElement, testId: string): TElement {
+  const element = canvasElement.querySelector<TElement>(`[data-testid="${testId}"]`);
+
+  if (!element) {
+    throw new Error(`Expected ${testId} to render in the DataList overflow story.`);
+  }
+
+  return element;
+}
+
+function expectComputedStyles(
+  element: HTMLElement,
+  label: string,
+  expectedStyles: Partial<Pick<CSSStyleDeclaration, 'overflowX' | 'textOverflow' | 'whiteSpace'>>,
+) {
+  const computedStyles = window.getComputedStyle(element);
+
+  if (expectedStyles.overflowX !== undefined && computedStyles.overflowX !== expectedStyles.overflowX) {
+    throw new Error(
+      `Expected ${label} overflowX to compute to ${expectedStyles.overflowX}, received ${computedStyles.overflowX}.`,
+    );
+  }
+
+  if (expectedStyles.textOverflow !== undefined && computedStyles.textOverflow !== expectedStyles.textOverflow) {
+    throw new Error(
+      `Expected ${label} textOverflow to compute to ${expectedStyles.textOverflow}, received ${computedStyles.textOverflow}.`,
+    );
+  }
+
+  if (expectedStyles.whiteSpace !== undefined && computedStyles.whiteSpace !== expectedStyles.whiteSpace) {
+    throw new Error(
+      `Expected ${label} whiteSpace to compute to ${expectedStyles.whiteSpace}, received ${computedStyles.whiteSpace}.`,
+    );
+  }
+}
+
 /** The standard condensed look used by Traces, Logs, Scores, Dataset Items, and Skills. */
 export const Compact: Story = {
   render: ({ variant }) => (
@@ -382,6 +418,32 @@ export const Empty: Story = {
 
 /** Wide grid with constrained columns, horizontal scrolling, and a long badge that must stay inside its cell. */
 export const WideColumnsOverflow: Story = {
+  play: async ({ canvasElement }) => {
+    await new Promise(requestAnimationFrame);
+
+    const statusCell = getElementByTestId(canvasElement, 'wide-overflow-status-cell');
+    const statusBadge = getElementByTestId(canvasElement, 'wide-overflow-status-badge');
+    const statusLabel = getElementByTestId(canvasElement, 'wide-overflow-status-label');
+
+    expectComputedStyles(statusCell, 'status cell', {
+      overflowX: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+    expectComputedStyles(statusBadge, 'status badge', {
+      overflowX: 'hidden',
+      whiteSpace: 'nowrap',
+    });
+    expectComputedStyles(statusLabel, 'status label', {
+      overflowX: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+
+    if (statusLabel.scrollWidth <= statusLabel.clientWidth) {
+      throw new Error('Expected the long status label to overflow so the ellipsis behavior is exercised.');
+    }
+  },
   render: ({ variant }) => (
     <div className="max-w-[760px]">
       <DataList columns={WIDE_COLUMNS} variant={variant} className="max-h-[360px]">
@@ -406,9 +468,14 @@ export const WideColumnsOverflow: Story = {
               <DataList.MonoCell>
                 {run.input} with enough extra context to verify truncation in a narrow scrolling grid
               </DataList.MonoCell>
-              <DataList.Cell height="compact" className="min-w-0">
-                <Badge variant={index % 3 === 0 ? 'warning' : 'success'} className="max-w-full min-w-0 overflow-hidden">
-                  <span className="min-w-0 truncate">{index === 2 ? VERY_LONG_BADGE : run.status}</span>
+              <DataList.Cell height="compact" data-testid={index === 2 ? 'wide-overflow-status-cell' : undefined}>
+                <Badge
+                  variant={index % 3 === 0 ? 'warning' : 'success'}
+                  data-testid={index === 2 ? 'wide-overflow-status-badge' : undefined}
+                >
+                  <span data-testid={index === 2 ? 'wide-overflow-status-label' : undefined}>
+                    {index === 2 ? VERY_LONG_BADGE : run.status}
+                  </span>
                 </Badge>
               </DataList.Cell>
               <DataList.MonoCell>{MODEL_TOKEN_PLACEHOLDERS[index % MODEL_TOKEN_PLACEHOLDERS.length]}</DataList.MonoCell>

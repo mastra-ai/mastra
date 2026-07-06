@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 const statusBadgeVariants = cva(
   // Base styles
-  'inline-flex w-fit max-w-full items-center gap-1.5 rounded-full text-ui-xs font-medium transition-colors duration-normal',
+  'inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 overflow-hidden rounded-full text-ui-xs font-medium transition-colors duration-normal',
   {
     variants: {
       variant: {
@@ -38,7 +38,7 @@ const statusBadgeVariants = cva(
   },
 );
 
-const dotVariants = cva('rounded-full', {
+const dotVariants = cva('shrink-0 rounded-full', {
   variants: {
     variant: {
       success: 'bg-accent1',
@@ -69,11 +69,21 @@ export type StatusBadgeProps = React.HTMLAttributes<HTMLSpanElement> &
     children: React.ReactNode;
   };
 
+function StatusBadgeContent({ children }: { children: React.ReactNode }) {
+  if (React.isValidElement<{ className?: string }>(children) && typeof children.type === 'string') {
+    return React.cloneElement(children, {
+      className: cn('min-w-0 truncate', children.props.className),
+    });
+  }
+
+  return <span className="min-w-0 truncate">{children}</span>;
+}
+
 export function StatusBadge({ className, variant, size, withDot, pulse, children, ...props }: StatusBadgeProps) {
   return (
     <span className={cn(statusBadgeVariants({ variant, size, withDot, pulse }), className)} {...props}>
       {withDot && <span className={dotVariants({ variant, size, pulse })} />}
-      {children}
+      <StatusBadgeContent>{children}</StatusBadgeContent>
     </span>
   );
 }

@@ -28,7 +28,8 @@ export function DataListCell({ children, className, height = 'default', as, stic
   return (
     <Component
       className={cn(
-        'relative grid min-w-0 max-w-full items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:content-["—"] empty:before:text-neutral2',
+        'relative grid min-w-0 max-w-full items-center overflow-hidden text-ellipsis text-ui-md whitespace-nowrap text-neutral3 empty:before:content-["—"] empty:before:text-neutral2',
+        '[&>*]:min-w-0 [&>*]:max-w-full [&>*]:overflow-hidden [&>*]:text-ellipsis [&>*]:whitespace-nowrap',
         height === 'compact' ? 'py-1.5' : 'py-2.5',
         sticky === 'start' && dataListStickyStartStyles,
         className,

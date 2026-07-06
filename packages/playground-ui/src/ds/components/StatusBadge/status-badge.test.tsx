@@ -10,9 +10,9 @@ afterEach(() => {
 
 describe('StatusBadge', () => {
   it('uses intrinsic width by default so grid cells do not stretch it', () => {
-    render(<StatusBadge>Running</StatusBadge>);
+    render(<StatusBadge data-testid="status-badge">Running</StatusBadge>);
 
-    const badge = screen.getByText('Running');
+    const badge = screen.getByTestId('status-badge');
     expect(badge.classList.contains('inline-flex')).toBe(true);
     expect(badge.classList.contains('w-fit')).toBe(true);
     expect(badge.classList.contains('max-w-full')).toBe(true);
