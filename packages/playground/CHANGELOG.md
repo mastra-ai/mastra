@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.18.1-alpha.4
+
+### Patch Changes
+
+- Added a Studio thread rail to chat surfaces so users can preview turns, jump through long conversations, and return to the latest message when they scroll away from the bottom. ([#18902](https://github.com/mastra-ai/mastra/pull/18902))
+
+- Updated dependencies [[`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`26b593d`](https://github.com/mastra-ai/mastra/commit/26b593de99d5745e069994fab14f1e12f2db8c4c), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`f6e7bb3`](https://github.com/mastra-ai/mastra/commit/f6e7bb3ccffc4cab6ce6ea5c031c8cb528e5f101), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0-alpha.4
+  - @mastra/playground-ui@40.0.0-alpha.4
+  - @mastra/client-js@1.31.0-alpha.4
+  - @mastra/react@1.2.3-alpha.4
+
 ## 1.18.1-alpha.3
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 1.15.1-alpha.1
+
+### Patch Changes
+
+- Fixed the ESM build never creating the `mastra_observational_memory` table. The OM schema was loaded through a dynamic `require` that esbuild rewrites to a throwing shim in the ESM output, and the silent catch skipped the table's creation, so `deleteThread()` crashed with Postgres error 42P01 on databases initialized from ESM processes (plain node ESM, tsx, vitest). The schema is now imported statically, which the `@mastra/core` peer dependency range guarantees is available. ([#18957](https://github.com/mastra-ai/mastra/pull/18957))
+
+- Updated dependencies [[`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0-alpha.4
+
 ## 1.15.1-alpha.0
 
 ### Patch Changes
