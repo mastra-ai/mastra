@@ -1,6 +1,7 @@
 name: Scheduled (Every 2 Hours)
 permissions:
-  contents: none
+  contents: read
+  actions: write
 
 on:
   schedule:
