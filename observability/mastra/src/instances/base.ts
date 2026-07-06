@@ -200,8 +200,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = this.computeTraceState(tracingOptions);
     }
 
-    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence)
-    const tracingMetadata = tracingOptions?.metadata;
+    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
+    const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
     const mergedMetadata = metadata || tracingMetadata ? { ...metadata, ...tracingMetadata } : undefined;
 
     // Extract metadata from RequestContext
@@ -221,7 +221,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         ? { ...(enrichedMetadata ?? {}), environment: this.#mastraEnvironment }
         : enrichedMetadata;
 
-    const tags = tracingOptions?.tags;
+    // Tags are only passed for root spans (no parent)
+    const tags = !options.parent ? tracingOptions?.tags : undefined;
 
     // Extract traceId and parentSpanId from tracingOptions for root spans (no parent)
     // These allow nested workflows to join the parent workflow's trace
