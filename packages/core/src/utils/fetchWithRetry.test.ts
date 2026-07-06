@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fetchWithRetry } from './fetchWithRetry';
 
 describe('fetchWithRetry', () => {
-  const realSetTimeout = setTimeout;
   let mockFetch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
