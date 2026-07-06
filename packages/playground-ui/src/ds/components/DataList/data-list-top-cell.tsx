@@ -67,7 +67,7 @@ export type DataListTopCellSmartProps = {
   className?: string;
 };
 
-const breakpointClasses: Record<string, { show: string; hide: string }> = {
+const breakpointClasses: Record<'sm' | 'md' | 'lg' | 'xl' | '2xl', { show: string; hide: string }> = {
   sm: { show: 'hidden sm:inline-flex', hide: 'inline-flex sm:hidden' },
   md: { show: 'hidden md:inline-flex', hide: 'inline-flex md:hidden' },
   lg: { show: 'hidden lg:inline-flex', hide: 'inline-flex lg:hidden' },
