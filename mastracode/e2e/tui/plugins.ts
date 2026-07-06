@@ -22,6 +22,7 @@ let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } |
 let githubInstallGhLogPath: string | undefined;
 let githubInstallGhPath: string | undefined;
 let githubInstallCheckoutDir: string | undefined;
+let githubInstallMissingPackageManagerBinDir: string | undefined;
 
 function resetPluginScenarioState(): void {
   currentTui = undefined;
@@ -31,6 +32,7 @@ function resetPluginScenarioState(): void {
   githubInstallGhLogPath = undefined;
   githubInstallGhPath = undefined;
   githubInstallCheckoutDir = undefined;
+  githubInstallMissingPackageManagerBinDir = undefined;
 }
 
 function writeLocalPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
@@ -170,6 +172,36 @@ export default defineMastraCodePlugin({
   );
 }
 
+function writeGithubInstallMissingPackageManagerPluginSource(pluginDir: string): void {
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+
+  writeFileSync(
+    join(pluginDir, 'package.json'),
+    JSON.stringify(
+      {
+        type: 'module',
+        packageManager: 'pnpm@10.0.0',
+      },
+      null,
+      2,
+    ),
+  );
+
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { defineMastraCodePlugin } from 'mastracode/plugin';
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E missing package manager tests.',
+  tools: {},
+});
+`,
+  );
+}
+
 function writeGithubInstallPluginSource(pluginDir: string): void {
   const pluginSrcDir = join(pluginDir, 'src');
   const dependencyDir = join(pluginDir, 'fixtures', 'dependency');
@@ -299,7 +331,7 @@ function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' });
 }
 
-function prepareGithubInstallGhPlugin(projectDir: string): void {
+function prepareGithubInstallGhPlugin(projectDir: string, options: { missingPackageManager?: boolean } = {}): void {
   const sourceDir = join(projectDir, 'fixtures', 'plugins', 'github-install-source');
   const remoteDir = join(projectDir, 'fixtures', 'plugins', 'github-install-remote.git');
   const fakeBinDir = join(projectDir, 'fixtures', 'bin');
@@ -307,7 +339,8 @@ function prepareGithubInstallGhPlugin(projectDir: string): void {
   const ghLogPath = join(projectDir, 'fixtures', 'gh-calls.log');
   const checkoutDir = join(projectDir, '.mastracode', 'plugins', 'sources', 'github', 'acme-github-install-plugin');
 
-  writeGithubInstallPluginSource(sourceDir);
+  if (options.missingPackageManager) writeGithubInstallMissingPackageManagerPluginSource(sourceDir);
+  else writeGithubInstallPluginSource(sourceDir);
   git(sourceDir, ['init', '-b', 'main']);
   git(sourceDir, ['config', 'user.email', 'e2e@example.com']);
   git(sourceDir, ['config', 'user.name', 'Mastra Code E2E']);
@@ -331,8 +364,8 @@ if [ "$#" -eq 2 ] && [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 0
 fi
 if [ "$#" -ge 4 ] && [ "$1" = "repo" ] && [ "$2" = "clone" ] && [ "$3" = "acme/github-install-plugin" ]; then
-  mkdir -p "$4"
-  cp -R ${JSON.stringify(sourceDir)}/. "$4"/
+  /bin/mkdir -p "$4"
+  /bin/cp -R ${JSON.stringify(sourceDir)}/. "$4"/
   exit 0
 fi
 echo "unexpected gh invocation: $*" >&2
@@ -343,6 +376,7 @@ exit 1
   githubInstallGhPath = fakeGhPath;
   githubInstallGhLogPath = ghLogPath;
   githubInstallCheckoutDir = checkoutDir;
+  if (options.missingPackageManager) githubInstallMissingPackageManagerBinDir = fakeBinDir;
 }
 
 function prepareGithubPollPlugin(projectDir: string): string {
@@ -641,6 +675,57 @@ export const pluginsGithubInstallGhCliScenario: McE2eScenario = {
         `Expected provider request to expose GitHub-installed plugin tool ${TOOL_NAME}. Names: ${names.join(', ')}`,
       );
     }
+  },
+};
+
+export const pluginsGithubInstallMissingPackageManagerScenario: McE2eScenario = {
+  name: 'plugins-github-install-missing-package-manager',
+  description: 'Shows a clear error when a GitHub plugin requires a package manager that is not installed.',
+  testName: 'shows a clear missing package manager error during GitHub plugin install',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    prepareGithubInstallGhPlugin(projectDir, { missingPackageManager: true });
+  },
+  env() {
+    if (!githubInstallMissingPackageManagerBinDir) {
+      throw new Error('GitHub install missing package manager fixture was not prepared');
+    }
+    return { PATH: githubInstallMissingPackageManagerBinDir };
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    if (!githubInstallGhPath) throw new Error('GitHub install gh fixture was not prepared');
+    const { PluginManager } = await import('../../src/plugins/manager.js');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({
+          projectRoot: projectDir,
+          configDir: '.mastracode',
+          homeDir,
+          githubCliPath: githubInstallGhPath,
+        }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('/plugins');
+    await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+    terminal.write('\x1b[B');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub URL:/i, terminal, 8_000);
+    await typeTextSlowly(terminal, 'https://github.com/acme/github-install-plugin');
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Install scope:/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/GitHub plugins also auto-update/i, terminal, 8_000);
+    terminal.write('\r');
+
+    await runtime.waitForScreenText(/This plugin uses pnpm, but pnpm is not installed/i, terminal, 15_000);
+    terminal.keyCtrlC();
   },
 };
 

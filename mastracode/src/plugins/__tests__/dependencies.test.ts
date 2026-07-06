@@ -133,6 +133,17 @@ describe('installPluginDependencies', () => {
     await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(error);
   });
 
+  it('explains when the selected package manager is not installed', async () => {
+    const pluginRoot = makePluginRoot();
+    const error = Object.assign(new Error('spawn pnpm ENOENT'), { code: 'ENOENT' });
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
+    execaMock.mockRejectedValueOnce(error);
+
+    await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(
+      `This plugin uses pnpm, but pnpm is not installed. Install pnpm and try again. Plugin path: ${pluginRoot}`,
+    );
+  });
+
   it('finds dependency roots for nested entry packages', () => {
     const pluginRoot = makePluginRoot();
     const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');

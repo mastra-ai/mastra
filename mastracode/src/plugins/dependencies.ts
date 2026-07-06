@@ -45,7 +45,17 @@ export async function installPluginDependencies(
     child.stdout?.on('data', options.onOutput);
     child.stderr?.on('data', options.onOutput);
   }
-  await child;
+  try {
+    await child;
+  } catch (error) {
+    if (isCommandNotFoundError(error)) {
+      throw new Error(
+        `This plugin uses ${installCommand.command}, but ${installCommand.command} is not installed. Install ${installCommand.command} and try again. Plugin path: ${pluginRoot}`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
   return true;
 }
 
@@ -156,6 +166,10 @@ function getInstallCommand(
   }
 
   return { command: 'npm', args: ['install'] };
+}
+
+function isCommandNotFoundError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT';
 }
 
 function readPackageJson(pluginRoot: string): { packageManager?: unknown } {
