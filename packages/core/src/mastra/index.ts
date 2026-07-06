@@ -2458,7 +2458,16 @@ export class Mastra<
       return;
     }
 
-    this.setServer(fsServer);
+    // Preserve apiRoutes accumulated during construction (e.g. channel
+    // webhook routes) — they live on #server even when the user never
+    // passed a server config explicitly.
+    const existingRoutes = this.#server?.apiRoutes ?? [];
+    const fsRoutes = fsServer.apiRoutes ?? [];
+    const mergedRoutes = [...existingRoutes, ...fsRoutes];
+    this.setServer({
+      ...fsServer,
+      ...(mergedRoutes.length > 0 ? { apiRoutes: mergedRoutes } : {}),
+    });
   }
 
   /**
