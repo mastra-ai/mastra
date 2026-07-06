@@ -1078,6 +1078,94 @@ describe('prepareFsAgentsEntry with studio', () => {
     expect(result.moduleSource).toContain('__registerFsStudio');
   });
 });
+
+describe('agent processors discovery', () => {
+  it('discovers input and output processors under agents/*/processors/', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    const procDir = join(dir, 'agents', 'weather', 'processors');
+    await mkdir(join(procDir, 'input'), { recursive: true });
+    await mkdir(join(procDir, 'output'), { recursive: true });
+    await writeFile(join(procDir, 'input', 'sanitize.ts'), `export default {};`);
+    await writeFile(join(procDir, 'output', 'format.ts'), `export default {};`);
+
+    const agents = await discoverFsAgents(dir);
+    expect(agents).toHaveLength(1);
+    const agent = agents[0]!;
+    expect(agent.inputProcessors).toHaveLength(1);
+    expect(agent.inputProcessors[0]!.key).toBe('sanitize');
+    expect(agent.outputProcessors).toHaveLength(1);
+    expect(agent.outputProcessors[0]!.key).toBe('format');
+  });
+
+  it('returns empty arrays when no processors directory exists', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+
+    const agents = await discoverFsAgents(dir);
+    const agent = agents[0]!;
+    expect(agent.inputProcessors).toEqual([]);
+    expect(agent.outputProcessors).toEqual([]);
+  });
+
+  it('skips test files in processor directories', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    const procDir = join(dir, 'agents', 'weather', 'processors');
+    await mkdir(join(procDir, 'input'), { recursive: true });
+    await writeFile(join(procDir, 'input', 'sanitize.ts'), `export default {};`);
+    await writeFile(join(procDir, 'input', 'sanitize.test.ts'), `test('noop', () => {});`);
+    await writeFile(join(procDir, 'input', 'sanitize.spec.ts'), `test('noop', () => {});`);
+
+    const agents = await discoverFsAgents(dir);
+    expect(agents[0]!.inputProcessors).toHaveLength(1);
+    expect(agents[0]!.inputProcessors[0]!.key).toBe('sanitize');
+  });
+});
+
+describe('generateFsAgentsModule with processors', () => {
+  it('includes processor imports and entry fields when provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [
+      {
+        name: 'weather',
+        dir: '/project/agents/weather',
+        configPath: '/project/agents/weather/config.ts',
+        tools: [],
+        inputProcessors: [{ key: 'sanitize', path: '/project/agents/weather/processors/input/sanitize.ts' }],
+        outputProcessors: [{ key: 'format', path: '/project/agents/weather/processors/output/format.ts' }],
+        skills: [],
+        subagents: [],
+      },
+    ]);
+    expect(source).toContain('inputProc');
+    expect(source).toContain('outputProc');
+    expect(source).toContain('inputProcessors:');
+    expect(source).toContain('outputProcessors:');
+  });
+
+  it('omits processor fields when none are discovered', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [
+      {
+        name: 'weather',
+        dir: '/project/agents/weather',
+        configPath: '/project/agents/weather/config.ts',
+        tools: [],
+        inputProcessors: [],
+        outputProcessors: [],
+        skills: [],
+        subagents: [],
+      },
+    ]);
+    expect(source).not.toContain('inputProcessors');
+    expect(source).not.toContain('outputProcessors');
+  });
+});
 describe('subagents', () => {
   it('discovers subagents under subagents/', async () => {
     await writeAgent('supervisor', {
