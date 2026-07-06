@@ -1,5 +1,57 @@
 # @mastra/deployer
 
+## 1.50.0-alpha.5
+
+### Minor Changes
+
+- Auto-construct a Mastra instance when no `index.ts` exists. If your `src/mastra` ([#18893](https://github.com/mastra-ai/mastra/pull/18893))
+  directory has file-based primitives but no entry file, `mastra dev` and
+  `mastra build` now build and run the project without any boilerplate — no
+  `new Mastra({...})` required.
+
+  ```
+  src/mastra/
+    storage.ts          // export default new LibSQLStore({ url: 'file:./mastra.db' })
+    observability.ts    // export default new Observability({ ... })
+    server.ts           // export default { port: 4111 }
+    studio.ts           // export default { ... }
+    agents/weather/     // file-based agent
+    workflows/report.ts // export default createWorkflow({ ... })
+  ```
+
+  ```sh
+  # No src/mastra/index.ts needed:
+  mastra dev
+  ```
+
+  Projects that already export a `mastra` instance from `index.ts` are unaffected.
+
+- Added file-system-routed agent processors. Place input and output processor files under `agents/<name>/processors/input/` and `agents/<name>/processors/output/`. Each file default-exports a processor, and they are auto-discovered and merged with config-defined processors when running `mastra dev` or `mastra build`. Config-defined processors run first, and a dynamic (function) `inputProcessors`/`outputProcessors` in `config.ts` takes precedence over discovered files. ([#18890](https://github.com/mastra-ai/mastra/pull/18890))
+
+  ```
+  src/mastra/agents/support/
+  ├── config.ts
+  ├── instructions.md
+  └── processors/
+      ├── input/
+      │   └── moderation.ts
+      └── output/
+          └── redact-pii.ts
+  ```
+
+  ```ts
+  // src/mastra/agents/support/processors/input/moderation.ts
+  import { ModerationProcessor } from '@mastra/core/processors';
+
+  export default new ModerationProcessor({ model: 'openai/gpt-5-nano' });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36)]:
+  - @mastra/core@1.50.0-alpha.5
+  - @mastra/server@1.50.0-alpha.5
+
 ## 1.50.0-alpha.4
 
 ### Minor Changes
