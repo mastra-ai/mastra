@@ -1,3 +1,4 @@
+import type { Provider } from '@mastra/client-js';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -22,7 +23,14 @@ export interface LLMProvidersProps {
   disabled?: boolean;
 }
 
-export const LLMProviders = ({
+export interface LLMProviderSelectProps extends LLMProvidersProps {
+  providers: Provider[];
+  isLoading?: boolean;
+}
+
+export const LLMProviderSelect = ({
+  providers,
+  isLoading,
   value,
   onValueChange,
   variant,
@@ -32,9 +40,7 @@ export const LLMProviders = ({
   onOpenChange,
   container,
   disabled,
-}: LLMProvidersProps) => {
-  const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const providers = dataProviders?.providers || [];
+}: LLMProviderSelectProps) => {
   const sortedProviders = useFilteredProviders(providers, '', false);
 
   // Create provider options with icons
@@ -74,7 +80,7 @@ export const LLMProviders = ({
     onValueChange(cleanedId);
   };
 
-  if (providersLoading) {
+  if (isLoading) {
     return <Skeleton className="w-full h-8" />;
   }
 
@@ -100,4 +106,9 @@ export const LLMProviders = ({
       disabled={disabled}
     />
   );
+};
+
+export const LLMProviders = (props: LLMProvidersProps) => {
+  const { data: dataProviders, isLoading } = useLLMProviders();
+  return <LLMProviderSelect {...props} providers={dataProviders?.providers ?? []} isLoading={isLoading} />;
 };

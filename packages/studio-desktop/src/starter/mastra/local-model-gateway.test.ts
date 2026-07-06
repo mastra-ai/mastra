@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { desktopAgents } from './agents/template-agents';
-import { getDesktopBuilderConfig, getDesktopConfiguredExternalModelAllowlistEntries } from './desktop-builder';
+import {
+  getDesktopBuilderAgentModelConfig,
+  getDesktopBuilderConfig,
+  getDesktopConfiguredExternalModelAllowlistEntries,
+} from './desktop-builder';
 import { DesktopLocalModelGateway, getDesktopModelConfig } from './local-model-gateway';
 import { desktopRuntimeBundlerConfig, mastra } from './index';
 
@@ -141,6 +145,43 @@ describe('getDesktopBuilderConfig', () => {
             },
           },
         },
+      });
+    });
+  });
+});
+
+describe('getDesktopBuilderAgentModelConfig', () => {
+  describe('when Anthropic is configured for the desktop runtime', () => {
+    it('uses Anthropic for the internal builder agent instead of the local model', () => {
+      process.env.MASTRA_DESKTOP_MODEL_URL = 'http://localhost:11434/v1';
+      process.env.MASTRA_DESKTOP_MODEL_ID = 'llama3.2';
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-local';
+
+      expect(getDesktopBuilderAgentModelConfig()).toBe('anthropic/claude-sonnet-4-6');
+    });
+  });
+
+  describe('when only OpenAI is configured for the desktop runtime', () => {
+    it('uses OpenAI for the internal builder agent', () => {
+      process.env.MASTRA_DESKTOP_MODEL_URL = 'http://localhost:11434/v1';
+      process.env.MASTRA_DESKTOP_MODEL_ID = 'llama3.2';
+      process.env.OPENAI_API_KEY = 'sk-openai-local';
+
+      expect(getDesktopBuilderAgentModelConfig()).toBe('openai/gpt-5.5');
+    });
+  });
+
+  describe('when no cloud provider key is configured', () => {
+    it('falls back to the configured local desktop model', () => {
+      process.env.MASTRA_DESKTOP_MODEL_URL = 'http://localhost:11434/v1';
+      process.env.MASTRA_DESKTOP_MODEL_ID = 'llama3.2';
+      process.env.MASTRA_DESKTOP_MODEL_API_KEY = 'ollama';
+
+      expect(getDesktopBuilderAgentModelConfig()).toEqual({
+        apiKey: 'ollama',
+        modelId: 'llama3.2',
+        providerId: 'ollama',
+        url: 'http://localhost:11434/v1',
       });
     });
   });

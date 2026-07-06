@@ -9,6 +9,7 @@ import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { useEnvironmentVariablesEditor } from '@mastra/playground-ui/hooks/use-environment-variables-editor';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { desktopEndpoint, desktopLocalProviderIdForModelUrl, desktopRequest } from '@/lib/desktop-runtime';
 import type {
@@ -57,6 +58,7 @@ const LOCAL_MODEL_PRESETS = {
 
 const ENVIRONMENT_VARIABLE_PRESETS = [
   { key: 'OPENAI_API_KEY', label: 'OpenAI key' },
+  { key: 'ANTHROPIC_API_KEY', label: 'Anthropic key' },
   { key: 'LM_API_TOKEN', label: 'LM Studio token' },
 ] as const;
 
@@ -100,6 +102,17 @@ function modelOptionsFor(probe: ProbeModelsResult | undefined, modelId: string) 
 
   if (modelId.trim() && !probe.models.includes(modelId)) return [...probe.models, modelId];
   return probe.models;
+}
+
+async function invalidateRuntimeModelConsumers(queryClient: QueryClient, endpoint: string) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] }),
+    queryClient.invalidateQueries({ queryKey: ['desktop-runtime-models', endpoint] }),
+    queryClient.invalidateQueries({ queryKey: ['llm-providers'] }),
+    queryClient.invalidateQueries({ queryKey: ['agents-model-providers'] }),
+    queryClient.invalidateQueries({ queryKey: ['builder-settings'] }),
+    queryClient.invalidateQueries({ queryKey: ['builder-available-models'] }),
+  ]);
 }
 
 function ModelIdControl({
@@ -163,36 +176,39 @@ function RuntimeEnvironmentEditor({ endpoint, state }: { endpoint: string; state
     });
   }
 
-  async function restartRuntimeAfterEnvironmentSave(savedState: DesktopRuntimeState) {
-    try {
-      const restartedState = await desktopRequest<DesktopRuntimeState>(endpoint, '/restart-runtime', {
-        method: 'POST',
-      });
-      queryClient.setQueryData(['desktop-runtime-state', endpoint], restartedState);
-    } catch (error) {
-      queryClient.setQueryData(['desktop-runtime-state', endpoint], savedState);
-      toast.error(error instanceof Error ? error.message : 'Runtime environment saved, but restart failed');
-    } finally {
-      void queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] });
-      void queryClient.invalidateQueries({ queryKey: ['llm-providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['agents-model-providers'] });
-      void queryClient.invalidateQueries({ queryKey: ['builder-available-models'] });
-    }
-  }
-
   const saveEnvironment = useMutation({
     mutationFn: async () => {
-      return desktopRequest<UpdateSettingsResult>(endpoint, '/settings', {
+      const update = await desktopRequest<UpdateSettingsResult>(endpoint, '/settings', {
         body: JSON.stringify({ environmentVariables: editor.getEnvironmentVariablesForSubmit() }),
         method: 'PATCH',
       });
+
+      try {
+        const restartedState = await desktopRequest<DesktopRuntimeState>(endpoint, '/restart-runtime', {
+          method: 'POST',
+        });
+        return { update, restartedState };
+      } catch (restartError) {
+        return { update, restartError };
+      }
     },
-    onSuccess: result => {
-      const nextRows = rowsFromEnvironmentVariables(result.settings.environmentVariables);
+    onSuccess: async result => {
+      const nextRows = rowsFromEnvironmentVariables(result.update.settings.environmentVariables);
       editor.resetRows(nextRows);
-      queryClient.setQueryData(['desktop-runtime-state', endpoint], result.state);
-      toast.success('Runtime environment saved');
-      void restartRuntimeAfterEnvironmentSave(result.state);
+      if ('restartedState' in result) {
+        queryClient.setQueryData(['desktop-runtime-state', endpoint], result.restartedState);
+        await invalidateRuntimeModelConsumers(queryClient, endpoint);
+        toast.success('Runtime environment saved');
+        return;
+      }
+
+      queryClient.setQueryData(['desktop-runtime-state', endpoint], result.update.state);
+      toast.error(
+        result.restartError instanceof Error
+          ? result.restartError.message
+          : 'Runtime environment saved, but restart failed',
+      );
+      await queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] });
     },
     onError: error => {
       toast.error(error instanceof Error ? error.message : 'Unable to save runtime environment');
@@ -363,12 +379,9 @@ function DesktopRuntimeSettingsForm({ endpoint, state }: { endpoint: string; sta
       });
       return desktopRequest<DesktopRuntimeState>(endpoint, '/restart-runtime', { method: 'POST' });
     },
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['desktop-runtime-state', endpoint] }),
-        queryClient.invalidateQueries({ queryKey: ['desktop-runtime-models', endpoint] }),
-        queryClient.invalidateQueries({ queryKey: ['builder-available-models'] }),
-      ]);
+    onSuccess: async restartedState => {
+      queryClient.setQueryData(['desktop-runtime-state', endpoint], restartedState);
+      await invalidateRuntimeModelConsumers(queryClient, endpoint);
       toast.success('Local model settings applied');
     },
     onError: error => {

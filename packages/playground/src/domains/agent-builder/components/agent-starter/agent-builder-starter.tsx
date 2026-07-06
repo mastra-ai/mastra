@@ -1,6 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { toast } from '@mastra/playground-ui/utils/toast';
@@ -16,7 +14,8 @@ import { resolveStarterModel, truncateName } from './utils';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
-import { ProviderLogo } from '@/domains/llm/components/provider-logo';
+import { LLMModelSelect } from '@/domains/llm/components/llm-models';
+import { LLMProviderSelect } from '@/domains/llm/components/llm-providers';
 import { providerMatches } from '@/domains/llm/hooks/use-filtered-models';
 
 const providersMatch = (provider: string, targetProvider: string) =>
@@ -60,24 +59,7 @@ export const AgentBuilderStarter = () => {
     selectedProviderModels.find(model => model.model === starterModel.name)?.model ??
     selectedProviderModels[0]?.model ??
     starterModel.name;
-  const providerOptions = useMemo<ComboboxOption[]>(
-    () =>
-      allowedProviders.map(provider => ({
-        label: provider.name,
-        value: provider.id,
-        start: <ProviderLogo providerId={provider.id} size={16} />,
-      })),
-    [allowedProviders],
-  );
-  const modelOptions = useMemo<ComboboxOption[]>(
-    () =>
-      selectedProviderModels.map(model => ({
-        label: model.model,
-        value: model.model,
-      })),
-    [selectedProviderModels],
-  );
-  const showModelPicker = !isAllowedModelsLoading && providerOptions.length > 0;
+  const showModelPicker = !isAllowedModelsLoading && allowedProviders.length > 0;
   const isSubmitBlocked =
     trimmed.length === 0 ||
     isCreating ||
@@ -167,24 +149,21 @@ export const AgentBuilderStarter = () => {
           <div className="flex flex-col gap-2 px-3 pb-2.5 sm:flex-row sm:items-center sm:justify-between">
             {showModelPicker ? (
               <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
-                <Combobox
-                  options={providerOptions}
+                <LLMProviderSelect
+                  providers={allowedProviders}
+                  isLoading={isAllowedModelsLoading}
                   value={selectedProvider}
                   onValueChange={handleProviderChange}
-                  placeholder="Select provider..."
-                  searchPlaceholder="Search providers..."
-                  emptyText="No providers found"
                   variant="ghost"
                   size="sm"
                   className="min-w-0 sm:max-w-48"
                 />
-                <Combobox
-                  options={modelOptions}
+                <LLMModelSelect
+                  providers={allowedProviders}
+                  isLoading={isAllowedModelsLoading}
                   value={selectedModel}
+                  llmId={selectedProvider}
                   onValueChange={setSelectedModelId}
-                  placeholder="Select model..."
-                  searchPlaceholder="Search models..."
-                  emptyText="No models found"
                   variant="ghost"
                   size="sm"
                   className="min-w-0 sm:max-w-64"

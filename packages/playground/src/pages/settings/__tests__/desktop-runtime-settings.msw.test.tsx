@@ -71,6 +71,7 @@ describe('DesktopRuntimeSettingsSection', () => {
       expect(screen.getByText('Runtime environment')).not.toBeNull();
       expect(screen.queryByText('Add provider keys for the bundled runtime.')).toBeNull();
       expect(screen.getByDisplayValue('OPENAI_API_KEY')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Anthropic key' })).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Apply & restart' })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Restart runtime' })).toBeNull();
       expect(await screen.findByRole('button', { name: 'Use LM Studio' })).not.toBeNull();
@@ -214,13 +215,14 @@ describe('DesktopRuntimeSettingsSection', () => {
           },
         ]),
       );
+      expect(await screen.findByRole('button', { name: 'Saving...' })).not.toBeNull();
+      expect(restartRequests).toBe(1);
+
+      restartGate.resolve();
       expect(await screen.findByRole('button', { name: 'Save runtime env' })).not.toBeNull();
       expect(screen.queryByText('Saving...')).toBeNull();
       expect(await screen.findByDisplayValue('ANTHROPIC_API_KEY')).not.toBeNull();
       expect(screen.getByDisplayValue('saved-key')).not.toBeNull();
-      expect(restartRequests).toBe(1);
-
-      restartGate.resolve();
     });
   });
 

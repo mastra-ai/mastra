@@ -22,6 +22,18 @@ export function getDesktopConfiguredExternalModelAllowlistEntries(): ProviderMod
     .map(({ provider }) => ({ provider }));
 }
 
+export function getDesktopBuilderAgentModelConfig() {
+  if (hasConfiguredEnv(['ANTHROPIC_API_KEY'])) {
+    return 'anthropic/claude-sonnet-4-6';
+  }
+
+  if (hasConfiguredEnv(['OPENAI_API_KEY'])) {
+    return 'openai/gpt-5.5';
+  }
+
+  return getDesktopAgentModelConfig();
+}
+
 export function getDesktopBuilderConfig(): AgentBuilderOptions {
   const desktopModel = getDesktopModelConfig();
 
@@ -48,5 +60,5 @@ export function getDesktopBuilderConfig(): AgentBuilderOptions {
 }
 
 export const desktopBuilderAgent = createBuilderAgent({
-  model: getDesktopAgentModelConfig(),
+  model: getDesktopBuilderAgentModelConfig(),
 });

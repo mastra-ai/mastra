@@ -1,3 +1,4 @@
+import type { Provider } from '@mastra/client-js';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -18,7 +19,14 @@ export interface LLMModelsProps {
   disabled?: boolean;
 }
 
-export const LLMModels = ({
+export interface LLMModelSelectProps extends LLMModelsProps {
+  providers: Provider[];
+  isLoading?: boolean;
+}
+
+export const LLMModelSelect = ({
+  providers,
+  isLoading,
   value,
   onValueChange,
   llmId,
@@ -29,10 +37,7 @@ export const LLMModels = ({
   onOpenChange,
   container,
   disabled,
-}: LLMModelsProps) => {
-  const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const providers = dataProviders?.providers || [];
-
+}: LLMModelSelectProps) => {
   const allModels = useAllModels(providers);
 
   // Filter models by provider
@@ -46,7 +51,7 @@ export const LLMModels = ({
     }));
   }, [filteredModels]);
 
-  if (providersLoading) {
+  if (isLoading) {
     return <Skeleton className="w-full h-8" />;
   }
 
@@ -67,4 +72,9 @@ export const LLMModels = ({
       disabled={disabled}
     />
   );
+};
+
+export const LLMModels = (props: LLMModelsProps) => {
+  const { data: dataProviders, isLoading } = useLLMProviders();
+  return <LLMModelSelect {...props} providers={dataProviders?.providers ?? []} isLoading={isLoading} />;
 };
