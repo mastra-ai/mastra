@@ -37,6 +37,8 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
+import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
+import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -102,6 +104,11 @@ export interface ThreadProps {
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
   runOptionsSlot?: React.ReactNode;
+  /**
+   * Called when a voice call connects. On a brand-new chat the agent page passes its
+   * thread-list refresh here so the page navigates from /new to the real thread URL.
+   */
+  refreshThreadList?: () => Promise<void> | void;
 }
 
 export const Thread = ({
@@ -111,6 +118,7 @@ export const Thread = ({
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
+  refreshThreadList,
 }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -202,6 +210,7 @@ export const Thread = ({
             hasModelList={hasModelList}
             hideModelSwitcher={hideModelSwitcher}
             runOptionsSlot={runOptionsSlot}
+            refreshThreadList={refreshThreadList}
           />
         </div>
       </MessageScrollerProvider>
@@ -228,9 +237,17 @@ interface ComposerProps {
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
+  refreshThreadList?: () => Promise<void> | void;
 }
 
-const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
+const Composer = ({
+  agentId,
+  threadId,
+  hasModelList,
+  hideModelSwitcher,
+  runOptionsSlot,
+  refreshThreadList,
+}: ComposerProps) => {
   const { threadInput: text, setThreadInput } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const send = useChatSend();
@@ -239,6 +256,9 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+  // On a brand-new chat, starting the call must transition the page out of its
+  // new-thread state (same as the first text send) or the chat never loads messages.
+  const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
 
   const isEmpty = text.trim().length === 0 && attachments.length === 0;
   const sendBlocked = isRunning && !canSendWhileStreaming;
@@ -266,6 +286,8 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
         </div>
+
+        <VoiceCallPanel voiceCall={voiceCall} />
 
         <div
           className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
@@ -315,6 +337,7 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher, runOptio
               onSetText={value => {
                 setThreadInput(value);
               }}
+              voiceCall={voiceCall}
             />
           </div>
         </div>
@@ -379,6 +402,7 @@ interface ComposerActionRowProps {
   canSendWhileStreaming: boolean;
   onCancel: () => void;
   onSetText: (text: string) => void;
+  voiceCall?: VoiceCallControls;
 }
 
 const ComposerActionRow = ({
@@ -391,6 +415,7 @@ const ComposerActionRow = ({
   canSendWhileStreaming,
   onCancel,
   onSetText,
+  voiceCall,
 }: ComposerActionRowProps) => {
   return (
     <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
@@ -412,6 +437,7 @@ const ComposerActionRow = ({
         <ButtonsGroup spacing="close">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         </ButtonsGroup>
         <ComposerSendButton
           canExecute={canExecute}
