@@ -21,14 +21,17 @@
  * module and let the deployer generate the server — there is no separate
  * hand-wired dev bootstrap.
  *
- * NOTE: the deployer's static serving is Studio-only, so the SPA is NOT served
- * by the platform — it is deployed separately and talks to this API server
- * cross-origin (hence `server.cors` + cross-site session cookies).
+ * NOTE: the deployer's own static serving is Studio-only. The SPA (vite build
+ * output) is served same-origin at `/` by the SPA middleware below when a
+ * build is found (`web:build` produces one); `server.cors` remains only for
+ * the optional separately-hosted-SPA setup. In dev, Vite serves the SPA and
+ * proxies API paths here instead.
  */
 
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@internal/mastracode';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
+import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import { TenantDispatcher } from '../web/tenant-server.js';
 import { assertRemoteTenantDbIfRequired } from '../web/tenant-storage.js';
 import { assembleWebApiRoutes, resolveGithubReady } from '../web/web-surface.js';
@@ -95,9 +98,14 @@ const prepared = await prepareAgentControllerMount({
   ],
   buildServerConfig: () => {
     const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
+    // Same-origin SPA: when a vite build is present (see resolveUiDistDir),
+    // serve it at `/` from this server. Mounted last so the auth gate (when
+    // enabled) covers it; it always passes `/api`, `/web`, `/auth` through.
+    const uiDist = resolveUiDistDir();
+    const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
     if (!webAuthEnabled || !authProvider) {
-      // Auth disabled: no gate, no per-tenant isolation. Only CORS (if any).
-      return cors;
+      // Auth disabled: no gate, no per-tenant isolation. SPA + CORS only.
+      return { ...(spa.length ? { middleware: spa } : {}), ...cors };
     }
 
     // Ordered middleware. The deployer applies these AFTER its context
@@ -106,8 +114,13 @@ const prepared = await prepareAgentControllerMount({
     //              redirects unauthenticated requests. Skips public `/auth/*`.
     //   2. tenant — for authenticated `/api/*`, forwards to the user's isolated
     //              tenant Mastra app (its own libSQL storage/vector pair).
+    //   3. spa   — serves the built UI for everything the server doesn't own.
     return {
-      middleware: [createWebAuthGate(authProvider), { path: '/api/*', handler: tenantDispatcher!.middleware() }],
+      middleware: [
+        createWebAuthGate(authProvider),
+        { path: '/api/*', handler: tenantDispatcher!.middleware() },
+        ...spa,
+      ],
       ...cors,
     };
   },

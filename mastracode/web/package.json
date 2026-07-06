@@ -1,7 +1,7 @@
 {
   "name": "mastracode-web",
   "version": "0.1.0",
-  "description": "MastraCode web surface: API routes, tenant server, deployable Mastra entry, and the SPA UI. Standalone pnpm project consuming monorepo packages via link: — run pnpm install at the monorepo root (plus a core build) first.",
+  "description": "MastraCode web surface: API routes, tenant server, deployable Mastra entry, and the SPA UI. Standalone pnpm project consuming monorepo packages via link: — run pnpm install at the monorepo root first; `pnpm prebuild` builds the linked packages (web:build / web:ui:build run it automatically).",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,10 +9,11 @@
     "check:ui": "tsc --noEmit -p src/web/ui/tsconfig.json",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
+    "prebuild": "cd ../.. && pnpm turbo build --filter ./mastracode/core --filter ./packages/playground-ui --filter ./client-sdks/client-js --filter ./client-sdks/react --filter ./stores/libsql --filter ./auth/workos --filter ./server-adapters/hono --filter ./workspaces/railway --filter ./packages/cli",
     "web:dev": "concurrently --kill-others-on-fail --names server,ui \"PORT=4111 mastra dev --dir src/mastra --env src/web/.env\" \"vite --config src/web/vite.config.ts\"",
     "web:dev:github": "pnpm db:up && pnpm web:dev",
-    "web:ui:build": "vite --config src/web/vite.config.ts build",
-    "web:build": "mastra build --dir src/mastra",
+    "web:ui:build": "pnpm run prebuild && vite --config src/web/vite.config.ts build",
+    "web:build": "pnpm run web:ui:build && mastra build --dir src/mastra && rm -rf .mastra/output/ui && cp -R dist/web/ui .mastra/output/ui",
     "web:start": "mastra start --env src/web/.env",
     "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "web:ui:test": "vitest run --config e2e/web-ui/vitest.config.ts",
@@ -22,7 +23,6 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@internal/mastracode": "link:../core",
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/core": "link:../../packages/core",
@@ -47,6 +47,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^3.0.63",
+    "@internal/mastracode": "link:../core",
     "@copilotkit/aimock": "^1.29.0",
     "@tailwindcss/vite": "4.2.2",
     "@testing-library/dom": "^10.4.0",

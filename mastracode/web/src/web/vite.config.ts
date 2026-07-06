@@ -41,9 +41,10 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
  * proxied to that server so the browser uses same-origin requests in dev.
  *
- * The production build outputs the static SPA to `dist/web/ui`. It is hosted
- * separately (static host / CDN) and talks to the deployed API cross-origin —
- * the Mastra server no longer serves the SPA itself.
+ * The production build outputs the static SPA to `dist/web/ui`. `web:build`
+ * copies it into `.mastra/output/ui`, and the API server serves it same-origin
+ * at `/` (see src/web/spa-static.ts). Hosting the SPA separately (static host
+ * / CDN, cross-origin via MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
 export default defineConfig(({ mode }) => ({
   root: resolve(here, 'ui'),
