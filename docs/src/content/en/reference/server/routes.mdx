@@ -179,6 +179,7 @@ The route returns:
 | Method | Path | Description |
 | - | - | - |
 | `GET` | `/api/workflows` | List all workflows |
+| `GET` | `/api/workflows/run-counts` | Get per-workflow counts of running and suspended runs |
 | `GET` | `/api/workflows/:workflowId` | Get workflow by ID |
 | `POST` | `/api/workflows/:workflowId/create-run` | Create a new workflow run |
 | `POST` | `/api/workflows/:workflowId/start-async` | Start workflow and await result |
@@ -187,6 +188,19 @@ The route returns:
 | `POST` | `/api/workflows/:workflowId/resume-async` | Resume asynchronously |
 | `GET` | `/api/workflows/:workflowId/runs` | List workflow runs |
 | `GET` | `/api/workflows/:workflowId/runs/:runId` | Get specific run |
+
+### Run counts response
+
+The `/api/workflows/run-counts` endpoint returns counts of `running` and [`suspended`](/docs/workflows/suspend-and-resume) runs for every registered workflow. The record is keyed by the workflow's registry key from the Mastra config, and the server may cache the response for a few seconds:
+
+```typescript prettier:false
+{
+  [workflowRegistryKey: string]: {
+    running: number;
+    suspended: number;
+  };
+}
+```
 
 ### Create run request body
 

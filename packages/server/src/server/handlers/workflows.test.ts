@@ -3,14 +3,18 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { Workflow } from '@mastra/core/workflows';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
+import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { checkRouteFGA } from '../server-adapter';
+import { WORKFLOWS_ROUTES } from '../server-adapter/routes/workflows';
 import { getWorkflowInfo } from '../utils';
 import { createTestServerContext } from './test-utils';
 import {
   LIST_WORKFLOWS_ROUTE,
+  LIST_WORKFLOW_RUN_COUNTS_ROUTE,
+  __setWorkflowRunCountsNow,
   GET_WORKFLOW_BY_ID_ROUTE,
   START_ASYNC_WORKFLOW_ROUTE,
   GET_WORKFLOW_RUN_BY_ID_ROUTE,
@@ -245,6 +249,225 @@ describe('vNext Workflow Handlers', () => {
 
       expect(result).toEqual({});
       expect(filterAccessible).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('LIST_WORKFLOW_RUN_COUNTS_ROUTE', () => {
+    let fakeNow: number;
+
+    beforeEach(() => {
+      // Deterministic clock: the cache is WeakMap-keyed per Mastra instance
+      // (isolated by the fresh mockMastra each test), and TTL is tested by
+      // advancing this value instead of waiting on the wall clock.
+      fakeNow = 1_000_000;
+      __setWorkflowRunCountsNow(() => fakeNow);
+    });
+
+    afterEach(() => {
+      __setWorkflowRunCountsNow();
+    });
+
+    const persistRun = async (
+      mastra: Mastra,
+      workflowName: string,
+      runId: string,
+      status: string,
+      resourceId?: string,
+    ) => {
+      const store = await mastra.getStorage()!.getStore('workflows');
+      await store!.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        resourceId,
+        snapshot: { status, resourceId } as any,
+      });
+    };
+
+    it('counts running and suspended runs grouped by registry key', async () => {
+      await persistRun(mockMastra, 'test-workflow', 'run-1', 'running');
+      await persistRun(mockMastra, 'test-workflow', 'run-2', 'running');
+      await persistRun(mockMastra, 'test-workflow', 'run-3', 'suspended');
+      await persistRun(mockMastra, 'test-workflow', 'run-4', 'success');
+
+      const result = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+
+      expect(result).toEqual({
+        'test-workflow': { running: 2, suspended: 1 },
+        'reusable-workflow': { running: 0, suspended: 0 },
+      });
+    });
+
+    it('maps run rows to the registry key when it differs from the workflow id', async () => {
+      const camelMastra = new Mastra({
+        logger: false,
+        workflows: { testWorkflowKey: createMockWorkflow('kebab-flow-id') },
+        storage: new MockStore(),
+      });
+      await persistRun(camelMastra, 'kebab-flow-id', 'run-1', 'suspended');
+
+      const result = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: camelMastra }),
+      } as any);
+
+      expect(result).toEqual({ testWorkflowKey: { running: 0, suspended: 1 } });
+    });
+
+    it('ignores run rows whose workflow is not registered', async () => {
+      await persistRun(mockMastra, 'ghost-flow', 'run-1', 'running');
+
+      const result = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+
+      expect(result).toEqual({
+        'test-workflow': { running: 0, suspended: 0 },
+        'reusable-workflow': { running: 0, suspended: 0 },
+      });
+    });
+
+    it('returns zero counts when storage is not configured', async () => {
+      const storagelessMastra = new Mastra({
+        logger: false,
+        workflows: { 'test-workflow': createMockWorkflow('test-workflow') },
+      });
+
+      const result = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: storagelessMastra }),
+      } as any);
+
+      expect(result).toEqual({ 'test-workflow': { running: 0, suspended: 0 } });
+    });
+
+    it('serves cached counts within the TTL window and refreshes after expiry', async () => {
+      await persistRun(mockMastra, 'test-workflow', 'run-1', 'running');
+
+      const first = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+      expect(first['test-workflow'].running).toEqual(1);
+
+      await persistRun(mockMastra, 'test-workflow', 'run-2', 'running');
+
+      // Within the TTL the cached map is served, so the new run is invisible.
+      fakeNow += 4_000;
+      const second = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+      expect(second['test-workflow'].running).toEqual(1);
+
+      // Past the TTL the counts must refresh — an infinite cache is a regression.
+      fakeNow += 2_000;
+      const third = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+      expect(third['test-workflow'].running).toEqual(2);
+    });
+
+    it('scopes counts to the reserved request-context resource id and bypasses the cache', async () => {
+      await persistRun(mockMastra, 'test-workflow', 'run-a', 'running', 'tenant-a');
+      await persistRun(mockMastra, 'test-workflow', 'run-b', 'running', 'tenant-b');
+      await persistRun(mockMastra, 'test-workflow', 'run-c', 'suspended', 'tenant-b');
+
+      const scopedContext = new RequestContext();
+      scopedContext.set(MASTRA_RESOURCE_ID_KEY, 'tenant-a');
+
+      const scoped = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        requestContext: scopedContext,
+      } as any);
+      expect(scoped['test-workflow']).toEqual({ running: 1, suspended: 0 });
+
+      // Unscoped request right after: must not be served the scoped map, and
+      // the scoped request must not have been served a cached unscoped map.
+      const unscoped = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+      expect(unscoped['test-workflow']).toEqual({ running: 2, suspended: 1 });
+    });
+
+    it('returns an empty map when FGA is configured and no user is present, without touching storage', async () => {
+      const filterAccessible = vi.fn();
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
+      const getStorage = vi.spyOn(mockMastra, 'getStorage');
+
+      const result = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+
+      expect(result).toEqual({});
+      expect(filterAccessible).not.toHaveBeenCalled();
+      expect(getStorage).not.toHaveBeenCalled();
+    });
+
+    it('filters counts to FGA-accessible workflows for the requesting user', async () => {
+      await persistRun(mockMastra, 'test-workflow', 'run-1', 'running');
+      await persistRun(mockMastra, 'reusable-workflow', 'run-2', 'suspended');
+
+      const filterAccessible = vi.fn().mockResolvedValue([{ id: 'test-workflow' }]);
+      vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      const result = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        requestContext,
+      } as any);
+
+      expect(result).toEqual({ 'test-workflow': { running: 1, suspended: 0 } });
+      expect(filterAccessible).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.arrayContaining([{ id: 'test-workflow' }, { id: 'reusable-workflow' }]),
+        'workflow',
+        'workflows:read',
+      );
+    });
+
+    it('does not serve or fill the shared cache for FGA-filtered requests', async () => {
+      await persistRun(mockMastra, 'test-workflow', 'run-1', 'running');
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+      const filterAccessible = vi.fn().mockResolvedValue([{ id: 'test-workflow' }]);
+      const getServerSpy = vi.spyOn(mockMastra, 'getServer').mockReturnValue({ fga: { filterAccessible } } as any);
+
+      const fgaResult = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+        requestContext,
+      } as any);
+      expect(fgaResult).toEqual({ 'test-workflow': { running: 1, suspended: 0 } });
+
+      // FGA off again: the filtered map must not come back from the cache.
+      getServerSpy.mockReturnValue({} as any);
+      const openResult = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+      expect(openResult['reusable-workflow']).toEqual({ running: 0, suspended: 0 });
+    });
+
+    it('counts a genuinely suspended run produced by a real execution', async () => {
+      const run = await reusableWorkflow.createRun({ runId: 'suspend-run' });
+      await run.start({ inputData: {} });
+
+      const result = await LIST_WORKFLOW_RUN_COUNTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mockMastra }),
+      } as any);
+
+      expect(result['reusable-workflow'].suspended).toEqual(1);
+    });
+
+    it('registers the static run-counts path before the parameterized workflow route', () => {
+      const paths = WORKFLOWS_ROUTES.map(route => `${route.method} ${route.path}`);
+      const countsIndex = paths.indexOf('GET /workflows/run-counts');
+      const paramIndex = paths.indexOf('GET /workflows/:workflowId');
+
+      expect(countsIndex).toBeGreaterThan(-1);
+      expect(paramIndex).toBeGreaterThan(-1);
+      // Routes register sequentially; the param route would capture
+      // "run-counts" as a workflowId if it came first.
+      expect(countsIndex).toBeLessThan(paramIndex);
     });
   });
 

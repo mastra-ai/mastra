@@ -1,4 +1,4 @@
-import type { GetWorkflowResponse, ListWorkflowRunsResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse, ListWorkflowRunCountsResponse } from '@mastra/client-js';
 
 type StepInfo = GetWorkflowResponse['steps'][string];
 type AllStepInfo = GetWorkflowResponse['allSteps'][string];
@@ -103,18 +103,12 @@ export const workflowsFixture: Record<string, GetWorkflowResponse> = {
   },
 };
 
-export const RUNNING_TOTALS: Record<string, number> = {
-  engRunner: 3,
-};
-
-export const SUSPENDED_TOTALS: Record<string, number> = {
-  prdGroomProduct: 2,
-};
-
-export const emptyRuns: ListWorkflowRunsResponse = { runs: [], total: 0 };
-
-export const runsResponseFor = (workflowId: string, status: string | null): ListWorkflowRunsResponse => {
-  const totals =
-    status === 'running' ? RUNNING_TOTALS : status === 'suspended' ? SUSPENDED_TOTALS : ({} as Record<string, number>);
-  return { runs: [], total: totals[workflowId] ?? 0 };
+/** Server-aggregated counts, keyed by registry key — mirrors GET /workflows/run-counts. */
+export const runCountsFixture: ListWorkflowRunCountsResponse = {
+  prdShipProduct: { running: 0, suspended: 0 },
+  prdGroomProduct: { running: 0, suspended: 2 },
+  prdFixProduct: { running: 0, suspended: 0 },
+  engRunner: { running: 3, suspended: 0 },
+  loopA: { running: 0, suspended: 0 },
+  loopB: { running: 0, suspended: 0 },
 };

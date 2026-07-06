@@ -5,7 +5,7 @@ import { forwardRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { WorkflowsList } from '../workflows-list';
-import { runsResponseFor, workflowsFixture } from './fixtures/workflows';
+import { runCountsFixture, workflowsFixture } from './fixtures/workflows';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
@@ -23,16 +23,26 @@ const paths = {
   workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
 } as unknown as LinkComponentProviderProps['paths'];
 
-const useRunsHandler = () => {
-  const onRunsRequest = vi.fn<(url: string) => void>();
+const useRunCountsHandler = () => {
+  const onRunCountsRequest = vi.fn<() => void>();
   server.use(
-    http.get(`${TEST_BASE_URL}/api/workflows/:workflowId/runs`, ({ params, request }) => {
-      onRunsRequest(request.url);
-      const status = new URL(request.url).searchParams.get('status');
-      return HttpResponse.json(runsResponseFor(String(params.workflowId), status));
+    http.get(`${TEST_BASE_URL}/api/workflows/run-counts`, () => {
+      onRunCountsRequest();
+      return HttpResponse.json(runCountsFixture);
     }),
   );
-  return onRunsRequest;
+  return onRunCountsRequest;
+};
+
+const useRunCounts404Handler = () => {
+  const onRunCountsRequest = vi.fn<() => void>();
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/workflows/run-counts`, () => {
+      onRunCountsRequest();
+      return new HttpResponse(null, { status: 404 });
+    }),
+  );
+  return onRunCountsRequest;
 };
 
 const renderList = (props?: Partial<Parameters<typeof WorkflowsList>[0]>) =>
@@ -52,7 +62,7 @@ const rowFor = (name: string) => {
 describe('WorkflowsList', () => {
   describe('when the list renders', () => {
     it('shows the workflow rows and the count columns', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       expect(screen.getByText('prd-ship-product')).not.toBeNull();
@@ -64,7 +74,7 @@ describe('WorkflowsList', () => {
     });
 
     it('keeps the expand toggle outside the row link', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       const toggle = screen.getByRole('button', { name: 'Expand nested workflows of prd-ship-product' });
@@ -76,7 +86,7 @@ describe('WorkflowsList', () => {
 
   describe('when workflows have registered nested children', () => {
     it('shows a nested badge listing children resolved across registry key styles', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       const parentRow = rowFor('prd-ship-product');
@@ -87,7 +97,7 @@ describe('WorkflowsList', () => {
     });
 
     it('offers no badge or toggle on plain leaf rows', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       const leafRow = rowFor('prd-fix-product');
@@ -100,7 +110,7 @@ describe('WorkflowsList', () => {
 
   describe('when a parent row is expanded', () => {
     it('reveals child rows linked by registry key and collapses back', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       expect(screen.getAllByText('prd-groom-product')).toHaveLength(1);
@@ -126,7 +136,7 @@ describe('WorkflowsList', () => {
     });
 
     it('expands a child row from its own toggle', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       fireEvent.click(screen.getByRole('button', { name: 'Expand nested workflows of prd-ship-product' }));
@@ -148,7 +158,7 @@ describe('WorkflowsList', () => {
 
   describe('when nested workflows are not registered standalone', () => {
     it('renders them as inline non-link rows', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       expect(screen.queryByText('use-case-arch')).toBeNull();
@@ -166,7 +176,7 @@ describe('WorkflowsList', () => {
 
   describe('when workflows nest each other in a cycle', () => {
     it('does not offer expansion into an ancestor', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList();
 
       expect(screen.getAllByRole('button', { name: /nested workflows of loop-b/ })).toHaveLength(1);
@@ -183,8 +193,8 @@ describe('WorkflowsList', () => {
   });
 
   describe('when runs are active or suspended', () => {
-    it('shows running and pending-input counts and hides zeros', async () => {
-      const onRunsRequest = useRunsHandler();
+    it('shows running and pending-input counts from the aggregated endpoint and hides zeros', async () => {
+      const onRunCountsRequest = useRunCountsHandler();
       const { queryClient } = renderList();
 
       const runnerRow = rowFor('eng-runner');
@@ -197,22 +207,32 @@ describe('WorkflowsList', () => {
       // Idle workflows render empty count cells, never a zero.
       expect(rowFor('prd-fix-product').queryByText('0')).toBeNull();
 
-      // Every request asked for a single item of an explicitly counted status.
-      const urls = onRunsRequest.mock.calls.map(([url]) => new URL(url));
-      expect(urls.length).toBeGreaterThan(0);
-      const statuses = new Set(urls.map(url => url.searchParams.get('status')));
-      expect(statuses).toEqual(new Set(['running', 'suspended']));
-      for (const url of urls) {
-        expect(url.searchParams.get('perPage')).toBe('1');
-      }
+      // One aggregated request serves every workflow — no per-workflow N+1.
+      expect(onRunCountsRequest).toHaveBeenCalledTimes(1);
 
       await waitForMutationsIdle(queryClient);
+    });
+
+    it('degrades to blank count columns and stops polling when the server lacks the endpoint', async () => {
+      const onRunCountsRequest = useRunCounts404Handler();
+      const { queryClient } = renderList();
+
+      expect(screen.getByText('eng-runner')).not.toBeNull();
+      await waitForMutationsIdle(queryClient);
+
+      // No counts light up, and nothing crashes — old servers just show blanks.
+      expect(screen.queryByLabelText(/runs? in progress/)).toBeNull();
+      expect(screen.queryByLabelText(/awaiting input/)).toBeNull();
+
+      // The server said it doesn't have the endpoint — exactly one attempt,
+      // no retries, and the poll interval shuts off instead of hammering it.
+      expect(onRunCountsRequest).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('when searching', () => {
     it('filters rows by the search term', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList({ search: 'Single entry' });
 
       expect(screen.getByText('prd-ship-product')).not.toBeNull();
@@ -223,7 +243,7 @@ describe('WorkflowsList', () => {
     });
 
     it('shows the no-match message when nothing matches', async () => {
-      useRunsHandler();
+      useRunCountsHandler();
       const { queryClient } = renderList({ search: 'zzz-no-such-workflow' });
 
       expect(screen.getByText('No Workflows match your search')).not.toBeNull();

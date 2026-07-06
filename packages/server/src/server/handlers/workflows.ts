@@ -13,6 +13,7 @@ import {
   createWorkflowRunResponseSchema,
   listWorkflowRunsQuerySchema,
   listWorkflowsResponseSchema,
+  workflowRunCountsResponseSchema,
   restartBodySchema,
   timeTravelBodySchema,
   resumeBodySchema,
@@ -137,6 +138,109 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
       return _workflows;
     } catch (error) {
       return handleError(error, 'Error getting workflows');
+    }
+  }) as any,
+});
+
+type WorkflowRunCounts = { running: number; suspended: number };
+
+const RUN_COUNTS_CACHE_TTL_MS = 5_000;
+// Keyed by Mastra instance so multiple apps in one process never share counts.
+const runCountsCache = new WeakMap<object, { at: number; value: Record<string, WorkflowRunCounts> }>();
+let runCountsNow: () => number = () => Date.now();
+
+/** Test seam — lets TTL expiry be tested without wall-clock waits. */
+export function __setWorkflowRunCountsNow(now?: () => number) {
+  runCountsNow = now ?? (() => Date.now());
+}
+
+export const LIST_WORKFLOW_RUN_COUNTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/workflows/run-counts',
+  responseType: 'json',
+  responseSchema: workflowRunCountsResponseSchema,
+  summary: 'List workflow run counts',
+  description:
+    'Returns per-workflow counts of currently running and suspended (awaiting resume) runs, keyed by the workflow registry key used in the Mastra config',
+  tags: ['Workflows'],
+  requiresAuth: true,
+  handler: (async ({ mastra, requestContext }: any) => {
+    try {
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      // FGA with no user can never see anything — answer before touching storage.
+      if (fgaProvider && !user) {
+        return {};
+      }
+
+      const workflows = mastra.listWorkflows({ serialized: false });
+
+      const counts: Record<string, WorkflowRunCounts> = {};
+      const workflowIdToRegistryKey = new Map<string, string>();
+      for (const [registryKey, workflow] of Object.entries(workflows)) {
+        counts[registryKey] = { running: 0, suspended: 0 };
+        workflowIdToRegistryKey.set((workflow as any).id, registryKey);
+      }
+
+      // Runs are scoped to the caller like the runs-listing endpoint: the
+      // reserved request-context resource id takes precedence for security.
+      const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+
+      // The shared cache holds the unscoped, unfiltered map — usable only when
+      // neither per-user FGA filtering nor a resource scope applies.
+      const cacheable = !fgaProvider && !effectiveResourceId;
+      if (cacheable) {
+        const cached = runCountsCache.get(mastra);
+        if (cached && runCountsNow() - cached.at < RUN_COUNTS_CACHE_TTL_MS) {
+          return cached.value;
+        }
+      }
+
+      const storage = mastra.getStorage();
+      const workflowsStore = storage ? await storage.getStore('workflows') : undefined;
+      if (workflowsStore) {
+        // Cross-workflow, engine-agnostic: both execution engines persist run
+        // status into the same store. Deliberately not listActiveWorkflowRuns,
+        // which means running+waiting and covers the default engine only.
+        const [running, suspended] = await Promise.all([
+          workflowsStore.listWorkflowRuns({ status: 'running', resourceId: effectiveResourceId }),
+          workflowsStore.listWorkflowRuns({ status: 'suspended', resourceId: effectiveResourceId }),
+        ]);
+        for (const run of running.runs) {
+          const registryKey = workflowIdToRegistryKey.get(run.workflowName);
+          const entry = registryKey ? counts[registryKey] : undefined;
+          if (entry) entry.running++;
+        }
+        for (const run of suspended.runs) {
+          const registryKey = workflowIdToRegistryKey.get(run.workflowName);
+          const entry = registryKey ? counts[registryKey] : undefined;
+          if (entry) entry.suspended++;
+        }
+      }
+
+      if (fgaProvider) {
+        const workflowList = Object.keys(counts).map(id => ({ id }));
+        const accessible = await fgaProvider.filterAccessible(
+          user,
+          workflowList,
+          'workflow',
+          MastraFGAPermissions.WORKFLOWS_READ,
+        );
+        const accessibleSet = new Set(accessible.map((w: any) => w.id));
+        for (const id of Object.keys(counts)) {
+          if (!accessibleSet.has(id)) {
+            delete counts[id];
+          }
+        }
+        return counts;
+      }
+
+      if (cacheable) {
+        runCountsCache.set(mastra, { at: runCountsNow(), value: counts });
+      }
+      return counts;
+    } catch (error) {
+      return handleError(error, 'Error getting workflow run counts');
     }
   }) as any,
 });

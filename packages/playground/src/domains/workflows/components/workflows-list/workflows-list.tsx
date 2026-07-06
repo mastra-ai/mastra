@@ -107,8 +107,7 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
     [filteredData, workflows, expandedPaths],
   );
 
-  const workflowIds = useMemo(() => workflowData.map(wf => wf.id), [workflowData]);
-  const runCounts = useWorkflowsRunCounts(workflowIds);
+  const runCounts = useWorkflowsRunCounts();
 
   const toggleExpanded = (pathKey: string) => {
     setExpandedPaths(previous => {
