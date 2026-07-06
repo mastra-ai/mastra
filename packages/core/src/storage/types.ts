@@ -379,6 +379,7 @@ export type StorageDefaultOptions = Omit<
   | 'onChunk'
   | 'onError'
   | 'onAbort'
+  | 'onTitleGenerated'
   | 'prepareStep'
   // Runtime objects
   | 'abortSignal'

@@ -1115,6 +1115,7 @@ export type AgentExecuteOnFinishOptions = {
   threadExists: boolean;
   structuredOutput?: boolean;
   overrideScorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+  onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
 export type AgentMethodType = 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
