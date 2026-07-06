@@ -44,11 +44,7 @@ describe('installPluginDependencies', () => {
 
     await expect(installPluginDependencies(pluginRoot)).resolves.toBe(true);
 
-    expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      ['install', '--frozen-lockfile'],
-      expect.objectContaining({ cwd: pluginRoot }),
-    );
+    expect(execaMock).toHaveBeenCalledWith('pnpm', ['install'], expect.objectContaining({ cwd: pluginRoot }));
   });
 
   it('uses pnpm when pnpm-lock.yaml is present', async () => {
@@ -125,6 +121,36 @@ describe('installPluginDependencies', () => {
     ]);
     expect(getEntryPackageRoot(pluginRoot, '.mastracode/plugins/sources/local/alexandria/src/index.ts')).toBe(
       nestedRoot,
+    );
+  });
+
+  it('inherits the checkout package manager for nested entry packages', async () => {
+    const pluginRoot = makePluginRoot();
+    const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.5.1' });
+    fs.writeFileSync(path.join(pluginRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+    fs.mkdirSync(path.join(nestedRoot, 'src'), { recursive: true });
+    writePackageJson(nestedRoot);
+
+    await installPluginDependencies(nestedRoot, pluginRoot);
+
+    expect(execaMock).toHaveBeenCalledWith('pnpm', ['install'], expect.objectContaining({ cwd: nestedRoot }));
+  });
+
+  it('uses frozen install for nested entry packages with their own lockfile', async () => {
+    const pluginRoot = makePluginRoot();
+    const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.5.1' });
+    fs.mkdirSync(nestedRoot, { recursive: true });
+    writePackageJson(nestedRoot);
+    fs.writeFileSync(path.join(nestedRoot, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+
+    await installPluginDependencies(nestedRoot, pluginRoot);
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'pnpm',
+      ['install', '--frozen-lockfile'],
+      expect.objectContaining({ cwd: nestedRoot }),
     );
   });
 });

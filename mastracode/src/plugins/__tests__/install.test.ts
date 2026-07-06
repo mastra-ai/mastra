@@ -201,6 +201,7 @@ describe('installGithubPlugin', () => {
         if (!destination) throw new Error('missing checkout dir');
         writePlugin(destination, 'acme.dep');
         fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+        fs.writeFileSync(path.join(destination, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
       }
       return { stdout: '' };
     });

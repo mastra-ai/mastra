@@ -14,6 +14,18 @@ import type { SlashCommandContext } from './types.js';
 const INSTALL_VALUE = '__install__';
 const BACK_VALUE = '__back__';
 
+class PluginInstallProgress extends Box {
+  constructor(specifier: string) {
+    super(4, 2, text => theme.bg('overlayBg', text));
+    this.addChild(new Text(theme.bold(theme.fg('accent', 'Installing GitHub plugin')), 0, 0));
+    this.addChild(new Spacer(1));
+    this.addChild(new Text(specifier, 0, 0));
+    this.addChild(new Spacer(1));
+    this.addChild(new Text('Cloning repository and installing dependencies…', 0, 0));
+    this.addChild(new Text(theme.fg('dim', 'This can take a minute for larger plugins.'), 0, 0));
+  }
+}
+
 export async function handlePluginsCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
   if (!ctx.pluginManager) {
     ctx.showInfo('Plugin system not initialized.');
@@ -97,6 +109,21 @@ function showPluginsList(ctx: SlashCommandContext): void {
 function reportPluginMutationError(ctx: SlashCommandContext, action: string, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   ctx.showError(`${action} failed: ${message}`);
+}
+
+async function withGithubPluginInstallProgress<T>(
+  ctx: SlashCommandContext,
+  specifier: string,
+  install: () => Promise<T>,
+): Promise<T> {
+  const overlay = showModalOverlay(ctx.state.ui, new PluginInstallProgress(specifier), { maxHeight: '50%' });
+  ctx.state.ui.requestRender?.();
+  try {
+    return await install();
+  } finally {
+    overlay?.hide?.();
+    ctx.state.ui.requestRender?.();
+  }
 }
 
 function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void {
@@ -369,9 +396,11 @@ async function installPluginWithOptionalEntryPrompt(
         ? ctx.pluginManager!.installLocal(specifier, scope, { entry })
         : ctx.pluginManager!.installLocal(specifier, scope);
     }
-    return entry
-      ? ctx.pluginManager!.installGithub(specifier, scope, { entry })
-      : ctx.pluginManager!.installGithub(specifier, scope);
+    return withGithubPluginInstallProgress(ctx, specifier, () =>
+      entry
+        ? ctx.pluginManager!.installGithub(specifier, scope, { entry })
+        : ctx.pluginManager!.installGithub(specifier, scope),
+    );
   };
 
   try {

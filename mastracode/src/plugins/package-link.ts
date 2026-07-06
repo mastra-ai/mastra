@@ -12,8 +12,10 @@ export function ensureMastraCodePackageLink(pluginDir: string): void {
   const nodeModulesDir = path.join(pluginDir, 'node_modules');
   const linkPath = path.join(nodeModulesDir, 'mastracode');
   try {
-    fs.lstatSync(linkPath);
-    return;
+    if (fs.realpathSync(linkPath) === fs.realpathSync(MASTRACODE_PACKAGE_ROOT)) {
+      return;
+    }
+    fs.rmSync(linkPath, { recursive: true, force: true });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }

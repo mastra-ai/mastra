@@ -10,16 +10,19 @@ type InstallCommand = {
   args: string[];
 };
 
-export async function installPluginDependencies(pluginRoot: string): Promise<boolean> {
+export async function installPluginDependencies(pluginRoot: string, commandRoot = pluginRoot): Promise<boolean> {
   const packageJsonPath = path.join(pluginRoot, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
     return false;
   }
 
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { packageManager?: unknown };
+  const packageJson = readPackageJson(pluginRoot);
+  const commandPackageJson = commandRoot === pluginRoot ? packageJson : readPackageJson(commandRoot);
   const installCommand = getInstallCommand(
     pluginRoot,
     typeof packageJson.packageManager === 'string' ? packageJson.packageManager : undefined,
+    commandRoot,
+    typeof commandPackageJson.packageManager === 'string' ? commandPackageJson.packageManager : undefined,
   );
 
   await execa(installCommand.command, installCommand.args, {
@@ -33,7 +36,7 @@ export async function installPluginDependencies(pluginRoot: string): Promise<boo
 
 export async function installPluginDependenciesForEntry(pluginRoot: string, entry: string): Promise<void> {
   for (const dependencyRoot of getPluginDependencyRoots(pluginRoot, entry)) {
-    await installPluginDependencies(dependencyRoot);
+    await installPluginDependencies(dependencyRoot, pluginRoot);
   }
 }
 
@@ -71,40 +74,75 @@ function isInsideDirectory(targetPath: string, root: string): boolean {
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
-function getInstallCommand(pluginRoot: string, packageManager?: string): InstallCommand {
-  if (packageManager?.startsWith('pnpm@')) {
-    return { command: 'pnpm', args: ['install', '--frozen-lockfile'] };
+function getInstallCommand(
+  pluginRoot: string,
+  packageManager?: string,
+  commandRoot = pluginRoot,
+  commandPackageManager?: string,
+): InstallCommand {
+  const manager = packageManager ?? commandPackageManager;
+
+  if (manager?.startsWith('pnpm@')) {
+    return hasFile(pluginRoot, 'pnpm-lock.yaml')
+      ? { command: 'pnpm', args: ['install', '--frozen-lockfile'] }
+      : { command: 'pnpm', args: ['install'] };
   }
 
-  if (packageManager?.startsWith('npm@')) {
+  if (manager?.startsWith('npm@')) {
     return hasNpmLockfile(pluginRoot) ? { command: 'npm', args: ['ci'] } : { command: 'npm', args: ['install'] };
   }
 
-  if (packageManager?.startsWith('yarn@')) {
-    return { command: 'yarn', args: ['install', '--frozen-lockfile'] };
+  if (manager?.startsWith('yarn@')) {
+    return hasFile(pluginRoot, 'yarn.lock')
+      ? { command: 'yarn', args: ['install', '--frozen-lockfile'] }
+      : { command: 'yarn', args: ['install'] };
   }
 
-  if (packageManager?.startsWith('bun@')) {
-    return { command: 'bun', args: ['install', '--frozen-lockfile'] };
+  if (manager?.startsWith('bun@')) {
+    return hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')
+      ? { command: 'bun', args: ['install', '--frozen-lockfile'] }
+      : { command: 'bun', args: ['install'] };
   }
 
   if (hasFile(pluginRoot, 'pnpm-lock.yaml')) {
     return { command: 'pnpm', args: ['install', '--frozen-lockfile'] };
   }
 
+  if (hasFile(commandRoot, 'pnpm-lock.yaml')) {
+    return { command: 'pnpm', args: ['install'] };
+  }
+
   if (hasNpmLockfile(pluginRoot)) {
     return { command: 'npm', args: ['ci'] };
+  }
+
+  if (hasNpmLockfile(commandRoot)) {
+    return { command: 'npm', args: ['install'] };
   }
 
   if (hasFile(pluginRoot, 'yarn.lock')) {
     return { command: 'yarn', args: ['install', '--frozen-lockfile'] };
   }
 
+  if (hasFile(commandRoot, 'yarn.lock')) {
+    return { command: 'yarn', args: ['install'] };
+  }
+
   if (hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')) {
     return { command: 'bun', args: ['install', '--frozen-lockfile'] };
   }
 
+  if (hasFile(commandRoot, 'bun.lock') || hasFile(commandRoot, 'bun.lockb')) {
+    return { command: 'bun', args: ['install'] };
+  }
+
   return { command: 'npm', args: ['install'] };
+}
+
+function readPackageJson(pluginRoot: string): { packageManager?: unknown } {
+  const packageJsonPath = path.join(pluginRoot, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) return {};
+  return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { packageManager?: unknown };
 }
 
 function hasNpmLockfile(pluginRoot: string): boolean {

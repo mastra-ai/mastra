@@ -211,7 +211,7 @@ describe('PluginManager', () => {
     );
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--frozen-lockfile'],
+      ['install'],
       expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(fs.realpathSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(

@@ -403,6 +403,51 @@ describe('handlePluginsCommand', () => {
     expect(pluginManager.installLocal).toHaveBeenNthCalledWith(2, discoveredPath, 'project');
   });
 
+  it('shows progress while installing a GitHub plugin', async () => {
+    let resolveInstall: (id: string) => void = () => {};
+    const installPromise = new Promise<string>(resolve => {
+      resolveInstall = resolve;
+    });
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      discoverLocal: vi.fn(() => []),
+      installGithub: vi.fn(() => installPromise),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('GitHub URL')
+      .mockResolvedValueOnce('https://github.com/acme/foo')
+      .mockResolvedValueOnce('global')
+      .mockResolvedValueOnce('Install');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    const progressOverlay = { hide: vi.fn() };
+    overlay.showModalOverlay.mockReturnValueOnce({ hide: vi.fn() }).mockReturnValueOnce(progressOverlay);
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    const progress = overlay.showModalOverlay.mock.calls[1]?.[1] as any;
+    expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Installing GitHub plugin');
+    expect(progress.children.map((child: any) => child.text).join('\n')).toContain(
+      'Cloning repository and installing dependencies…',
+    );
+    expect(ctx.state.ui.requestRender).toHaveBeenCalled();
+
+    resolveInstall('acme.foo');
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(ctx.showInfo).toHaveBeenCalledWith('Installed plugin acme.foo.');
+    expect(progressOverlay.hide).toHaveBeenCalledTimes(1);
+  });
+
   it('asks for an entry path and retries GitHub install when auto-detection fails', async () => {
     const entryError = new Error('Could not find a plugin entry file. Tried: src/index.ts, index.ts');
     const pluginManager = {
