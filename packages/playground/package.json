@@ -70,6 +70,7 @@
     "@uiw/react-codemirror": "^4.25.10",
     "@xyflow/react": "^12.10.1",
     "date-fns": "catalog:",
+    "livekit-client": "^2.19.2",
     "lucide-react": "^0.522.0",
     "nanoid": "^5.1.11",
     "papaparse": "^5.5.3",
