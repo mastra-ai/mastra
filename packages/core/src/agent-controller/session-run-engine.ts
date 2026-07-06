@@ -23,6 +23,17 @@ import type { AgentControllerMessage, TokenUsage } from './types';
  * being assembled, content indices for streaming deltas, and suspend/terminal
  * flags. One per run; recreated per run within a subscribed thread stream.
  */
+function formatToolProgressOutput(progress: unknown): string {
+  if (typeof progress === 'string') return progress.endsWith('\n') ? progress : `${progress}\n`;
+  if (typeof progress !== 'object' || progress === null) return `${String(progress)}\n`;
+
+  const record = progress as { status?: unknown; detail?: unknown };
+  const parts = [record.status, record.detail].filter(
+    (part): part is string => typeof part === 'string' && part.length > 0,
+  );
+  return parts.length > 0 ? `${parts.join(': ')}\n` : `${JSON.stringify(progress)}\n`;
+}
+
 type StreamState = {
   currentMessage: AgentControllerMessage;
   lastFinishedMessage?: AgentControllerMessage;
@@ -707,6 +718,18 @@ export class SessionRunEngine {
             oldTitle: payload.oldTitle,
             newTitle: payload.newTitle,
           });
+        }
+        break;
+      }
+
+      case 'data-mastracode-tool-progress': {
+        const d = (chunk as any).data as Record<string, any> | undefined;
+        if (d?.toolCallId && d?.progress !== undefined) {
+          this.#session.emit({ type: 'tool_update', toolCallId: d.toolCallId, partialResult: d.progress });
+          const output = formatToolProgressOutput(d.progress);
+          if (output) {
+            this.#session.emit({ type: 'shell_output', toolCallId: d.toolCallId, output, stream: 'stdout' });
+          }
         }
         break;
       }

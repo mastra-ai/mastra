@@ -80,7 +80,10 @@ async function decodeStep(
 ): Promise<void> {
   vi.setSystemTime(opts.startMs);
   await dispatchEvent(
-    { type: 'message_update', message: { content: [{ type: 'text', text: 'streaming...' }] } } as any,
+    {
+      type: 'message_update',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'streaming...' }] },
+    } as any,
     ectx,
     state,
   );
@@ -134,7 +137,7 @@ describe('tokens/sec decode-window calculation', () => {
     vi.setSystemTime(1000); // request issued; nothing streamed yet
     vi.setSystemTime(4000);
     await dispatchEvent(
-      { type: 'message_update', message: { content: [{ type: 'text', text: 'hello' }] } } as any,
+      { type: 'message_update', message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] } } as any,
       ectx,
       state,
     );
@@ -146,6 +149,60 @@ describe('tokens/sec decode-window calculation', () => {
     );
 
     expect(state.tokensPerSec).toBe(20);
+  });
+
+  it('records stream activity on assistant message updates', async () => {
+    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const ectx = createEctx();
+
+    vi.setSystemTime(4000);
+    await dispatchEvent(
+      {
+        type: 'message_update',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'streaming...' }] },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.agentRunLastStreamPartAt).toBe(4000);
+    expect(state.decodeStartedAt).toBe(4000);
+    expect(ectx.updateStatusLine).toHaveBeenCalled();
+  });
+
+  it('does not open the decode window for non-assistant text updates', async () => {
+    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const ectx = createEctx();
+
+    vi.setSystemTime(4000);
+    await dispatchEvent(
+      { type: 'message_update', message: { role: 'user', content: [{ type: 'text', text: 'user text' }] } } as any,
+      ectx,
+      state,
+    );
+
+    expect(state.agentRunLastStreamPartAt).toBe(1000);
+    expect(state.decodeStartedAt).toBe(0);
+    expect(ectx.updateStatusLine).toHaveBeenCalled();
+  });
+
+  it('records tool and shell activity without opening the decode window', async () => {
+    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const ectx = createEctx();
+
+    vi.setSystemTime(4000);
+    await dispatchEvent(
+      { type: 'tool_update', toolCallId: 'tool-1', partialResult: { status: 'working' } } as any,
+      ectx,
+      state,
+    );
+    expect(state.agentRunLastStreamPartAt).toBe(4000);
+    expect(state.decodeStartedAt).toBe(0);
+
+    vi.setSystemTime(5000);
+    await dispatchEvent({ type: 'shell_output', toolCallId: 'tool-1', output: 'still working' } as any, ectx, state);
+    expect(state.agentRunLastStreamPartAt).toBe(5000);
+    expect(state.decodeStartedAt).toBe(0);
   });
 
   it('includes reasoning tokens in the decode rate', async () => {
@@ -179,16 +236,39 @@ describe('tokens/sec decode-window calculation', () => {
     const state = createMinimalState({ tokensPerSec: 42, decodeStartedAt: 1000 });
     const ectx = createEctx();
 
-    // agent_end keeps the reading visible (so short turns stay readable) but
-    // clears the in-flight decode window.
-    await dispatchEvent({ type: 'agent_end', reason: 'done' } as any, ectx, state);
-    expect(state.tokensPerSec).toBe(42);
-    expect(state.decodeStartedAt).toBe(0);
-
-    // The next turn's agent_start clears it for a fresh measurement.
+    vi.setSystemTime(1000);
     await dispatchEvent({ type: 'agent_start' } as any, ectx, state);
     expect(state.tokensPerSec).toBe(0);
     expect(state.decodeStartedAt).toBe(0);
+    expect(state.agentRunStartedAt).toBe(1000);
+    expect(state.agentRunLastStreamPartAt).toBe(1000);
+    expect(state.lastAgentRunDurationMs).toBeUndefined();
+    expect(state.lastAgentRunEndedAt).toBeUndefined();
+    expect(state.lastAgentRunEndReason).toBeUndefined();
+
+    state.tokensPerSec = 42;
+    state.decodeStartedAt = 1500;
+
+    // agent_end keeps the reading visible (so short turns stay readable) but
+    // clears the in-flight decode window.
+    vi.setSystemTime(4000);
+    await dispatchEvent({ type: 'agent_end', reason: 'done' } as any, ectx, state);
+    expect(state.tokensPerSec).toBe(42);
+    expect(state.decodeStartedAt).toBe(0);
+    expect(state.agentRunStartedAt).toBeUndefined();
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
+    expect(state.lastAgentRunDurationMs).toBe(3000);
+    expect(state.lastAgentRunEndedAt).toBe(4000);
+    expect(state.lastAgentRunEndReason).toBe('done');
+
+    // The next turn's agent_start clears it for a fresh measurement.
+    vi.setSystemTime(5000);
+    await dispatchEvent({ type: 'agent_start' } as any, ectx, state);
+    expect(state.tokensPerSec).toBe(0);
+    expect(state.decodeStartedAt).toBe(0);
+    expect(state.agentRunStartedAt).toBe(5000);
+    expect(state.lastAgentRunDurationMs).toBeUndefined();
+    expect(state.lastAgentRunEndedAt).toBeUndefined();
   });
 
   it('does not compute a rate for a tool-only step with no streamed content', async () => {
@@ -253,5 +333,23 @@ describe('tokens/sec decode-window calculation', () => {
 
     // With the decode window never opened, tok/s should remain 0 — NOT 55,000.
     expect(state.tokensPerSec).toBe(0);
+  });
+
+  it('records aborted and error end reasons for run summaries', async () => {
+    const ectx = createEctx();
+
+    vi.setSystemTime(1000);
+    const abortedState = createMinimalState({ agentRunStartedAt: 1000 });
+    vi.setSystemTime(4000);
+    await dispatchEvent({ type: 'agent_end', reason: 'aborted' } as any, ectx, abortedState);
+    expect(abortedState.lastAgentRunDurationMs).toBe(3000);
+    expect(abortedState.lastAgentRunEndReason).toBe('aborted');
+
+    vi.setSystemTime(5000);
+    const errorState = createMinimalState({ agentRunStartedAt: 5000 });
+    vi.setSystemTime(9000);
+    await dispatchEvent({ type: 'agent_end', reason: 'error' } as any, ectx, errorState);
+    expect(errorState.lastAgentRunDurationMs).toBe(4000);
+    expect(errorState.lastAgentRunEndReason).toBe('error');
   });
 });

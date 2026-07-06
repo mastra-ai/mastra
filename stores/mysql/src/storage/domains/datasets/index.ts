@@ -24,6 +24,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -32,6 +33,8 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
+  TargetType,
 } from '@mastra/core/storage';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
@@ -45,11 +48,14 @@ function parseJSON<T>(value: unknown): T | undefined {
     try {
       return JSON.parse(value) as T;
     } catch {
-      return undefined;
+      // mysql2 auto-parses JSON columns, so a non-JSON string here means the
+      // stored payload was a JSON string scalar (e.g. input: 'foo' was stored
+      // as `"foo"` and the driver already unwrapped it). Return it as-is.
+      return value as unknown as T;
     }
   }
   if (typeof value === 'object') return value as T;
-  return undefined;
+  return value as T;
 }
 
 function jsonArg(value: unknown): string | null {
@@ -157,7 +163,17 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.operations.alterTable({
       tableName: TABLE_DATASETS,
       schema: DATASETS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId', 'candidateKey', 'candidateId'],
+      ifNotExists: [
+        'organizationId',
+        'projectId',
+        'candidateKey',
+        'candidateId',
+        'requestContextSchema',
+        'tags',
+        'targetType',
+        'targetIds',
+        'scorerIds',
+      ],
     });
     await this.operations.alterTable({
       tableName: TABLE_DATASET_ITEMS as any,
@@ -174,6 +190,20 @@ export class DatasetsMySQL extends DatasetsStorage {
     await this.pool.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)}`);
   }
 
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const [rows] = await this.pool.execute<any[]>(
+        `SELECT COUNT(*) AS c FROM information_schema.tables
+         WHERE table_schema = DATABASE() AND table_name IN (?, ?)`,
+        [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+      );
+      const row = Array.isArray(rows) ? (rows[0] as { c?: number | string } | undefined) : undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
+  }
+
   // --- Row transformers ---
 
   private mapDataset(row: Record<string, any>): DatasetRecord {
@@ -184,6 +214,11 @@ export class DatasetsMySQL extends DatasetsStorage {
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
       inputSchema: parseJSON<Record<string, unknown>>(row.inputSchema),
       groundTruthSchema: parseJSON<Record<string, unknown>>(row.groundTruthSchema),
+      requestContextSchema: parseJSON<Record<string, unknown>>(row.requestContextSchema),
+      tags: parseJSON<string[]>(row.tags) ?? null,
+      targetType: (row.targetType as TargetType | null | undefined) ?? null,
+      targetIds: parseJSON<string[]>(row.targetIds) ?? null,
+      scorerIds: parseJSON<string[]>(row.scorerIds) ?? null,
       version: row.version as number,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
@@ -251,6 +286,10 @@ export class DatasetsMySQL extends DatasetsStorage {
           metadata: jsonArg(input.metadata),
           inputSchema: jsonArg(input.inputSchema),
           groundTruthSchema: jsonArg(input.groundTruthSchema),
+          requestContextSchema: jsonArg(input.requestContextSchema),
+          targetType: input.targetType ?? null,
+          targetIds: jsonArg(input.targetIds),
+          scorerIds: jsonArg(input.scorerIds),
           version: 0,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
@@ -268,6 +307,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         metadata: input.metadata,
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
+        requestContextSchema: input.requestContextSchema ?? undefined,
+        targetType: input.targetType ?? null,
+        targetIds: input.targetIds ?? null,
+        scorerIds: input.scorerIds ?? null,
         version: 0,
         organizationId: input.organizationId ?? null,
         projectId: input.projectId ?? null,
@@ -288,11 +331,23 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
+      // prepareWhereClause ignores undefined values, so this scopes the SELECT only
+      // when the caller passed tenancy filters.
       const row = await this.operations.load<Record<string, any>>({
         tableName: TABLE_DATASETS,
-        keys: { id },
+        keys: {
+          id,
+          organizationId: filters?.organizationId,
+          projectId: filters?.projectId,
+        },
       });
       return row ? this.mapDataset(row) : null;
     } catch (error) {
@@ -309,7 +364,7 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: 'MYSQL_UPDATE_DATASET_NOT_FOUND',
@@ -328,6 +383,15 @@ export class DatasetsMySQL extends DatasetsStorage {
         data.inputSchema = args.inputSchema === null ? null : JSON.stringify(args.inputSchema);
       if (args.groundTruthSchema !== undefined)
         data.groundTruthSchema = args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema);
+      if (args.requestContextSchema !== undefined)
+        data.requestContextSchema =
+          args.requestContextSchema === null ? null : JSON.stringify(args.requestContextSchema);
+      if (args.tags !== undefined) data.tags = args.tags === null ? null : JSON.stringify(args.tags);
+      if (args.targetType !== undefined) data.targetType = args.targetType;
+      if (args.targetIds !== undefined)
+        data.targetIds = args.targetIds === null ? null : JSON.stringify(args.targetIds);
+      if (args.scorerIds !== undefined)
+        data.scorerIds = args.scorerIds === null ? null : JSON.stringify(args.scorerIds);
 
       await this.operations.update({
         tableName: TABLE_DATASETS,
@@ -343,6 +407,13 @@ export class DatasetsMySQL extends DatasetsStorage {
         inputSchema: (args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema) ?? undefined,
         groundTruthSchema:
           (args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema) ?? undefined,
+        requestContextSchema:
+          (args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema) ??
+          undefined,
+        tags: (args.tags !== undefined ? args.tags : existing.tags) ?? null,
+        targetType: (args.targetType !== undefined ? args.targetType : existing.targetType) ?? null,
+        targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
+        scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
         updatedAt: data.updatedAt,
       };
     } catch (error) {
@@ -358,26 +429,50 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
+    // Atomic gate + cascade under SELECT ... FOR UPDATE, so a concurrent
+    // delete/recreate under a different tenant cannot let a scoped delete hit
+    // another tenant's row. Silent no-op on tenancy mismatch.
+    const filterCols: string[] = [];
+    const filterVals: any[] = [];
+    if (filters?.organizationId !== undefined) {
+      filterCols.push(`${quoteIdentifier('organizationId', 'column name')} = ?`);
+      filterVals.push(filters.organizationId);
+    }
+    if (filters?.projectId !== undefined) {
+      filterCols.push(`${quoteIdentifier('projectId', 'column name')} = ?`);
+      filterVals.push(filters.projectId);
+    }
+    const scopedWhere = ['id = ?', ...filterCols].join(' AND ');
+
+    // Probe for experiment tables via information_schema outside the transaction
+    // rather than running DMLs and swallowing "table missing" errors. Even though
+    // ER_NO_SUCH_TABLE (1146) does not abort an InnoDB transaction, resolving
+    // existence up front keeps the transaction focused on real writes.
+    const experimentTablesExist = await this.experimentTablesExist();
+
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
 
-      try {
+      const [rows] = await connection.execute<any[]>(
+        `SELECT id FROM ${formatTableName(TABLE_DATASETS)} WHERE ${scopedWhere} FOR UPDATE`,
+        [id, ...filterVals],
+      );
+      if (!Array.isArray(rows) || rows.length === 0) {
+        await connection.commit();
+        return;
+      }
+
+      if (experimentTablesExist) {
         await connection.execute(
           `DELETE FROM ${formatTableName(TABLE_EXPERIMENT_RESULTS)} WHERE ${quoteIdentifier('experimentId', 'column name')} IN (SELECT id FROM ${formatTableName(TABLE_EXPERIMENTS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?)`,
           [id],
         );
-      } catch {
-        // experiment_results table may not exist
-      }
-      try {
         await connection.execute(
           `UPDATE ${formatTableName(TABLE_EXPERIMENTS)} SET ${quoteIdentifier('datasetId', 'column name')} = NULL, ${quoteIdentifier('datasetVersion', 'column name')} = NULL WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
           [id],
         );
-      } catch {
-        // experiments table may not exist
       }
 
       await connection.execute(
@@ -388,7 +483,10 @@ export class DatasetsMySQL extends DatasetsStorage {
         `DELETE FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('datasetId', 'column name')} = ?`,
         [id],
       );
-      await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)} WHERE id = ?`, [id]);
+      await connection.execute(`DELETE FROM ${formatTableName(TABLE_DATASETS)} WHERE ${scopedWhere}`, [
+        id,
+        ...filterVals,
+      ]);
 
       await connection.commit();
     } catch (error) {
@@ -427,6 +525,20 @@ export class DatasetsMySQL extends DatasetsStorage {
       if (args.filters?.candidateId !== undefined) {
         filterParts.push(`${quoteIdentifier('candidateId', 'column name')} = ?`);
         filterArgs.push(args.filters.candidateId);
+      }
+      if (args.filters?.targetType !== undefined) {
+        filterParts.push(`${quoteIdentifier('targetType', 'column name')} = ?`);
+        filterArgs.push(args.filters.targetType);
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // JSON_OVERLAPS returns true if any value in JSON_ARRAY(?,?,...) is present in `targetIds`.
+        const placeholders = args.filters.targetIds.map(() => '?').join(',');
+        filterParts.push(`JSON_OVERLAPS(${quoteIdentifier('targetIds', 'column name')}, JSON_ARRAY(${placeholders}))`);
+        filterArgs.push(...args.filters.targetIds);
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        filterParts.push(`LOWER(${quoteIdentifier('name', 'column name')}) LIKE LOWER(?)`);
+        filterArgs.push(`%${args.filters.name}%`);
       }
       const whereClause = {
         sql: filterParts.length > 0 ? `WHERE ${filterParts.join(' AND ')}` : '',
@@ -662,7 +774,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     const existing = await this.getItemById({ id });
     if (!existing) return;
     if (existing.datasetId !== datasetId) {

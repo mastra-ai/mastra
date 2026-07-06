@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderHookWithProviders, waitForMutationsIdle } from '..
 import { useCustomProvidersQuery, useRemoveCustomProvider, useSaveCustomProvider } from '../use-custom-providers';
 import { customProvider, customProvidersResponse } from './fixtures/custom-providers';
 
-const URL = `${TEST_BASE_URL}/api/web/config/custom-providers`;
+const URL = `${TEST_BASE_URL}/web/config/custom-providers`;
 
 describe('useCustomProvidersQuery', () => {
   describe('when the list loads', () => {

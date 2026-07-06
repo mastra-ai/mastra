@@ -22,7 +22,7 @@ const {
   builtinPacks,
   builtinOmPacks,
   effectiveDefaults,
-} = createMastraCode(options)
+} = await createMastraCode(options)
 ```
 
 ### Parameters
@@ -36,27 +36,52 @@ const {
 | Property | Type | Description |
 | - | - | - |
 | `controller` | `AgentController` | The main orchestrator for modes, threads, messages, and tools |
+| `session` | `Session<MastraCodeState>` | The wired local session. Pass this (with `controller`) to `runMC` |
+| `sessionId` | `string` | Identity of the eager local session |
+| `ownerId` | `string` | Owner ID for the local session |
+| `storage` | `StorageConfig` | The resolved storage backend |
+| `memory` | `Memory \| MemoryFactory` | The resolved memory instance or factory |
+| `observability` | `object` | Observability handles |
 | `mcpManager` | `MCPManager` | Manager for MCP server connections |
 | `hookManager` | `HookManager` | Manager for lifecycle hooks |
+| `signalsPubSub` | `PubSub` | PubSub used for signal routing |
+| `githubSignals` | `object` | GitHub PR signal handles |
 | `authStorage` | `AuthStorage` | Storage for OAuth credentials |
 | `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Model resolution function |
 | `storageWarning` | `string \| null` | Warning message if storage fallback occurred |
+| `observabilityWarning` | `string \| null` | Warning message if observability setup fell back |
 | `builtinPacks` | `ModePack[]` | Built-in mode packs |
 | `builtinOmPacks` | `OmPack[]` | Built-in Observational Memory packs |
 | `effectiveDefaults` | `object` | Effective default settings after merging |
+| `setActiveSession` | `(session: Session<MastraCodeState>) => void` | Publishes a session back into config closures |
 
 ### `CreateMastraCodeOptions`
 
 | Option | Type | Default | Description |
 | - | - | - | - |
-| `cwd` | `string` | `process.cwd()` | Working directory for the agent |
-| `modes` | `AgentControllerMode[]` | Build, Plan, Fast | Custom mode configurations |
-| `extraTools` | `ToolsInput` | `{}` | Additional tools merged with built-in tools |
-| `subagents` | `AgentControllerSubagent[]` | Explore, Plan, Execute | Custom subagent definitions |
-| `storage` | `StorageConfig` | Local LibSQL | Database configuration |
-| `initialState` | `Partial<MastraCodeState>` | Default state | Initial controller state values |
-| `heartbeatHandlers` | `HeartbeatHandler[]` | Default handlers | Background task definitions |
-| `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Default resolver | Custom model resolution function |
+| `cwd` | `string` | `process.cwd()` | Working directory for project detection |
+| `homeDir` | `string` | `os.homedir()` | Home directory for global config discovery |
+| `modes` | `AgentControllerMode[]` | Build, Plan, Fast | Override modes (model IDs, colors, which modes exist) |
+| `subagents` | `AgentControllerSubagent[]` | Explore, Plan, Execute | Override or extend subagent definitions |
+| `extraTools` | `Record<string, Tool> \| ((ctx) => Record<string, Tool>)` | `{}` | Extra tools merged into the dynamic tool set |
+| `disabledTools` | `string[]` | `[]` | Tools removed from the dynamic tool set before exposure to the model |
+| `storage` | `StorageConfig` | Local LibSQL | Custom storage config instead of auto-detected default |
+| `omScope` | `'thread' \| 'resource'` | Auto-detected | Observational Memory scope |
+| `settingsPath` | `string` | Global settings | Path to a custom `settings.json` file |
+| `initialState` | `Partial<MastraCodeState>` | Default state | Initial state overrides (yolo, thinkingLevel, etc.) |
+| `idGenerator` | `() => string` | Default | Override id generation for threads/messages (useful for deterministic tests) |
+| `intervalHandlers` | `IntervalHandler[]` | gateway-sync | Override interval (background task) handlers |
+| `resolveModel` | `(modelId: string, options?) => ResolvedModel` | Default resolver | Custom model resolution function |
+| `workspace` | `Workspace` | Local FS + sandbox | Override the workspace |
+| `configDir` | `string` | `.mastracode` | Override the config directory name |
+| `mcpServers` | `Record<string, McpServerConfig>` | `{}` | Programmatic MCP server configs, merged with file-based configs |
+| `disableMcp` | `boolean` | `false` | Disable MCP server discovery |
+| `disableHooks` | `boolean` | `false` | Disable hooks |
+| `memory` | `Memory \| MemoryFactory \| false` | Built-in gateway | Override the memory instance or factory |
+| `browser` | `BrowserProvider` | — | Browser provider; when set the agent gains browser tools |
+| `pubsub` | `PubSub` | — | PubSub for signal routing |
+| `unixSocketPubSub` | `boolean` | `false` | Use the built-in Unix socket PubSub for local cross-process signal routing |
+| `crossProcessPubSub` | `boolean` | `false` | Mark the configured PubSub as cross-process-safe (skips file thread locks) |
 
 #### `AgentControllerMode`
 
@@ -118,17 +143,14 @@ Tool permission configuration.
 
 ```typescript
 interface PermissionRules {
-  categories: {
-    read: 'allow' | 'ask' | 'deny'
-    edit: 'allow' | 'ask' | 'deny'
-    execute: 'allow' | 'ask' | 'deny'
-    mcp: 'allow' | 'ask' | 'deny'
-  }
+  // Keyed by category (e.g. "read", "edit", "execute", "mcp")
+  categories: Record<string, 'allow' | 'ask' | 'deny'>
+  // Keyed by tool id, overriding the category policy
   tools: Record<string, 'allow' | 'ask' | 'deny'>
 }
 ```
 
-#### `HeartbeatHandler`
+#### `IntervalHandler`
 
 Background task definition.
 
@@ -179,24 +201,29 @@ tui.run()
 
 ### Basic usage
 
+`createMastraCode` boots the controller and returns a ready-to-use `session`. Subscribe to events and send messages on the session:
+
 ```typescript
 import { createMastraCode } from 'mastracode'
 
-const { controller } = await createMastraCode({
+const { session } = await createMastraCode({
   cwd: '/path/to/project',
 })
 
-await controller.init()
-await controller.selectOrCreateThread()
-
-controller.subscribe(event => {
+session.subscribe(event => {
   if (event.type === 'message_update') {
-    console.log(event.message.content)
+    const text = event.message.content
+      .filter(p => p.type === 'text')
+      .map(p => p.text)
+      .join('')
+    process.stdout.write(text)
   }
 })
 
-await controller.sendMessage({ content: 'Explain the auth module' })
+await session.sendMessage({ content: 'Explain the auth module' })
 ```
+
+For one-shot/headless runs, prefer [`runMC`](/headless), which wraps this subscribe/send/aggregate loop and resolves to a typed result.
 
 ### Custom mode
 

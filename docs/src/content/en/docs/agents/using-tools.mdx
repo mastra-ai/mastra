@@ -260,6 +260,7 @@ Use `hooks` to run custom logic before and after every tool call an agent makes.
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   instructions: 'Help users with their questions.',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -280,6 +281,7 @@ export const supportAgent = new Agent({
 
 ```typescript
 const guardedAgent = new Agent({
+  id: 'guarded-agent',
   name: 'guarded-agent',
   instructions: 'Run shell commands for the user.',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -416,6 +418,7 @@ Subagents and workflows follow the same pattern. They're converted to tools with
 
 ```typescript
 const orchestrator = new Agent({
+  id: 'orchestrator',
   agents: {
     weather: weatherAgent, // toolName: "agent-weather"
   },
@@ -434,7 +437,7 @@ Note that for subagents, you'll see two different identifiers in stream response
 
 - [`createTool` reference](/reference/tools/create-tool)
 - [`Agent.generate()` reference](/reference/agents/generate): Runtime options for tool selection, steps, and callbacks
-- [Background tasks](/docs/agents/background-tasks): Run long-running tools without blocking the agent loop
+- [Background tasks](/docs/long-running-agents/background-tasks): Run long-running tools without blocking the agent loop
 - [MCP overview](/docs/mcp/overview)
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries
 - [Tools with structured output](/docs/agents/structured-output#combine-tools-and-structured-output): Model compatibility when combining tools and structured output

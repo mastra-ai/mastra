@@ -256,4 +256,43 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     const suspendedParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-suspended');
     expect(suspendedParts).toHaveLength(0);
   });
+
+  it('downgrades an output-denied invocation to a v5 output-available part using the denial reason', () => {
+    // v5 has no `output-denied` state. A declined approval must downgrade to a single
+    // `output-available` part whose output is the denial reason, so v5 UI consumers — and the
+    // next LLM turn's prompt (built through this adapter) — see a tool result, not a dangling call.
+    const dbMessage: MastraDBMessage = {
+      id: 'msg-denied',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'tc-denied',
+              toolName: 'find-user',
+              args: { name: 'Dero Israel' },
+              state: 'output-denied',
+              approval: { id: 'tc-denied', approved: false, reason: 'Tool call was not approved by the user' },
+            },
+          },
+        ] as any,
+      },
+    };
+
+    const toolParts = AIV5Adapter.toUIMessage(dbMessage).parts.filter((p: any) => p.type.startsWith('tool-'));
+
+    expect(toolParts).toHaveLength(1);
+    expect(toolParts[0]).toMatchObject({
+      type: 'tool-find-user',
+      toolCallId: 'tc-denied',
+      state: 'output-available',
+      input: { name: 'Dero Israel' },
+      output: 'Tool call was not approved by the user',
+    });
+    // No `approval` field is carried on the downgraded v5 part.
+    expect((toolParts[0] as any).approval).toBeUndefined();
+  });
 });

@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Lists all experiments (runs) for this dataset with pagination.
+Lists experiments (runs) for this dataset with optional filters and pagination. Filters are applied at the storage layer, so results are always scoped to the current dataset.
 
 ## Usage example
 
@@ -22,7 +22,16 @@ const mastra = new Mastra({
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
+// Basic pagination
 const { experiments, pagination } = await dataset.listExperiments({ page: 0, perPage: 10 })
+
+// Filter to a specific agent version — useful for baseline vs variant comparisons
+const { experiments: v2Runs } = await dataset.listExperiments({
+  targetType: 'agent',
+  targetId: 'my-agent',
+  agentVersion: 'v2',
+  status: 'completed',
+})
 
 for (const exp of experiments) {
   console.log(`${exp.id}: ${exp.status} (${exp.succeededCount}/${exp.totalItems})`)
@@ -33,6 +42,37 @@ for (const exp of experiments) {
 
 <PropertiesTable
   content={[
+  {
+    name: 'targetType',
+    type: "'agent' | 'workflow' | 'scorer' | 'processor'",
+    isOptional: true,
+    description: 'Restrict results to experiments run against this target type.',
+  },
+  {
+    name: 'targetId',
+    type: 'string',
+    isOptional: true,
+    description: 'Restrict results to experiments run against this target ID.',
+  },
+  {
+    name: 'agentVersion',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Restrict results to experiments recorded against this agent version. Useful for distinguishing baseline from variant runs.',
+  },
+  {
+    name: 'status',
+    type: "'pending' | 'running' | 'completed' | 'failed'",
+    isOptional: true,
+    description: 'Restrict results to experiments in this status.',
+  },
+  {
+    name: 'filters',
+    type: 'ExperimentTenancyFilters',
+    isOptional: true,
+    description: 'Multi-tenant scoping filters (`organizationId`, `projectId`). Forwarded to the storage layer.',
+  },
   {
     name: 'page',
     type: 'number',

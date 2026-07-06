@@ -259,6 +259,7 @@ const contentBlocker = {
 }
 
 const agent = new Agent({
+  id: 'safe-agent',
   name: 'safe-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -298,6 +299,7 @@ const inputValidator = {
 }
 
 const agent = new Agent({
+  id: 'validated-agent',
   name: 'validated-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',

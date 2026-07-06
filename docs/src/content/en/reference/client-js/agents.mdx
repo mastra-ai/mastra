@@ -350,7 +350,7 @@ await subscription.processDataStream({
 
 ### `streamUntilIdle()`
 
-Stream a response and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `stream()`.
+Stream a response and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `stream()`.
 
 ```typescript
 const response = await agent.streamUntilIdle('Research solana for me', {
@@ -372,7 +372,7 @@ response.processDataStream({
 
 ### `resumeStreamUntilIdle()`
 
-Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `resumeStream()`:
+Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `resumeStream()`:
 
 ```typescript
 const response = await agent.resumeStreamUntilIdle(
@@ -428,6 +428,27 @@ response.processDataStream({
   },
 })
 ```
+
+### `listSuspendedRuns()`
+
+List suspended runs for the agent from storage — runs waiting on a tool-call approval or on a tool that suspended. Discovery is backed by storage, so it works after a server restart and across server instances. Pass the returned `runId` to `approveToolCall()`, `declineToolCall()`, or `resumeStream()`.
+
+```typescript
+const { runs, total } = await agent.listSuspendedRuns({
+  threadId: 'thread-456',
+  resourceId: 'user-123',
+})
+
+if (runs[0]) {
+  console.log(runs[0].toolCalls) // [{ toolCallId, toolName, args, requiresApproval }]
+  await agent.approveToolCall({
+    runId: runs[0].runId,
+    toolCallId: runs[0].toolCalls[0].toolCallId,
+  })
+}
+```
+
+Accepts optional filters (`threadId`, `resourceId`, `fromDate`, `toDate`) and pagination (`perPage`, `page`). Returns `{ runs, total }`, where `total` is the number of matching runs before pagination. See [`Agent.listSuspendedRuns()`](/reference/agents/listSuspendedRuns) for details on the returned run shape.
 
 ### `approveToolCall()`
 
