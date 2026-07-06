@@ -11,7 +11,9 @@ Prefer narrowest build test lint typecheck for packages
 when package splits unit integration or E2E coverage run narrowest suite first
 From root prefer specific scripts like pnpm build:core or pnpm --filter ./packages/name script
 Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
-Building whole monorepo is slow and should be last resort
+Don't run pnpm build directly (slow, builds everything); build individual packages from root like pnpm build:core or pnpm build:memory, or generically pnpm turbo build --filter ./packages/<name> — turbo builds only the workspace dependency graph that package needs
+Fresh worktree/clone: pnpm install, then build the packages you'll work in (command above)
+Unresolvable @internal/* or workspace package imports in tests mean deps aren't built — build them (command above); never restructure tests to tolerate an unbuilt environment
 Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
 some integration tests need pnpm i --ignore-workspace
 
