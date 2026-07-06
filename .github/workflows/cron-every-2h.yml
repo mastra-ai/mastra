@@ -20,7 +20,7 @@ jobs:
     uses: ./.github/workflows/call-external-mastra-workflow.yml
     with:
       workflow_name: discordSyncWorkflow
-      input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra"},"requestContext":{}}'
+      input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra"}}'
       base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
     secrets:
       MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/call-external-mastra-workflow.yml
     with:
       workflow_name: discordToGithubWorkflow
-      input_data: '{"inputData":{"forumChannelId":"1349006916902191125","fetchLimit":1},"requestContext":{}}'
+      input_data: '{"inputData":{"forumChannelId":"1349006916902191125","fetchLimit":5}}'
       base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
     secrets:
       MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
@@ -44,7 +44,7 @@ jobs:
     uses: ./.github/workflows/call-external-mastra-workflow.yml
     with:
       workflow_name: githubIssueManagerWorkflow
-      input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra","batchSize":100},"requestContext":{}}'
+      input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra","batchSize":20}}'
       base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
     secrets:
       MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
