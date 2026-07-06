@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Settings, Trash2 } from 'lucide-react';
 import { forwardRef, useState } from 'react';
 import { DataList } from './data-list';
 import type { DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { StatusBadge } from '@/ds/components/StatusBadge';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 type DataListStoryArgs = {
@@ -74,13 +75,14 @@ const WIDE_COLUMNS =
   'minmax(12rem,14rem) minmax(18rem,24rem) minmax(16rem,20rem) minmax(10rem,12rem) minmax(12rem,14rem) minmax(9rem,11rem) minmax(12rem,14rem) minmax(11rem,13rem) minmax(10rem,12rem) minmax(12rem,14rem)';
 const VERY_LONG_BADGE =
   'production-critical-evaluation-run-with-an-extraordinarily-long-status-label-that-must-truncate-inside-the-cell';
+const LONG_DEPLOYMENT_STATUS = 'Not deployed to production because the environment has not been promoted yet';
 const MODEL_TOKEN_PLACEHOLDERS = ['__GATEWAY_OPENAI_MODEL_BASE__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'];
 
 function getElementByTestId<TElement extends HTMLElement>(canvasElement: HTMLElement, testId: string): TElement {
   const element = canvasElement.querySelector<TElement>(`[data-testid="${testId}"]`);
 
   if (!element) {
-    throw new Error(`Expected ${testId} to render in the DataList overflow story.`);
+    throw new Error(`Expected ${testId} to render in the DataList story.`);
   }
 
   return element;
@@ -413,6 +415,94 @@ export const Empty: Story = {
       </DataList.Top>
       <DataList.NoMatch message="No runs match your search" />
     </DataList>
+  ),
+};
+
+/** Narrow visible status column where a dotted status label truncates instead of clipping. */
+export const StatusColumnTruncation: Story = {
+  play: async ({ canvasElement }) => {
+    await new Promise(requestAnimationFrame);
+
+    const statusCell = getElementByTestId(canvasElement, 'visible-status-cell');
+    const statusBadge = getElementByTestId(canvasElement, 'visible-status-badge');
+    const statusLabel = getElementByTestId(canvasElement, 'visible-status-label');
+
+    expectComputedStyles(statusCell, 'visible status cell', {
+      overflowX: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+    expectComputedStyles(statusBadge, 'visible status badge', {
+      overflowX: 'hidden',
+      whiteSpace: 'nowrap',
+    });
+    expectComputedStyles(statusLabel, 'visible status label', {
+      overflowX: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+
+    if (statusLabel.scrollWidth <= statusLabel.clientWidth) {
+      throw new Error('Expected the visible status label to overflow so the ellipsis behavior is exercised.');
+    }
+  },
+  render: ({ variant }) => (
+    <div className="max-w-[980px]">
+      <DataList
+        columns="minmax(12rem,1fr) 7rem minmax(6rem,7rem) minmax(12rem,1fr) minmax(5rem,5rem) auto"
+        variant={variant}
+      >
+        <DataList.Top>
+          <DataList.TopCell>Name</DataList.TopCell>
+          <DataList.TopCell>Status</DataList.TopCell>
+          <DataList.TopCell>Region</DataList.TopCell>
+          <DataList.TopCell>Slug</DataList.TopCell>
+          <DataList.TopCell>Branch</DataList.TopCell>
+          <DataList.TopCell> </DataList.TopCell>
+        </DataList.Top>
+        {[
+          {
+            name: 'production',
+            status: LONG_DEPLOYMENT_STATUS,
+            region: 'EU West',
+            slug: 'docs-expert-45e0',
+            branch: '-',
+          },
+          {
+            name: 'preview',
+            status: 'Deployed',
+            region: 'US East',
+            slug: 'docs-expert-preview',
+            branch: 'main',
+          },
+        ].map((deployment, index) => (
+          <DataList.RowWrapper key={deployment.name}>
+            <DataList.Cell>{deployment.name}</DataList.Cell>
+            <DataList.Cell height="compact" data-testid={index === 0 ? 'visible-status-cell' : undefined}>
+              <StatusBadge
+                withDot
+                variant={index === 0 ? 'neutral' : 'success'}
+                className="bg-transparent px-0 py-0"
+                data-testid={index === 0 ? 'visible-status-badge' : undefined}
+              >
+                <span data-testid={index === 0 ? 'visible-status-label' : undefined}>{deployment.status}</span>
+              </StatusBadge>
+            </DataList.Cell>
+            <DataList.Cell height="compact">
+              <Badge size="xs">{deployment.region}</Badge>
+            </DataList.Cell>
+            <DataList.MonoCell>{deployment.slug}</DataList.MonoCell>
+            <DataList.Cell height="compact">{deployment.branch}</DataList.Cell>
+            <DataList.Cell className="py-0">
+              <Button type="button" variant="outline" size="sm">
+                <Settings />
+                See config
+              </Button>
+            </DataList.Cell>
+          </DataList.RowWrapper>
+        ))}
+      </DataList>
+    </div>
   ),
 };
 
