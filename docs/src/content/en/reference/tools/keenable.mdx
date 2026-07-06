@@ -1,0 +1,152 @@
+---
+title: "Reference: Keenable tools | Tools and MCP"
+description: "API reference for @mastra/keenable, which provides keyless-by-default web search and page-fetch tools for Mastra agents."
+packages:
+  - "@mastra/keenable"
+---
+
+# Keenable tools
+
+The `@mastra/keenable` package wraps the [Keenable](https://keenable.ai) web search API as Mastra-compatible tools. It exposes factory functions for search and fetch, each returning a tool created with [`createTool()`](./create-tool) that includes full Zod input/output schemas.
+
+Keenable is **keyless by default**: the tools work with no account or key against the public endpoints (rate-limited). An optional `KEENABLE_API_KEY` lifts the hourly cap; it is never required. No provider SDK is needed; the package calls the Keenable HTTP API directly.
+
+## Installation
+
+```sh npm2yarn
+npm install @mastra/keenable zod
+```
+
+## Quick start
+
+Use `createKeenableTools()` to get both tools with shared configuration:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createKeenableTools } from '@mastra/keenable'
+
+const tools = createKeenableTools()
+// Keyless by default. To lift the rate limit, pass an explicit key:
+// const tools = createKeenableTools({ apiKey: 'keen_...' })
+```
+
+Each tool can also be created individually:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createKeenableSearchTool, createKeenableFetchTool } from '@mastra/keenable'
+
+const searchTool = createKeenableSearchTool()
+const fetchTool = createKeenableFetchTool({ apiKey: 'keen_...' })
+```
+
+By default the tools read `KEENABLE_API_KEY` from the environment when present; with no key they use the keyless public endpoints. Set `KEENABLE_API_URL` to override the base URL.
+
+## `createKeenableSearchTool()`
+
+Returns a tool (id `keenable-search`) that queries the Keenable web index.
+
+### Input
+
+<PropertiesTable
+  content={[
+  { name: 'query', type: 'string', required: true, description: 'The search query.' },
+  {
+    name: 'site',
+    type: 'string',
+    isOptional: true,
+    description: "Restrict results to a single domain, e.g. 'techcrunch.com'.",
+  },
+  {
+    name: 'publishedAfter',
+    type: 'string',
+    isOptional: true,
+    description: 'Only pages published on or after this date (YYYY-MM-DD).',
+  },
+  {
+    name: 'publishedBefore',
+    type: 'string',
+    isOptional: true,
+    description: 'Only pages published on or before this date (YYYY-MM-DD).',
+  },
+  {
+    name: 'acquiredAfter',
+    type: 'string',
+    isOptional: true,
+    description: 'Only pages indexed on or after this date (YYYY-MM-DD).',
+  },
+  {
+    name: 'acquiredBefore',
+    type: 'string',
+    isOptional: true,
+    description: 'Only pages indexed on or before this date (YYYY-MM-DD).',
+  },
+  { name: 'maxResults', type: 'number', isOptional: true, description: 'Maximum number of results to return (1-20).' },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  { name: 'query', type: 'string', description: 'The query that was run.' },
+  {
+    name: 'results',
+    type: 'Array<{ title, url, description?, publishedAt?, acquiredAt? }>',
+    description: 'The search results.',
+  },
+]}
+/>
+
+## `createKeenableFetchTool()`
+
+Returns a tool (id `keenable-fetch`) that fetches a single URL and returns its main content as markdown.
+
+### Input
+
+<PropertiesTable
+  content={[
+  { name: 'url', type: 'string', required: true, description: 'The URL of the page to fetch and extract as markdown.' },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  { name: 'url', type: 'string', description: 'The fetched URL.' },
+  { name: 'title', type: 'string', isOptional: true, description: 'Page title.' },
+  { name: 'content', type: 'string', isOptional: true, description: 'Main content as markdown.' },
+  { name: 'description', type: 'string', isOptional: true, description: 'Page description, when available.' },
+  { name: 'author', type: 'string', isOptional: true, description: 'Author, when available.' },
+  { name: 'publishedAt', type: 'string', isOptional: true, description: 'Publication date, when available.' },
+]}
+/>
+
+## Configuration
+
+All factory functions accept an optional config object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Keenable API key. Keyless by default; falls back to KEENABLE_API_KEY. A key lifts the hourly rate limit.',
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    isOptional: true,
+    description: 'API base URL. Falls back to KEENABLE_API_URL, then https://api.keenable.ai.',
+  },
+  {
+    name: 'clientSource',
+    type: 'string',
+    isOptional: true,
+    description: "Attribution tag Keenable segments integration traffic by. Defaults to 'Mastra'.",
+  },
+]}
+/>
+
+Create a key at [keenable.ai/console](https://keenable.ai/console).
