@@ -1,5 +1,75 @@
 # @mastra/core
 
+## 1.50.0-alpha.3
+
+### Minor Changes
+
+- Added file-system routed storage support. A `storage.ts` file under the mastra directory is now auto-discovered and registered during `mastra dev` / `mastra build`. The default export replaces the InMemoryStore fallback. Code-registered storage (passed to `new Mastra({storage})`) wins on collision. ([#18885](https://github.com/mastra-ai/mastra/pull/18885))
+
+  ```ts
+  // src/mastra/storage.ts
+  import { LibSQLStore } from '@mastra/libsql';
+
+  export default new LibSQLStore({ url: 'file:local.db' });
+  ```
+
+- models.dev gateway: honor per-model `provider` overrides (endpoint, request shape, SDK). ([`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5))
+
+  A provider can now serve individual models over a different base URL / request shape than the provider default — e.g. a model served over the OpenAI **Responses** API while the provider default is chat-completions. The models.dev gateway now reads each model's `provider` block (`api`, `shape`, `npm`), so `resolveLanguageModel` routes `shape: "responses"` models via the OpenAI Responses API and `buildUrl` prefers a per-model `api` when present. Providers without per-model overrides are unaffected.
+
+- **Renamed heartbeats to schedules.** Agent heartbeats and workflow schedules are now one unified Schedules API: `mastra.schedules` manages both. The name "heartbeat" implied a liveness check; these are cron-based agent schedules, so they are now simply called schedules. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+  **Before**
+
+  ```ts
+  const hb = await mastra.heartbeats.create({
+    agentId: 'chef',
+    cron: '0 9 * * *',
+    prompt: 'Suggest a dish of the day',
+  });
+
+  await mastra.heartbeats.pause(hb.id);
+  ```
+
+  **After**
+
+  ```ts
+  // Schedule an agent (was a heartbeat)
+  const schedule = await mastra.schedules.create({
+    agentId: 'chef',
+    cron: '0 9 * * *',
+    prompt: 'Suggest a dish of the day',
+  });
+
+  // Schedule a workflow with the same API
+  await mastra.schedules.create({
+    workflowId: 'daily-report',
+    cron: '0 6 * * *',
+    inputData: { region: 'us' },
+  });
+
+  await mastra.schedules.pause(schedule.id);
+  ```
+
+  What changed:
+  - `mastra.heartbeats` is now `mastra.schedules` and also creates, lists, updates, pauses, resumes, runs, and deletes workflow schedules. Results are discriminated by `agentId` vs `workflowId`.
+  - The Mastra config option `heartbeat: { ... }` (lifecycle hooks) is now `schedules: { ... }`, and hook types were renamed (`HeartbeatHooks` → `ScheduleHooks`, `HeartbeatPrepareContext` → `SchedulePrepareContext`, and so on).
+  - New agent schedule ids use the `agent_` prefix instead of `hb_`. Existing `hb_` ids keep working.
+  - The default signal tag an agent receives on a fire is now `<schedule>` instead of `<heartbeat>`.
+  - Types renamed: `Heartbeat` → `AgentSchedule`, `CreateHeartbeatInput` → `CreateAgentScheduleInput`, `HeartbeatScheduleTarget` → `AgentScheduleTarget` (persisted `target.type` is now `'agent'` instead of `'heartbeat'`).
+
+  Existing schedules stored in your database keep working: rows persisted with the old `target.type: 'heartbeat'` are read as `'agent'` automatically and keep firing.
+
+### Patch Changes
+
+- Fix workflow snapshot bloat on agent HITL tool-approval suspensions (#18647). Agent-run snapshots previously grew with thread length × number of historical suspensions because completed steps retained stale `suspendPayload`s (each embedding a full serialized message list) and duplicated message arrays across step payloads and outputs. Snapshots could balloon to 5MB+ on long threads and hit storage row-size limits. ([#18862](https://github.com/mastra-ai/mastra/pull/18862))
+
+  Agent-loop snapshots are now pruned to minimal resume artifacts before persist: completed steps drop suspension payloads and heavy message/step data, while suspended steps keep their full resume state intact. Snapshot size now stays flat across sequential approvals — O(thread) instead of O(suspensions × thread).
+
+  This also adds an optional `pruneSnapshot` workflow option (alongside `shouldPersistSnapshot`) that transforms a snapshot immediately before it is persisted. User-authored workflows are unaffected and persist full snapshots by default.
+
+- Fixed `listSuspendedRuns()` reporting `toolCallId: undefined` for tool calls parked via `suspend()`. The id was only stored as the workflow resume label, so discovery dropped it and `sendToolApproval({ toolCallId })` could never match the run once it had to be resolved from storage. The suspend payload now carries the id (agentic and durable loops), and discovery recovers it from resume labels for snapshots persisted before this change. ([#18940](https://github.com/mastra-ai/mastra/pull/18940))
+
 ## 1.50.0-alpha.2
 
 ### Minor Changes

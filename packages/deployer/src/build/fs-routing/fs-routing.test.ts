@@ -543,6 +543,9 @@ describe('prepareFsAgentsEntry', () => {
       agentCount: 0,
       workflowCount: 0,
       hasStorage: false,
+      hasObservability: false,
+      hasServer: false,
+      hasStudio: false,
     });
   });
 
@@ -926,6 +929,155 @@ describe('prepareFsAgentsEntry with storage', () => {
   });
 });
 
+describe('generateFsAgentsModule with observability', () => {
+  it('includes observability import and registration when provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [], {
+      observability: { path: '/project/src/mastra/observability.ts' },
+    });
+    expect(source).toContain(`import __fsObservability from "/project/src/mastra/observability.ts"`);
+    expect(source).toContain('__registerFsObservability(__fsObservability)');
+  });
+
+  it('omits observability when not provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', []);
+    expect(source).not.toContain('__fsObservability');
+    expect(source).not.toContain('__registerFsObservability');
+  });
+});
+
+describe('prepareFsAgentsEntry with observability', () => {
+  it('generates a wrapper entry when only observability.ts exists (no agents)', async () => {
+    await writeFile(join(dir, 'observability.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.hasObservability).toBe(true);
+    expect(result.agentCount).toBe(0);
+    expect(result.moduleSource).toContain('__registerFsObservability');
+  });
+
+  it('discovers observability alongside agents, workflows, and storage', async () => {
+    await writeAgent('assistant', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    await mkdir(join(dir, 'workflows'), { recursive: true });
+    await writeFile(join(dir, 'workflows', 'pipeline.ts'), `export default {};`);
+    await writeFile(join(dir, 'storage.ts'), `export default {};`);
+    await writeFile(join(dir, 'observability.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.agentCount).toBe(1);
+    expect(result.workflowCount).toBe(1);
+    expect(result.hasStorage).toBe(true);
+    expect(result.hasObservability).toBe(true);
+    expect(result.moduleSource).toContain('__registerFsWorkflows');
+    expect(result.moduleSource).toContain('__registerFsStorage');
+    expect(result.moduleSource).toContain('__registerFsObservability');
+  });
+});
+
+describe('generateFsAgentsModule with server', () => {
+  it('includes server import and registration when provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [], {
+      server: { path: '/project/src/mastra/server.ts' },
+    });
+    expect(source).toContain(`import __fsServer from "/project/src/mastra/server.ts"`);
+    expect(source).toContain('__registerFsServer(__fsServer)');
+  });
+
+  it('omits server when not provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', []);
+    expect(source).not.toContain('__fsServer');
+    expect(source).not.toContain('__registerFsServer');
+  });
+});
+
+describe('prepareFsAgentsEntry with server', () => {
+  it('generates a wrapper entry when only server.ts exists (no agents)', async () => {
+    await writeFile(join(dir, 'server.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.hasServer).toBe(true);
+    expect(result.agentCount).toBe(0);
+    expect(result.moduleSource).toContain('__registerFsServer');
+  });
+
+  it('discovers server alongside all other primitives', async () => {
+    await writeAgent('assistant', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    await mkdir(join(dir, 'workflows'), { recursive: true });
+    await writeFile(join(dir, 'workflows', 'pipeline.ts'), `export default {};`);
+    await writeFile(join(dir, 'storage.ts'), `export default {};`);
+    await writeFile(join(dir, 'observability.ts'), `export default {};`);
+    await writeFile(join(dir, 'server.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.agentCount).toBe(1);
+    expect(result.workflowCount).toBe(1);
+    expect(result.hasStorage).toBe(true);
+    expect(result.hasObservability).toBe(true);
+    expect(result.hasServer).toBe(true);
+    expect(result.moduleSource).toContain('__registerFsWorkflows');
+    expect(result.moduleSource).toContain('__registerFsStorage');
+    expect(result.moduleSource).toContain('__registerFsObservability');
+    expect(result.moduleSource).toContain('__registerFsServer');
+  });
+});
+
+describe('generateFsAgentsModule with studio', () => {
+  it('includes studio import and registration when provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [], {
+      studio: { path: '/project/src/mastra/studio.ts' },
+    });
+    expect(source).toContain(`import __fsStudio from "/project/src/mastra/studio.ts"`);
+    expect(source).toContain('__registerFsStudio(__fsStudio)');
+  });
+
+  it('omits studio when not provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', []);
+    expect(source).not.toContain('__fsStudio');
+    expect(source).not.toContain('__registerFsStudio');
+  });
+});
+
+describe('prepareFsAgentsEntry with studio', () => {
+  it('generates a wrapper entry when only studio.ts exists (no agents)', async () => {
+    await writeFile(join(dir, 'studio.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.hasStudio).toBe(true);
+    expect(result.agentCount).toBe(0);
+    expect(result.moduleSource).toContain('__registerFsStudio');
+  });
+
+  it('discovers studio alongside all other primitives', async () => {
+    await writeAgent('assistant', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    await mkdir(join(dir, 'workflows'), { recursive: true });
+    await writeFile(join(dir, 'workflows', 'pipeline.ts'), `export default {};`);
+    await writeFile(join(dir, 'storage.ts'), `export default {};`);
+    await writeFile(join(dir, 'observability.ts'), `export default {};`);
+    await writeFile(join(dir, 'studio.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.agentCount).toBe(1);
+    expect(result.workflowCount).toBe(1);
+    expect(result.hasStorage).toBe(true);
+    expect(result.hasObservability).toBe(true);
+    expect(result.hasStudio).toBe(true);
+    expect(result.moduleSource).toContain('__registerFsWorkflows');
+    expect(result.moduleSource).toContain('__registerFsStorage');
+    expect(result.moduleSource).toContain('__registerFsObservability');
+    expect(result.moduleSource).toContain('__registerFsStudio');
+  });
+});
 describe('subagents', () => {
   it('discovers subagents under subagents/', async () => {
     await writeAgent('supervisor', {

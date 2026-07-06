@@ -1,5 +1,6 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { X } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { transitions, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -9,11 +10,12 @@ export type TabProps = {
   onClick?: () => void;
   onClose?: () => void;
   disabled?: boolean;
+  disabledTooltip?: React.ReactNode;
   className?: string;
 };
 
-export const Tab = ({ children, value, onClick, onClose, disabled, className }: TabProps) => {
-  return (
+export const Tab = ({ children, value, onClick, onClose, disabled, disabledTooltip, className }: TabProps) => {
+  const tab = (
     <BaseTabs.Tab
       value={value}
       disabled={disabled}
@@ -24,6 +26,8 @@ export const Tab = ({ children, value, onClick, onClose, disabled, className }: 
         focusRing.visible,
         'hover:text-neutral4',
         'data-[active]:text-neutral5',
+        'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
+        'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
         'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
         // Line variant legacy fallback — active state drawn by <Tabs.Indicator> in TabList
         'group-data-[variant=line]/tabs-list:py-2 group-data-[variant=line]/tabs-list:px-5',
@@ -56,4 +60,15 @@ export const Tab = ({ children, value, onClick, onClose, disabled, className }: 
       )}
     </BaseTabs.Tab>
   );
+
+  if (disabled && disabledTooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipContent>{disabledTooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return tab;
 };
