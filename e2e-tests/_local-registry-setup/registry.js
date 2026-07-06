@@ -2,7 +2,7 @@ import { fork, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareMonorepo } from './prepare.js';
 import { publishPackages } from './publish.js';
@@ -178,6 +178,11 @@ export async function createPublishedRegistry({
   const groups = publishGroups || [{ tag, publishFilters }];
   if (groups.some(group => !group.tag || !group.publishFilters?.length)) {
     throw new Error('publishGroups must include a tag and publishFilters');
+  }
+
+  const defaultConfigStorageDir = resolve(dirname(configPath), 'storage');
+  if (resolve(storageDir) !== defaultConfigStorageDir) {
+    throw new Error(`storageDir must match the Verdaccio config storage path: ${defaultConfigStorageDir}`);
   }
 
   await mkdir(storageDir, { recursive: true });
