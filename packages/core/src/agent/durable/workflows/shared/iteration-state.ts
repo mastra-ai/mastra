@@ -95,5 +95,9 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     accumulatedUsage: newUsage,
     lastStepResult: executionOutput.stepResult,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
+    delegationBailed: executionOutput.delegationBailed,
+    pendingFeedbackStop: currentState.pendingFeedbackStop,
+    agentSpanData: currentState.agentSpanData,
+    modelSpanData: currentState.modelSpanData,
   };
 }
