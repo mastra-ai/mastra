@@ -47,9 +47,7 @@ export async function build({
       logger.info('No index.ts found — auto-constructing Mastra instance from file-based primitives.');
     }
 
-    const platformDeployer = mastraEntryFile
-      ? await getDeployer(mastraEntryFile, outputDirectory)
-      : undefined;
+    const platformDeployer = mastraEntryFile ? await getDeployer(mastraEntryFile, outputDirectory) : undefined;
 
     if (!platformDeployer) {
       const deployer = new BuildBundler({ studio });
