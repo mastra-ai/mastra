@@ -1,5 +1,34 @@
 # @mastra/core
 
+## 1.50.0-alpha.4
+
+### Minor Changes
+
+- Added file-system-routed observability singleton. Place an `observability.ts` file in your mastra directory that default-exports an `ObservabilityEntrypoint`, and it will be auto-discovered and registered when running `mastra dev` or `mastra build`. Code-registered observability takes precedence if both are present. ([#18887](https://github.com/mastra-ai/mastra/pull/18887))
+
+  ```ts
+  // src/mastra/observability.ts
+  import { Observability, MastraStorageExporter } from '@mastra/observability';
+
+  export default new Observability({
+    configs: { default: { serviceName: 'mastra', exporters: [new MastraStorageExporter()] } },
+  });
+  ```
+
+- Added file-system routed server config singleton. Place a server.ts file in your mastra directory that default-exports a ServerConfig object, and it will be auto-discovered and registered when running mastra dev or mastra build. Code-registered server config takes precedence if both are present. ([#18888](https://github.com/mastra-ai/mastra/pull/18888))
+
+- Added file-system routed studio config singleton. Place a studio.ts file in your mastra directory that default-exports a StudioConfig object, and it will be auto-discovered and registered when running mastra dev or mastra build. Code-registered studio config takes precedence if both are present. ([#18889](https://github.com/mastra-ai/mastra/pull/18889))
+
+### Patch Changes
+
+- Fixed cross-pod signal routing to dead runIds in multi-pod deployments without sticky sessions ([#18614](https://github.com/mastra-ai/mastra/pull/18614))
+
+- Fix `DurableAgent` persisting messages when `memory.options.readOnly` is `true`. The durable finish path saved via the save queue directly, bypassing the `MessageHistory` processor that enforces `readOnly` in the non-durable path, so messages were written against the caller's explicit "read but don't save" instruction. The durable path now honors `readOnly` and skips persistence, matching the non-durable agent. Closes #18771. ([#18921](https://github.com/mastra-ai/mastra/pull/18921))
+
+- Fixed `agent.generate()` and `agent.stream()` rejecting AI SDK v7 messages under strict TypeScript. AI SDK v7 `ModelMessage` and `UIMessage` inputs are now accepted, matching the existing v4-v6 support. (#18956) ([#18997](https://github.com/mastra-ai/mastra/pull/18997))
+
+- Fixed a TypeScript build error caused by the regenerated provider registry adding per-model shape overrides ([#18995](https://github.com/mastra-ai/mastra/pull/18995))
+
 ## 1.50.0-alpha.3
 
 ### Minor Changes
