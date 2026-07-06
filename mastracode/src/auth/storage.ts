@@ -5,6 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { slackOAuthProvider } from '../slack/oauth.js';
 import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
@@ -35,6 +36,10 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
   [anthropicOAuthProvider.id, anthropicOAuthProvider],
   [openaiCodexOAuthProvider.id, openaiCodexOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
+  // Slack is not a model provider — it has no PROVIDER_DEFAULT_MODELS entry.
+  // It's registered here so AuthStorage.getApiKey('slack') auto-refreshes the
+  // PKCE user token used as a bearer header for Slack's remote MCP server.
+  [slackOAuthProvider.id, slackOAuthProvider],
 ]);
 
 /**

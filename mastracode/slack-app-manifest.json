@@ -1,0 +1,48 @@
+{
+  "_comment": "Source-of-truth manifest for the Mastra-published Slack app ('Mastra Code'). See slack-app-manifest.README.md. The user scopes here are the SUPERSET that mastracode's permission-level presets (src/slack/scopes.ts SLACK_MANIFEST_USER_SCOPES) must be a subset of. redirect_urls MUST match the loopback ports in src/slack/oauth.ts. oauth_config.pkce_enabled=true makes this a public client (required for the no-secret PKCE token exchange); enabling PKCE is a one-way, irreversible change on the app.",
+  "display_information": {
+    "name": "Mastra Code",
+    "description": "Connect your Slack account to the Mastra Code CLI agent to search, read, and send messages.",
+    "background_color": "#1a1a2e"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "mastra-code",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "http://localhost:41927/callback",
+      "http://localhost:41928/callback",
+      "http://localhost:41929/callback"
+    ],
+    "scopes": {
+      "bot": ["users:read"],
+      "user": [
+        "search:read.public",
+        "search:read.private",
+        "channels:history",
+        "groups:history",
+        "im:history",
+        "mpim:history",
+        "users:read",
+        "users:read.email",
+        "canvases:read",
+        "chat:write",
+        "reactions:write",
+        "canvases:write",
+        "channels:read",
+        "groups:read",
+        "channels:write",
+        "groups:write"
+      ]
+    },
+    "pkce_enabled": true
+  },
+  "settings": {
+    "token_rotation_enabled": true,
+    "is_mcp_enabled": true,
+    "org_deploy_enabled": true
+  }
+}

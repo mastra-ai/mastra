@@ -385,6 +385,17 @@ export function setupAutocomplete(state: TUIState): void {
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
     {
+      name: 'slack',
+      description: 'Manage the Slack integration (connect, level, disconnect)',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'connect', label: 'connect', description: 'Connect a Slack account (OAuth)' },
+          { value: 'level', label: 'level', description: 'Set the requested permission level' },
+          { value: 'disconnect', label: 'disconnect', description: 'Disconnect the Slack account' },
+          { value: 'status', label: 'status', description: 'Show Slack connection status' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
       name: 'goal',
       description: 'Set/manage persistent goal (Ralph loop)',
       getArgumentCompletions: (argumentPrefix: string) =>

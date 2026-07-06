@@ -59,6 +59,21 @@ const controllerSetStateMock = vi.fn();
 const controllerSetThreadSettingMock = vi.fn();
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
+
+// The third arg to createMcpManager is an async resolver that merges the caller's
+// programmatic mcpServers with the (off-by-default) Slack MCP server. This helper
+// asserts the first two args and resolves the resolver to compare the merged map.
+async function expectMcpManagerCalledWith(
+  projectPath: string,
+  configDir: string,
+  expectedServers: Record<string, unknown> | undefined,
+): Promise<void> {
+  expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, configDir, expect.any(Function));
+  const call = createMcpManagerMock.mock.calls.find(([p, c]) => p === projectPath && c === configDir);
+  expect(call).toBeDefined();
+  const resolver = call![2] as () => Promise<Record<string, unknown>>;
+  await expect(resolver()).resolves.toEqual(expectedServers ?? {});
+}
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
 const getDynamicWorkspaceMock = vi.fn();
@@ -472,7 +487,7 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    await expectMcpManagerCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
   });
 
@@ -603,7 +618,7 @@ describe('createMastraCode', () => {
 
     expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    await expectMcpManagerCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
@@ -636,7 +651,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ cwd, configDir: '.acme-code', mcpServers });
 
-    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', mcpServers);
+    await expectMcpManagerCalledWith(projectPath, '.acme-code', mcpServers);
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {

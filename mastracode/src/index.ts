@@ -81,6 +81,7 @@ import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex
 
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
+import { buildSlackMcpServers } from './slack/config.js';
 
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
@@ -467,8 +468,20 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
 
-  // MCP
-  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
+  // MCP. The Slack MCP server (if enabled + connected) is injected via an async
+  // resolver so its bearer token is refreshed on every init/reload. Its token is
+  // never written to mcp.json. The `slack` settings are re-read from disk here
+  // (not the startup `globalSettings` snapshot) so enabling Slack + connecting
+  // mid-session is picked up on the next `reload()`.
+  const staticMcpServers = config?.mcpServers;
+  const mcpExtraServers = async (): Promise<Record<string, McpServerConfig>> => {
+    const slackSettings = loadSettings(config?.settingsPath).slack;
+    return {
+      ...staticMcpServers,
+      ...(await buildSlackMcpServers(authStorage, slackSettings)),
+    };
+  };
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, mcpExtraServers);
 
   // Hooks
   const hookManager = config?.disableHooks

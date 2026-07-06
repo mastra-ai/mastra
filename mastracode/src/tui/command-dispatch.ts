@@ -45,6 +45,7 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
+  handleSlackCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -256,6 +257,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'github':
       await handleGithubCommand(buildCtx(), args);
+      return true;
+    case 'slack':
+      await handleSlackCommand(buildCtx(), args);
       return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);

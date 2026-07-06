@@ -65,6 +65,15 @@ describe('createMcpManager', () => {
       const manager = createMcpManager('/tmp/test');
       expect(manager.hasServers()).toBe(true);
     });
+
+    it('returns true when a dynamic extra-server resolver is present and config is empty', () => {
+      // The Slack MCP server is injected via an async resolver at init/reload
+      // time. hasServers() must report true so the caller runs init() and the
+      // resolver gets a chance to inject the server on a fresh session load.
+      setupConfig({});
+      const manager = createMcpManager('/tmp/test', undefined, async () => ({}));
+      expect(manager.hasServers()).toBe(true);
+    });
   });
 
   describe('getSkippedServers', () => {

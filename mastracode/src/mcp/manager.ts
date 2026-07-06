@@ -118,18 +118,45 @@ function getStorageKeyFingerprint(value: string): string {
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
  */
+/**
+ * Programmatic MCP servers merged in at highest priority. Either a static map
+ * of server configs, or an async resolver that is re-invoked on every
+ * init/reload so entries whose auth (e.g. a bearer token) must be re-fetched
+ * — such as the Slack MCP server — always connect with fresh headers.
+ */
+export type ExtraServers = Record<string, McpServerConfig> | (() => Promise<Record<string, McpServerConfig>>);
+
 export function createMcpManager(
   projectDir: string,
   configDirName = DEFAULT_CONFIG_DIR,
-  extraServers?: Record<string, McpServerConfig>,
+  extraServers?: ExtraServers,
 ): McpManager {
-  /** Merge programmatic servers into a base config (highest priority). */
-  const applyExtraServers = (base: McpConfig): McpConfig => {
-    if (!extraServers || Object.keys(extraServers).length === 0) return base;
+  /** Merge static programmatic servers into a base config (highest priority). */
+  const applyStaticExtraServers = (base: McpConfig): McpConfig => {
+    if (!extraServers || typeof extraServers === 'function' || Object.keys(extraServers).length === 0) {
+      return base;
+    }
     return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
   };
 
-  let config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
+  /**
+   * Resolve async extra servers (if the resolver form was provided) and merge
+   * them into the current config. Called right before every connect so tokens
+   * are refreshed. Static extra servers are already merged into `config`.
+   */
+  const resolveDynamicExtraServers = async (): Promise<void> => {
+    if (typeof extraServers !== 'function') return;
+    let resolved: Record<string, McpServerConfig> = {};
+    try {
+      resolved = await extraServers();
+    } catch {
+      resolved = {};
+    }
+    if (Object.keys(resolved).length === 0) return;
+    config = { ...config, mcpServers: { ...config.mcpServers, ...resolved } };
+  };
+
+  let config = applyStaticExtraServers(loadMcpConfig(projectDir, configDirName));
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
@@ -309,6 +336,7 @@ export function createMcpManager(
   return {
     async init() {
       if (initialized) return;
+      await resolveDynamicExtraServers();
       await connectAndCollectTools();
       initialized = true;
     },
@@ -328,11 +356,12 @@ export function createMcpManager(
 
     async reload() {
       await disconnect();
-      config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
+      config = applyStaticExtraServers(loadMcpConfig(projectDir, configDirName));
       tools = {};
       serverStatuses = new Map();
       stderrLogs = new Map();
       initialized = false;
+      await resolveDynamicExtraServers();
       await connectAndCollectTools();
       initialized = true;
     },
@@ -455,7 +484,12 @@ export function createMcpManager(
     hasServers() {
       const hasConfigured = config.mcpServers !== undefined && Object.keys(config.mcpServers).length > 0;
       const hasSkipped = config.skippedServers !== undefined && config.skippedServers.length > 0;
-      return hasConfigured || hasSkipped;
+      // A dynamic resolver (e.g. the Slack MCP server) may inject servers at
+      // init/reload time that aren't in the static config yet. Report true so
+      // the caller runs init(), which resolves and connects them. init() is a
+      // no-op when the resolver yields nothing, so this is safe.
+      const hasDynamicResolver = typeof extraServers === 'function';
+      return hasConfigured || hasSkipped || hasDynamicResolver;
     },
 
     getServerStatuses() {

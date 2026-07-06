@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
   handleGithubCommand: vi.fn().mockResolvedValue(undefined),
+  handleSlackCommand: vi.fn().mockResolvedValue(undefined),
   handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
   handleMcpCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
@@ -57,6 +58,7 @@ vi.mock('../commands/index.js', () => ({
   handleFeedbackCommand: vi.fn(),
   handleObservabilityCommand: vi.fn(),
   handleGithubCommand: mocks.handleGithubCommand,
+  handleSlackCommand: mocks.handleSlackCommand,
   handleGoalCommand: mocks.handleGoalCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
 }));
@@ -88,6 +90,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
     mocks.handleGithubCommand.mockClear();
+    mocks.handleSlackCommand.mockClear();
     mocks.handleReportIssueCommand.mockClear();
     mocks.handleMcpCommand.mockClear();
     mocks.handlePluginsCommand.mockClear();
@@ -176,6 +179,17 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleGithubCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleGithubCommand).toHaveBeenCalledWith(ctx, ['mastra-ai/mastra#17447']);
+  });
+
+  it('routes /slack to handleSlackCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/slack connect read-write', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleSlackCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleSlackCommand).toHaveBeenCalledWith(ctx, ['connect', 'read-write']);
   });
 
   it('routes /plugins to handlePluginsCommand', async () => {

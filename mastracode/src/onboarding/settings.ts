@@ -10,6 +10,8 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage } from '../auth/storage.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
+import { DEFAULT_SLACK_PERMISSION_LEVEL, isSlackPermissionLevel } from '../slack/scopes.js';
+import type { SlackPermissionLevel } from '../slack/scopes.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../tui/voice/stt-registry.js';
 import { getAppDataDir } from '../utils/project.js';
 
@@ -142,6 +144,20 @@ export interface BrowserSettings {
   agentBrowser?: AgentBrowserSettings;
 }
 
+/** Slack MCP integration configuration persisted in global settings. */
+export interface SlackSettings {
+  /** Whether the Slack MCP integration is enabled. Off by default. */
+  enabled: boolean;
+  /** Permission level → scope preset requested during OAuth. */
+  permissionLevel: SlackPermissionLevel;
+  /**
+   * Optional BYO public client_id for restricted orgs. Falls back to Mastra's
+   * published app when unset. The Slack token itself is NOT stored here — it
+   * lives in auth.json under the `slack` provider.
+   */
+  clientId?: string;
+}
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -238,6 +254,8 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Slack MCP integration configuration (off by default)
+  slack: SlackSettings;
   // Direct TUI `!` shell passthrough configuration
   shellPassthrough: ShellPassthroughSettings;
   // Hold-space voice input configuration
@@ -328,6 +346,7 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
+  slack: { enabled: false, permissionLevel: DEFAULT_SLACK_PERMISSION_LEVEL },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
   signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
@@ -564,6 +583,16 @@ function parseVoiceSettings(rawVoice: unknown): VoiceSettings {
   };
 }
 
+function parseSlackSettings(rawSlack: unknown): SlackSettings {
+  const raw = rawSlack && typeof rawSlack === 'object' ? (rawSlack as Record<string, unknown>) : {};
+  const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.slack.enabled;
+  const permissionLevel = isSlackPermissionLevel(raw.permissionLevel)
+    ? raw.permissionLevel
+    : DEFAULTS.slack.permissionLevel;
+  const clientId = typeof raw.clientId === 'string' && raw.clientId.trim() ? raw.clientId.trim() : undefined;
+  return { enabled, permissionLevel, clientId };
+}
+
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
@@ -629,6 +658,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
+        slack: parseSlackSettings(raw.slack),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
         signals: parseSignalSettings(raw.signals),
@@ -752,6 +782,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
+      slack: parseSlackSettings(raw.slack),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
       signals: parseSignalSettings(raw.signals),

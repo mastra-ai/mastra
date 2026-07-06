@@ -68,6 +68,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
     },
     shellPassthrough: { mode: 'default' },
     voice: { enabled: false, engine: 'cloud', provider: 'openai', model: 'whisper-1' },
+    slack: { enabled: false, permissionLevel: 'read-only' },
     signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
@@ -162,6 +163,59 @@ describe('voice settings parsing', () => {
       const { voice } = loadSettings(filePath);
 
       expect(voice.engine).toMatch(/^(macos-native|cloud)$/);
+    });
+  });
+});
+
+describe('slack settings parsing', () => {
+  it('defaults to disabled + read-only when missing from the file', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({}), 'utf-8');
+
+      const { slack } = loadSettings(filePath);
+
+      expect(slack.enabled).toBe(false);
+      expect(slack.permissionLevel).toBe('read-only');
+      expect(slack.clientId).toBeUndefined();
+    });
+  });
+
+  it('round-trips a valid enabled + read-write config', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(
+        filePath,
+        JSON.stringify({ slack: { enabled: true, permissionLevel: 'read-write', clientId: 'client-abc' } }),
+        'utf-8',
+      );
+
+      const { slack } = loadSettings(filePath);
+
+      expect(slack.enabled).toBe(true);
+      expect(slack.permissionLevel).toBe('read-write');
+      expect(slack.clientId).toBe('client-abc');
+    });
+  });
+
+  it('falls back to read-only for an invalid permission level', () => {
+    withTempSettingsFile(filePath => {
+      writeFileSync(filePath, JSON.stringify({ slack: { enabled: true, permissionLevel: 'root' } }), 'utf-8');
+
+      const { slack } = loadSettings(filePath);
+
+      expect(slack.enabled).toBe(true);
+      expect(slack.permissionLevel).toBe('read-only');
+    });
+  });
+
+  it('does not persist a Slack token into settings', () => {
+    withTempSettingsFile(filePath => {
+      const settings = loadSettings(filePath);
+      settings.slack.enabled = true;
+      saveSettings(settings, filePath);
+
+      const raw = readFileSync(filePath, 'utf-8');
+      expect(raw).not.toMatch(/xoxp-/);
+      expect(raw).not.toMatch(/access[_"]/i);
     });
   });
 });
