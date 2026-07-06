@@ -1,0 +1,6 @@
+{
+  "name": "@inner/transitive-c",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js"
+}

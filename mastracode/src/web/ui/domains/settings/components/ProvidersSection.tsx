@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { ProviderInfo } from '../../../../../shared/api/types';
 import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../../../../../shared/hooks/use-providers';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   oauth: 'Signed in',
@@ -187,9 +188,7 @@ export function ProvidersSection() {
       )}
 
       {loading ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
-          Loading providers…
-        </Txt>
+        <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
       ) : (
         <>
           {!searching && (

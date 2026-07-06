@@ -5,6 +5,7 @@ import { Folder } from 'lucide-react';
 import { useState } from 'react';
 
 import { useDirectoryListing } from '../../../../../shared/hooks/use-fs';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 /**
  * Server-driven directory browser. The browser can't read absolute filesystem
@@ -82,11 +83,7 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
       )}
 
       <div className="flex max-h-72 min-h-40 flex-col gap-0.5 overflow-y-auto rounded-lg border border-border1 bg-surface-overlay-soft p-1.5">
-        {loading && (
-          <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-icon3">
-            Loading…
-          </Txt>
-        )}
+        {loading && <SkeletonRows label="Loading folders" rows={4} rowClassName="h-7 w-full" />}
         {error && (
           <Txt as="div" variant="ui-sm" className="px-2 py-1.5 text-notice-destructive-fg">
             {error}

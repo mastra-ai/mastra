@@ -1,60 +1,48 @@
 import { useKeyDown } from '../../../lib/hooks';
+import { useOverlays } from '../../../lib/overlays';
+import { useActiveProjectContext } from '../../workspaces';
+import { useChatSession } from '../context/ChatSessionProvider';
 
-interface UseGlobalShortcutsArgs {
-  busy: boolean;
-  projectsOpen: boolean;
-  settingsOpen: boolean;
-  shortcutsOpen: boolean;
-  paletteOpen: boolean;
-  sidebarOpen: boolean;
-  setPaletteOpen: (open: boolean | ((open: boolean) => boolean)) => void;
-  setShortcutsOpen: (open: boolean | ((open: boolean) => boolean)) => void;
-  setSettingsOpen: (open: boolean) => void;
-  setSidebarOpen: (open: boolean) => void;
-  abort: () => Promise<void>;
-}
+/**
+ * App-wide keyboard shortcuts. Zero-args: observes overlay state via
+ * `useOverlays()`, run state via `useChatSession()`, and the zero-projects
+ * rule via `useActiveProjectContext()` (with no projects the projects modal
+ * is forced open, so Escape must be a no-op).
+ */
+export function useGlobalShortcuts() {
+  const overlays = useOverlays();
+  const { projects } = useActiveProjectContext();
+  const { busy, abort } = useChatSession();
 
-export function useGlobalShortcuts({
-  busy,
-  projectsOpen,
-  settingsOpen,
-  shortcutsOpen,
-  paletteOpen,
-  sidebarOpen,
-  setPaletteOpen,
-  setShortcutsOpen,
-  setSettingsOpen,
-  setSidebarOpen,
-  abort,
-}: UseGlobalShortcutsArgs) {
   useKeyDown({
     'mod+k': e => {
       e.preventDefault();
-      setPaletteOpen(o => !o);
+      overlays.toggle('palette');
     },
     '?': e => {
       const target = e.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
       if (typing || e.metaKey || e.ctrlKey) return;
       e.preventDefault();
-      setShortcutsOpen(o => !o);
+      overlays.toggle('shortcuts');
     },
     escape: () => {
-      if (projectsOpen) return;
-      if (shortcutsOpen) {
-        setShortcutsOpen(false);
+      const projectsForcedOpen = overlays.isOpen('projects') || projects.length === 0;
+      if (projectsForcedOpen) return;
+      if (overlays.isOpen('shortcuts')) {
+        overlays.close('shortcuts');
         return;
       }
-      if (settingsOpen) {
-        setSettingsOpen(false);
+      if (overlays.isOpen('settings')) {
+        overlays.close('settings');
         return;
       }
-      if (paletteOpen) {
-        setPaletteOpen(false);
+      if (overlays.isOpen('palette')) {
+        overlays.close('palette');
         return;
       }
-      if (sidebarOpen) {
-        setSidebarOpen(false);
+      if (overlays.isOpen('sidebar')) {
+        overlays.close('sidebar');
         return;
       }
       if (busy) void abort();

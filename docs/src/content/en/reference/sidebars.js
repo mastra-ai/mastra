@@ -374,6 +374,11 @@ const sidebars = {
       items: [
         {
           type: 'category',
+          label: 'Feedback',
+          items: [{ type: 'doc', id: 'observability/feedback', label: 'Feedback' }],
+        },
+        {
+          type: 'category',
           label: 'Logging',
           items: [{ type: 'doc', id: 'logging/pino-logger', label: 'PinoLogger' }],
         },
@@ -538,6 +543,12 @@ const sidebars = {
         { type: 'doc', id: 'rag/rerankWithScorer', label: 'rerankWithScorer()' },
         { type: 'doc', id: 'rag/chunk', label: '.chunk()' },
       ],
+    },
+    {
+      type: 'category',
+      label: 'Schedules',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'schedules/overview', label: 'Overview' }],
     },
     {
       type: 'category',
@@ -711,6 +722,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/google-gemini-live', label: 'Google Gemini Live' },
         { type: 'doc', id: 'voice/inworld', label: 'Inworld' },
         { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
+        { type: 'doc', id: 'voice/livekit', label: 'LiveKit' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { generateFsAgentsModule } from './codegen';
-import type { DiscoveredFsAgent } from './discover';
+import type { DiscoveredFsAgent, DiscoveredFsWorkflow } from './discover';
 
 let dir: string;
 
@@ -53,6 +53,8 @@ describe('generated module evaluation', () => {
         configPath: join(agentDir, 'config.mjs'),
         instructionsPath: undefined,
         tools: [{ key: 'get_weather', path: join(agentDir, 'tools', 'get_weather.mjs') }],
+        inputProcessors: [],
+        outputProcessors: [],
         skills: [],
         subagents: [],
       },
@@ -110,6 +112,8 @@ describe('generated module evaluation', () => {
         configPath: join(agentDir, 'config.mjs'),
         instructionsPath: undefined,
         tools: [],
+        inputProcessors: [],
+        outputProcessors: [],
         skills: [
           {
             kind: 'packaged',
@@ -177,6 +181,8 @@ describe('generated module evaluation', () => {
         configPath: join(parentDir, 'config.mjs'),
         instructionsPath: undefined,
         tools: [],
+        inputProcessors: [],
+        outputProcessors: [],
         skills: [],
         subagents: [
           {
@@ -185,6 +191,8 @@ describe('generated module evaluation', () => {
             configPath: join(childDir, 'config.mjs'),
             instructionsPath: undefined,
             tools: [],
+            inputProcessors: [],
+            outputProcessors: [],
             skills: [],
             subagents: [],
           },
@@ -206,5 +214,55 @@ describe('generated module evaluation', () => {
     expect(Object.keys(supervisor.subagents)).toEqual(['writer']);
     expect(supervisor.subagents.writer.name).toBe('writer');
     expect(supervisor.subagents.writer.__entry.config.description).toBe('Writes');
+  });
+
+  it('imports workflow modules and registers them via __registerFsWorkflows', async () => {
+    const coreStub = join(dir, 'core-agent.mjs');
+    await writeFile(
+      coreStub,
+      `export function assembleAgentFromFsEntry(entry) {
+         return { id: entry.name, name: entry.name, __entry: entry };
+       }`,
+    );
+
+    const userEntry = join(dir, 'index.mjs');
+    await writeFile(
+      userEntry,
+      `const registered = {};
+       const registeredWorkflows = {};
+       export const mastra = {
+         registered,
+         registeredWorkflows,
+         getLogger() { return { warn() {} }; },
+         __registerFsAgents(map) { Object.assign(registered, map); },
+         __registerFsWorkflows(map) { Object.assign(registeredWorkflows, map); },
+       };
+       export const extra = 'kept';`,
+    );
+
+    // Stub workflow modules.
+    const workflowsDir = join(dir, 'workflows');
+    await mkdir(workflowsDir, { recursive: true });
+    await writeFile(join(workflowsDir, 'pipeline.mjs'), `export default { id: 'pipeline', name: 'Data Pipeline' };`);
+    await writeFile(join(workflowsDir, 'onboarding.mjs'), `export default { id: 'onboarding', name: 'Onboarding' };`);
+
+    const agents: DiscoveredFsAgent[] = [];
+    const workflows: DiscoveredFsWorkflow[] = [
+      { key: 'pipeline', path: join(workflowsDir, 'pipeline.mjs') },
+      { key: 'onboarding', path: join(workflowsDir, 'onboarding.mjs') },
+    ];
+
+    let source = await generateFsAgentsModule(userEntry, agents, { workflows });
+    source = source.replace(`'@mastra/core/agent'`, JSON.stringify(coreStub));
+
+    const generated = join(dir, 'wrapper-workflows.mjs');
+    await writeFile(generated, source);
+
+    const mod = await import(pathToFileURL(generated).href);
+
+    expect(mod.extra).toBe('kept');
+    expect(mod.mastra).toBeTruthy();
+    expect(mod.mastra.registeredWorkflows.pipeline).toMatchObject({ id: 'pipeline', name: 'Data Pipeline' });
+    expect(mod.mastra.registeredWorkflows.onboarding).toMatchObject({ id: 'onboarding', name: 'Onboarding' });
   });
 });

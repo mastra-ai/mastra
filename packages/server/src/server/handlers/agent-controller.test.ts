@@ -1,9 +1,10 @@
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -20,6 +21,10 @@ import {
   RENAME_AGENT_CONTROLLER_THREAD_ROUTE,
   LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE,
   SWITCH_AGENT_CONTROLLER_THREAD_ROUTE,
+  STEER_AGENT_CONTROLLER_SESSION_ROUTE,
+  FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE,
+  AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE,
+  AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE,
 } from './agent-controller';
 
 function makeAgent(id = 'test-agent') {
@@ -115,6 +120,108 @@ describe('agent-controller routes', () => {
         message: 'hello',
       } as any);
       expect(res).toEqual({ ok: true });
+    });
+  });
+
+  describe('requestContext forwarding', () => {
+    // Identity injected by `server.middleware` arrives on the handler as
+    // `requestContext`; the session-write routes must thread it through to the
+    // session methods (which pass it to the run engine) or dynamic
+    // instructions/tools see an empty context (see mastra-ai/mastra#18916).
+    async function getRouteSession(resourceId: string) {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      // Same get-or-create call the route handlers make, so this returns the
+      // exact session instance the handler will operate on.
+      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
+    }
+
+    function makeRequestContext() {
+      const requestContext = new RequestContext();
+      requestContext.set('tenantId', 'acme');
+      return requestContext;
+    }
+
+    it('forwards requestContext to session.sendMessage', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'hello',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
+    });
+
+    it('forwards requestContext to session.steer', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'change course',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'change course', requestContext });
+    });
+
+    it('forwards requestContext to session.followUp', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'and another thing',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'and another thing', requestContext });
+    });
+
+    it('forwards requestContext to session.respondToToolApproval', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'respondToToolApproval').mockReturnValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        toolCallId: 'call-1',
+        approved: true,
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ toolCallId: 'call-1', decision: 'approve', requestContext });
+    });
+
+    it('forwards requestContext to session.respondToToolSuspension', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        toolCallId: 'call-2',
+        resumeData: 'Yes',
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ toolCallId: 'call-2', resumeData: 'Yes', requestContext });
     });
   });
 

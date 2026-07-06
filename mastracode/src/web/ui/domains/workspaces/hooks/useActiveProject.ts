@@ -49,7 +49,6 @@ export function useActiveProject() {
   return {
     projects,
     activeProject,
-    activeProjectId,
     resourceId,
     sessionEnabled,
     selectProject,

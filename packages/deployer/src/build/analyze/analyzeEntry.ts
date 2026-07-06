@@ -1,10 +1,7 @@
-import { pathToFileURL } from 'node:url';
-import { noopLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
@@ -73,15 +70,12 @@ async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
   projectRoot: string,
-  initialDepsToOptimize: Map<string, DependencyMetadata>,
   {
     logger,
     shouldCheckTransitiveDependencies,
-    analyzeCache,
   }: {
     logger: IMastraLogger;
     shouldCheckTransitiveDependencies: boolean;
-    analyzeCache?: Map<string, AnalyzeEntryResult>;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -128,14 +122,12 @@ async function captureDependenciesToOptimize(
     });
   }
 
+  const processedWorkspaceDeps = new Set<string>();
+
   /**
-   * Recursively discovers and analyzes transitive workspace dependencies
+   * Recursively discovers transitive workspace dependencies from package manifests.
    */
-  async function checkTransitiveDependencies(
-    internalMap: Map<string, DependencyMetadata>,
-    maxDepth = 10,
-    currentDepth = 0,
-  ) {
+  function checkTransitiveDependencies(maxDepth = 10, currentDepth = 0) {
     // Could be a circular dependency...
     if (currentDepth >= maxDepth) {
       logger.warn('Maximum dependency depth reached while checking transitive dependencies.');
@@ -147,72 +139,52 @@ async function captureDependenciesToOptimize(
     let hasAddedDeps = false;
 
     for (const [dep, meta] of depsSnapshot) {
+      const pkgName = getPackageName(dep);
       // We only care about workspace deps that we haven't already processed
-      if (!meta.isWorkspace || internalMap.has(dep)) {
+      if (!pkgName || !meta.isWorkspace || processedWorkspaceDeps.has(pkgName)) {
         continue;
       }
 
-      try {
-        const importerPath = output.facadeModuleId
-          ? pathToFileURL(output.facadeModuleId).href
-          : pathToFileURL(projectRoot).href;
-        // Absolute path to the dependency using ESM-compatible resolution
-        const resolvedPath = resolveModule(dep, {
-          paths: [importerPath],
-        });
-        if (!resolvedPath) {
-          logger.warn('Could not resolve path for workspace dependency', { dep });
+      processedWorkspaceDeps.add(pkgName);
+
+      const workspaceInfo = workspaceMap.get(pkgName);
+      if (!workspaceInfo?.dependencies) {
+        continue;
+      }
+
+      for (const [innerDep, _innerDepVersion] of Object.entries(workspaceInfo.dependencies)) {
+        const innerWorkspaceInfo = workspaceMap.get(innerDep);
+        if (!innerWorkspaceInfo) {
           continue;
         }
 
-        const analysis = await analyzeEntry({ entry: resolvedPath, isVirtualFile: false }, '', {
-          workspaceMap,
-          projectRoot,
-          logger: noopLogger,
-          sourcemapEnabled: false,
-          initialDepsToOptimize: depsToOptimize,
-          analyzeCache,
-        });
-
-        if (!analysis?.dependencies) {
+        const existingMeta = depsToOptimize.get(innerDep);
+        if (existingMeta) {
+          depsToOptimize.set(innerDep, {
+            ...existingMeta,
+            exports: existingMeta.exports.includes('*') ? existingMeta.exports : [...existingMeta.exports, '*'],
+          });
           continue;
         }
 
-        for (const [innerDep, innerMeta] of analysis.dependencies) {
-          if (!innerMeta.isWorkspace) {
-            continue;
-          }
-
-          const existingMeta = depsToOptimize.get(innerDep);
-          if (existingMeta) {
-            depsToOptimize.set(innerDep, {
-              ...existingMeta,
-              exports: [...new Set([...existingMeta.exports, ...innerMeta.exports])],
-            });
-            continue;
-          }
-
-          if (internalMap.has(innerDep)) {
-            continue;
-          }
-
-          depsToOptimize.set(innerDep, innerMeta);
-          internalMap.set(innerDep, innerMeta);
-          hasAddedDeps = true;
-        }
-      } catch (err) {
-        logger.error('Failed to resolve or analyze dependency', { dep, error: (err as Error).message });
+        depsToOptimize.set(innerDep, {
+          exports: ['*'],
+          rootPath: slash(innerWorkspaceInfo.location),
+          isWorkspace: true,
+          version: innerWorkspaceInfo.version,
+        });
+        hasAddedDeps = true;
       }
     }
 
     // Continue until no new deps are found
     if (hasAddedDeps) {
-      await checkTransitiveDependencies(internalMap, maxDepth, currentDepth + 1);
+      checkTransitiveDependencies(maxDepth, currentDepth + 1);
     }
   }
 
   if (shouldCheckTransitiveDependencies) {
-    await checkTransitiveDependencies(initialDepsToOptimize);
+    checkTransitiveDependencies();
   }
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
@@ -284,7 +256,6 @@ export async function analyzeEntry(
     sourcemapEnabled,
     workspaceMap,
     projectRoot,
-    initialDepsToOptimize = new Map(), // used to avoid infinite recursion
     shouldCheckTransitiveDependencies = false,
     analyzeCache,
   }: {
@@ -292,7 +263,6 @@ export async function analyzeEntry(
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
-    initialDepsToOptimize?: Map<string, DependencyMetadata>;
     shouldCheckTransitiveDependencies?: boolean;
     /** Shared cache to avoid re-analyzing the same entry across recursive calls */
     analyzeCache?: Map<string, AnalyzeEntryResult>;
@@ -320,17 +290,10 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(
-    output[0] as OutputChunk,
-    workspaceMap,
-    projectRoot,
-    initialDepsToOptimize,
-    {
-      logger,
-      shouldCheckTransitiveDependencies,
-      analyzeCache,
-    },
-  );
+  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
+    logger,
+    shouldCheckTransitiveDependencies,
+  });
 
   const result: AnalyzeEntryResult = {
     dependencies: depsToOptimize,
