@@ -1,9 +1,9 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
-import { Mastra } from '../../mastra';
-import { MockStore } from '../../storage/mock';
-import { Agent } from '../agent';
-import { HEARTBEAT_SCHEDULE_PREFIX } from './types';
+import { Agent } from '../agent/agent';
+import { Mastra } from '../mastra';
+import { MockStore } from '../storage/mock';
+import { AGENT_SCHEDULE_PREFIX } from './types';
 
 function makeAgent(id: string): Agent {
   return new Agent({
@@ -18,18 +18,18 @@ function makeMastra(agents: Record<string, Agent>) {
   return new Mastra({ logger: false, storage: new MockStore(), agents });
 }
 
-describe('mastra.heartbeats', () => {
-  it('creates a threadless heartbeat with a random hb_ id', async () => {
+describe('mastra.schedules', () => {
+  it('creates a threadless agent schedule with a random agent_ id', async () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    const hb = await mastra.heartbeats.create({
+    const hb = await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/5 * * * *',
       prompt: 'ping',
     });
 
-    expect(hb.id.startsWith(HEARTBEAT_SCHEDULE_PREFIX)).toBe(true);
+    expect(hb.id.startsWith(AGENT_SCHEDULE_PREFIX)).toBe(true);
     expect(hb.agentId).toBe('pinger');
     expect(hb.prompt).toBe('ping');
     expect(hb.threadId).toBeUndefined();
@@ -37,11 +37,11 @@ describe('mastra.heartbeats', () => {
     expect(typeof hb.nextFireAt).toBe('number');
   });
 
-  it('creates a threaded heartbeat with the threaded knobs', async () => {
+  it('creates a threaded agent schedule with the threaded knobs', async () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    const hb = await mastra.heartbeats.create({
+    const hb = await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/5 * * * *',
       prompt: 'check in',
@@ -59,11 +59,11 @@ describe('mastra.heartbeats', () => {
     expect(hb.ifIdle).toEqual({ behavior: 'wake' });
   });
 
-  it('supports multiple heartbeats per agent/thread with distinct ids', async () => {
+  it('supports multiple schedules per agent/thread with distinct ids', async () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    const a = await mastra.heartbeats.create({
+    const a = await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/5 * * * *',
       prompt: 'a',
@@ -71,7 +71,7 @@ describe('mastra.heartbeats', () => {
       threadId: 't1',
       resourceId: 'u1',
     });
-    const b = await mastra.heartbeats.create({
+    const b = await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/10 * * * *',
       prompt: 'b',
@@ -81,7 +81,7 @@ describe('mastra.heartbeats', () => {
     });
 
     expect(a.id).not.toBe(b.id);
-    const list = await mastra.heartbeats.list({ agentId: agent.id });
+    const list = await mastra.schedules.list({ agentId: agent.id });
     expect(list).toHaveLength(2);
     expect(list.map(h => h.name).sort()).toEqual(['evening', 'morning']);
   });
@@ -90,14 +90,14 @@ describe('mastra.heartbeats', () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    await expect(mastra.heartbeats.create({ agentId: agent.id, cron: 'not-a-cron', prompt: 'p' })).rejects.toThrow();
+    await expect(mastra.schedules.create({ agentId: agent.id, cron: 'not-a-cron', prompt: 'p' })).rejects.toThrow();
   });
 
   it('rejects a missing agentId', async () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    await expect(mastra.heartbeats.create({ cron: '*/5 * * * *', prompt: 'p' } as any)).rejects.toThrow(/agentId/);
+    await expect(mastra.schedules.create({ cron: '*/5 * * * *', prompt: 'p' } as any)).rejects.toThrow(/agentId/);
   });
 
   it('rejects threadId without resourceId', async () => {
@@ -105,7 +105,7 @@ describe('mastra.heartbeats', () => {
     const mastra = makeMastra({ pinger: agent });
 
     await expect(
-      mastra.heartbeats.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p', threadId: 't1' }),
+      mastra.schedules.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p', threadId: 't1' }),
     ).rejects.toThrow(/resourceId/);
   });
 
@@ -114,26 +114,26 @@ describe('mastra.heartbeats', () => {
     const mastra = makeMastra({ pinger: agent });
 
     await expect(
-      mastra.heartbeats.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p', ifIdle: 'wake' } as any),
+      mastra.schedules.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p', ifIdle: 'wake' } as any),
     ).rejects.toThrow(/threadId/);
   });
 
-  it('rejects updating thread-only knobs on a threadless heartbeat', async () => {
+  it('rejects updating thread-only knobs on a threadless schedule', async () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    const hb = await mastra.heartbeats.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p' });
+    const hb = await mastra.schedules.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p' });
 
-    await expect(mastra.heartbeats.update(hb.id, { ifIdle: 'wake' } as any)).rejects.toThrow(/threadId/);
-    await expect(mastra.heartbeats.update(hb.id, { ifActive: 'queue' } as any)).rejects.toThrow(/threadId/);
-    await expect(mastra.heartbeats.update(hb.id, { signalType: 'notification' } as any)).rejects.toThrow(/threadId/);
+    await expect(mastra.schedules.update(hb.id, { ifIdle: 'wake' } as any)).rejects.toThrow(/threadId/);
+    await expect(mastra.schedules.update(hb.id, { ifActive: 'queue' } as any)).rejects.toThrow(/threadId/);
+    await expect(mastra.schedules.update(hb.id, { signalType: 'notification' } as any)).rejects.toThrow(/threadId/);
 
-    // A non-thread-scoped patch on the same threadless heartbeat still works.
-    const patched = await mastra.heartbeats.update(hb.id, { prompt: 'changed' });
+    // A non-thread-scoped patch on the same threadless schedule still works.
+    const patched = await mastra.schedules.update(hb.id, { prompt: 'changed' });
     expect(patched.prompt).toBe('changed');
   });
 
-  it('refuses heartbeats when storage lacks the schedules domain', async () => {
+  it('refuses schedules when storage lacks the schedules domain', async () => {
     const agent = makeAgent('pinger');
     // Mastra now always backs `new Mastra({})` with an in-memory store (which
     // includes the schedules domain), so the guard can only be exercised by a
@@ -141,32 +141,32 @@ describe('mastra.heartbeats', () => {
     const storage = new MockStore();
     delete (storage.stores as Partial<typeof storage.stores>).schedules;
     const mastra = new Mastra({ logger: false, storage, agents: { pinger: agent } });
-    await expect(mastra.heartbeats.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p' })).rejects.toThrow(
+    await expect(mastra.schedules.create({ agentId: agent.id, cron: '*/5 * * * *', prompt: 'p' })).rejects.toThrow(
       /schedules/,
     );
   });
 
-  it('delete removes the heartbeat by id', async () => {
+  it('delete removes the schedule by id', async () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    const hb = await mastra.heartbeats.create({
+    const hb = await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/5 * * * *',
       prompt: 'p',
       threadId: 't1',
       resourceId: 'u1',
     });
-    expect(await mastra.heartbeats.get(hb.id)).not.toBeNull();
+    expect(await mastra.schedules.get(hb.id)).not.toBeNull();
 
-    await mastra.heartbeats.delete(hb.id);
-    expect(await mastra.heartbeats.get(hb.id)).toBeNull();
+    await mastra.schedules.delete(hb.id);
+    expect(await mastra.schedules.get(hb.id)).toBeNull();
   });
 
   it('delete is a no-op for unknown ids', async () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
-    await expect(mastra.heartbeats.delete('hb_does-not-exist')).resolves.toBeUndefined();
+    await expect(mastra.schedules.delete('agent_does-not-exist')).resolves.toBeUndefined();
   });
 
   it('list filters by agentId', async () => {
@@ -174,15 +174,15 @@ describe('mastra.heartbeats', () => {
     const b = makeAgent('b');
     const mastra = makeMastra({ a, b });
 
-    await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A' });
-    await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A2', threadId: 't', resourceId: 'r' });
-    await mastra.heartbeats.create({ agentId: 'b', cron: '*/5 * * * *', prompt: 'B' });
+    await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A' });
+    await mastra.schedules.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A2', threadId: 't', resourceId: 'r' });
+    await mastra.schedules.create({ agentId: 'b', cron: '*/5 * * * *', prompt: 'B' });
 
-    const aList = await mastra.heartbeats.list({ agentId: 'a' });
+    const aList = await mastra.schedules.list({ agentId: 'a' });
     expect(aList).toHaveLength(2);
     expect(aList.every(h => h.agentId === 'a')).toBe(true);
 
-    const bList = await mastra.heartbeats.list({ agentId: 'b' });
+    const bList = await mastra.schedules.list({ agentId: 'b' });
     expect(bList).toHaveLength(1);
     expect(bList[0]!.agentId).toBe('b');
   });
@@ -191,7 +191,7 @@ describe('mastra.heartbeats', () => {
     const agent = makeAgent('pinger');
     const mastra = makeMastra({ pinger: agent });
 
-    await mastra.heartbeats.create({
+    await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/5 * * * *',
       prompt: 'a',
@@ -199,7 +199,7 @@ describe('mastra.heartbeats', () => {
       threadId: 't1',
       resourceId: 'u1',
     });
-    await mastra.heartbeats.create({
+    await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/5 * * * *',
       prompt: 'b',
@@ -207,7 +207,7 @@ describe('mastra.heartbeats', () => {
       threadId: 't1',
       resourceId: 'u1',
     });
-    await mastra.heartbeats.create({
+    await mastra.schedules.create({
       agentId: agent.id,
       cron: '*/5 * * * *',
       prompt: 'c',
@@ -215,8 +215,8 @@ describe('mastra.heartbeats', () => {
       resourceId: 'u1',
     });
 
-    expect(await mastra.heartbeats.list({ agentId: agent.id, threadId: 't1' })).toHaveLength(2);
-    expect(await mastra.heartbeats.list({ agentId: agent.id, name: 'morning' })).toHaveLength(1);
-    expect(await mastra.heartbeats.list({ agentId: agent.id, threadId: 't2' })).toHaveLength(1);
+    expect(await mastra.schedules.list({ agentId: agent.id, threadId: 't1' })).toHaveLength(2);
+    expect(await mastra.schedules.list({ agentId: agent.id, name: 'morning' })).toHaveLength(1);
+    expect(await mastra.schedules.list({ agentId: agent.id, threadId: 't2' })).toHaveLength(1);
   });
 });

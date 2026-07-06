@@ -502,8 +502,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'long-running-agents/heartbeats',
-          label: 'Heartbeats',
+          id: 'long-running-agents/schedules',
+          label: 'Schedules',
           customProps: {
             tags: ['beta'],
           },

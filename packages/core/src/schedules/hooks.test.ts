@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Mastra } from '../../mastra';
-import type { ScheduleTarget } from '../../storage/domains/schedules/base';
-import type { HeartbeatHooks } from './types';
-import { executeHeartbeat } from './worker';
+import type { Mastra } from '../mastra';
+import type { ScheduleTarget } from '../storage/domains/schedules/base';
+import type { ScheduleHooks } from './types';
+import { executeAgentSchedule } from './worker';
 
-type HeartbeatTarget = Extract<ScheduleTarget, { type: 'heartbeat' }>;
+type AgentTarget = Extract<ScheduleTarget, { type: 'agent' }>;
 
 // Build a `sendSignal` return matching the `accepted` API: a sync object
 // carrying `signal` plus an `accepted` promise that resolves to the routing
@@ -38,25 +38,25 @@ function makeMastra(opts: { agent?: any; storage?: ReturnType<typeof makeStorage
       return opts.agent;
     }),
     getLogger: () => ({ debug: vi.fn(), error: vi.fn(), warn: vi.fn(), info: vi.fn() }),
-    heartbeats: {
+    schedules: {
       get: vi.fn(async () => null),
     },
-    __getHeartbeatHooks: () => opts.agent?.__getHeartbeatHooks?.(),
+    __getScheduleHooks: () => opts.agent?.__getScheduleHooks?.(),
   } as unknown as Mastra;
 }
 
-function makeTarget(overrides: Partial<HeartbeatTarget> = {}): HeartbeatTarget {
+function makeTarget(overrides: Partial<AgentTarget> = {}): AgentTarget {
   return {
-    type: 'heartbeat',
+    type: 'agent',
     agentId: 'a1',
     prompt: 'row prompt',
     ...overrides,
-  } as HeartbeatTarget;
+  } as AgentTarget;
 }
 
 function makeAgent(
   opts: {
-    hooks?: HeartbeatHooks;
+    hooks?: ScheduleHooks;
     sendSignal?: ReturnType<typeof vi.fn>;
     generate?: ReturnType<typeof vi.fn>;
     threadExists?: boolean;
@@ -68,11 +68,11 @@ function makeAgent(
     getMemory: vi.fn(async () => ({
       getThreadById: vi.fn(async () => (opts.threadExists === false ? null : { id: 't1', updatedAt: new Date(0) })),
     })),
-    __getHeartbeatHooks: () => opts.hooks,
+    __getScheduleHooks: () => opts.hooks,
   };
 }
 
-describe('HeartbeatWorker — lifecycle hooks', () => {
+describe('AgentScheduleWorker — lifecycle hooks', () => {
   it('prepare returning overrides changes effective values used by sendSignal', async () => {
     const sendSignal: any = vi.fn(() => signalResult({ action: 'wake', runId: 'r1' }));
     const prepare = vi.fn(() => ({ threadId: 'new-thread', resourceId: 'new-res', prompt: 'hooked prompt' }));
@@ -80,7 +80,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { prepare, onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ prompt: 'row prompt' }));
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ prompt: 'row prompt' }));
 
     expect(result.outcome).toBe('succeeded');
     expect(sendSignal).toHaveBeenCalledTimes(1);
@@ -105,7 +105,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { prepare, onFinish }, sendSignal, generate });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(result.outcome).toBe('skipped');
     expect(sendSignal).not.toHaveBeenCalled();
@@ -119,7 +119,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { prepare }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1', prompt: 'row prompt' }));
+    await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1', prompt: 'row prompt' }));
 
     const [signal] = sendSignal.mock.calls[0]!;
     expect(signal.contents).toBe('row prompt');
@@ -136,7 +136,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { prepare, onError, onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(result.outcome).toBe('failed');
     expect(sendSignal).not.toHaveBeenCalled();
@@ -150,7 +150,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+    await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'succeeded', runId: 'r3' }));
   });
@@ -162,7 +162,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { prepare, onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    await executeHeartbeat(mastra, 'hb1', makeTarget({ agentId: 'a1', threadId: 't1', resourceId: 'r1' }));
+    await executeAgentSchedule(mastra, 'hb1', makeTarget({ agentId: 'a1', threadId: 't1', resourceId: 'r1' }));
 
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'a1' }));
     expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'a1', outcome: 'succeeded' }));
@@ -174,7 +174,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(result.outcome).toBe('delivered');
     expect(onFinish).toHaveBeenCalledWith(
@@ -188,7 +188,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(result.outcome).toBe('persisted');
     // `persist` carries no runId under the accepted API — the asymmetric union
@@ -202,7 +202,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(result.outcome).toBe('discarded');
     // `discard` carries no runId under the accepted API.
@@ -220,7 +220,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onFinish }, generate });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget());
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget());
 
     expect(result.outcome).toBe('succeeded');
     expect(onFinish).toHaveBeenCalledWith(
@@ -241,7 +241,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onError }, generate });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget());
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget());
 
     expect(result.outcome).toBe('failed');
     expect(onError).toHaveBeenCalledWith(expect.objectContaining({ phase: 'run', error: err }));
@@ -257,7 +257,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onAbort, onError }, generate });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget());
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget());
 
     expect(result.outcome).toBe('aborted');
     expect(onAbort).toHaveBeenCalledTimes(1);
@@ -273,7 +273,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }), {
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }), {
       logger: { error: loggerError },
     });
 
@@ -287,11 +287,11 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
       sendSignal,
       generate: vi.fn(),
       getMemory: vi.fn(async () => ({ getThreadById: vi.fn(async () => ({ id: 't1', updatedAt: new Date(0) })) })),
-      // __getHeartbeatHooks intentionally omitted
+      // __getScheduleHooks intentionally omitted
     };
     const mastra = makeMastra({ agent });
 
-    const result = await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
+    const result = await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(result.outcome).toBe('succeeded');
   });
@@ -303,7 +303,7 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     const agent = makeAgent({ hooks: { prepare, onFinish }, sendSignal });
     const mastra = makeMastra({ agent });
 
-    await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }), {
+    await executeAgentSchedule(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }), {
       triggerKind: 'manual',
     });
 
