@@ -1,6 +1,6 @@
 import * as React from 'react';
 
-const useIsomorphicLayoutEffect = typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect;
+import { useIsomorphicLayoutEffect } from './use-isomorphic-layout-effect';
 
 const getElementHeight = (element: HTMLElement): number => {
   const rectHeight = element.getBoundingClientRect().height;

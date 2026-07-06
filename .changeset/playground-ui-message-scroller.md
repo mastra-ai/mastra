@@ -2,7 +2,7 @@
 '@mastra/playground-ui': patch
 ---
 
-Added reusable message scroller and thread rail primitives for conversation navigation.
+Added reusable message scroller and thread rail primitives for conversation navigation, plus a shared `useIsomorphicLayoutEffect` hook for layout work that must also render safely on the server.
 
 ```tsx
 import {
