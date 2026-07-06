@@ -8,7 +8,7 @@ vi.mock('../prune-chat.js', () => ({
   pruneChatContainer: vi.fn(),
 }));
 
-vi.mock('@internal/mastracode/utils/project', () => ({
+vi.mock('@mastra/code-sdk/utils/project', () => ({
   getCurrentGitBranch: vi.fn(() => 'main'),
   getCurrentGitBranchAsync: vi.fn(() => Promise.resolve('main')),
 }));

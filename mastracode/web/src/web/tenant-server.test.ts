@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // isolation (distinct users -> distinct mounts).
 const builtStorages: unknown[] = [];
 
-vi.mock('@internal/mastracode', () => ({
+vi.mock('@mastra/code-sdk', () => ({
   mountAgentControllerOnMastra: vi.fn(async (config: { storage?: unknown }) => {
     builtStorages.push(config.storage);
     return {

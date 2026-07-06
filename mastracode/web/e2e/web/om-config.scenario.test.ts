@@ -4,8 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
-import { applyOmRoleOverride } from '@internal/mastracode/onboarding/om-settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import { applyOmRoleOverride } from '@mastra/code-sdk/onboarding/om-settings';
 import { readOMConfig } from '../../src/web/config-routes.js';
 import type { OMSession } from '../../src/web/config-routes.js';
 

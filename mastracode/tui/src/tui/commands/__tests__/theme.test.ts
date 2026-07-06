@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   getThemeMode: vi.fn(),
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: mocks.loadSettings,
   saveSettings: mocks.saveSettings,
 }));

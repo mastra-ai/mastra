@@ -1,17 +1,17 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import { setClipboardText } from '@internal/mastracode/clipboard/index';
-import { removeCustomPackFromSettings } from '@internal/mastracode/onboarding/custom-packs';
-import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@internal/mastracode/onboarding/packs';
-import { getAvailableModePacks } from '@internal/mastracode/onboarding/packs';
+import { setClipboardText } from '@mastra/code-sdk/clipboard/index';
+import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
+import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
+import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
   resolveThreadActiveModelPackId,
   saveSettings,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-} from '@internal/mastracode/onboarding/settings';
-import type { GlobalSettings } from '@internal/mastracode/onboarding/settings';
+} from '@mastra/code-sdk/onboarding/settings';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import chalk from 'chalk';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';

@@ -29,7 +29,7 @@
  */
 
 import { Mastra } from '@mastra/core/mastra';
-import { prepareAgentControllerMount } from '@internal/mastracode';
+import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import { TenantDispatcher } from '../web/tenant-server.js';

@@ -59,7 +59,7 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: updateStatusLineMock,
 }));
 
-vi.mock('@internal/mastracode/utils/project', () => ({
+vi.mock('@mastra/code-sdk/utils/project', () => ({
   getUserId: getUserIdMock,
 }));
 

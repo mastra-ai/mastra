@@ -1,8 +1,8 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import type { ThinkingLevelSetting } from '@internal/mastracode/onboarding/settings';
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import {
   THINKING_LEVELS,
   getThinkingLevelForModel,

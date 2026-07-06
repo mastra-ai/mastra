@@ -2,7 +2,7 @@
 # standalone lockfile and the project never joins the monorepo workspace.
 # Monorepo packages are consumed through `link:` dependencies, which resolve to
 # workspace directories — run `pnpm install` at the monorepo root and build
-# @internal/mastracode (`pnpm --filter ./mastracode/core build:lib`) first.
+# @mastra/code-sdk (`pnpm --filter ./mastracode/core build:lib`) first.
 packages:
   - '.'
 # Share pnpm's machine-global virtual store (same setting as the monorepo
@@ -12,7 +12,11 @@ packages:
 enableGlobalVirtualStore: true
 # Mirrors the monorepo root policy: postinstall build scripts for these deps
 # are unnecessary (esbuild works without its install script under pnpm's
-# fallback; msw's script is telemetry/init only).
+# fallback; msw's script is telemetry/init only; onnxruntime-node's native
+# build is not needed at runtime for @mastra/fastembed text embedding).
+# Listing them here (even as false) also prevents pnpm v10 from exiting with
+# ERR_PNPM_IGNORED_BUILDS when the deployer copies this file to .mastra/output.
 allowBuilds:
   esbuild: false
   msw: false
+  onnxruntime-node: false

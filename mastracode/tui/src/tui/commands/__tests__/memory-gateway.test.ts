@@ -19,7 +19,7 @@ vi.mock('@mastra/core/llm', () => ({
   },
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: mockLoadSettings,
   saveSettings: mockSaveSettings,
   MEMORY_GATEWAY_PROVIDER: 'mastra-gateway',

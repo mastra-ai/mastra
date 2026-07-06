@@ -4,9 +4,9 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AuthStorage } from '@internal/mastracode/auth/storage';
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
-import { removeCustomPackFromSettings } from '@internal/mastracode/onboarding/custom-packs';
+import { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import { buildProviderAccess, listModelPacks } from '../../src/web/config-routes.js';
 
 /**

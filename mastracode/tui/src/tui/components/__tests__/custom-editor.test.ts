@@ -53,7 +53,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   };
 });
 
-vi.mock('@internal/mastracode/clipboard/index', () => ({
+vi.mock('@mastra/code-sdk/clipboard/index', () => ({
   getClipboardImage: mocks.getClipboardImage,
   getClipboardText: mocks.getClipboardText,
 }));

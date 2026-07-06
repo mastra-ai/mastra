@@ -4,19 +4,19 @@
  */
 import fs from 'node:fs';
 
-import { createMastraCodeAnalytics } from '@internal/mastracode/analytics';
-import { isStreamDestroyedError } from '@internal/mastracode/error-classification';
-import { hasHeadlessFlag, runMCCli } from '@internal/mastracode/headless/index';
-import { createBrowserFromSettings, loadSettings } from '@internal/mastracode/onboarding/settings';
-import { formatScaffoldSuccess, scaffoldPlugin } from '@internal/mastracode/plugins/scaffold';
-import { setupDebugLogging } from '@internal/mastracode/utils/debug-log';
-import { drainPipedStdin, reopenStdinFromTTY } from '@internal/mastracode/utils/stdin-pipe';
-import { releaseAllThreadLocks } from '@internal/mastracode/utils/thread-lock';
-import { getCurrentVersion } from '@internal/mastracode/utils/update-check';
+import { createMastraCode } from '@mastra/code-sdk';
+import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
+import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
+import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
+import { createBrowserFromSettings, loadSettings } from '@mastra/code-sdk/onboarding/settings';
+import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
+import { setupDebugLogging } from '@mastra/code-sdk/utils/debug-log';
+import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
+import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
+import { getCurrentVersion } from '@mastra/code-sdk/utils/update-check';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
-import { createMastraCode } from './index.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
@@ -250,7 +250,7 @@ async function main() {
   }
 
   if (process.argv.includes('--acp')) {
-    const { acpMain } = await import('@internal/mastracode/acp/index');
+    const { acpMain } = await import('@mastra/code-sdk/acp/index');
     return acpMain({ dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve') });
   }
 

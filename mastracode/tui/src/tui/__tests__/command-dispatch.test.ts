@@ -66,7 +66,7 @@ vi.mock('../display.js', () => ({
   showInfo: mocks.showInfo,
 }));
 
-vi.mock('@internal/mastracode/utils/slash-command-processor', () => ({
+vi.mock('@mastra/code-sdk/utils/slash-command-processor', () => ({
   processSlashCommand: mocks.processSlashCommand,
 }));
 

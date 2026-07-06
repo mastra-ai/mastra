@@ -1,5 +1,5 @@
-import { applyOmRoleOverride, persistOmObserveAttachments } from '@internal/mastracode/onboarding/om-settings';
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
+import { applyOmRoleOverride, persistOmObserveAttachments } from '@mastra/code-sdk/onboarding/om-settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { OMSettingsComponent } from '../components/om-settings.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';

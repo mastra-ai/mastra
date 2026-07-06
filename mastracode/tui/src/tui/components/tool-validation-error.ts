@@ -5,7 +5,7 @@
 
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import { MC_TOOLS } from '@internal/mastracode/tool-names';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import { safeStringify } from '@mastra/core/utils';
 import { theme } from '../theme.js';
 

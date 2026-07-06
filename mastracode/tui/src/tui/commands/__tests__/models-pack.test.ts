@@ -1,5 +1,5 @@
-import type { ModePack } from '@internal/mastracode/onboarding/packs';
-import type { GlobalSettings, StorageSettings } from '@internal/mastracode/onboarding/settings';
+import type { ModePack } from '@mastra/code-sdk/onboarding/packs';
+import type { GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboarding/settings';
 import { describe, expect, it } from 'vitest';
 import {
   deserializePack,

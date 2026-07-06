@@ -1,19 +1,19 @@
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { AuthStorage } from '@internal/mastracode/auth/storage';
-import { removeCustomPackFromSettings } from '@internal/mastracode/onboarding/custom-packs';
-import { removeCustomProviderFromSettings, upsertCustomProviderInSettings } from '@internal/mastracode/onboarding/custom-providers';
-import { applyOmRoleOverride, persistOmObserveAttachments } from '@internal/mastracode/onboarding/om-settings';
-import { getAvailableModePacks } from '@internal/mastracode/onboarding/packs';
-import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@internal/mastracode/onboarding/packs';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
+import { removeCustomProviderFromSettings, upsertCustomProviderInSettings } from '@mastra/code-sdk/onboarding/custom-providers';
+import { applyOmRoleOverride, persistOmObserveAttachments } from '@mastra/code-sdk/onboarding/om-settings';
+import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
+import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import {
   getCustomProviderId,
   loadSettings,
   saveSettings,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-} from '@internal/mastracode/onboarding/settings';
-import type { CustomProviderSetting } from '@internal/mastracode/onboarding/settings';
+} from '@mastra/code-sdk/onboarding/settings';
+import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 
 /**
  * Server-side configuration routes for the web app.

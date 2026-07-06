@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@internal/mastracode/utils/plans';
+import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@mastra/code-sdk/utils/plans';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';

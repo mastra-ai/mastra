@@ -1,1 +1,1 @@
-export * from '@internal/mastracode/headless/index';
+export * from '@mastra/code-sdk/headless/index';

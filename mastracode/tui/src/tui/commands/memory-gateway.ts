@@ -3,7 +3,7 @@ import {
   saveSettings,
   MEMORY_GATEWAY_PROVIDER,
   MEMORY_GATEWAY_DEFAULT_URL,
-} from '@internal/mastracode/onboarding/settings';
+} from '@mastra/code-sdk/onboarding/settings';
 import { GatewayRegistry } from '@mastra/core/llm';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';

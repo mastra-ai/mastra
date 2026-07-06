@@ -2,7 +2,7 @@
  * Engine factory: builds the active `STTEngine` from voice settings.
  */
 
-import type { AuthStorage } from '@internal/mastracode/auth/storage';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { CloudSTTEngine } from './cloud-engine.js';
 import { MacosNativeSTTEngine } from './macos-native-engine.js';
 import type { STTEngine, STTEngineKind } from './types.js';

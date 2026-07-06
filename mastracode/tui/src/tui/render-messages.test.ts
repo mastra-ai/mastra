@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Container } from '@earendil-works/pi-tui';
-import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@internal/mastracode/utils/plans';
+import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@mastra/code-sdk/utils/plans';
 import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

@@ -6,7 +6,7 @@
 import * as os from 'node:os';
 import { Box, Container, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import { MC_TOOLS } from '@internal/mastracode/tool-names';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';

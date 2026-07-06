@@ -1,4 +1,4 @@
-import type { VoiceSettings } from '@internal/mastracode/onboarding/settings';
+import type { VoiceSettings } from '@mastra/code-sdk/onboarding/settings';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { STTEngine, STTSession, STTSessionCallbacks } from '../engines/types.js';

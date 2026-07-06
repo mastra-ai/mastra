@@ -14,6 +14,9 @@ importers:
       '@mastra/client-js':
         specifier: link:../../client-sdks/client-js
         version: link:../../client-sdks/client-js
+      '@mastra/code-sdk':
+        specifier: link:../core
+        version: link:../core
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
@@ -81,9 +84,6 @@ importers:
       '@copilotkit/aimock':
         specifier: ^1.29.0
         version: 1.35.0(vitest@4.1.8(@types/node@22.19.21)(jsdom@26.1.0)(msw@2.14.6(@types/node@22.19.21)(typescript@6.0.3))(vite@6.4.3(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.5)))
-      '@internal/mastracode':
-        specifier: link:../core
-        version: link:../core
       '@tailwindcss/vite':
         specifier: 4.2.2
         version: 4.2.2(vite@6.4.3(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.5))

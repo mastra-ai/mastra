@@ -1,1 +1,1 @@
-export * from '@internal/mastracode';
+export * from '@mastra/code-sdk';

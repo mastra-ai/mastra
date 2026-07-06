@@ -2232,6 +2232,9 @@ importers:
       '@mastra/agent-browser':
         specifier: workspace:*
         version: link:../../browser/agent-browser
+      '@mastra/code-sdk':
+        specifier: workspace:^
+        version: link:../core
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -2320,9 +2323,6 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
-      '@internal/mastracode':
-        specifier: workspace:*
-        version: link:../core
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder

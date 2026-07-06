@@ -8,7 +8,7 @@
 
 import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@earendil-works/pi-tui';
-import type { StorageBackend } from '@internal/mastracode/onboarding/settings';
+import type { StorageBackend } from '@mastra/code-sdk/onboarding/settings';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';

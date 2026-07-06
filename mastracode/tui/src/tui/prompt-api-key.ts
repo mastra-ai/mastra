@@ -3,7 +3,7 @@
  */
 
 import type { TUI } from '@earendil-works/pi-tui';
-import type { AuthStorage } from '@internal/mastracode/auth/storage';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { ApiKeyDialogComponent } from './components/api-key-dialog.js';
 import type { ModelItem } from './components/model-selector.js';
 import { showModalOverlay } from './overlay.js';

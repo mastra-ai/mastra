@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { detectTerminalTheme } from '../detect-theme.js';
 import { applyThemeMode, getThemeMode } from '../theme.js';
 import type { SlashCommandContext } from './types.js';

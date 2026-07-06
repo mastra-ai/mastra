@@ -23,8 +23,8 @@ import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 
-import { mountAgentControllerOnMastra } from '@internal/mastracode';
-import type { MastraCodeConfig } from '@internal/mastracode';
+import { mountAgentControllerOnMastra } from '@mastra/code-sdk';
+import type { MastraCodeConfig } from '@mastra/code-sdk';
 
 import { webAuthTenant } from './auth.js';
 import { getUserStorage } from './tenant-storage.js';

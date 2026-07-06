@@ -2,7 +2,7 @@
  * Event handlers for agent lifecycle events:
  * agent_start, agent_end (normal / aborted / error).
  */
-import { getCurrentGitBranchAsync } from '@internal/mastracode/utils/project';
+import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';

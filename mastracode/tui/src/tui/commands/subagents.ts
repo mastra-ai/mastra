@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';

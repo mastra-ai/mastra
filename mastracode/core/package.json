@@ -1,11 +1,14 @@
 {
-  "name": "@internal/mastracode",
+  "name": "@mastra/code-sdk",
   "version": "0.1.0",
-  "description": "Internal Mastra Code core (everything except the TUI) — bundled into the published mastracode package",
-  "private": true,
+  "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

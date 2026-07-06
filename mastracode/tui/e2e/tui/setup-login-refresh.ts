@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { anthropicOAuthProvider } from '@internal/mastracode/auth/providers/anthropic';
+import { anthropicOAuthProvider } from '@mastra/code-sdk/auth/providers/anthropic';
 import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
 

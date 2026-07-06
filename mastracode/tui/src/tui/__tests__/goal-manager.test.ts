@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   loadSettings: vi.fn(() => ({ models: { goalJudgeModel: '__GATEWAY_OPENAI_MODEL__', goalMaxTurns: 50 } })),
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: mocks.loadSettings,
 }));
 

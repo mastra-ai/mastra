@@ -1,6 +1,6 @@
 import { StdinBuffer } from '@earendil-works/pi-tui';
 import type { Terminal } from '@earendil-works/pi-tui';
-import type { MastraCodeConfig } from '@internal/mastracode';
+import type { MastraCodeConfig } from '@mastra/code-sdk';
 import type { Terminal as XtermTerminalType } from '@xterm/headless';
 import xterm from '@xterm/headless';
 
@@ -333,12 +333,12 @@ async function startMastraCodeApp(
   options?: McE2eStartMastraCodeAppOptions,
 ): Promise<McE2eInProcessApp> {
   const [{ createMastraCode }, { MastraTUI }, { createBrowserFromSettings, loadSettings }] = await Promise.all([
-    import('@internal/mastracode'),
+    import('@mastra/code-sdk'),
     import('../src/tui/index.js'),
-    import('@internal/mastracode/onboarding/settings'),
+    import('@mastra/code-sdk/onboarding/settings'),
   ]);
   if (options?.setupDebugLogging) {
-    const { setupDebugLogging } = await import('@internal/mastracode/utils/debug-log');
+    const { setupDebugLogging } = await import('@mastra/code-sdk/utils/debug-log');
     setupDebugLogging();
   }
   const warn = globalThis.console.warn;
@@ -430,7 +430,7 @@ export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<
   };
 
   return withRunEnvironment(runConfig, async () => {
-    const { releaseAllThreadLocks } = await import('@internal/mastracode/utils/thread-lock');
+    const { releaseAllThreadLocks } = await import('@mastra/code-sdk/utils/thread-lock');
     let stopApp: (() => Promise<void> | void) | undefined;
 
     try {

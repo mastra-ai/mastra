@@ -5,7 +5,7 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
-import { readPlanFile, resolvePlanPath } from '@internal/mastracode/utils/plans';
+import { readPlanFile, resolvePlanPath } from '@mastra/code-sdk/utils/plans';
 import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/core/agent-controller';
 import { parseSubagentMeta } from '@mastra/core/agent-controller';
 import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';

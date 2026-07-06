@@ -1,11 +1,11 @@
-import type { BrowserProvider, BrowserSettings, StagehandEnv } from '@internal/mastracode/onboarding/settings';
+import type { BrowserProvider, BrowserSettings, StagehandEnv } from '@mastra/code-sdk/onboarding/settings';
 import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
   loadSettings,
   saveSettings,
   setProfileProvider,
-} from '@internal/mastracode/onboarding/settings';
+} from '@mastra/code-sdk/onboarding/settings';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { AuthStorage } from '@internal/mastracode/auth/storage';
+import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { listProviders } from '../../src/web/config-routes.js';
 
 /**

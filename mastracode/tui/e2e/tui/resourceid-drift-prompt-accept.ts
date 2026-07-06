@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { detectProject } from '@internal/mastracode/utils/project';
+import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { McE2eScenario } from './types.js';
 
 const OLD_RESOURCE_ID = 'mc-e2e-old-dirname-resource';

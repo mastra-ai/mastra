@@ -2,8 +2,8 @@
  * Event handlers for interactive prompt events:
  * tool_suspended (ask_user / request_access / submit_plan).
  */
-import { shouldShowDiff } from '@internal/mastracode/utils/plan-diff';
-import { approvePlanFile, readPlanFile, resolvePlanPath } from '@internal/mastracode/utils/plans';
+import { shouldShowDiff } from '@mastra/code-sdk/utils/plan-diff';
+import { approvePlanFile, readPlanFile, resolvePlanPath } from '@mastra/code-sdk/utils/plans';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';

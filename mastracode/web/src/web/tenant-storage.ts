@@ -39,7 +39,7 @@ import { mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { LibSQLStorageConfig } from '@internal/mastracode/utils/project';
+import type { LibSQLStorageConfig } from '@mastra/code-sdk/utils/project';
 import { isTursoProvisioningEnabled, provisionTursoTenant } from './tenant-provisioner.js';
 
 /**

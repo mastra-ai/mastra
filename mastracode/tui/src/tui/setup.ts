@@ -5,9 +5,9 @@ import { execFileSync } from 'node:child_process';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
-import { getUserId } from '@internal/mastracode/utils/project';
-import { loadCustomCommands } from '@internal/mastracode/utils/slash-command-loader';
-import { ThreadLockError } from '@internal/mastracode/utils/thread-lock';
+import { getUserId } from '@mastra/code-sdk/utils/project';
+import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
+import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';

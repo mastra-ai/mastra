@@ -20,7 +20,7 @@ const {
   saveSettingsMock: vi.fn(),
 }));
 
-vi.mock('@internal/mastracode/utils/update-check', () => ({
+vi.mock('@mastra/code-sdk/utils/update-check', () => ({
   fetchLatestVersion: fetchLatestVersionMock,
   fetchChangelog: fetchChangelogMock,
   detectPackageManager: detectPackageManagerMock,
@@ -29,7 +29,7 @@ vi.mock('@internal/mastracode/utils/update-check', () => ({
   getInstallCommand: getInstallCommandMock,
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: loadSettingsMock,
   saveSettings: saveSettingsMock,
 }));

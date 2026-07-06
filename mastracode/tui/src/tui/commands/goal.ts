@@ -12,7 +12,7 @@
  */
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';

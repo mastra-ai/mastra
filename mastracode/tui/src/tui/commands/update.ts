@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import {
   detectPackageManager,
   fetchChangelog,
@@ -6,7 +6,7 @@ import {
   getInstallCommand,
   isNewerVersion,
   runUpdate,
-} from '@internal/mastracode/utils/update-check';
+} from '@mastra/code-sdk/utils/update-check';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
 

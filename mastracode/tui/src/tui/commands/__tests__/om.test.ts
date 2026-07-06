@@ -1,4 +1,4 @@
-import type { GlobalSettings, StorageSettings } from '@internal/mastracode/onboarding/settings';
+import type { GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboarding/settings';
 import { describe, expect, it } from 'vitest';
 
 import { applyOmRoleOverride } from '../om.js';

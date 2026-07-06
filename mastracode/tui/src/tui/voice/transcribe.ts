@@ -19,9 +19,9 @@
  */
 
 import { Readable } from 'node:stream';
-import type { AuthStorage } from '@internal/mastracode/auth/storage';
-import { DEFAULT_STT_MODEL, resolveSTTModel } from '@internal/mastracode/voice/stt-registry';
-import type { STTModel } from '@internal/mastracode/voice/stt-registry';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { DEFAULT_STT_MODEL, resolveSTTModel } from '@mastra/code-sdk/voice/stt-registry';
+import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
 import { DeepgramVoice } from '@mastra/voice-deepgram';
 import { OpenAIVoice } from '@mastra/voice-openai';
 

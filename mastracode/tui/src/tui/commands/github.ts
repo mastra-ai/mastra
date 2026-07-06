@@ -1,4 +1,4 @@
-import { loadSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import { GITHUB_SIGNALS_METADATA_KEY } from '@mastra/github-signals';
 import type { GithubPRSignalInput } from '@mastra/github-signals';
 import { askModalQuestion } from '../modal-question.js';

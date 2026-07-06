@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileS
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { scaffoldPlugin } from '@internal/mastracode/plugins/scaffold';
+import { scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
 import type { McE2ePrepareContext, McE2eScenario } from './types.js';
 import { typeTextSlowly } from './typing-utils.js';
 
@@ -433,7 +433,7 @@ export const pluginsLocalToolScenario: McE2eScenario = {
     writePluginRegistry(projectDir, pluginDir);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
@@ -473,7 +473,7 @@ export const pluginsStreamingToolOutputScenario: McE2eScenario = {
     writePluginRegistry(projectDir, pluginDir);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
@@ -515,7 +515,7 @@ export const pluginsScaffoldInstallToolScenario: McE2eScenario = {
     });
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
@@ -567,7 +567,7 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
     writePluginRegistry(projectDir, hotReloadPluginDir);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
@@ -621,7 +621,7 @@ export const pluginsGithubInstallGhCliScenario: McE2eScenario = {
       'github',
       'acme-github-install-plugin',
     );
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({
@@ -703,7 +703,7 @@ export const pluginsGithubInstallMissingPackageManagerScenario: McE2eScenario = 
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
     if (!githubInstallGhPath) throw new Error('GitHub install gh fixture was not prepared');
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({
@@ -752,7 +752,7 @@ export const pluginsGithubPollUpdateScenario: McE2eScenario = {
     githubPollSourceDir = prepareGithubPollPlugin(projectDir);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     const manager = new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir });
     githubPollManager = manager;
     return startMastraCodeApp({
@@ -801,7 +801,7 @@ export const pluginsBlockedConfigScenario: McE2eScenario = {
     writePluginRegistry(projectDir, pluginDir, true, [PLUGIN_ID]);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
@@ -839,7 +839,7 @@ export const pluginsAssetsLoadingScenario: McE2eScenario = {
     writePluginRegistry(projectDir, pluginDir);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
@@ -900,7 +900,7 @@ export const pluginsCommandUiScenario: McE2eScenario = {
     writePluginRegistry(projectDir, pluginDir);
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
-    const { PluginManager } = await import('@internal/mastracode/plugins/manager');
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
     return startMastraCodeApp({
       config: {
         pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),

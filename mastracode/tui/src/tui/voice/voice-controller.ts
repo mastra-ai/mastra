@@ -11,8 +11,8 @@
  * editor can insert it at the cursor.
  */
 
-import type { AuthStorage } from '@internal/mastracode/auth/storage';
-import type { VoiceSettings } from '@internal/mastracode/onboarding/settings';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import type { VoiceSettings } from '@mastra/code-sdk/onboarding/settings';
 import { createSTTEngine } from './engines/index.js';
 import type { PermissionGuidance, STTEngine, STTSession } from './engines/types.js';
 

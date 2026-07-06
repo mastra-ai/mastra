@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@internal/mastracode/utils/project', () => ({
+vi.mock('@mastra/code-sdk/utils/project', () => ({
   getUserName: vi.fn(() => 'test-user'),
 }));
 

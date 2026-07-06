@@ -3,7 +3,7 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 
-import { parseError } from '@internal/mastracode/utils/errors';
+import { parseError } from '@mastra/code-sdk/utils/errors';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
 import type { NotificationMode, NotificationReason } from './notify.js';

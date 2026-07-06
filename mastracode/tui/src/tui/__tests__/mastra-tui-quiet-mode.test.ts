@@ -1,4 +1,4 @@
-import type { GlobalSettings } from '@internal/mastracode/onboarding/settings';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -11,7 +11,7 @@ vi.mock('../modal-question.js', () => ({
   askModalQuestion: mocks.askModalQuestion,
 }));
 
-vi.mock('@internal/mastracode/onboarding/index', () => ({
+vi.mock('@mastra/code-sdk/onboarding/index', () => ({
   getAvailableModePacks: vi.fn(() => []),
   getAvailableOmPacks: vi.fn(() => []),
   ONBOARDING_VERSION: 1,

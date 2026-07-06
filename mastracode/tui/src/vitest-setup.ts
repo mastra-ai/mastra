@@ -2,7 +2,7 @@ import { vi } from 'vitest';
 
 // Global mock for @mastra/github-signals — the package resolves to dist/ which
 // is unavailable during unit tests.  Every test file that transitively imports
-// @internal/mastracode (which conditionally imports the package) needs this.
+// @mastra/code-sdk (which conditionally imports the package) needs this.
 vi.mock('@mastra/github-signals', () => ({
   GithubSignals: class GithubSignals {
     static signals = {

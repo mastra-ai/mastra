@@ -7,7 +7,7 @@
 
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { AuthMode } from '@internal/mastracode/auth/types';
+import type { AuthMode } from '@mastra/code-sdk/auth/types';
 import { showModalOverlay } from '../overlay.js';
 import { theme } from '../theme.js';
 

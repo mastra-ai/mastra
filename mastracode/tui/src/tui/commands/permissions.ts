@@ -22,7 +22,7 @@ export async function handlePermissionsCommand(ctx: SlashCommandContext, args: s
 }
 
 async function showPermissions(ctx: SlashCommandContext): Promise<void> {
-  const { TOOL_CATEGORIES, getToolsForCategory } = await import('@internal/mastracode/permissions');
+  const { TOOL_CATEGORIES, getToolsForCategory } = await import('@mastra/code-sdk/permissions');
   const rules = ctx.state.session.permissions.getRules();
   const grants = ctx.state.session.getGrants();
   const isYolo = (ctx.state.session.state.get() as any)?.yolo === true;

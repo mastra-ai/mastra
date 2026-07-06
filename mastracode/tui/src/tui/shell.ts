@@ -2,7 +2,7 @@
  * Shell passthrough: execute a shell command and display the output in the TUI.
  * Streams stdout/stderr in real-time using a bordered box that rebuilds on each chunk.
  */
-import { loadSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { ShellStreamComponent } from './components/shell-output.js';
 import { showError, showInfo } from './display.js';

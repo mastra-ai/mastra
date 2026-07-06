@@ -3,7 +3,7 @@
  */
 
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
-import type { OAuthProviderInterface } from '@internal/mastracode/auth/types';
+import type { OAuthProviderInterface } from '@mastra/code-sdk/auth/types';
 import { theme } from '../theme.js';
 
 /**

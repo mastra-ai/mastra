@@ -12,7 +12,7 @@
  * while keeping the controller engine-agnostic.
  */
 
-import type { AuthStorage } from '@internal/mastracode/auth/storage';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { detectRecorder, MicRecording } from '../mic-capture.js';
 import type { RecorderInfo } from '../mic-capture.js';
 import { createTranscriber, hasProviderCredential } from '../transcribe.js';

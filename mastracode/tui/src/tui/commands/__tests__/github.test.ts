@@ -11,7 +11,7 @@ vi.mock('node:child_process', () => ({
   execFile: (...args: unknown[]) => execFileMock(...args),
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: () => loadSettingsMock(),
 }));
 

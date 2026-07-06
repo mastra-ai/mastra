@@ -25,6 +25,7 @@
   "dependencies": {
     "@mastra/auth-workos": "link:../../auth/workos",
     "@mastra/client-js": "link:../../client-sdks/client-js",
+    "@mastra/code-sdk": "link:../core",
     "@mastra/core": "link:../../packages/core",
     "@mastra/hono": "link:../../server-adapters/hono",
     "@mastra/libsql": "link:../../stores/libsql",
@@ -48,7 +49,6 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^3.0.63",
-    "@internal/mastracode": "link:../core",
     "@copilotkit/aimock": "^1.29.0",
     "@tailwindcss/vite": "4.2.2",
     "@testing-library/dom": "^10.4.0",

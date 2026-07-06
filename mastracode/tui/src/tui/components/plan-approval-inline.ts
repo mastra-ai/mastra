@@ -18,8 +18,8 @@ import {
   wrapTextWithAnsi,
 } from '@earendil-works/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
-import type { DiffEntry } from '@internal/mastracode/utils/plan-diff';
-import { generatePlanDiff } from '@internal/mastracode/utils/plan-diff';
+import type { DiffEntry } from '@mastra/code-sdk/utils/plan-diff';
+import { generatePlanDiff } from '@mastra/code-sdk/utils/plan-diff';
 import chalk from 'chalk';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';

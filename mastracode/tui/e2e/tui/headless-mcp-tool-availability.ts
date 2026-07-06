@@ -78,7 +78,7 @@ async function runHeadlessInProcess(terminal: { write: (text: string) => void })
   }) as typeof process.exit;
 
   try {
-    const { runMCCli } = await import('@internal/mastracode/headless/index');
+    const { runMCCli } = await import('@mastra/code-sdk/headless/index');
     await runMCCli();
   } catch (error) {
     if (!(error instanceof Error) || !error.message.startsWith('MC_E2E_HEADLESS_EXIT:0')) throw error;

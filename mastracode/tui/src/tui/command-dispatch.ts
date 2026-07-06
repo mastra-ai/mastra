@@ -1,7 +1,7 @@
 /**
  * Slash command dispatcher: routes command strings to extracted handlers.
  */
-import { processSlashCommand } from '@internal/mastracode/utils/slash-command-processor';
+import { processSlashCommand } from '@mastra/code-sdk/utils/slash-command-processor';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 import {

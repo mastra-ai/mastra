@@ -1,4 +1,4 @@
-import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '@internal/mastracode/auth/storage';
+import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import { LoginDialogComponent } from '../components/login-dialog.js';
 import { promptAuthMode } from '../components/login-mode-selector.js';
 import { LoginSelectorComponent } from '../components/login-selector.js';

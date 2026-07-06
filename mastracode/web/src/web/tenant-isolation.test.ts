@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildLibSQLStore } from '@internal/mastracode/utils/storage-factory';
+import { buildLibSQLStore } from '@mastra/code-sdk/utils/storage-factory';
 import { __clearTenantStorageCache, resolveTenantStorage } from './tenant-storage.js';
 
 // The composite store types `stores`/`stores.memory` as optionally undefined;

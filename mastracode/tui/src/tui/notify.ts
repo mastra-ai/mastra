@@ -4,7 +4,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import type { HookManager } from '@internal/mastracode/hooks/manager';
+import type { HookManager } from '@mastra/code-sdk/hooks/manager';
 
 export type NotificationMode = 'bell' | 'system' | 'both' | 'off';
 

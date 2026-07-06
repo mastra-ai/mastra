@@ -10,7 +10,7 @@ const voiceMocks = vi.hoisted(() => ({
   openMacSettings: vi.fn(async () => true),
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: voiceMocks.loadSettings,
   saveSettings: voiceMocks.saveSettings,
 }));

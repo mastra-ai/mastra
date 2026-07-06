@@ -1,4 +1,4 @@
-import { ThreadLockError } from '@internal/mastracode/utils/thread-lock';
+import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';

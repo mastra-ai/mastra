@@ -4,12 +4,12 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { getCustomProviderId, loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
-import type { GlobalSettings } from '@internal/mastracode/onboarding/settings';
+import { getCustomProviderId, loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import {
   removeCustomProviderFromSettings,
   upsertCustomProviderInSettings,
-} from '@internal/mastracode/onboarding/custom-providers';
+} from '@mastra/code-sdk/onboarding/custom-providers';
 
 /**
  * The web settings panel manages custom OpenAI-compatible providers through the

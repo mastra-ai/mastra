@@ -6,7 +6,7 @@
  * Also includes formatToolResult helper.
  */
 
-import { getToolCategory, TOOL_CATEGORIES } from '@internal/mastracode/permissions';
+import { getToolCategory, TOOL_CATEGORIES } from '@mastra/code-sdk/permissions';
 import type { TaskItemInput } from '@mastra/core/signals';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';

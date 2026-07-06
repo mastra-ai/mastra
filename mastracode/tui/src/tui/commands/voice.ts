@@ -1,11 +1,11 @@
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
-import type { VoiceEngine, VoiceSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import type { VoiceEngine, VoiceSettings } from '@mastra/code-sdk/onboarding/settings';
 import {
   defaultModelForProvider,
   resolveSTTModel,
   sttModelsForProvider,
   sttProviders,
-} from '@internal/mastracode/voice/stt-registry';
+} from '@mastra/code-sdk/voice/stt-registry';
 import { askModalQuestion } from '../modal-question.js';
 import type { PermissionGuidance } from '../voice/engines/types.js';
 import { openMacSettings } from '../voice/native/open-settings.js';

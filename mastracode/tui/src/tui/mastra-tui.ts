@@ -6,21 +6,21 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import type { Component } from '@earendil-works/pi-tui';
-import { getOAuthProviders } from '@internal/mastracode/auth/storage';
+import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
   ONBOARDING_VERSION,
   loadSettings,
   saveSettings,
-} from '@internal/mastracode/onboarding/index';
-import type { ProviderAccess, ProviderAccessLevel } from '@internal/mastracode/onboarding/index';
+} from '@mastra/code-sdk/onboarding/index';
+import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/index';
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   MEMORY_GATEWAY_PROVIDER,
-} from '@internal/mastracode/onboarding/settings';
-import type { LoadedPlugin } from '@internal/mastracode/plugins/types';
+} from '@mastra/code-sdk/onboarding/settings';
+import type { LoadedPlugin } from '@mastra/code-sdk/plugins/types';
 import {
   detectPackageManager,
   fetchChangelog,
@@ -28,7 +28,7 @@ import {
   getInstallCommand,
   isNewerVersion,
   runUpdate,
-} from '@internal/mastracode/utils/update-check';
+} from '@mastra/code-sdk/utils/update-check';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
@@ -1272,7 +1272,7 @@ export class MastraTUI {
         .then(async () => {
           this.state.ui.hideOverlay();
 
-          const { PROVIDER_DEFAULT_MODELS } = await import('@internal/mastracode/auth/storage');
+          const { PROVIDER_DEFAULT_MODELS } = await import('@mastra/code-sdk/auth/storage');
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
             await this.state.session.model.switch({ modelId: defaultModel });

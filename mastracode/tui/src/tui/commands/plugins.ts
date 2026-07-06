@@ -1,7 +1,7 @@
 import { Box, SelectList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
-import type { LoadedPlugin, PluginScope } from '@internal/mastracode/plugins/types';
+import type { LoadedPlugin, PluginScope } from '@mastra/code-sdk/plugins/types';
 import type { MastraCodePluginConfigOption, MastraCodePluginConfigValue } from '../../plugin.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';

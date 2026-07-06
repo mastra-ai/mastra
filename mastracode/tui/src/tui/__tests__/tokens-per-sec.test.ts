@@ -40,7 +40,7 @@ vi.mock('../state.js', () => ({
   getGithubPrSubscriptionsFromMetadata: vi.fn(() => []),
 }));
 
-vi.mock('@internal/mastracode/utils/project', () => ({
+vi.mock('@mastra/code-sdk/utils/project', () => ({
   getCurrentGitBranchAsync: vi.fn(async () => 'main'),
 }));
 

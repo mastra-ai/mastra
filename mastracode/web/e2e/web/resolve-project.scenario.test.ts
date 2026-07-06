@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { detectProject } from '@internal/mastracode/utils/project';
+import { detectProject } from '@mastra/code-sdk/utils/project';
 import { resolveProject } from '../../src/web/fs-routes.js';
 
 /**

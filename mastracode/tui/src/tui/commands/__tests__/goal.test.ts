@@ -19,7 +19,7 @@ const overlayMocks = vi.hoisted(() => ({
   showModalOverlay: vi.fn(),
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => settingsMock);
+vi.mock('@mastra/code-sdk/onboarding/settings', () => settingsMock);
 
 vi.mock('@earendil-works/pi-tui', () => ({
   Box: class {
@@ -85,7 +85,7 @@ vi.mock('@mastra/core/processors', () => ({
   StreamErrorRetryProcessor: class {},
 }));
 
-vi.mock('@internal/mastracode/agents/model', () => ({
+vi.mock('@mastra/code-sdk/agents/model', () => ({
   getModel: vi.fn(() => ({ modelId: 'mock-model' })),
 }));
 

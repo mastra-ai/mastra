@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
-import { getCurrentGitBranchAsync } from '@internal/mastracode/utils/project';
+import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';

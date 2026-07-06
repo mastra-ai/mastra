@@ -5,7 +5,7 @@ import { isAbsolute, join, resolve, sep } from 'node:path';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 
-import { detectProject, getResourceIdOverride } from '@internal/mastracode/utils/project';
+import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 
 /**
  * Server-side directory browser for the web project picker.

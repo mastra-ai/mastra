@@ -2,7 +2,7 @@
  * Help text builder — generates the inline help content shown by /help.
  */
 
-import type { SlashCommandMetadata } from '@internal/mastracode/utils/slash-command-loader';
+import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
 
 export interface HelpTextOptions {
   /** Number of available controller modes (mode commands shown when > 1) */

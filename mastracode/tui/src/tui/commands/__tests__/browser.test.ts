@@ -12,7 +12,7 @@ const browserMocks = vi.hoisted(() => ({
   askModalQuestion: vi.fn(),
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   checkProfileProviderMismatch: browserMocks.checkProfileProviderMismatch,
   createBrowserFromSettings: browserMocks.createBrowserFromSettings,
   loadSettings: browserMocks.loadSettings,

@@ -1,4 +1,4 @@
-import { VALID_EVENTS } from '@internal/mastracode/hooks/index';
+import { VALID_EVENTS } from '@mastra/code-sdk/hooks/index';
 import type { SlashCommandContext } from './types.js';
 
 export function handleHooksCommand(ctx: SlashCommandContext, args: string[]): void {

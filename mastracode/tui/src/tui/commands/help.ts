@@ -1,4 +1,4 @@
-import { loadSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import { buildHelpText } from '../components/help-overlay.js';
 import { describeShellPassthroughInvocation, resolveShellPassthroughInvocation } from '../shell-config.js';
 import type { SlashCommandContext } from './types.js';

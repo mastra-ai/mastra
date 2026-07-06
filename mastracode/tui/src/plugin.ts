@@ -1,1 +1,1 @@
-export * from '@internal/mastracode/plugin';
+export * from '@mastra/code-sdk/plugin';

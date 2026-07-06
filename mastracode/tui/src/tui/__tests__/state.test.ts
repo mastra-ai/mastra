@@ -36,7 +36,7 @@ vi.mock('../components/custom-editor.js', () => ({
   },
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', async importOriginal => {
+vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
@@ -45,7 +45,7 @@ vi.mock('@internal/mastracode/onboarding/settings', async importOriginal => {
   };
 });
 
-vi.mock('@internal/mastracode/utils/project', async importOriginal => {
+vi.mock('@mastra/code-sdk/utils/project', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,

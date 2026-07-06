@@ -1,4 +1,4 @@
-import type { ShellPassthroughSettings } from '@internal/mastracode/onboarding/settings';
+import type { ShellPassthroughSettings } from '@mastra/code-sdk/onboarding/settings';
 import { resolveShellPassthroughInvocation } from './shell-config.js';
 
 const SHELL_COMMAND_TIMEOUT_MS = 30_000;

@@ -4,7 +4,7 @@ const { loadSettingsMock } = vi.hoisted(() => ({
   loadSettingsMock: vi.fn(),
 }));
 
-vi.mock('@internal/mastracode/onboarding/settings', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: loadSettingsMock,
 }));
 

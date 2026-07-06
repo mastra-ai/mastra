@@ -12,7 +12,7 @@
  * chunks.
  */
 import { randomUUID } from 'node:crypto';
-import { loadSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings } from '@mastra/code-sdk/onboarding/settings';
 import type { Agent } from '@mastra/core/agent';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 

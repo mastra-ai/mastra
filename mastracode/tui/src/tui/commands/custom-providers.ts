@@ -1,14 +1,14 @@
 import {
   removeCustomProviderFromSettings,
   upsertCustomProviderInSettings,
-} from '@internal/mastracode/onboarding/custom-providers';
+} from '@mastra/code-sdk/onboarding/custom-providers';
 import {
   getCustomProviderId,
   loadSettings,
   saveSettings,
   toCustomProviderModelId,
-} from '@internal/mastracode/onboarding/settings';
-import type { GlobalSettings } from '@internal/mastracode/onboarding/settings';
+} from '@mastra/code-sdk/onboarding/settings';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 

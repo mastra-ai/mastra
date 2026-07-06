@@ -5,8 +5,8 @@ import { join } from 'node:path';
 
 import { Box, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { StorageBackend, ThinkingLevelSetting } from '@internal/mastracode/onboarding/settings';
-import { loadSettings, saveSettings } from '@internal/mastracode/onboarding/settings';
+import type { StorageBackend, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { SettingsComponent } from '../components/settings.js';
 import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import { askModalQuestion } from '../modal-question.js';

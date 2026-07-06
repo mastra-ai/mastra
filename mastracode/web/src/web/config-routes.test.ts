@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AuthStorage } from '@internal/mastracode/auth/storage';
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { listProviders } from './config-routes.js';
 
 function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): AuthStorage {

@@ -4,7 +4,7 @@
  */
 
 import type { MarkdownTheme, EditorTheme, SettingsListTheme, SelectListTheme } from '@earendil-works/pi-tui';
-import { mastraBrand } from '@internal/mastracode/theme-palette';
+import { mastraBrand } from '@mastra/code-sdk/theme-palette';
 import chalk from 'chalk';
 
 // =============================================================================

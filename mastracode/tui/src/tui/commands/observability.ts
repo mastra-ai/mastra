@@ -1,4 +1,4 @@
-import { loadSettings, OBSERVABILITY_AUTH_PREFIX, saveSettings } from '@internal/mastracode/onboarding/settings';
+import { loadSettings, OBSERVABILITY_AUTH_PREFIX, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { askModalQuestion } from '../modal-question.js';
 import { theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';

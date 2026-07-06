@@ -42,8 +42,8 @@ export default defineConfig({
     for (const asset of NATIVE_VOICE_ASSETS) {
       copyFileSync(join(process.cwd(), 'src', 'tui', 'voice', 'native', asset), join(destDir, asset));
     }
-    // Embed @internal/mastracode's declarations into the published d.ts (the
-    // runtime JS is bundled by tsup because the package is a devDependency).
-    await generateTypes(process.cwd(), new Set(['@internal/mastracode']));
+    // @mastra/code-sdk is a regular dependency, so tsup externalizes its
+    // runtime JS and the generated d.ts references its published types.
+    await generateTypes(process.cwd());
   },
 });

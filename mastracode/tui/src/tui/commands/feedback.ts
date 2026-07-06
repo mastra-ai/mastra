@@ -1,4 +1,4 @@
-import { getUserName } from '@internal/mastracode/utils/project';
+import { getUserName } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandContext } from './types.js';
 
 /**
