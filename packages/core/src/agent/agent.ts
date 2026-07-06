@@ -7004,7 +7004,11 @@ export class Agent<
                     metadata: thread.metadata,
                   });
                   if (typeof onTitleGenerated === 'function') {
-                    await onTitleGenerated(title);
+                    try {
+                      await onTitleGenerated(title);
+                    } catch (callbackError) {
+                      this.logger.error('Error in onTitleGenerated callback:', callbackError);
+                    }
                   }
                 }
               })
