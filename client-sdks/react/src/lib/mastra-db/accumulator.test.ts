@@ -540,6 +540,64 @@ describe('accumulateChunk - text streaming', () => {
 });
 
 // =============================================================================
+// INTERLEAVED TEXT + TOOL ORDERING (regression: live view merged text segments
+// across a tool call — https://github.com/mastra-ai/mastra/issues/18964)
+// =============================================================================
+
+describe('accumulateChunk - interleaved text and tool calls', () => {
+  it('keeps text → tool → text ordering with distinct textIds', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      textStartChunk('t2'),
+      textDeltaChunk('t2', 'After'),
+      textEndChunk('t2'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('does not merge the second text segment into the first when the textId is reused across a tool call', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      // Some providers reuse the same text id for the post-tool continuation.
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('does not merge the second text segment into the first when text-delta carries no textId', () => {
+    const out = reduce([
+      startChunk(),
+      textDeltaChunk(undefined as unknown as string, 'Before'),
+      toolCallChunk('tc-1', 'search', { q: 'x' }),
+      textDeltaChunk(undefined as unknown as string, 'After'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'tool-invocation', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+});
+
+// =============================================================================
 // REASONING STREAMING
 // =============================================================================
 
