@@ -18,11 +18,11 @@ This feature is in beta. Breaking changes may occur without a major version bump
 
 A schedule runs an agent on a cron cadence. On each fire, Mastra sends a prompt to the agent, either as a [signal](/docs/long-running-agents/signals) into a thread or as a threadless [`agent.generate()`](/reference/agents/generate) run. Use schedules for recurring agent work such as daily summaries, periodic checks, or scheduled nudges into a conversation.
 
-Schedules are persisted, so they survive restarts and redeploys. Manage them at runtime through [`mastra.schedules`](/reference/schedules/schedules), the canonical create, read, update, and delete (CRUD) surface. The same surface also manages [workflow schedules](/docs/workflows/scheduled-workflows) (pass `workflowId` instead of `agentId` to schedule a workflow).
+Schedules are persisted, so they survive restarts and redeploys. Manage them at runtime through [`mastra.schedules`](/reference/schedules/overview), the canonical create, read, update, and delete (CRUD) surface. The same surface also manages [workflow schedules](/docs/workflows/scheduled-workflows) (pass `workflowId` instead of `agentId` to schedule a workflow).
 
 :::note
 
-Schedules require a [storage](/docs/memory/storage) adapter that implements the schedules domain. See the [`mastra.schedules` reference](/reference/schedules/schedules) for supported adapters and API behavior.
+Schedules require a [storage](/docs/memory/storage) adapter that implements the schedules domain. See the [`mastra.schedules` reference](/reference/schedules/overview) for supported adapters and API behavior.
 
 :::
 
@@ -99,7 +99,7 @@ await mastra.schedules.create({
 
 Threaded schedules accept extra fields that control how the signal behaves, including the signal type, XML tag, tag attributes, and active-or-idle delivery behavior. They mirror the options [`agent.sendSignal()`](/docs/long-running-agents/signals) accepts and stay JSON-serializable so they persist with the schedule.
 
-These fields require a `threadId`. For the full threaded input shape, see the [agent schedule input reference](/reference/schedules/schedules#createinput).
+These fields require a `threadId`. For the full threaded input shape, see the [agent schedule input reference](/reference/schedules/overview#createinput).
 
 ```typescript
 await mastra.schedules.create({
@@ -136,7 +136,7 @@ await mastra.schedules.resume(schedule.id)
 await mastra.schedules.run(schedule.id) // Fire once now, off-schedule
 ```
 
-`pause` and `resume` are durable. `run` fires the schedule once immediately without affecting its cadence. For the complete method list, filters, and patch fields, see the [`mastra.schedules` reference](/reference/schedules/schedules).
+`pause` and `resume` are durable. `run` fires the schedule once immediately without affecting its cadence. For the complete method list, filters, and patch fields, see the [`mastra.schedules` reference](/reference/schedules/overview).
 
 ### Workflow schedules
 
@@ -165,7 +165,7 @@ await mastra.schedules.create({
 })
 ```
 
-See the [`create(input)` reference](/reference/schedules/schedules#createinput) for ID normalization rules and duplicate ID behavior.
+See the [`create(input)` reference](/reference/schedules/overview#createinput) for ID normalization rules and duplicate ID behavior.
 
 ### From the client
 
@@ -210,6 +210,6 @@ Hook exceptions are caught and logged. They never re-route the worker or trigger
 
 ## Related
 
-- [`mastra.schedules`](/reference/schedules/schedules): API reference for creating and managing schedules.
+- [`mastra.schedules`](/reference/schedules/overview): API reference for creating and managing schedules.
 - [Signals](/docs/long-running-agents/signals): the delivery mechanism behind threaded schedules.
 - [Scheduled workflows](/docs/workflows/scheduled-workflows): declare a cron schedule on a workflow definition.
