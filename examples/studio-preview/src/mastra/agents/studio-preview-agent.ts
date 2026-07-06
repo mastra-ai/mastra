@@ -50,7 +50,7 @@ Use the preview status tool when a reviewer asks about preview health, routing, 
 });
 
 /**
- * Code-defined agent whose instructions and tools may be overridden from the
+ * Code-defined shell whose instructions and tool membership are owned by the
  * Studio editor. Registering `MastraEditor` (see `../index.ts`) flips the editor
  * capability on for the preview, so reviewers can open this agent, see the
  * "Editor" capability in the sidebar footer, and exercise the versioning flow.
@@ -58,14 +58,7 @@ Use the preview status tool when a reviewer asks about preview health, routing, 
 export const editorShowcaseAgent = new Agent({
   id: 'editor-showcase-agent',
   name: 'Editor Showcase Agent',
-  description: 'Code-defined agent that Studio may override (instructions + tools) to demo the editor.',
-  instructions: `
-You are a small demo agent for the Mastra Studio editor.
-Reviewers can edit these instructions and your tools from the editor to try the save/publish versioning flow.
-`,
+  description: 'Code-defined shell that lets Studio own instructions and tools to demo the editor.',
   model,
-  tools: {
-    previewStatusTool,
-  },
   editor: { instructions: true, tools: true },
 });
