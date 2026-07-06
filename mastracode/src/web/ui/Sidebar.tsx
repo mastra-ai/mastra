@@ -1,5 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Circle, LogOut, Settings } from 'lucide-react';
 
@@ -85,9 +86,10 @@ function SidebarAuth() {
 
   if (auth.isLoading) {
     return (
-      <Txt as="div" variant="ui-sm" className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-icon3">
-        <span className="col-start-2">Checking sign-in…</span>
-      </Txt>
+      <div role="status" aria-label="Checking sign-in" className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center">
+        <Skeleton className="size-6 justify-self-center rounded-full" />
+        <Skeleton className="h-3 w-24" />
+      </div>
     );
   }
 

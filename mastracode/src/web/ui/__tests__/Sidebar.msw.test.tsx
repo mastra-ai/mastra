@@ -10,7 +10,7 @@
 import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
@@ -260,6 +260,26 @@ describe('Sidebar', () => {
 
       expect(await screen.findByText('Select a project…')).toBeInTheDocument();
       expect(screen.queryByText('First thread')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('while the sign-in check is pending', () => {
+    it('renders a skeleton placeholder, then the identity row', async () => {
+      seedProject();
+      server.use(
+        http.get(`${TEST_BASE_URL}/auth/me`, async () => {
+          await delay(150);
+          return HttpResponse.json({ authenticated: true, user: { name: 'Ada Lovelace' } });
+        }),
+      );
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      expect(await screen.findByRole('status', { name: 'Checking sign-in' })).toBeInTheDocument();
+      expect(screen.queryByText(/Checking sign-in/)).not.toBeInTheDocument();
+
+      expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
     });
   });
 
