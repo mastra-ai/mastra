@@ -51,7 +51,8 @@ export function CodeBlock({
   const hasOptions = options && options.length > 0;
   const useTabs = hasOptions && selector === 'tabs';
   const useSelect = hasOptions && selector === 'select';
-  const activeValue = value ?? options?.[0]?.value;
+  const firstOption = options?.[0];
+  const activeValue = value ?? firstOption?.value;
 
   return (
     <figure
@@ -60,8 +61,8 @@ export function CodeBlock({
         className,
       )}
     >
-      {useTabs && options && (
-        <Tabs defaultTab={options[0].value} value={activeValue} onValueChange={onValueChange ?? (() => {})}>
+      {useTabs && firstOption && (
+        <Tabs defaultTab={firstOption.value} value={activeValue} onValueChange={onValueChange ?? (() => {})}>
           <div className="flex items-stretch">
             <div className="min-w-0 flex-1">
               <TabList>

@@ -328,7 +328,8 @@ export function buildMetricsDimensionalFilter(tokens: PropertyFilterToken[]): Me
       if (fieldId === 'tags') {
         result.tags = values;
       } else if (fieldId === 'rootEntityType') {
-        const validated = toValidRootEntityType(values[0]);
+        const firstValue = values[0];
+        const validated = firstValue !== undefined ? toValidRootEntityType(firstValue) : undefined;
         if (validated) result.rootEntityType = validated;
       } else {
         // Backend accepts a single string per dimension; take the first selection.

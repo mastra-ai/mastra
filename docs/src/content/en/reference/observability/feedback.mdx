@@ -1,0 +1,536 @@
+---
+title: "Reference: Feedback | Observability"
+description: "API reference for observability feedback records, filters, and query methods."
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Feedback
+
+**Added in:** `@mastra/core@1.18.0`
+
+Feedback APIs store and query human-in-the-loop observability signals such as ratings, thumbs, comments, and corrections. Use the [feedback guide](/docs/observability/feedback) for usage patterns.
+
+## Usage example
+
+The following example records a rating for a persisted trace through the observability entrypoint. `addFeedback()` is optional on the entrypoint, so check that the active observability implementation supports it before calling it.
+
+```typescript
+if (!mastra.observability.addFeedback) {
+  throw new Error('Feedback is not supported by the active observability implementation')
+}
+
+await mastra.observability.addFeedback({
+  traceId: 'trace-123',
+  spanId: 'span-456',
+  feedback: {
+    feedbackSource: 'user',
+    feedbackType: 'rating',
+    value: 1,
+    comment: 'Helpful answer.',
+  },
+})
+```
+
+## Create feedback
+
+### `addFeedback(args)`
+
+Adds feedback to a persisted trace or span through the observability entrypoint.
+
+```typescript
+await mastra.observability.addFeedback?.({
+  traceId: 'trace-123',
+  spanId: 'span-456',
+  feedback: {
+    feedbackSource: 'user',
+    feedbackType: 'rating',
+    value: 1,
+    comment: 'Helpful answer.',
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'traceId', type: 'string', description: 'Trace that anchors the feedback target.', isOptional: true },
+  { name: 'spanId', type: 'string', description: 'Span that anchors the feedback target.', isOptional: true },
+  {
+    name: 'correlationContext',
+    type: 'CorrelationContext',
+    description: 'Live span or trace context to emit from without rehydrating the target from storage.',
+    isOptional: true,
+  },
+  { name: 'feedback', type: 'FeedbackInput', description: 'Feedback payload to add.' },
+]}
+/>
+
+### `createFeedback(args)`
+
+Creates one feedback record through the observability storage domain. Storage-level calls write directly to the store, so include `timestamp`.
+
+```typescript
+await observability.createFeedback({
+  feedback: {
+    feedbackId: 'feedback-1',
+    timestamp: new Date(),
+    traceId: 'trace-123',
+    spanId: 'span-456',
+    feedbackSource: 'user',
+    feedbackType: 'rating',
+    value: 1,
+    comment: 'Helpful answer.',
+  },
+})
+```
+
+The HTTP and client SDK create route accepts `CreateFeedbackBody`, sets `timestamp` server-side, and generates `feedbackId` when omitted:
+
+```typescript
+await mastraClient.createFeedback({
+  feedback: {
+    traceId: 'trace-123',
+    spanId: 'span-456',
+    feedbackSource: 'user',
+    feedbackType: 'rating',
+    value: 1,
+  },
+})
+```
+
+### `batchCreateFeedback(args)`
+
+Creates multiple feedback records through the observability storage domain. This method isn't exposed by the HTTP routes or `@mastra/client-js`.
+
+```typescript
+await observability.batchCreateFeedback({
+  feedbacks: [
+    {
+      feedbackId: 'feedback-1',
+      timestamp: new Date(),
+      traceId: 'trace-123',
+      feedbackSource: 'user',
+      feedbackType: 'rating',
+      value: 1,
+    },
+    {
+      feedbackId: 'feedback-2',
+      timestamp: new Date(),
+      traceId: 'trace-123',
+      feedbackSource: 'qa',
+      feedbackType: 'comment',
+      value: 'Needs a citation before shipping.',
+    },
+  ],
+})
+```
+
+## List feedback
+
+### `listFeedback(args?)`
+
+Returns feedback records in page mode or delta mode.
+
+```typescript
+const response = await mastraClient.listFeedback({
+  filters: {
+    feedbackType: 'rating',
+    feedbackSource: 'studio',
+  },
+  pagination: { page: 0, perPage: 20 },
+  orderBy: { field: 'timestamp', direction: 'DESC' },
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'mode', type: "'page' | 'delta'", description: "List mode. Defaults to 'page'.", isOptional: true },
+  { name: 'filters', type: 'FeedbackFilter', description: 'Filters for the feedback records.', isOptional: true },
+  {
+    name: 'pagination',
+    type: '{ page?: number; perPage?: number }',
+    description: 'Page-mode pagination. `page` is zero-indexed.',
+    isOptional: true,
+  },
+  {
+    name: 'orderBy',
+    type: "{ field?: 'timestamp'; direction?: 'ASC' | 'DESC' }",
+    description: 'Page-mode sort configuration.',
+    isOptional: true,
+  },
+  {
+    name: 'after',
+    type: 'string',
+    description: 'Delta cursor for incremental polling. Only valid in delta mode.',
+    isOptional: true,
+  },
+  {
+    name: 'limit',
+    type: 'number',
+    description: 'Maximum number of updates to return in delta mode.',
+    isOptional: true,
+  },
+]}
+/>
+
+## OLAP queries
+
+OLAP feedback queries operate on numeric `value` fields.
+
+### `getFeedbackAggregate(args)`
+
+Returns one aggregate feedback value.
+
+```typescript
+const response = await mastraClient.getFeedbackAggregate({
+  feedbackType: 'rating',
+  feedbackSource: 'user',
+  aggregation: 'avg',
+  comparePeriod: 'previous_day',
+})
+```
+
+<PropertiesTable
+  content={[
+  { name: 'feedbackType', type: 'string', description: 'Feedback type to aggregate.' },
+  { name: 'feedbackSource', type: 'string', description: 'Feedback source to aggregate.', isOptional: true },
+  {
+    name: 'aggregation',
+    type: "'sum' | 'avg' | 'min' | 'max' | 'count' | 'count_distinct' | 'last'",
+    description: 'Aggregation to apply.',
+  },
+  { name: 'filters', type: 'FeedbackFilter', description: 'Additional filters.', isOptional: true },
+  {
+    name: 'comparePeriod',
+    type: "'previous_period' | 'previous_day' | 'previous_week'",
+    description: 'Optional period-over-period comparison.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `getFeedbackBreakdown(args)`
+
+Returns feedback values grouped by dimensions.
+
+```typescript
+const response = await mastraClient.getFeedbackBreakdown({
+  feedbackType: 'rating',
+  groupBy: ['entityName'],
+  aggregation: 'avg',
+})
+```
+
+### `getFeedbackTimeSeries(args)`
+
+Returns feedback values bucketed by interval.
+
+```typescript
+const response = await mastraClient.getFeedbackTimeSeries({
+  feedbackType: 'rating',
+  interval: '1h',
+  aggregation: 'avg',
+  groupBy: ['feedbackSource'],
+})
+```
+
+### `getFeedbackPercentiles(args)`
+
+Returns percentile values bucketed by interval.
+
+```typescript
+const response = await mastraClient.getFeedbackPercentiles({
+  feedbackType: 'rating',
+  percentiles: [0.5, 0.95],
+  interval: '1d',
+})
+```
+
+## Types
+
+### `FeedbackRecord`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'feedbackId',
+    type: 'string | null',
+    description: 'Unique ID for this feedback event. The server route generates one when omitted.',
+    isOptional: true,
+  },
+  { name: 'timestamp', type: 'Date', description: 'Time when the feedback was recorded.' },
+  {
+    name: 'traceId',
+    type: 'string | null',
+    description: 'Trace that anchors the feedback target when available.',
+    isOptional: true,
+  },
+  {
+    name: 'spanId',
+    type: 'string | null',
+    description: 'Span that anchors the feedback target when available.',
+    isOptional: true,
+  },
+  {
+    name: 'feedbackSource',
+    type: 'string | null',
+    description: "Optional source metadata, such as 'user', 'qa', 'studio', or 'system'.",
+    isOptional: true,
+  },
+  {
+    name: 'source',
+    type: 'string | null',
+    description: 'Deprecated alias for `feedbackSource`.',
+    isOptional: true,
+  },
+  {
+    name: 'feedbackType',
+    type: 'string',
+    description: "Type of feedback, such as 'rating', 'thumbs', 'comment', or 'correction'.",
+  },
+  {
+    name: 'value',
+    type: 'number | string',
+    description: 'Feedback value. Numeric values support aggregate, breakdown, time series, and percentile queries.',
+  },
+  {
+    name: 'comment',
+    type: 'string | null',
+    description: 'Additional comment or context for the feedback.',
+    isOptional: true,
+  },
+  {
+    name: 'feedbackUserId',
+    type: 'string | null',
+    description: 'User who provided the feedback.',
+    isOptional: true,
+  },
+  {
+    name: 'sourceId',
+    type: 'string | null',
+    description: 'ID of the source record this feedback is linked to, such as an experiment result ID.',
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown> | null',
+    description: 'User-defined metadata for the feedback record.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Shared context fields
+
+Feedback records can include shared observability context fields for filtering, grouping, and correlation with traces, logs, metrics, and scores.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'entityType',
+    type: 'EntityType | null',
+    description: 'Entity type that produced the signal.',
+    isOptional: true,
+  },
+  {
+    name: 'entityId',
+    type: 'string | null',
+    description: 'ID of the entity that produced the signal.',
+    isOptional: true,
+  },
+  {
+    name: 'entityName',
+    type: 'string | null',
+    description: 'Name of the entity that produced the signal.',
+    isOptional: true,
+  },
+  {
+    name: 'parentEntityType',
+    type: 'EntityType | null',
+    description: 'Entity type of the parent entity.',
+    isOptional: true,
+  },
+  { name: 'parentEntityId', type: 'string | null', description: 'ID of the parent entity.', isOptional: true },
+  { name: 'parentEntityName', type: 'string | null', description: 'Name of the parent entity.', isOptional: true },
+  {
+    name: 'rootEntityType',
+    type: 'EntityType | null',
+    description: 'Entity type of the root entity.',
+    isOptional: true,
+  },
+  { name: 'rootEntityId', type: 'string | null', description: 'ID of the root entity.', isOptional: true },
+  { name: 'rootEntityName', type: 'string | null', description: 'Name of the root entity.', isOptional: true },
+  { name: 'userId', type: 'string | null', description: 'Human end user who triggered execution.', isOptional: true },
+  {
+    name: 'organizationId',
+    type: 'string | null',
+    description: 'Multi-tenant organization or account.',
+    isOptional: true,
+  },
+  { name: 'resourceId', type: 'string | null', description: 'Broader resource context.', isOptional: true },
+  { name: 'runId', type: 'string | null', description: 'Execution run identifier.', isOptional: true },
+  {
+    name: 'sessionId',
+    type: 'string | null',
+    description: 'Session identifier for grouping traces.',
+    isOptional: true,
+  },
+  { name: 'threadId', type: 'string | null', description: 'Conversation thread identifier.', isOptional: true },
+  { name: 'requestId', type: 'string | null', description: 'HTTP request ID for correlation.', isOptional: true },
+  { name: 'environment', type: 'string | null', description: 'Deployment environment.', isOptional: true },
+  { name: 'serviceName', type: 'string | null', description: 'Name of the service.', isOptional: true },
+  {
+    name: 'scope',
+    type: 'Record<string, unknown> | null',
+    description: 'Package, app version, or deployment metadata.',
+    isOptional: true,
+  },
+  {
+    name: 'entityVersionId',
+    type: 'string | null',
+    description: 'Version ID of the entity that produced the signal.',
+    isOptional: true,
+  },
+  {
+    name: 'parentEntityVersionId',
+    type: 'string | null',
+    description: 'Version ID of the parent entity.',
+    isOptional: true,
+  },
+  {
+    name: 'rootEntityVersionId',
+    type: 'string | null',
+    description: 'Version ID of the root entity.',
+    isOptional: true,
+  },
+  { name: 'experimentId', type: 'string | null', description: 'Experiment or eval run identifier.', isOptional: true },
+  {
+    name: 'executionSource',
+    type: 'string | null',
+    description: 'Source of execution, such as local, cloud, or CI.',
+    isOptional: true,
+  },
+  { name: 'tags', type: 'string[] | null', description: 'Labels for filtering.', isOptional: true },
+]}
+/>
+
+### `FeedbackInput`
+
+Use `FeedbackInput` with `mastra.observability.addFeedback()`, `recordedTrace.addFeedback()`, and `recordedSpan.addFeedback()`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'feedbackSource',
+    type: 'string',
+    description: 'Optional source metadata for the feedback.',
+    isOptional: true,
+  },
+  { name: 'source', type: 'string', description: 'Deprecated alias for `feedbackSource`.', isOptional: true },
+  { name: 'feedbackType', type: 'string', description: 'Type of feedback to record.' },
+  { name: 'value', type: 'number | string', description: 'Feedback value to record.' },
+  { name: 'comment', type: 'string', description: 'Additional comment or context.', isOptional: true },
+  { name: 'feedbackUserId', type: 'string', description: 'User who provided the feedback.', isOptional: true },
+  { name: 'userId', type: 'string', description: 'Deprecated alias for `feedbackUserId`.', isOptional: true },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Additional feedback-specific metadata.',
+    isOptional: true,
+  },
+  { name: 'experimentId', type: 'string', description: 'Experiment or eval run identifier.', isOptional: true },
+  {
+    name: 'sourceId',
+    type: 'string',
+    description: 'ID of the source record this feedback is linked to.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `FeedbackFilter`
+
+Use `FeedbackFilter` in `listFeedback()` and OLAP query `filters`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'timestamp',
+    type: '{ start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }',
+    description: 'Filter by timestamp range.',
+    isOptional: true,
+  },
+  { name: 'traceId', type: 'string', description: 'Filter by trace ID.', isOptional: true },
+  { name: 'spanId', type: 'string', description: 'Filter by span ID.', isOptional: true },
+  {
+    name: 'feedbackType',
+    type: 'string | string[]',
+    description: 'Filter by one or more feedback types.',
+    isOptional: true,
+  },
+  { name: 'feedbackSource', type: 'string', description: 'Filter by feedback source.', isOptional: true },
+  { name: 'source', type: 'string', description: 'Deprecated alias for `feedbackSource`.', isOptional: true },
+  {
+    name: 'feedbackUserId',
+    type: 'string',
+    description: 'Filter by the user who provided the feedback.',
+    isOptional: true,
+  },
+  { name: 'entityType', type: 'EntityType', description: 'Filter by entity type.', isOptional: true },
+  { name: 'entityName', type: 'string', description: 'Filter by entity name.', isOptional: true },
+  { name: 'entityVersionId', type: 'string', description: 'Filter by entity version ID.', isOptional: true },
+  { name: 'parentEntityType', type: 'EntityType', description: 'Filter by parent entity type.', isOptional: true },
+  { name: 'parentEntityName', type: 'string', description: 'Filter by parent entity name.', isOptional: true },
+  {
+    name: 'parentEntityVersionId',
+    type: 'string',
+    description: 'Filter by parent entity version ID.',
+    isOptional: true,
+  },
+  { name: 'rootEntityType', type: 'EntityType', description: 'Filter by root entity type.', isOptional: true },
+  { name: 'rootEntityName', type: 'string', description: 'Filter by root entity name.', isOptional: true },
+  { name: 'rootEntityVersionId', type: 'string', description: 'Filter by root entity version ID.', isOptional: true },
+  { name: 'userId', type: 'string', description: 'Filter by human end-user ID.', isOptional: true },
+  { name: 'organizationId', type: 'string', description: 'Filter by organization ID.', isOptional: true },
+  { name: 'resourceId', type: 'string', description: 'Filter by resource ID.', isOptional: true },
+  { name: 'runId', type: 'string', description: 'Filter by run ID.', isOptional: true },
+  { name: 'sessionId', type: 'string', description: 'Filter by session ID.', isOptional: true },
+  { name: 'threadId', type: 'string', description: 'Filter by thread ID.', isOptional: true },
+  { name: 'requestId', type: 'string', description: 'Filter by request ID.', isOptional: true },
+  { name: 'serviceName', type: 'string', description: 'Filter by service name.', isOptional: true },
+  { name: 'environment', type: 'string', description: 'Filter by environment.', isOptional: true },
+  { name: 'executionSource', type: 'string', description: 'Filter by execution source.', isOptional: true },
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'Filter by experiment or eval run identifier.',
+    isOptional: true,
+  },
+  {
+    name: 'tags',
+    type: 'string[]',
+    description: 'Filter by tags. Matching records must have all specified tags.',
+    isOptional: true,
+  },
+]}
+/>
+
+## HTTP routes
+
+| Method | Path | Purpose | Permission |
+| - | - | - | - |
+| `GET` | `/api/observability/feedback` | List feedback records | None derived |
+| `POST` | `/api/observability/feedback` | Create a feedback record | None derived |
+| `POST` | `/api/observability/feedback/aggregate` | Return one aggregate value | `observability:read` |
+| `POST` | `/api/observability/feedback/breakdown` | Group feedback by dimensions | `observability:read` |
+| `POST` | `/api/observability/feedback/timeseries` | Bucket feedback by interval | `observability:read` |
+| `POST` | `/api/observability/feedback/percentiles` | Return percentile series | `observability:read` |
+
+## Related
+
+- [Feedback guide](/docs/observability/feedback)
+- [Client SDK observability reference](/reference/client-js/observability)
+- [Observability configuration](/reference/observability/tracing/configuration)
