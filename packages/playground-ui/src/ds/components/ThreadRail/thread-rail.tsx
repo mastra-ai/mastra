@@ -1,9 +1,9 @@
 import { FileText } from 'lucide-react';
 import * as React from 'react';
 
-import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from './message-scroller-hooks';
 import type { ThreadRailTurn } from './thread-rail-turns';
 
+import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
@@ -318,7 +318,7 @@ function ThreadRailPreview({
   const hiddenLayerClassName = 'scale-95 opacity-0 blur-xs';
   const visibleLayerClassName = 'scale-100 opacity-100 blur-none';
   const layerClassName =
-    'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-360 ease-in-out will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
+    'absolute inset-x-0 top-0 h-full origin-left transition-[opacity,filter,scale] duration-150 ease-in-out will-change-[opacity,filter,scale] motion-reduce:scale-100 motion-reduce:blur-none motion-reduce:transition-none';
 
   React.useLayoutEffect(() => {
     measurePreviewHeight();

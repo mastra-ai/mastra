@@ -11,9 +11,8 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
-  ThreadRail,
-  buildThreadRailTurns,
 } from '@mastra/playground-ui/components/MessageScroller';
+import { ThreadRail, buildThreadRailTurns } from '@mastra/playground-ui/components/ThreadRail';
 
 const turns = buildThreadRailTurns(messages);
 

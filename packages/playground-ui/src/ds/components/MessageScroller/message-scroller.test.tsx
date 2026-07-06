@@ -2,14 +2,15 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ThreadRail } from '../ThreadRail/thread-rail';
+import type { ThreadRailTurn } from '../ThreadRail/thread-rail-turns';
+
 import {
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from './message-scroller';
-import { ThreadRail } from './thread-rail';
-import type { ThreadRailTurn } from './thread-rail-turns';
 
 const turns: ThreadRailTurn[] = [
   { key: 'turn-1', messageId: 'message-1', prompt: 'First turn', files: [], hiddenFileCount: 0 },
@@ -227,7 +228,7 @@ describe('MessageScroller', () => {
     expect(preview.style.height).toBe('96px');
     expect(viewport.className).not.toContain('overflow-hidden');
     expect(within(screen.getByTestId('thread-rail-preview-sizer')).getByText('First turn')).toBeTruthy();
-    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-360');
+    expect(screen.getByTestId('thread-rail-preview-current').className).toContain('duration-150');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('ease-in-out');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('scale-95');
     expect(screen.getByTestId('thread-rail-preview-current').className).toContain('blur-xs');
