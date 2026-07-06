@@ -8,8 +8,8 @@ vitest tests are colocated with source
 When adding a model name or ID to changesets or comments, use a literal value from docs/src/plugins/remark-model-tokens/models.ts (do not use placeholder tokens, remark does not replace them in changesets/comments)
 
 Prefer narrowest package build/test/lint/typecheck; start with unit/integration before E2E
-Use specific root scripts like pnpm build:core, pnpm --filter ./packages/name script, or pnpm turbo build --filter ./packages/<name>
-Avoid pnpm setup/build/build:packages unless package-local options are insufficient
+Use specific root scripts like pnpm build:core, pnpm --filter ./packages/name script, or pnpm turbo build --filter ./packages/<name>; these build that package's dependency graph
+Avoid pnpm setup/build/build:packages unless package-local options are insufficient whole monorepo builds are slow and usually unneeded
 Fresh clone: pnpm install, then build relevant packages
 Unresolvable internal/workspace imports means deps aren't built
 some integration tests need pnpm i --ignore-workspace
