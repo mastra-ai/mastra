@@ -7,6 +7,7 @@ Added reusable message scroller and thread rail primitives for conversation navi
 ```tsx
 import {
   MessageScroller,
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -27,6 +28,7 @@ const turns = buildThreadRailTurns(messages);
         ))}
       </MessageScrollerContent>
     </MessageScrollerViewport>
+    <MessageScrollerButton />
     <ThreadRail turns={turns} />
   </MessageScroller>
 </MessageScrollerProvider>;

@@ -310,6 +310,57 @@ describe('Thread', () => {
         }
       }
     });
+
+    it('shows a scroll-to-bottom control when the viewport is not at the bottom', async () => {
+      const scrollTo = vi.fn();
+      const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+      Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+        configurable: true,
+        writable: true,
+        value: scrollTo,
+      });
+      server.use(...baseHandlers());
+
+      try {
+        await act(async () => {
+          renderThread([
+            userMessage('first question'),
+            assistantMessage('first answer'),
+            userMessage('second question'),
+          ]);
+        });
+
+        const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+        if (!viewport) throw new Error('missing message scroller viewport');
+
+        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 40 });
+        Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 100 });
+        Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 320 });
+
+        const scrollToEnd = screen.getByRole('button', { name: 'Scroll to end' });
+        expect(scrollToEnd.getAttribute('data-active')).toBe('false');
+
+        await act(async () => {
+          fireEvent.scroll(viewport);
+        });
+
+        await waitFor(() => {
+          expect(scrollToEnd.getAttribute('data-active')).toBe('true');
+        });
+
+        await act(async () => {
+          fireEvent.click(scrollToEnd);
+        });
+
+        expect(scrollTo).toHaveBeenCalledWith({ top: 220, behavior: 'smooth' });
+      } finally {
+        if (originalDescriptor) {
+          Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalDescriptor);
+        } else {
+          delete HTMLElement.prototype.scrollTo;
+        }
+      }
+    });
   });
 
   it('shows assistant model attribution when model-list metadata is available', async () => {

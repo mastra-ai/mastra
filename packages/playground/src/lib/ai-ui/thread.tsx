@@ -3,6 +3,8 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
+  MessageScroller,
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -133,55 +135,58 @@ export const Thread = ({
     <ComposerAttachmentsProvider>
       <MessageScrollerProvider>
         <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
-          <MessageScrollerViewport
-            ref={areaRef}
-            className="overflow-y-scroll h-full"
-            style={{ overflowAnchor: 'none' }}
-          >
-            {isEmpty ? (
-              <ThreadWelcome agentName={agentName} />
-            ) : (
-              <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
-                <ThreadRailLayer turns={threadRailTurns} />
-                <div
-                  ref={messagesContainerRef}
-                  data-testid="thread-message-column"
-                  className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
-                >
-                  <BracketOverlay containerRef={messagesContainerRef} />
-                  <MessageScrollerContent className="flex flex-col gap-6 py-6">
-                    {messages.map(message => {
-                      // Prefer the optimistic `clientMessageId` as the React key so the
-                      // user row keeps a stable identity when `data-user-message`
-                      // reconciliation swaps `message.id` to the server signal id. A
-                      // changing key would unmount/remount the row and shift the
-                      // trailing pending indicator. Falls back to `message.id` for
-                      // messages without a correlation key (assistant, reloaded).
-                      const messageKey = getClientMessageKey(message);
-                      return (
-                        <MessageScrollerItem
-                          key={messageKey}
-                          messageId={message.id}
-                          scrollAnchor={threadRailAnchorIds.has(message.id)}
-                        >
-                          <MessageRow
-                            message={message}
-                            hasModelList={hasModelList}
-                            isSpeaking={isSpeaking}
-                            onReadAloud={readAloud}
-                            onStopSpeaking={stopSpeaking}
-                          />
-                        </MessageScrollerItem>
-                      );
-                    })}
-                    {delayedPending && <PendingIndicator />}
-                  </MessageScrollerContent>
+          <MessageScroller>
+            <MessageScrollerViewport
+              ref={areaRef}
+              className="overflow-y-scroll h-full"
+              style={{ overflowAnchor: 'none' }}
+            >
+              {isEmpty ? (
+                <ThreadWelcome agentName={agentName} />
+              ) : (
+                <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
+                  <ThreadRailLayer turns={threadRailTurns} />
+                  <div
+                    ref={messagesContainerRef}
+                    data-testid="thread-message-column"
+                    className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+                  >
+                    <BracketOverlay containerRef={messagesContainerRef} />
+                    <MessageScrollerContent className="flex flex-col gap-6 py-6">
+                      {messages.map(message => {
+                        // Prefer the optimistic `clientMessageId` as the React key so the
+                        // user row keeps a stable identity when `data-user-message`
+                        // reconciliation swaps `message.id` to the server signal id. A
+                        // changing key would unmount/remount the row and shift the
+                        // trailing pending indicator. Falls back to `message.id` for
+                        // messages without a correlation key (assistant, reloaded).
+                        const messageKey = getClientMessageKey(message);
+                        return (
+                          <MessageScrollerItem
+                            key={messageKey}
+                            messageId={message.id}
+                            scrollAnchor={threadRailAnchorIds.has(message.id)}
+                          >
+                            <MessageRow
+                              message={message}
+                              hasModelList={hasModelList}
+                              isSpeaking={isSpeaking}
+                              onReadAloud={readAloud}
+                              onStopSpeaking={stopSpeaking}
+                            />
+                          </MessageScrollerItem>
+                        );
+                      })}
+                      {delayedPending && <PendingIndicator />}
+                    </MessageScrollerContent>
 
-                  {!isRunning && <SaveFullConversationAction />}
+                    {!isRunning && <SaveFullConversationAction />}
+                  </div>
                 </div>
-              </div>
-            )}
-          </MessageScrollerViewport>
+              )}
+            </MessageScrollerViewport>
+            <MessageScrollerButton className="z-30" />
+          </MessageScroller>
 
           {showThumbnailInChat && agentId && threadId && (
             <div className="mb-2 max-w-3xl w-full mx-auto px-4">
