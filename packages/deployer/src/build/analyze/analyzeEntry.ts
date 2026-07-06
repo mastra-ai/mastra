@@ -1,15 +1,15 @@
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { readJSON } from 'fs-extra/esm';
 import { resolveModule } from 'local-pkg';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { getPackageRootPath } from '../package-info';
+import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
+import { getPackageMetadata, getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
 import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
@@ -27,7 +27,6 @@ function getInputPlugins(
   mastraEntry: string,
   { sourcemapEnabled }: { sourcemapEnabled: boolean },
 ): Plugin[] {
-  const normalizedMastraEntry = slash(mastraEntry);
   let virtualPlugin = null;
   if (isVirtualFile) {
     virtualPlugin = virtual({
@@ -43,22 +42,10 @@ function getInputPlugins(
 
   plugins.push(
     ...[
-      tsConfigPaths(),
       protocolExternalResolver(),
-      {
-        name: 'custom-alias-resolver',
-        resolveId(id: string) {
-          if (id === '#server') {
-            return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
-          }
-          if (id === '#mastra') {
-            return normalizedMastraEntry;
-          }
-          if (id.startsWith('@mastra/server')) {
-            return fileURLToPath(import.meta.resolve(id));
-          }
-        },
-      } satisfies Plugin,
+      mastraInternalAliasPlugin(mastraEntry),
+      mastraToolsAliasPlugin(),
+      tsConfigPaths(),
       json(),
       esbuild(),
       commonjs({
@@ -120,20 +107,14 @@ async function captureDependenciesToOptimize(
     let rootPath: string | null = null;
     let isWorkspace = false;
     let version: string | undefined;
+    let packageSpec: string | undefined;
 
     if (pkgName) {
-      rootPath = await getPackageRootPath(dependency, entryRootPath);
+      const metadata = await getPackageMetadata(dependency, entryRootPath);
+      rootPath = metadata.rootPath;
+      version = metadata.version;
+      packageSpec = metadata.packageSpec;
       isWorkspace = workspaceMap.has(pkgName);
-
-      // Read version from package.json when we have a valid rootPath
-      if (rootPath) {
-        try {
-          const pkgJson = await readJSON(`${rootPath}/package.json`);
-          version = pkgJson.version;
-        } catch {
-          // Failed to read package.json, version will remain undefined
-        }
-      }
     }
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
@@ -143,6 +124,7 @@ async function captureDependenciesToOptimize(
       rootPath: normalizedRootPath,
       isWorkspace,
       version,
+      packageSpec,
     });
   }
 
@@ -197,17 +179,26 @@ async function captureDependenciesToOptimize(
         }
 
         for (const [innerDep, innerMeta] of analysis.dependencies) {
-          /**
-           * Only add to depsToOptimize if:
-           * - It's a workspace package
-           * - We haven't already processed it
-           * - We haven't already discovered it at the beginning
-           */
-          if (innerMeta.isWorkspace && !internalMap.has(innerDep) && !depsToOptimize.has(innerDep)) {
-            depsToOptimize.set(innerDep, innerMeta);
-            internalMap.set(innerDep, innerMeta);
-            hasAddedDeps = true;
+          if (!innerMeta.isWorkspace) {
+            continue;
           }
+
+          const existingMeta = depsToOptimize.get(innerDep);
+          if (existingMeta) {
+            depsToOptimize.set(innerDep, {
+              ...existingMeta,
+              exports: [...new Set([...existingMeta.exports, ...innerMeta.exports])],
+            });
+            continue;
+          }
+
+          if (internalMap.has(innerDep)) {
+            continue;
+          }
+
+          depsToOptimize.set(innerDep, innerMeta);
+          internalMap.set(innerDep, innerMeta);
+          hasAddedDeps = true;
         }
       } catch (err) {
         logger.error('Failed to resolve or analyze dependency', { dep, error: (err as Error).message });
@@ -232,18 +223,14 @@ async function captureDependenciesToOptimize(
         // Try to resolve version for dynamic imports as well
         const pkgName = getPackageName(dynamicImport);
         let version: string | undefined;
+        let packageSpec: string | undefined;
         let rootPath: string | null = null;
 
         if (pkgName) {
-          rootPath = await getPackageRootPath(dynamicImport, entryRootPath);
-          if (rootPath) {
-            try {
-              const pkgJson = await readJSON(`${rootPath}/package.json`);
-              version = pkgJson.version;
-            } catch {
-              // Failed to read package.json
-            }
-          }
+          const metadata = await getPackageMetadata(dynamicImport, entryRootPath);
+          rootPath = metadata.rootPath;
+          version = metadata.version;
+          packageSpec = metadata.packageSpec;
         }
 
         depsToOptimize.set(dynamicImport, {
@@ -251,6 +238,7 @@ async function captureDependenciesToOptimize(
           rootPath: rootPath ? slash(rootPath) : null,
           isWorkspace: false,
           version,
+          packageSpec,
         });
       }
     }

@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import type { ActorSignal } from '@mastra/core/auth/ee';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
@@ -285,6 +286,7 @@ export class InngestRun<
             initialState: TState;
           }) & {
         requestContext?: RequestContext;
+        actor?: ActorSignal;
         outputWriter?: OutputWriter;
         tracingContext?: TracingContext;
         tracingOptions?: TracingOptions;
@@ -320,6 +322,7 @@ export class InngestRun<
             initialState: TState;
           }) & {
         requestContext?: RequestContext;
+        actor?: ActorSignal;
         tracingOptions?: TracingOptions;
         outputOptions?: {
           includeState?: boolean;
@@ -364,6 +367,7 @@ export class InngestRun<
         outputOptions: args.outputOptions,
         tracingOptions: args.tracingOptions,
         requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+        actor: args.actor,
         perStep: args.perStep,
       },
     });
@@ -384,10 +388,12 @@ export class InngestRun<
     tracingOptions,
     format,
     requestContext,
+    actor,
     perStep,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     initialState?: TState;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -433,6 +439,7 @@ export class InngestRun<
         tracingOptions,
         format,
         requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+        actor,
         perStep,
       },
     });
@@ -467,6 +474,7 @@ export class InngestRun<
       | string[];
     label?: string;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const p = this._resume(params).then(result => {
@@ -498,6 +506,7 @@ export class InngestRun<
       | string[];
     label?: string;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<{ eventId: string }> {
     const storage = this.#mastra?.getStorage();
@@ -570,6 +579,13 @@ export class InngestRun<
             resumePath: steps?.[0] ? (snapshot?.suspendedPaths?.[steps?.[0]] as any) : undefined,
           },
           requestContext: mergedRequestContext,
+          // `actor` is a per-call trust signal, not rehydrated from the snapshot like
+          // `requestContext` is above. This intentionally matches the default engine,
+          // which passes `actor: params.actor` on resume and never reads it from the
+          // snapshot (see packages/core/src/workflows/workflow.ts `_resume`). The caller
+          // (a trusted background system) re-supplies `actor` on each resume; we never
+          // persist a membership-bypass signal into durable storage.
+          actor: params.actor,
           perStep: params.perStep,
         },
       });
@@ -607,6 +623,7 @@ export class InngestRun<
       | string[];
     label?: string;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const { eventId } = await this._resumeAndSendEvent(params);
@@ -640,6 +657,7 @@ export class InngestRun<
       | string[];
     label?: string;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     perStep?: boolean;
   }): Promise<{ runId: string }> {
     await this._resumeAndSendEvent(params);
@@ -659,6 +677,7 @@ export class InngestRun<
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
@@ -690,6 +709,7 @@ export class InngestRun<
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     tracingOptions?: TracingOptions;
     outputOptions?: {
       includeState?: boolean;
@@ -808,6 +828,7 @@ export class InngestRun<
           tracingOptions: params.tracingOptions,
           outputOptions: params.outputOptions,
           requestContext: params.requestContext ? Object.fromEntries(params.requestContext.entries()) : {},
+          actor: params.actor,
           perStep: params.perStep,
         },
       });
@@ -873,7 +894,11 @@ export class InngestRun<
     };
   }
 
-  streamLegacy({ inputData, requestContext }: { inputData?: TInput; requestContext?: RequestContext } = {}): {
+  streamLegacy({
+    inputData,
+    requestContext,
+    actor,
+  }: { inputData?: TInput; requestContext?: RequestContext; actor?: ActorSignal } = {}): {
     stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   } {
@@ -919,7 +944,7 @@ export class InngestRun<
       }
     };
 
-    this.executionResults = this._start({ inputData, requestContext, format: 'legacy' }).then(result => {
+    this.executionResults = this._start({ inputData, requestContext, actor, format: 'legacy' }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
@@ -936,6 +961,7 @@ export class InngestRun<
   stream({
     inputData,
     requestContext,
+    actor,
     tracingOptions,
     closeOnSuspend = true,
     initialState,
@@ -944,6 +970,7 @@ export class InngestRun<
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     closeOnSuspend?: boolean;
@@ -989,6 +1016,7 @@ export class InngestRun<
         const executionResultsPromise = self._start({
           inputData,
           requestContext,
+          actor,
           // tracingContext, // We are not able to pass a reference to a span here, what to do?
           initialState,
           tracingOptions,
@@ -1036,6 +1064,7 @@ export class InngestRun<
     context,
     nestedStepsContext,
     requestContext,
+    actor,
     // tracingContext,
     tracingOptions,
     outputOptions,
@@ -1052,6 +1081,7 @@ export class InngestRun<
     context?: TimeTravelContext<any, any, any, any>;
     nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
     requestContext?: RequestContext;
+    actor?: ActorSignal;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     outputOptions?: {
@@ -1095,6 +1125,7 @@ export class InngestRun<
           resumeData,
           initialState,
           requestContext,
+          actor,
           tracingOptions,
           outputOptions,
           perStep,

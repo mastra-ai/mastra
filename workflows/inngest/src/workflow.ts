@@ -306,6 +306,7 @@ export class InngestWorkflow<
           timeTravel,
           perStep,
           tracingOptions,
+          actor,
         } = event.data;
 
         if (!runId) {
@@ -373,6 +374,7 @@ export class InngestWorkflow<
             pubsub,
             retryConfig: this.retryConfig,
             requestContext,
+            actor,
             resume,
             timeTravel,
             perStep,

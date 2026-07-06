@@ -59,7 +59,7 @@ vi.mock('../status-line.js', () => ({
 
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyHandlers, setupKeyboardShortcuts } from '../setup.js';
 import { createMockState } from './agent-controller-mock.js';
 
 const originalPlatform = process.platform;
@@ -125,6 +125,73 @@ function createState(isRunning: boolean) {
 
   return { state, editor, actions };
 }
+
+describe('setupKeyHandlers', () => {
+  function registerSigintHandler(state: any) {
+    let handler: (() => void) | undefined;
+    const onSpy = vi
+      .spyOn(process, 'on')
+      .mockImplementation((event: string | symbol, listener: (...args: any[]) => void) => {
+        if (event === 'SIGINT') {
+          handler = listener as () => void;
+        }
+        return process;
+      });
+    const offSpy = vi.spyOn(process, 'off').mockImplementation(() => process);
+
+    const cleanup = setupKeyHandlers(state, { stop: vi.fn(), doubleCtrlCMs: 500 });
+
+    expect(onSpy).toHaveBeenCalledWith('SIGINT', expect.any(Function));
+    expect(handler).toBeDefined();
+    return { handler: handler!, cleanup, offSpy };
+  }
+
+  it('only dismisses an active approval prompt on process SIGINT', () => {
+    const { state } = createState(false);
+    const pendingApprovalDismiss = vi.fn();
+    const runInterrupt = vi.fn().mockResolvedValue(undefined);
+    state.pendingApprovalDismiss = pendingApprovalDismiss;
+    state.hookManager = { runInterrupt };
+
+    const { handler, cleanup } = registerSigintHandler(state);
+
+    handler();
+    cleanup();
+
+    expect(pendingApprovalDismiss).toHaveBeenCalledTimes(1);
+    expect(runInterrupt).not.toHaveBeenCalled();
+    expect(state.session.abort).not.toHaveBeenCalled();
+  });
+
+  it('does not emit process_sigint when no run is active', () => {
+    const { state } = createState(false);
+    const runInterrupt = vi.fn().mockResolvedValue(undefined);
+    state.hookManager = { runInterrupt };
+
+    const { handler, cleanup } = registerSigintHandler(state);
+
+    handler();
+    cleanup();
+
+    expect(runInterrupt).not.toHaveBeenCalled();
+    expect(state.session.abort).not.toHaveBeenCalled();
+  });
+
+  it('emits process_sigint while aborting an active run', () => {
+    const { state } = createState(true);
+    const runInterrupt = vi.fn().mockResolvedValue(undefined);
+    state.hookManager = { runInterrupt };
+
+    const { handler, cleanup } = registerSigintHandler(state);
+
+    handler();
+    cleanup();
+
+    expect(runInterrupt).toHaveBeenCalledWith('process_sigint');
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
+    expect(state.userInitiatedAbort).toBe(true);
+  });
+});
 
 describe('setupKeyboardShortcuts', () => {
   it('defaults slash-command autocomplete to the first visible built-in command before custom commands', () => {

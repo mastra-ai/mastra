@@ -33,6 +33,8 @@ export * from './domains/tool-provider-connections/data';
 export type TestCapabilities = {
   /** Whether the adapter supports listing scores by span (defaults to true) */
   listScoresBySpan?: boolean;
+  /** Whether scorer-based pagination is guaranteed to be ordered newest-first. */
+  deterministicScorePagination?: boolean;
   /**
    * Whether the adapter persists item-level tool mocks and experiment tool mock
    * reports (defaults to true). Adapters that reject them (e.g. MySQL) set this

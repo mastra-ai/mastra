@@ -91,7 +91,8 @@ export function useLogsListNavigation(
     featuredLogIdx > 0
       ? () => {
           const prevLog = logs[featuredLogIdx - 1];
-          const id = logIdMap.get(prevLog)!;
+          const id = logIdMap.get(prevLog);
+          if (!id) return;
           if (featuredTraceId) {
             onFeaturedChange({ logId: id, traceId: prevLog.traceId ?? null, spanId: null });
           } else {
@@ -104,7 +105,8 @@ export function useLogsListNavigation(
     featuredLogIdx >= 0 && featuredLogIdx < logs.length - 1
       ? () => {
           const nextLog = logs[featuredLogIdx + 1];
-          const id = logIdMap.get(nextLog)!;
+          const id = logIdMap.get(nextLog);
+          if (!id) return;
           if (featuredTraceId) {
             onFeaturedChange({ logId: id, traceId: nextLog.traceId ?? null, spanId: null });
           } else {

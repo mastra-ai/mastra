@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "pretest": "docker compose up -d --wait",
+    "pretest": "docker compose up -d --wait || (echo '--- docker compose up failed; dumping diagnostics ---' && docker compose ps -a && docker compose logs && df -h && exit 1)",
     "test": "vitest run",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",
@@ -50,7 +50,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.42.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.49.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

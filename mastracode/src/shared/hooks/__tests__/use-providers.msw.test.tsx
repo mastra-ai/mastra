@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderHookWithProviders, waitForMutationsIdle } from '..
 import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../use-providers';
 import { anthropicProviderNoKey, openaiProvider, providersResponse } from './fixtures/providers';
 
-const PROVIDERS_URL = `${TEST_BASE_URL}/api/web/config/providers`;
+const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 const keyUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/key`;
 
 describe('useProvidersQuery', () => {

@@ -98,6 +98,37 @@ describe('checkMastraPeerDeps', () => {
     expect(mismatches).toHaveLength(0);
   });
 
+  it('should skip non-semver peer ranges like workspace:^ (monorepo-resolved packages)', async () => {
+    const packages: MastraPackageInfo[] = [
+      { name: '@mastra/client-js', version: '1.0.0' },
+      { name: '@mastra/playground-ui', version: '1.0.0' },
+    ];
+
+    mockGetPackageInfo.mockImplementation(async (name: string) => {
+      if (name === '@mastra/playground-ui') {
+        return {
+          name: '@mastra/playground-ui',
+          version: '1.0.0',
+          rootPath: '/workspace/packages/playground-ui',
+          packageJson: {
+            peerDependencies: {
+              '@mastra/client-js': 'workspace:^',
+            },
+          },
+        } as ReturnType<typeof getPackageInfo>;
+      }
+      return {
+        name,
+        version: packages.find(p => p.name === name)?.version ?? '0.0.0',
+        rootPath: `/node_modules/${name}`,
+        packageJson: {},
+      } as ReturnType<typeof getPackageInfo>;
+    });
+
+    const mismatches = await checkMastraPeerDeps(packages);
+    expect(mismatches).toHaveLength(0);
+  });
+
   it('should ignore non-mastra peer deps', async () => {
     const packages: MastraPackageInfo[] = [{ name: '@mastra/cli', version: '1.0.0' }];
 

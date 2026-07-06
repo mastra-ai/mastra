@@ -67,13 +67,21 @@ export class DevBundler extends Bundler {
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
     const sourcemapEnabled = !!bundlerOptions?.sourcemap;
 
+    const devServerAnalysisEntry = `
+      import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+      import { createNodeServer, getToolExports } from '#server';
+      export { scoreTracesWorkflow, createNodeServer, getToolExports };
+    `;
     const inputOptions = await getWatcherInputOptions(
       entryFile,
       this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
-      { sourcemap: sourcemapEnabled },
+      {
+        sourcemap: sourcemapEnabled,
+        analysisEntries: [entryFile, devServerAnalysisEntry],
+      },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 

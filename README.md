@@ -59,7 +59,7 @@ Provider rules:
 
 Allowed provider -> use it.
 Any other value -> use "openai".
-Run with answers: npm create mastra@latest <project-name> --default --llm <provider>
+Run with answers: npm create mastra@latest <project-name> -- --default --llm <provider>
 
 After project created, go to project dir. Start dev server: npx bgproc start -n <project-name> -w -- npm run dev
 

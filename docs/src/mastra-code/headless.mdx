@@ -1,0 +1,211 @@
+---
+title: 'Headless mode'
+description: 'Run Mastra Code non-interactively from your shell or programmatically from Node and CI with the runMC API.'
+packages:
+  - 'mastracode'
+---
+
+# Headless mode
+
+Mastra Code can run non-interactively — both from your shell and programmatically from Node or CI. Both paths share one core runner, `runMC`. The CLI is a thin adapter over it.
+
+- **CLI**: `mastracode --prompt "..."` parses flags, bootstraps Mastra Code, runs the task, prints output, and exits with a status code.
+- **Programmatic**: you bootstrap Mastra Code once with [`createMastraCode()`](/reference), then call `runMC()` to run a task as an async-iterable that also resolves to a typed result.
+
+## CLI usage
+
+Pass `--prompt` (or `-p`) to run a single task and exit:
+
+```sh
+mastracode --prompt "Fix the bug in auth.ts"
+```
+
+Prompts can also be piped via stdin by passing `-` as the prompt:
+
+```sh
+echo "Summarize the repo" | mastracode --prompt -
+```
+
+### Flags
+
+| Flag | Description |
+| - | - |
+| `--prompt`, `-p <text>` | The task to execute (required, or pipe via stdin) |
+| `--continue`, `-c` | Resume the most recent thread instead of creating a new one |
+| `--thread`, `-t <id>` | Resume a specific thread by ID |
+| `--title <title>` | Set or rename the thread title |
+| `--clone-thread` | Clone the current thread before running (work on a copy) |
+| `--resource-id <id>` | Set the resource ID for thread scoping |
+| `--timeout <seconds>` | Exit with code 2 if not complete within the timeout |
+| `--max-turns <n>` | Abort after N agentic turns (exit code 1) |
+| `--permission-mode <mode>` | How tool approvals/suspensions resolve: `auto` (default) approves everything; `deny` refuses approvals and aborts on suspension |
+| `--output`, `-o <mode>` | Output mode: `human` (default), `json`, or `jsonl` |
+| `--model`, `-m <id>` | Model override (e.g. a `provider/model` id) |
+| `--mode <build\|plan\|fast>` | Execution mode — defaults to `build` if omitted |
+| `--thinking-level <level>` | Thinking level: `off`, `low`, `medium`, `high`, `xhigh` |
+| `--settings <path>` | Path to a `settings.json` file (default: global settings) |
+| `--help`, `-h` | Show usage |
+
+`--continue` and `--thread` cannot be used together.
+
+### Output modes
+
+| Mode | Behavior |
+| - | - |
+| `human` | Streaming assistant text to stdout; tool activity and errors to stderr |
+| `json` | A single final JSON object (text, usage, tool calls/results, threadId, status) |
+| `jsonl` | Newline-delimited JSON: one line per event, then a final `{ "type": "result", ... }` line |
+
+### Exit codes
+
+| Code | Meaning |
+| - | - |
+| `0` | Agent completed successfully |
+| `1` | Error, aborted, or max turns reached |
+| `2` | Timeout |
+
+### Examples
+
+```sh
+# JSON output with a timeout
+mastracode --prompt "Add tests" --timeout 300 --output json
+
+# Event stream
+mastracode --prompt "Refactor" --output jsonl
+
+# Gate a CI run: no unattended tool execution, bounded turns
+mastracode --prompt "Review this PR" --permission-mode deny --max-turns 10
+
+# Use a CI-specific settings file
+mastracode --settings ./settings-ci.json --prompt "Run tests"
+
+# Resume the most recent thread
+mastracode -c --prompt "Continue where you left off"
+```
+
+## Programmatic usage
+
+Bootstrap Mastra Code with [`createMastraCode()`](/reference), then pass the returned `controller` and `session` to `runMC()`. `createMastraCode()` is async; `runMC()` is synchronous and returns a run handle immediately.
+
+```typescript title="src/run.ts"
+import { createMastraCode, runMC } from 'mastracode'
+
+const { controller, session } = await createMastraCode()
+
+const run = runMC({
+  controller,
+  session,
+  prompt: 'Fix the failing test in auth.test.ts',
+})
+
+// Optional: stream live events as they happen.
+for await (const event of run) {
+  console.log(event.type)
+}
+
+// Resolves once the run completes, times out, errors, or is aborted.
+const result = await run.result
+console.log(result.status, result.text)
+```
+
+`runMC` never calls `process.exit` and never writes to global streams, so it is safe to embed in CI scripts and servers.
+
+### The run handle
+
+`runMC` returns an `MCRun`, which is both an async-iterable over controller events and a handle that resolves to a final result:
+
+```typescript
+const run = runMC({ controller, session, prompt })
+
+run.result // Promise<RunMCResult>
+run.abort() // abort the in-flight run
+for await (const event of run) {
+  /* ... */
+}
+```
+
+Both `for await (const event of run)` and `await run.result` work on the same run. Awaiting `result` without iterating still drains events internally.
+
+### `runMC` options
+
+| Option | Type | Description |
+| - | - | - |
+| `controller` | `AgentController` | Controller from `createMastraCode()` (required) |
+| `session` | `Session` | Session from `createMastraCode()` (required) |
+| `prompt` | `string` | The task to run (required) |
+| `model` | `string` | Explicit model id override; takes precedence over `mode` |
+| `mode` | `'build' \| 'plan' \| 'fast'` | Execution mode; resolves a model from `modeDefaults` when `model` is absent |
+| `modeDefaults` | `Record<string, string>` | Per-mode default model ids |
+| `thinkingLevel` | `'off' \| 'low' \| 'medium' \| 'high' \| 'xhigh'` | Thinking-effort level |
+| `thread` | `{ id?: string; continueLatest?: boolean; clone?: boolean }` | Thread selection / mutation |
+| `resourceId` | `string` | Resource id for thread scoping |
+| `title` | `string` | Set or rename the thread title before running |
+| `timeoutMs` | `number` | Abort with `status: 'timeout'` (exit code 2) if not complete in time |
+| `maxTurns` | `number` | Abort with `status: 'max_turns'` (exit code 1) after N assistant turns |
+| `policy` | `ResolutionPolicy` | How approvals/suspensions resolve (defaults to `autoApprovePolicy`) |
+| `signal` | `AbortSignal` | External abort signal; aborting it aborts the run |
+
+### `RunMCResult`
+
+| Field | Type | Description |
+| - | - | - |
+| `status` | `'completed' \| 'error' \| 'aborted' \| 'timeout' \| 'max_turns'` | How the run ended |
+| `text` | `string` | Aggregated assistant text across the run |
+| `finishReason` | `string` | Underlying finish reason when the run finished normally |
+| `usage` | `{ inputTokens?; outputTokens?; totalTokens? }` | Token usage |
+| `toolCalls` | `Array<{ id; name; args }>` | Tool calls made during the run |
+| `toolResults` | `Array<{ id; name; result; isError }>` | Tool results |
+| `threadId` | `string` | The thread the run executed in |
+| `error` | `{ name; message; stack? }` | Present when `status` is `error` |
+| `exitCode` | `number` | `0` success, `1` error/aborted/max\_turns, `2` timeout |
+
+## Resolution policies
+
+A resolution policy decides how the run resumes `tool_approval_required` and `tool_suspended` events when there is no human in the loop. The default is `autoApprovePolicy`, which reproduces the historical headless behavior: approve every tool, auto-resolve sandbox and `submit_plan` suspensions, and answer any other suspension with a "use your best judgment" instruction.
+
+Two built-in policies and a resolver are exported:
+
+| Export | Behavior |
+| - | - |
+| `autoApprovePolicy` | Approve every tool; auto-resolve suspensions (default) |
+| `denyPolicy` | Refuse every tool approval; abort on any suspension |
+| `permissionModeToPolicy(mode)` | Resolve a `PermissionMode` (`'auto'` or `'deny'`) to a built-in policy |
+
+The CLI `--permission-mode` flag maps directly onto these via `permissionModeToPolicy`.
+
+### Custom policies
+
+Implement the `ResolutionPolicy` interface to make per-event decisions:
+
+```typescript title="src/strict-policy.ts"
+import { createMastraCode, runMC, type ResolutionPolicy } from 'mastracode'
+
+const readOnlyPolicy: ResolutionPolicy = {
+  // Only approve read_file; deny everything else.
+  onToolApproval(event) {
+    return event.toolName === 'read_file' ? 'approve' : 'deny'
+  },
+  // Abort rather than answer suspensions unattended.
+  onSuspension() {
+    return { abort: true }
+  },
+}
+
+const { controller, session } = await createMastraCode()
+
+const run = runMC({
+  controller,
+  session,
+  prompt: 'Audit the codebase for secrets',
+  policy: readOnlyPolicy,
+})
+
+const result = await run.result
+```
+
+`onToolApproval` returns `'approve'` or `'deny'`. `onSuspension` returns either `{ resumeData }` to resume the suspended tool or `{ abort: true }` to abort the run.
+
+## Next steps
+
+- [Customization](/customization) — extend Mastra Code with custom modes, tools, and subagents.
+- [API reference](/reference) — full `createMastraCode()` options and return values.

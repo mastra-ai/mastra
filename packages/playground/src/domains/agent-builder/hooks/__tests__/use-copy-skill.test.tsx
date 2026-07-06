@@ -1,4 +1,3 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -9,14 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useCopySkill } from '../use-copy-skill';
 import { makeStoredSkill } from './fixtures/stored-skills';
 import { server } from '@/test/msw-server';
-
-vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = await importOriginal<typeof PlaygroundUi>();
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-  };
-});
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },

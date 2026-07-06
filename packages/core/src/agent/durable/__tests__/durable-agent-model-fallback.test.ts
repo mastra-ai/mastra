@@ -314,9 +314,9 @@ describe('DurableAgent Model Fallback', () => {
       });
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
-      let errorReceived: Error | null = null;
+      let errorReceived: Error | string | null = null;
       const { cleanup } = await durableAgent.stream('Hello', {
-        onError: error => {
+        onError: ({ error }) => {
           errorReceived = error;
         },
       });
@@ -326,7 +326,7 @@ describe('DurableAgent Model Fallback', () => {
       cleanup();
 
       expect(errorReceived).not.toBeNull();
-      expect(errorReceived!.message).toContain('Model execution failed');
+      expect((errorReceived as Error).message).toContain('Model execution failed');
     });
 
     it('should fall back after exhausting retries on first model', async () => {

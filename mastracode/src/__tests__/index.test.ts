@@ -15,6 +15,7 @@ const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogPr
 const resolveModelMock = vi.fn();
 
 vi.mock('@mastra/core/llm', () => ({
+  MastraModelGateway: class {},
   PROVIDER_REGISTRY: providerRegistryMock,
 }));
 
@@ -27,13 +28,23 @@ vi.mock('@mastra/core/agent', () => ({
   SignalProvider: class {},
 }));
 
+// The code agent is built via the core `createCodingAgent` factory. Forward the
+// config mastracode passes to the same constructor spy the tests assert against,
+// returning a mocked Agent instance.
+vi.mock('@mastra/core/coding-agent', () => ({
+  createCodingAgent: (config: unknown) => {
+    agentConstructorMock(config);
+    return {};
+  },
+}));
+
 const agentConstructorMock = vi.fn();
 
-const agentControllerConstructorMock = vi.fn();
+const controllerConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
-const agentControllerSubscribeMock = vi.fn();
+const controllerSubscribeMock = vi.fn();
 const detectProjectMock = vi.fn(() => ({
   mode: 'none',
   rootPath: process.cwd(),
@@ -42,16 +53,16 @@ const detectProjectMock = vi.fn(() => ({
   hasGit: false,
   contextFiles: [],
 }));
-const agentControllerGetCurrentThreadIdMock = vi.fn();
-const agentControllerListThreadsMock = vi.fn();
-const agentControllerSetStateMock = vi.fn();
-const agentControllerSetThreadSettingMock = vi.fn();
+const controllerGetCurrentThreadIdMock = vi.fn();
+const controllerListThreadsMock = vi.fn();
+const controllerSetStateMock = vi.fn();
+const controllerSetThreadSettingMock = vi.fn();
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
 const getDynamicWorkspaceMock = vi.fn();
-let agentControllerStateMock: Record<string, unknown> = { cavemanObservations: false };
+let controllerStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
   return {
@@ -107,7 +118,7 @@ function createMockSettings() {
 vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
     constructor(config: unknown) {
-      agentControllerConstructorMock(config);
+      controllerConstructorMock(config);
     }
     async init() {}
     getMastra() {
@@ -115,33 +126,33 @@ vi.mock('@mastra/core/agent-controller', () => ({
     }
     async createSession() {
       return {
-        subscribe: (eventHandler: unknown) => agentControllerSubscribeMock(eventHandler),
+        subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
         identity: {
           getResourceId: () => 'project-resource',
         },
         thread: {
-          getId: () => agentControllerGetCurrentThreadIdMock(),
-          list: (options: unknown) => agentControllerListThreadsMock(options),
-          setSetting: (setting: unknown) => agentControllerSetThreadSettingMock(setting),
+          getId: () => controllerGetCurrentThreadIdMock(),
+          list: (options: unknown) => controllerListThreadsMock(options),
+          setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
         },
         mode: { get: () => 'build' },
         model: { get: () => 'anthropic/claude-opus-4-6' },
         state: {
-          get: () => agentControllerStateMock,
-          set: (state: unknown) => agentControllerSetStateMock(state),
+          get: () => controllerStateMock,
+          set: (state: unknown) => controllerSetStateMock(state),
           update: async (updater: any) => {
-            const result = await updater(agentControllerStateMock);
-            if (result?.updates) agentControllerSetStateMock(result.updates);
+            const result = await updater(controllerStateMock);
+            if (result?.updates) controllerSetStateMock(result.updates);
             return result?.result;
           },
         },
       };
     }
     getState() {
-      return agentControllerStateMock;
+      return controllerStateMock;
     }
     setState(state: unknown) {
-      return agentControllerSetStateMock(state);
+      return controllerSetStateMock(state);
     }
   },
   taskWriteTool: {},
@@ -330,15 +341,15 @@ describe('createMastraCode', () => {
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
     getDynamicMemoryMock.mockReturnValue(() => undefined);
-    agentControllerSubscribeMock.mockReset();
-    agentControllerGetCurrentThreadIdMock.mockReset();
-    agentControllerGetCurrentThreadIdMock.mockReturnValue(undefined);
-    agentControllerListThreadsMock.mockReset();
-    agentControllerListThreadsMock.mockResolvedValue([]);
-    agentControllerSetStateMock.mockReset();
-    agentControllerSetStateMock.mockResolvedValue(undefined);
-    agentControllerSetThreadSettingMock.mockReset();
-    agentControllerSetThreadSettingMock.mockResolvedValue(undefined);
+    controllerSubscribeMock.mockReset();
+    controllerGetCurrentThreadIdMock.mockReset();
+    controllerGetCurrentThreadIdMock.mockReturnValue(undefined);
+    controllerListThreadsMock.mockReset();
+    controllerListThreadsMock.mockResolvedValue([]);
+    controllerSetStateMock.mockReset();
+    controllerSetStateMock.mockResolvedValue(undefined);
+    controllerSetThreadSettingMock.mockReset();
+    controllerSetThreadSettingMock.mockResolvedValue(undefined);
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
     getStorageConfigMock.mockReset();
@@ -355,11 +366,11 @@ describe('createMastraCode', () => {
       hasGit: false,
       contextFiles: [],
     });
-    agentControllerStateMock = { cavemanObservations: false };
+    controllerStateMock = { cavemanObservations: false };
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
-    agentControllerConstructorMock.mockReset();
+    controllerConstructorMock.mockReset();
     streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
@@ -384,13 +395,14 @@ describe('createMastraCode', () => {
       settingsPath: undefined,
     });
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | {
-          gateways?: unknown[];
+          gateways?: Array<{ id?: string }>;
           subagents?: unknown[];
         }
       | undefined;
-    expect(agentControllerConfig?.gateways).toEqual([mastraCodeGatewayMock]);
+    expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
+    expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 10_000);
 
@@ -428,8 +440,8 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    expect(agentControllerConstructorMock).toHaveBeenCalled();
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
+    expect(controllerConstructorMock).toHaveBeenCalled();
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof agentControllerConfig?.memory).toBe('function');
   });
 
@@ -453,7 +465,7 @@ describe('createMastraCode', () => {
       initialState: { configDir: '.wrong-code' },
     });
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { memory?: unknown; initialState?: Record<string, unknown> }
       | undefined;
     expect(agentControllerConfig?.memory).toBe(customMemory);
@@ -470,9 +482,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ workspace: customWorkspace as any });
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
-      | { workspace?: unknown }
-      | undefined;
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
     expect(agentControllerConfig?.workspace).toBe(customWorkspace);
     expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
   });
@@ -482,11 +492,28 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
-      | { workspace?: unknown }
-      | undefined;
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
     expect(typeof agentControllerConfig?.workspace).toBe('function');
     expect(agentControllerConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
+  });
+
+  it('adds active plugin tool names to mode availableTools allowlists and seeds plugin instructions', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const pluginManager = {
+      reload: vi.fn(async () => [
+        { id: 'acme.plugin', status: 'active', toolNames: ['plugin_tool'], instructions: 'Use plugin policy.' },
+      ]),
+      getPluginTools: vi.fn(() => ({ plugin_tool: { id: 'plugin_tool' } })),
+    };
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
+      | { modes?: Array<{ id: string; availableTools?: string[] }>; initialState?: Record<string, unknown> }
+      | undefined;
+    expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
+    expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
+    expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
   });
 
   it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {
@@ -525,7 +552,7 @@ describe('createMastraCode', () => {
       ],
     });
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { modes?: { id: string; default?: boolean; defaultModelId: string }[] }
       | undefined;
     expect(agentControllerConfig?.modes).toEqual(
@@ -550,7 +577,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ cwd: projectPath });
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(agentControllerConfig?.initialState?.projectPath).toBe(projectPath);
@@ -578,7 +605,7 @@ describe('createMastraCode', () => {
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
@@ -626,7 +653,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls.at(-1)?.[0] as
+    const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
       | { pubsub?: unknown; threadLock?: unknown }
       | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
@@ -639,7 +666,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
-    const agentControllerConfig = agentControllerConstructorMock.mock.calls.at(-1)?.[0] as
+    const agentControllerConfig = controllerConstructorMock.mock.calls.at(-1)?.[0] as
       | { pubsub?: unknown; threadLock?: unknown }
       | undefined;
     expect(agentControllerConfig?.pubsub).toBe(pubsub);
@@ -647,28 +674,28 @@ describe('createMastraCode', () => {
   });
 
   it('restores the current thread caveman observation setting at startup', async () => {
-    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
+    controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    expect(agentControllerSubscribeMock).toHaveBeenCalled();
-    expect(agentControllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
-    expect(agentControllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
+    expect(controllerSubscribeMock).toHaveBeenCalled();
+    expect(controllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(controllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
   });
 
   it('restores an explicit false caveman observation setting at startup', async () => {
-    agentControllerStateMock = { cavemanObservations: true };
-    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: false } }]);
+    controllerStateMock = { cavemanObservations: true };
+    controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: false } }]);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    expect(agentControllerSubscribeMock).toHaveBeenCalled();
-    expect(agentControllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
-    expect(agentControllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
+    expect(controllerSubscribeMock).toHaveBeenCalled();
+    expect(controllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(controllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
   });
 
   it('seeds observeAttachments from persisted global setting at startup', async () => {
@@ -679,7 +706,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const agentControllerCall = agentControllerConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe(false);
@@ -690,23 +717,23 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const agentControllerCall = agentControllerConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerCall = controllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(agentControllerCall?.initialState?.observeAttachments).toBe('auto');
   });
 
   it('restores observeAttachments metadata for the current thread at startup', async () => {
-    agentControllerStateMock = { observeAttachments: true };
-    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { observeAttachments: 'auto' } }]);
+    controllerStateMock = { observeAttachments: true };
+    controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { observeAttachments: 'auto' } }]);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    expect(agentControllerSubscribeMock).toHaveBeenCalled();
-    expect(agentControllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
-    expect(agentControllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
+    expect(controllerSubscribeMock).toHaveBeenCalled();
+    expect(controllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(controllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
   it('runs stream error retries before provider-specific error recovery processors', async () => {
@@ -776,8 +803,8 @@ describe('createMastraCode', () => {
       ...createMockSettings(),
       signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
     });
-    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
+    controllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    controllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
     const { GithubSignals } = await import('@mastra/github-signals');
     const startPollingForThread = vi.spyOn(GithubSignals.prototype, 'startPollingForThread').mockResolvedValue(true);
     const { createMastraCode } = await import('../index.js');
