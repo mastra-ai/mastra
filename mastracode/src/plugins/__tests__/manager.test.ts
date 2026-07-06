@@ -211,7 +211,7 @@ describe('PluginManager', () => {
     );
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install'],
+      ['install', '--ignore-scripts'],
       expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(fs.realpathSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(
@@ -271,7 +271,11 @@ describe('PluginManager', () => {
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(manager.getPluginTools().github_tool?.description).toBe('second');
-    expect(execaMock).toHaveBeenCalledWith('npm', ['install'], expect.objectContaining({ cwd: nestedPluginDir }));
+    expect(execaMock).toHaveBeenCalledWith(
+      'npm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: nestedPluginDir }),
+    );
     expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
       fs.realpathSync(mastracodePackageRoot),
     );

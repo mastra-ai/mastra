@@ -45,7 +45,11 @@ describe('installPluginDependencies', () => {
 
     await expect(installPluginDependencies(pluginRoot)).resolves.toBe(true);
 
-    expect(execaMock).toHaveBeenCalledWith('pnpm', ['install'], expect.objectContaining({ cwd: pluginRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      'pnpm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
   });
 
   it('uses pnpm when pnpm-lock.yaml is present', async () => {
@@ -57,7 +61,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--frozen-lockfile'],
+      ['install', '--frozen-lockfile', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -69,7 +73,11 @@ describe('installPluginDependencies', () => {
 
     await installPluginDependencies(pluginRoot);
 
-    expect(execaMock).toHaveBeenCalledWith('npm', ['ci'], expect.objectContaining({ cwd: pluginRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      'npm',
+      ['ci', '--ignore-scripts'],
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
   });
 
   it('prefers packageManager over conflicting lockfiles', async () => {
@@ -79,7 +87,11 @@ describe('installPluginDependencies', () => {
 
     await installPluginDependencies(pluginRoot);
 
-    expect(execaMock).toHaveBeenCalledWith('npm', ['install'], expect.objectContaining({ cwd: pluginRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      'npm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
   });
 
   it('falls back to npm install when only package.json is present', async () => {
@@ -90,7 +102,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'npm',
-      ['install'],
+      ['install', '--ignore-scripts'],
       expect.objectContaining({
         cwd: pluginRoot,
         env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
@@ -119,7 +131,7 @@ describe('installPluginDependencies', () => {
     expect(output).toEqual(['stdout line\n', 'stderr line\n']);
     expect(execaMock).toHaveBeenCalledWith(
       'npm',
-      ['install'],
+      ['install', '--ignore-scripts'],
       expect.objectContaining({ stdout: 'pipe', stderr: 'pipe', cancelSignal: expect.any(AbortSignal) }),
     );
   });
@@ -144,6 +156,19 @@ describe('installPluginDependencies', () => {
     );
   });
 
+  it('disables package manager lifecycle scripts during install', async () => {
+    const pluginRoot = makePluginRoot();
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
+
+    await installPluginDependencies(pluginRoot);
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'pnpm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
+  });
+
   it('uses packageManager names that are not known lockfile managers', async () => {
     const pluginRoot = makePluginRoot();
     writePackageJson(pluginRoot, { packageManager: 'definitely-missing-pm@1.0.0' });
@@ -152,7 +177,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'definitely-missing-pm',
-      ['install'],
+      ['install', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -183,7 +208,11 @@ describe('installPluginDependencies', () => {
 
     await installPluginDependencies(nestedRoot, pluginRoot);
 
-    expect(execaMock).toHaveBeenCalledWith('pnpm', ['install'], expect.objectContaining({ cwd: nestedRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      'pnpm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: nestedRoot }),
+    );
   });
 
   it('uses frozen install for nested entry packages with their own lockfile', async () => {
@@ -198,7 +227,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--frozen-lockfile'],
+      ['install', '--frozen-lockfile', '--ignore-scripts'],
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });

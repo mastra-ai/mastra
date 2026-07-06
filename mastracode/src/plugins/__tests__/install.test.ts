@@ -224,7 +224,7 @@ describe('installGithubPlugin', () => {
     expect(execaMock).toHaveBeenNthCalledWith(
       4,
       'pnpm',
-      ['install', '--frozen-lockfile'],
+      ['install', '--frozen-lockfile', '--ignore-scripts'],
       expect.objectContaining({ cwd: checkoutDir }),
     );
     expect(
@@ -319,7 +319,11 @@ describe('installGithubPlugin', () => {
       ['repo', 'clone', 'acme/alexandria', checkoutDir, '--', '--depth', '1'],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
-    expect(execaMock).toHaveBeenCalledWith('npm', ['install'], expect.objectContaining({ cwd: nestedPluginDir }));
+    expect(execaMock).toHaveBeenCalledWith(
+      'npm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: nestedPluginDir }),
+    );
     expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
       fs.realpathSync(mastracodePackageRoot),
     );

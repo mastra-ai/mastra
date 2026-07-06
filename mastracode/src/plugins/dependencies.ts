@@ -113,63 +113,67 @@ function getInstallCommand(
 
   if (manager?.startsWith('pnpm@')) {
     return hasFile(pluginRoot, 'pnpm-lock.yaml')
-      ? { command: 'pnpm', args: ['install', '--frozen-lockfile'] }
-      : { command: 'pnpm', args: ['install'] };
+      ? installCommand('pnpm', ['install', '--frozen-lockfile'])
+      : installCommand('pnpm', ['install']);
   }
 
   if (manager?.startsWith('npm@')) {
-    return hasNpmLockfile(pluginRoot) ? { command: 'npm', args: ['ci'] } : { command: 'npm', args: ['install'] };
+    return hasNpmLockfile(pluginRoot) ? installCommand('npm', ['ci']) : installCommand('npm', ['install']);
   }
 
   if (manager?.startsWith('yarn@')) {
     return hasFile(pluginRoot, 'yarn.lock')
-      ? { command: 'yarn', args: ['install', '--frozen-lockfile'] }
-      : { command: 'yarn', args: ['install'] };
+      ? installCommand('yarn', ['install', '--frozen-lockfile'])
+      : installCommand('yarn', ['install']);
   }
 
   if (manager?.startsWith('bun@')) {
     return hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')
-      ? { command: 'bun', args: ['install', '--frozen-lockfile'] }
-      : { command: 'bun', args: ['install'] };
+      ? installCommand('bun', ['install', '--frozen-lockfile'])
+      : installCommand('bun', ['install']);
   }
 
   if (manager) {
-    return { command: manager.split('@')[0] ?? manager, args: ['install'] };
+    return installCommand(manager.split('@')[0] ?? manager, ['install']);
   }
 
   if (hasFile(pluginRoot, 'pnpm-lock.yaml')) {
-    return { command: 'pnpm', args: ['install', '--frozen-lockfile'] };
+    return installCommand('pnpm', ['install', '--frozen-lockfile']);
   }
 
   if (hasFile(commandRoot, 'pnpm-lock.yaml')) {
-    return { command: 'pnpm', args: ['install'] };
+    return installCommand('pnpm', ['install']);
   }
 
   if (hasNpmLockfile(pluginRoot)) {
-    return { command: 'npm', args: ['ci'] };
+    return installCommand('npm', ['ci']);
   }
 
   if (hasNpmLockfile(commandRoot)) {
-    return { command: 'npm', args: ['install'] };
+    return installCommand('npm', ['install']);
   }
 
   if (hasFile(pluginRoot, 'yarn.lock')) {
-    return { command: 'yarn', args: ['install', '--frozen-lockfile'] };
+    return installCommand('yarn', ['install', '--frozen-lockfile']);
   }
 
   if (hasFile(commandRoot, 'yarn.lock')) {
-    return { command: 'yarn', args: ['install'] };
+    return installCommand('yarn', ['install']);
   }
 
   if (hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')) {
-    return { command: 'bun', args: ['install', '--frozen-lockfile'] };
+    return installCommand('bun', ['install', '--frozen-lockfile']);
   }
 
   if (hasFile(commandRoot, 'bun.lock') || hasFile(commandRoot, 'bun.lockb')) {
-    return { command: 'bun', args: ['install'] };
+    return installCommand('bun', ['install']);
   }
 
-  return { command: 'npm', args: ['install'] };
+  return installCommand('npm', ['install']);
+}
+
+function installCommand(command: string, args: string[]): InstallCommand {
+  return { command, args: [...args, '--ignore-scripts'] };
 }
 
 function isCommandNotFoundError(error: unknown): boolean {
