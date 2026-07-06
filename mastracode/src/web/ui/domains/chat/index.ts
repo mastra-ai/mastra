@@ -7,6 +7,7 @@ export { CommandPalette } from './components/CommandPalette';
 export { GoalPanel } from './components/GoalPanel';
 export { ShortcutsOverlay } from './components/ShortcutsOverlay';
 export { StatusLine } from './components/StatusLine';
+export { ThreadList } from './components/ThreadList';
 export { Transcript } from './components/Transcript';
 export { SLASH_COMMANDS } from './services/commands';
 export { ChatSessionProvider, useChatSession } from './context/ChatSessionProvider';

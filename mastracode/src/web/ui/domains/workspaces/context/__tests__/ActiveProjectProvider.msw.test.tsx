@@ -31,13 +31,14 @@ function seedProject(project: Project = PROJECT) {
 }
 
 function Probe() {
-  const { projects, activeProject, activeProjectId, resourceId, sessionEnabled, selectProject } =
-    useActiveProjectContext();
+  const api = useActiveProjectContext();
+  const { projects, activeProject, resourceId, sessionEnabled, selectProject } = api;
   return (
     <div>
       <span data-testid="project-count">{projects.length}</span>
       <span data-testid="active-project">{activeProject?.name ?? '(none)'}</span>
-      <span data-testid="active-project-id">{activeProjectId ?? '(none)'}</span>
+      <span data-testid="active-project-id">{activeProject?.id ?? '(none)'}</span>
+      <span data-testid="has-legacy-id-field">{'activeProjectId' in api ? 'yes' : 'no'}</span>
       <span data-testid="resource-id">{resourceId}</span>
       <span data-testid="session-enabled">{sessionEnabled ? 'yes' : 'no'}</span>
       <button onClick={() => void selectProject(null)}>clear selection</button>
@@ -63,6 +64,8 @@ describe('ActiveProjectProvider', () => {
     expect(screen.getByTestId('active-project-id')).toHaveTextContent('project-test');
     expect(screen.getByTestId('resource-id')).toHaveTextContent('resource-test');
     expect(screen.getByTestId('session-enabled')).toHaveTextContent('yes');
+    // `activeProject` is the canonical field; the redundant id field is gone.
+    expect(screen.getByTestId('has-legacy-id-field')).toHaveTextContent('no');
   });
 
   it('given an active project, when selectProject(null) is called, then the selection clears', async () => {

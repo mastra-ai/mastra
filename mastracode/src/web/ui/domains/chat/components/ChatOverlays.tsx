@@ -12,8 +12,7 @@ import { ShortcutsOverlay } from './ShortcutsOverlay';
 /** Chat-page overlays: command palette, settings, shortcuts, and projects. */
 export function ChatOverlays() {
   const overlays = useOverlays();
-  const { projects, activeProject, activeProjectId, resourceId, sessionEnabled, selectProject } =
-    useActiveProjectContext();
+  const { projects, activeProject, resourceId, sessionEnabled, selectProject } = useActiveProjectContext();
   const session = useChatSession();
   const { runPaletteCommand } = useChatCommands();
   const { theme, setTheme } = useTheme();
@@ -58,7 +57,7 @@ export function ChatOverlays() {
       {projectsOpen && (
         <ProjectsModal
           projects={projects}
-          activeProjectId={activeProjectId}
+          activeProjectId={activeProject?.id ?? null}
           onSelectProject={project => void selectProject(project)}
           onClose={() => overlays.close('projects')}
         />

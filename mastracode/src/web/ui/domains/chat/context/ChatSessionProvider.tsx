@@ -3,9 +3,14 @@ import { createContext, useCallback, useContext } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { deriveProjectPath, useActiveProjectContext, useProjectSessionSync } from '../../workspaces';
+// Deep imports (not the workspaces barrel): the barrel re-exports components
+// that consume this chat context, so importing it here would create a cycle.
+import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
+import { useProjectSessionSync } from '../../workspaces/hooks/useProjectSessionSync';
+import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import type { AgentControllerSessionApi } from '../hooks/useAgentControllerSession';
 import { useAgentControllerSession } from '../hooks/useAgentControllerSession';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 /**
  * Owns the agent-controller session for the active project plus the derived
@@ -33,7 +38,7 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
 
   const session = useAgentControllerSession({
-    agentControllerId: 'code',
+    agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     projectPath: deriveProjectPath(activeProject),
     baseUrl,

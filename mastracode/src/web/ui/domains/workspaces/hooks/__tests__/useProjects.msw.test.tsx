@@ -192,6 +192,6 @@ describe('projects query hooks', () => {
     await waitForMutationsIdle(client);
 
     await waitFor(() => expect(result.current.activeProject?.resourceId).toBe('resource-legacy'));
-    expect(result.current.activeProjectId).toBe(legacyProject.id);
+    expect(result.current.activeProject?.id).toBe(legacyProject.id);
   });
 });
