@@ -255,7 +255,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       `pnpm changeset-cli version --snapshot ${tag}`,
     );
   } catch (error) {
-    cleanup(monorepoDir, false);
+    await cleanup(monorepoDir, false);
     throw error;
   }
 
