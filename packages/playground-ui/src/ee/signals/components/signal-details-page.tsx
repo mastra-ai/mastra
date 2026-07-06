@@ -172,7 +172,10 @@ export function SignalTraceListTab({
   const hasMore = visible.length < filtered.length;
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Topic trace summaries">
+    <section
+      className="grid grid-rows-[auto_1fr] min-h-0 gap-4 h-full overflow-y-auto"
+      aria-label="Topic trace summaries"
+    >
       <InputGroup variant="outline">
         <InputGroupAddon align="inline-start">
           <SearchIcon />
@@ -190,7 +193,7 @@ export function SignalTraceListTab({
 
       <DataList
         columns="minmax(12rem,1fr)"
-        className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border1/60"
+        className="min-h-0 h-full overflow-y-auto rounded-lg border border-border1/60"
       >
         <DataList.Top>
           <DataList.TopCells>
@@ -246,7 +249,7 @@ export function SignalChartTab({ topics, points, selectedTopicIds, onTopicToggle
   );
 
   return (
-    <div className="flex h-full min-w-0 gap-6">
+    <div className="flex h-full min-w-0 gap-6 overflow-y-auto">
       <SignalClusterSidebar
         topics={topics}
         selectedTopicIds={selectedTopicIds}
@@ -311,10 +314,10 @@ export function SignalClusterTabs({
         <Tab value="trace-list">Trace list</Tab>
         <Tab value="chart">Chart</Tab>
       </TabList>
-      <TabContent value="trace-list" className="min-h-0 flex-1 overflow-hidden py-0">
-        <div className="flex h-full min-w-0 gap-6">
+      <TabContent value="trace-list" className="min-h-0 flex-1 overflow-y-auto py-0">
+        <div className="flex h-full min-w-0 gap-6 overflow-y-auto">
           <SignalClusterSidebar topics={topics} selectedTopicIds={[selectedTopicId]} onTopicSelect={onTopicSelect} />
-          <div className="min-w-0 flex-1 overflow-hidden py-4">
+          <div className="min-w-0 flex-1 overflow-y-auto h-full py-4">
             <SignalTraceListTab
               examples={examples}
               loading={examplesLoading}
