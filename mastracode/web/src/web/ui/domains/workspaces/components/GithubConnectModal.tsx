@@ -71,18 +71,24 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
           </button>
         </div>
 
+        {/* Status diagnostics — explain why GitHub is unavailable before the body */}
+        <StatusCallout status={status} connected={connected} empty={connected && !loading && repos.length === 0} />
+
         {!connected ? (
           <>
             <p className="mb-4 mt-0 text-ui-sm leading-relaxed text-icon3">
               Install the MastraCode GitHub App to pick repositories you have access to and turn them into projects.
               Each repo is cloned into its own isolated cloud sandbox when you open it.
             </p>
-            <button
-              className="inline-flex items-center justify-center rounded-lg bg-accent1 px-4 py-2 text-ui-sm font-medium text-black hover:bg-accent1/90"
-              onClick={() => connectGithub(baseUrl)}
-            >
-              <span>Connect GitHub</span>
-            </button>
+            {/* Hide the connect button when the feature is disabled — /auth/github/connect won't exist */}
+            {status.reason !== 'missing_config' && status.reason !== 'organization_required' && (
+              <button
+                className="inline-flex items-center justify-center rounded-lg bg-accent1 px-4 py-2 text-ui-sm font-medium text-black hover:bg-accent1/90"
+                onClick={() => connectGithub(baseUrl)}
+              >
+                <span>Connect GitHub</span>
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -134,4 +140,75 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
       </div>
     </div>
   );
+}
+
+/**
+ * Actionable diagnostic callout rendered before the connect/repo-picker body.
+ * Explains the exact missing step so the user can fix it without curl/devtools.
+ * Never shows secret values — only env var names, booleans, and public URLs.
+ */
+function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
+  const calloutClass = 'mb-4 rounded-lg border border-border1 bg-surface2 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
+
+  // Auth required: the session expired or was never established.
+  if (status.authRequired) {
+    return (
+      <div className={calloutClass}>
+        You need to sign in to use GitHub. Reload the page — if that doesn't work, sign out and back in.
+      </div>
+    );
+  }
+
+  // Feature disabled: missing env config on the server.
+  if (status.reason === 'missing_config' && status.diagnostics) {
+    const missing = status.diagnostics.missingGithubAppEnvVars;
+    return (
+      <div className={calloutClass}>
+        <p className="m-0 mb-1">GitHub is disabled on the server.</p>
+        {missing.length > 0 && (
+          <p className="m-0 mb-1">
+            Missing env vars: <code className="text-icon4">{missing.join(', ')}</code>
+          </p>
+        )}
+        <p className="m-0">
+          Edit <code className="text-icon4">src/web/.env</code> and restart <code className="text-icon4">web:dev</code>.
+        </p>
+      </div>
+    );
+  }
+
+  // Organization required: signed in but no WorkOS org.
+  if (status.organizationRequired || status.reason === 'organization_required') {
+    return (
+      <div className={calloutClass}>
+        Your account has no WorkOS organization. GitHub projects require an org. Sign out and back in to auto-create
+        one, or ask your admin to add you to an org.
+      </div>
+    );
+  }
+
+  // Not connected: app installed but no installation persisted (callback didn't complete).
+  if (!connected && status.reason === 'not_connected') {
+    return (
+      <div className={calloutClass}>
+        The GitHub App isn't connected yet. Click <strong>Connect GitHub</strong> to install it. After install, GitHub
+        redirects to <code className="text-icon4">/auth/github/callback</code> — make sure that URL is registered in
+        your GitHub App settings (Callback URL).
+      </div>
+    );
+  }
+
+  // Connected but no repos: installation may have no repo access.
+  if (connected && empty) {
+    return (
+      <div className={calloutClass}>
+        No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
+        repository access at{' '}
+        <code className="text-icon4">https://github.com/settings/installations</code> and grant access to at least one
+        repo.
+      </div>
+    );
+  }
+
+  return null;
 }

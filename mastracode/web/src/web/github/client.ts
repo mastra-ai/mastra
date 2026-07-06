@@ -29,6 +29,24 @@ function normalizePrivateKey(raw: string): string {
   return raw.includes('\\n') ? raw.replace(/\\n/g, '\n') : raw;
 }
 
+/** Required GitHub App env var names (non-secret names only). */
+const GITHUB_APP_ENV_VARS = [
+  'GITHUB_APP_ID',
+  'GITHUB_APP_PRIVATE_KEY',
+  'GITHUB_APP_CLIENT_ID',
+  'GITHUB_APP_CLIENT_SECRET',
+  'GITHUB_APP_SLUG',
+] as const;
+
+/**
+ * Names of required GitHub App env vars that are not set. Exposed so logs and
+ * status diagnostics can say *which* gate is missing instead of only
+ * `enabled:false`. Only env var *names* are returned — never values.
+ */
+export function getMissingGithubAppEnvVars(): string[] {
+  return GITHUB_APP_ENV_VARS.filter(name => !process.env[name]);
+}
+
 /**
  * Read the GitHub App config from env, or `undefined` when not fully configured.
  */
@@ -49,7 +67,7 @@ export function getGithubAppConfig(): GithubAppConfig | undefined {
  * auth; the server-level gate (`isGithubFeatureEnabled`) combines both.
  */
 export function isGithubAppConfigured(): boolean {
-  return getGithubAppConfig() !== undefined;
+  return getMissingGithubAppEnvVars().length === 0;
 }
 
 function requireConfig(): GithubAppConfig {

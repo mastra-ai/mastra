@@ -41,7 +41,7 @@ import {
   listUserInstallations,
   mintInstallationToken,
 } from './client';
-import { isGithubFeatureEnabled, signState, verifyState } from './config';
+import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyState } from './config';
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
 import {
@@ -141,10 +141,16 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       requiresAuth: false,
       handler: async c => {
         if (!isGithubFeatureEnabled()) {
-          return c.json({ enabled: false, connected: false, installations: [] });
+          return c.json({
+            enabled: false,
+            connected: false,
+            installations: [],
+            reason: 'missing_config',
+            diagnostics: getGithubFeatureDiagnostics(),
+          });
         }
         const tenant = webAuthTenant(loose(c));
-        if (!tenant) return c.json({ error: 'unauthorized' }, 401);
+        if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
 
         // Org-scoped: personal (no-org) users have GitHub projects disabled. Report
         // enabled (so the SPA can show the org-required hint) but never connected.
@@ -155,6 +161,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             organizationRequired: true,
             connected: false,
             installations: [],
+            reason: 'organization_required',
+            diagnostics: getGithubFeatureDiagnostics(),
           });
         }
 
@@ -163,15 +171,18 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           .from(githubInstallations)
           .where(eq(githubInstallations.orgId, tenant.orgId));
 
+        const connected = rows.length > 0;
         return c.json({
           enabled: true,
           sandboxEnabled: isSandboxEnabled(),
-          connected: rows.length > 0,
+          connected,
           installations: rows.map(r => ({
             installationId: r.installationId,
             accountLogin: r.accountLogin,
             accountType: r.accountType,
           })),
+          reason: connected ? 'ready' : 'not_connected',
+          diagnostics: getGithubFeatureDiagnostics(),
         });
       },
     }),

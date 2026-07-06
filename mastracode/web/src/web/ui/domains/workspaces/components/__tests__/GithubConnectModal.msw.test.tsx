@@ -43,12 +43,13 @@ const createdProject: Project = {
 function renderModal(
   onProjectCreated = vi.fn<(project: Project) => void>(),
   client?: Parameters<typeof renderWithProviders>[1],
+  status: GithubStatus = connectedStatus,
 ) {
   return {
     onProjectCreated,
     ...renderWithProviders(
       createElement(GithubConnectModal, {
-        status: connectedStatus,
+        status,
         onProjectCreated,
         onClose: vi.fn(),
       }),
@@ -133,5 +134,86 @@ describe('GithubConnectModal', () => {
 
     expect(await screen.findByText('Failed to create project (500)')).toBeInTheDocument();
     expect(loadProjects()).toEqual([]);
+  });
+
+  it('shows the missing-config callout with missing env var names and no connect button', () => {
+    const missingConfigStatus: GithubStatus = {
+      enabled: false,
+      connected: false,
+      installations: [],
+      reason: 'missing_config',
+      diagnostics: {
+        githubAppConfigured: false,
+        webAuthEnabled: true,
+        appDbConfigured: true,
+        stateSecretConfigured: true,
+        sandboxEnabled: true,
+        sandboxProvider: 'local',
+        missingGithubAppEnvVars: ['GITHUB_APP_ID', 'GITHUB_APP_PRIVATE_KEY'],
+      },
+    };
+
+    renderModal(undefined, undefined, missingConfigStatus);
+
+    expect(screen.getByText(/GitHub is disabled on the server/i)).toBeInTheDocument();
+    expect(screen.getByText('GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY')).toBeInTheDocument();
+    expect(screen.getByText(/restart/i)).toBeInTheDocument();
+    // Connect button is hidden when the feature is disabled.
+    expect(screen.queryByRole('button', { name: /Connect GitHub/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the auth-required callout telling the user to sign in', () => {
+    const authRequiredStatus: GithubStatus = {
+      enabled: false,
+      connected: false,
+      installations: [],
+      authRequired: true,
+      reason: 'auth_required',
+    };
+
+    renderModal(undefined, undefined, authRequiredStatus);
+
+    expect(screen.getByText(/sign in to use GitHub/i)).toBeInTheDocument();
+  });
+
+  it('shows the organization-required callout and no connect button', () => {
+    const orgRequiredStatus: GithubStatus = {
+      enabled: true,
+      sandboxEnabled: true,
+      organizationRequired: true,
+      connected: false,
+      installations: [],
+      reason: 'organization_required',
+    };
+
+    renderModal(undefined, undefined, orgRequiredStatus);
+
+    expect(screen.getByText(/no WorkOS organization/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect GitHub/i })).not.toBeInTheDocument();
+  });
+
+  it('shows the not-connected callout with the callback URL hint', () => {
+    const notConnectedStatus: GithubStatus = {
+      enabled: true,
+      sandboxEnabled: true,
+      connected: false,
+      installations: [],
+      reason: 'not_connected',
+    };
+
+    renderModal(undefined, undefined, notConnectedStatus);
+
+    expect(screen.getByText(/isn't connected yet/i)).toBeInTheDocument();
+    expect(screen.getByText('/auth/github/callback')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Connect GitHub/i })).toBeInTheDocument();
+  });
+
+  it('shows the no-repos callout when connected but the repo list is empty', async () => {
+    server.use(http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [] })));
+
+    renderModal();
+
+    expect(await screen.findByText(/installation may not have access/i)).toBeInTheDocument();
+    expect(screen.getByText(/github.com\/settings\/installations/i)).toBeInTheDocument();
   });
 });

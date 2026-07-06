@@ -9,14 +9,49 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { isWebAuthEnabled } from '../auth';
-import { isGithubAppConfigured } from './client';
+import { getMissingGithubAppEnvVars, isGithubAppConfigured } from './client';
 import { isAppDbConfigured } from './db';
+import { getSandboxProvider, isSandboxEnabled } from './sandbox';
 
 /**
  * True when the GitHub App project feature should be active.
  */
 export function isGithubFeatureEnabled(): boolean {
   return isGithubAppConfigured() && isWebAuthEnabled() && isAppDbConfigured();
+}
+
+/**
+ * Non-secret diagnostic snapshot of every GitHub feature gate. Used by startup
+ * logs, `/web/github/status`, and the SPA so all three explain the same state.
+ *
+ * Only env var *names* and booleans are exposed — never secret values.
+ */
+export interface GithubFeatureDiagnostics {
+  githubAppConfigured: boolean;
+  webAuthEnabled: boolean;
+  appDbConfigured: boolean;
+  stateSecretConfigured: boolean;
+  sandboxEnabled: boolean;
+  sandboxProvider: string;
+  /** Names of missing required GitHub App env vars (non-secret names only). */
+  missingGithubAppEnvVars: string[];
+}
+
+/**
+ * Collect a non-secret diagnostic snapshot of every GitHub feature gate. Centralizes
+ * the feature-gate reasoning so startup logs, the status API, and the SPA explain
+ * the same state. Does not change `isGithubFeatureEnabled()` behavior.
+ */
+export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
+  return {
+    githubAppConfigured: isGithubAppConfigured(),
+    webAuthEnabled: isWebAuthEnabled(),
+    appDbConfigured: isAppDbConfigured(),
+    stateSecretConfigured: hasExplicitStateSecret(),
+    sandboxEnabled: isSandboxEnabled(),
+    sandboxProvider: getSandboxProvider(),
+    missingGithubAppEnvVars: getMissingGithubAppEnvVars(),
+  };
 }
 
 /**

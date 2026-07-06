@@ -19,6 +19,26 @@ export interface GithubInstallation {
   accountType: string | null;
 }
 
+/** Reason the GitHub feature is in its current state, returned by the server. */
+export type GithubStatusReason =
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready';
+
+/** Non-secret diagnostic snapshot of every GitHub feature gate. */
+export interface GithubFeatureDiagnostics {
+  githubAppConfigured: boolean;
+  webAuthEnabled: boolean;
+  appDbConfigured: boolean;
+  stateSecretConfigured: boolean;
+  sandboxEnabled: boolean;
+  sandboxProvider: string;
+  /** Names of missing required GitHub App env vars (non-secret names only). */
+  missingGithubAppEnvVars: string[];
+}
+
 export interface GithubStatus {
   enabled: boolean;
   sandboxEnabled?: boolean;
@@ -30,6 +50,12 @@ export interface GithubStatus {
    * prompt re-login instead of silently hiding GitHub.
    */
   authRequired?: boolean;
+  /** True when the user is signed in but has no WorkOS org (personal account). */
+  organizationRequired?: boolean;
+  /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
+  reason?: GithubStatusReason;
+  /** Non-secret feature-gate diagnostics from the server. */
+  diagnostics?: GithubFeatureDiagnostics;
 }
 
 export interface GithubRepo {
@@ -55,7 +81,7 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
       credentials: 'include',
     });
     if (res.status === 401) {
-      return { enabled: false, connected: false, installations: [], authRequired: true };
+      return { enabled: false, connected: false, installations: [], authRequired: true, reason: 'auth_required' };
     }
     if (!res.ok) return { enabled: false, connected: false, installations: [] };
     return (await res.json()) as GithubStatus;

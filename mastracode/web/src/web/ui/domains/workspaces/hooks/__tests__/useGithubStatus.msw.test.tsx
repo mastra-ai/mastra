@@ -40,13 +40,13 @@ describe('useGithubStatusQuery', () => {
     expect(result.current.data).toEqual(connectedStatus);
   });
 
-  it('given the server returns 401, when the hook resolves, then the status reports authRequired instead of disabled', async () => {
+  it('given the server returns 401, when the hook resolves, then the status reports authRequired with reason', async () => {
     server.use(http.get(STATUS_URL, () => HttpResponse.json({ error: 'auth_required' }, { status: 401 })));
 
     const { result } = renderHookWithProviders(() => useGithubStatusQuery());
 
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(result.current.data).toEqual({ ...disabledStatus, authRequired: true });
+    expect(result.current.data).toEqual({ ...disabledStatus, authRequired: true, reason: 'auth_required' });
     expect(result.current.isError).toBe(false);
   });
 
@@ -95,5 +95,68 @@ describe('useGithubStatusQuery', () => {
     expect(result.current.fetchStatus).toBe('idle');
     expect(result.current.data).toBeUndefined();
     expect(hit).not.toHaveBeenCalled();
+  });
+
+  it('given the feature is disabled for missing config, when the hook resolves, then it exposes reason and diagnostics', async () => {
+    const missingConfigStatus: GithubStatus = {
+      enabled: false,
+      connected: false,
+      installations: [],
+      reason: 'missing_config',
+      diagnostics: {
+        githubAppConfigured: false,
+        webAuthEnabled: true,
+        appDbConfigured: true,
+        stateSecretConfigured: true,
+        sandboxEnabled: true,
+        sandboxProvider: 'local',
+        missingGithubAppEnvVars: ['GITHUB_APP_ID', 'GITHUB_APP_PRIVATE_KEY'],
+      },
+    };
+    server.use(http.get(STATUS_URL, () => HttpResponse.json(missingConfigStatus)));
+
+    const { result } = renderHookWithProviders(() => useGithubStatusQuery());
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data).toEqual(missingConfigStatus);
+    expect(result.current.data?.reason).toBe('missing_config');
+    expect(result.current.data?.diagnostics?.missingGithubAppEnvVars).toEqual([
+      'GITHUB_APP_ID',
+      'GITHUB_APP_PRIVATE_KEY',
+    ]);
+  });
+
+  it('given the user lacks an org, when the hook resolves, then it exposes organizationRequired with reason', async () => {
+    const orgRequiredStatus: GithubStatus = {
+      enabled: true,
+      sandboxEnabled: true,
+      organizationRequired: true,
+      connected: false,
+      installations: [],
+      reason: 'organization_required',
+    };
+    server.use(http.get(STATUS_URL, () => HttpResponse.json(orgRequiredStatus)));
+
+    const { result } = renderHookWithProviders(() => useGithubStatusQuery());
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.organizationRequired).toBe(true);
+    expect(result.current.data?.reason).toBe('organization_required');
+  });
+
+  it('given the feature is enabled but not connected, when the hook resolves, then it exposes reason not_connected', async () => {
+    const notConnectedStatus: GithubStatus = {
+      enabled: true,
+      sandboxEnabled: true,
+      connected: false,
+      installations: [],
+      reason: 'not_connected',
+    };
+    server.use(http.get(STATUS_URL, () => HttpResponse.json(notConnectedStatus)));
+
+    const { result } = renderHookWithProviders(() => useGithubStatusQuery());
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.reason).toBe('not_connected');
   });
 });
