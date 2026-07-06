@@ -21,14 +21,13 @@ const bgCheckOutputSchema = z.any();
  *
  * Mirrors the regular agent's backgroundTaskCheckStep pattern:
  * - After tool calls complete, checks if any background tasks are still running
- * - Always waits for the next running background task to complete (up to
- *   waitTimeoutMs, or a 1s default), then sets isContinued=true so the LLM
- *   processes the result. This applies even on the first iteration, unlike
- *   the regular agent, because the durable agent's stream closes on FINISH
- *   and cannot pick up late tool-result chunks.
- * - skipBgTaskWait option: returns immediately with backgroundTaskPending=true
- *   when the outer caller drives continuation externally (e.g. streamUntilIdle)
  * - If no running tasks: passes through unchanged
+ * - If an explicit waitTimeoutMs is configured and retryCount === 0: returns
+ *   immediately with backgroundTaskPending=true (caller drives continuation)
+ * - Otherwise: waits for the next task to complete using the configured
+ *   waitTimeoutMs or a 1 s default — this keeps the workflow (and its pubsub
+ *   subscription) alive so background-task tool-result chunks are delivered
+ * - When a task completes: sets isContinued=true so the LLM processes the result
  */
 export function createDurableBackgroundTaskCheckStep() {
   return createStep({
@@ -36,7 +35,7 @@ export function createDurableBackgroundTaskCheckStep() {
     inputSchema: bgCheckInputSchema,
     outputSchema: bgCheckOutputSchema,
     execute: async params => {
-      const { inputData, getInitData } = params;
+      const { inputData, getInitData, retryCount } = params;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const typedInput = inputData as Record<string, any>;
 
@@ -79,17 +78,33 @@ export function createDurableBackgroundTaskCheckStep() {
       const managerConfig = bgManager.config;
       const waitTimeoutMs = bgConfig?.waitTimeoutMs ?? managerConfig?.waitTimeoutMs;
 
-      // Unlike the regular agent (which keeps its ReadableStream controller
-      // alive so background task onChunk callbacks can enqueue tool-result
-      // chunks even after backgroundTaskCheckStep returns), the durable
-      // agent closes its stream on the FINISH pubsub event. Any tool-result
-      // emitted after that is silently dropped. So the durable agent must
-      // always wait for background tasks on every invocation.
+      // The regular agent gates on `retryCount === 0 || !waitTimeoutMs`
+      // and can afford to skip waiting because tool-result chunks from
+      // background tasks are pushed directly into the ReadableStream
+      // controller via safeEnqueue — that works even after this step
+      // returns.
       //
-      // Use the configured waitTimeoutMs if available; otherwise use a
-      // short default (1s) that's long enough for typical fast background
-      // tasks. If the task doesn't complete in time, the timeout catch
-      // below returns without setting isContinued, ending the loop.
+      // The durable agent emits tool-result chunks via pubsub.  The
+      // pubsub subscription is torn down when the stream closes and the
+      // consumer calls cleanup().  If this step returns without waiting,
+      // the workflow finishes, FINISH fires, the stream closes, cleanup
+      // runs, and the pubsub subscriber is gone before the background
+      // task can deliver its result.
+      //
+      // Therefore the durable agent must always wait when background
+      // tasks are running — using the configured waitTimeoutMs, or a
+      // sensible 1 s default to keep the workflow (and pubsub) alive.
+
+      // First invocation without explicit waitTimeoutMs — match the
+      // regular agent's "signal pending, don't block" on retryCount 0,
+      // but only when the caller provided an explicit timeout (meaning
+      // they'll drive continuation externally).
+      if (retryCount === 0 && waitTimeoutMs) {
+        return { ...typedInput, backgroundTaskPending: true };
+      }
+
+      // Use configured timeout, or default to 1 s so the workflow stays
+      // alive long enough for pubsub to deliver background-task results.
       const effectiveWaitMs = waitTimeoutMs ?? 1000;
 
       // Emit initial progress chunk

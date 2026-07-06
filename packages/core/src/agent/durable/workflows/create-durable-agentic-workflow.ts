@@ -34,6 +34,7 @@ import {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableSignalDrainStep,
 } from './steps';
 
 /**
@@ -110,6 +111,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
   // Create the background task check step
   const backgroundTaskCheckStep = createDurableBackgroundTaskCheckStep();
+
+  // Create the signal drain step — mirrors the non-durable `signalDrainStep`
+  // which drains signals queued during tool execution.
+  const signalDrainStep = createDurableSignalDrainStep();
 
   // Create the isTaskComplete evaluation step (mirrors the non-durable
   // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
@@ -212,55 +217,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     // Step 6.5: Drain signals that were queued while tool execution was running
     // within this iteration. Mirrors the non-durable `signalDrainStep` which
     // sits between backgroundTaskCheckStep and isTaskCompleteStep.
-    .map(
-      async params => {
-        const execOutput = params.inputData as DurableAgenticExecutionOutput;
-        const initData = params.getInitData() as IterationState;
-        const runId = initData.runId;
-        const registryEntry = globalRunRegistry.get(runId);
-        const drainFn = registryEntry?.drainPendingSignals;
-
-        if (!drainFn) return execOutput;
-
-        try {
-          const pendingSignals = drainFn('pending');
-          if (pendingSignals.length === 0) return execOutput;
-
-          const drainList = new MessageList();
-          drainList.deserialize(execOutput.messageListState);
-          drainList.markResponseMessageBoundary(execOutput.messageId);
-
-          const nextMessageId =
-            (params.mastra as Mastra | undefined)?.generateId?.() ??
-            globalThis.crypto?.randomUUID?.() ??
-            `msg_${Date.now()}`;
-
-          const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-          for (const pendingSignal of pendingSignals) {
-            const signalForTranscript = drainList.addSignal(pendingSignal);
-            if (pubsub) {
-              await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
-            }
-          }
-
-          return {
-            ...execOutput,
-            messageListState: drainList.serialize(),
-            messageId: nextMessageId,
-            stepResult: {
-              ...execOutput.stepResult,
-              messageId: nextMessageId,
-              isContinued: true,
-            },
-          };
-        } catch {
-          // Signal drain is best-effort; drainPendingSignals() is inside
-          // the try so signals remain queued if it throws.
-          return execOutput;
-        }
-      },
-      { id: 'signal-drain' },
-    )
+    .then(signalDrainStep)
     // Step 7: Map back to iteration state format using shared function
     .map(
       async ({ inputData, getInitData }) => {
