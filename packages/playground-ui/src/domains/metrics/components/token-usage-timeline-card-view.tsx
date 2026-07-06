@@ -7,7 +7,6 @@ import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '../hooks/
 import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';
 
 type TokenUsageTimelineTab = 'tokens' | 'cost';
-type TokenUsageTimelineStatus = 'loading' | 'error' | 'empty' | 'ready';
 
 function sumMetric(dataKey: 'input' | 'output' | 'cost', formatter: (value: number) => string = formatCompact) {
   return (data: Record<string, unknown>[]) => ({
@@ -37,23 +36,6 @@ function isTokenUsageTimelineTab(value: string): value is TokenUsageTimelineTab 
   return value === 'tokens' || value === 'cost';
 }
 
-function getTokenUsageTimelineStatus({
-  isLoading,
-  isError,
-  hasData,
-}: Pick<TokenUsageTimelineCardViewProps, 'isLoading' | 'isError'> & { hasData: boolean }): TokenUsageTimelineStatus {
-  if (isLoading) {
-    return 'loading';
-  }
-  if (isError) {
-    return 'error';
-  }
-  if (!hasData) {
-    return 'empty';
-  }
-  return 'ready';
-}
-
 export interface TokenUsageTimelineCardViewProps {
   data: TokenTimelinePoint[] | undefined;
   interval: TokenUsageTimeSeriesInterval | undefined;
@@ -62,62 +44,43 @@ export interface TokenUsageTimelineCardViewProps {
   actions?: ReactNode;
 }
 
-function TokenUsageTimelineCardBody({
-  status,
+function TokenUsageTimelineContent({
   activeTab,
-  setActiveTab,
+  onTabChange,
   chartPoints,
   costChartPoints,
   costSeries,
-  hasCostData,
 }: {
-  status: TokenUsageTimelineStatus;
   activeTab: TokenUsageTimelineTab;
-  setActiveTab: (tab: TokenUsageTimelineTab) => void;
+  onTabChange: (tab: TokenUsageTimelineTab) => void;
   chartPoints: MetricsLineChartData;
   costChartPoints: MetricsLineChartData;
   costSeries: MetricsLineChartSeries;
-  hasCostData: boolean;
 }) {
-  if (status === 'loading') {
-    return <MetricsCard.Loading />;
-  }
-  if (status === 'error') {
-    return <MetricsCard.Error message="Failed to load token usage timeline" />;
-  }
-  if (status === 'empty') {
-    return (
-      <MetricsCard.Content>
-        <MetricsCard.NoData message="No token usage data yet" />
-      </MetricsCard.Content>
-    );
-  }
   return (
-    <MetricsCard.Content>
-      <Tabs
-        defaultTab="tokens"
-        value={activeTab}
-        onValueChange={value => {
-          if (isTokenUsageTimelineTab(value)) setActiveTab(value);
-        }}
-        className="overflow-visible"
-      >
-        <TabList>
-          <Tab value="tokens">Tokens</Tab>
-          <Tab value="cost">Cost</Tab>
-        </TabList>
-        <TabContent value="tokens">
-          <MetricsLineChart data={chartPoints} series={tokenSeries} />
-        </TabContent>
-        <TabContent value="cost">
-          {hasCostData ? (
-            <MetricsLineChart data={costChartPoints} series={costSeries} />
-          ) : (
-            <MetricsCard.NoData message="No cost data yet" />
-          )}
-        </TabContent>
-      </Tabs>
-    </MetricsCard.Content>
+    <Tabs
+      defaultTab="tokens"
+      value={activeTab}
+      onValueChange={value => {
+        if (isTokenUsageTimelineTab(value)) onTabChange(value);
+      }}
+      className="overflow-visible"
+    >
+      <TabList>
+        <Tab value="tokens">Tokens</Tab>
+        <Tab value="cost">Cost</Tab>
+      </TabList>
+      <TabContent value="tokens">
+        <MetricsLineChart data={chartPoints} series={tokenSeries} />
+      </TabContent>
+      <TabContent value="cost">
+        {costChartPoints.length > 0 ? (
+          <MetricsLineChart data={costChartPoints} series={costSeries} />
+        ) : (
+          <MetricsCard.NoData message="No cost data yet" />
+        )}
+      </TabContent>
+    </Tabs>
   );
 }
 
@@ -135,14 +98,13 @@ export function TokenUsageTimelineCardView({
   const hasData = points.length > 0;
   const totalTokens = points.reduce((sum, point) => sum + point.total, 0);
   const costPoints = points.filter(point => point.cost != null && point.cost > 0);
-  const costChartPoints: MetricsLineChartData = costPoints.map(point => ({ ...point }));
   const uniqueCostUnits = new Set(costPoints.map(point => point.costUnit).filter((unit): unit is string => !!unit));
   const hasSingleCostUnit = uniqueCostUnits.size === 1 && costPoints.every(point => point.costUnit != null);
   const costUnit = hasSingleCostUnit ? ([...uniqueCostUnits][0] ?? null) : null;
   const totalCost = hasSingleCostUnit ? costPoints.reduce((sum, point) => sum + (point.cost ?? 0), 0) : 0;
   const hasCostData = hasSingleCostUnit && totalCost > 0;
+  const costChartPoints: MetricsLineChartData = hasCostData ? costPoints.map(point => ({ ...point })) : [];
   const description = interval === '1h' ? 'Input and output tokens per hour.' : 'Input and output tokens per day.';
-  const status = getTokenUsageTimelineStatus({ isLoading, isError, hasData });
 
   const costSeries = [
     {
@@ -165,15 +127,24 @@ export function TokenUsageTimelineCardView({
           ))}
         {hasData && actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
-      <TokenUsageTimelineCardBody
-        status={status}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        chartPoints={chartPoints}
-        costChartPoints={costChartPoints}
-        costSeries={costSeries}
-        hasCostData={hasCostData}
-      />
+      {isLoading && <MetricsCard.Loading />}
+      {!isLoading && isError && <MetricsCard.Error message="Failed to load token usage timeline" />}
+      {!isLoading && !isError && !hasData && (
+        <MetricsCard.Content>
+          <MetricsCard.NoData message="No token usage data yet" />
+        </MetricsCard.Content>
+      )}
+      {!isLoading && !isError && hasData && (
+        <MetricsCard.Content>
+          <TokenUsageTimelineContent
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            chartPoints={chartPoints}
+            costChartPoints={costChartPoints}
+            costSeries={costSeries}
+          />
+        </MetricsCard.Content>
+      )}
     </MetricsCard>
   );
 }

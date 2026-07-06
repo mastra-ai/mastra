@@ -74,6 +74,9 @@ export interface TracesVolumeCardViewProps {
   LinkComponent?: LinkComponent;
 }
 
+type TracesVolumeData = NonNullable<TracesVolumeCardViewProps['data']>;
+type TracesVolumeLinks = Pick<TracesVolumeCardViewProps, 'getRowHref' | 'getErrorSegmentHref' | 'LinkComponent'>;
+
 function getVolumeRowHrefs(tab: VolumeTab, getRowHref: TracesVolumeCardViewProps['getRowHref']) {
   if (!getRowHref) {
     return undefined;
@@ -88,85 +91,66 @@ function getVolumeErrorHrefs(tab: VolumeTab, getErrorSegmentHref: TracesVolumeCa
   return (row: VolumeRow) => getErrorSegmentHref(tab, row);
 }
 
-function TracesVolumeCardBody({
+function TracesVolumeContent({
   data,
-  isLoading,
-  isError,
-  hasData,
   activeTab,
-  setActiveTab,
-  getRowHref,
-  getErrorSegmentHref,
-  LinkComponent,
-}: Pick<
-  TracesVolumeCardViewProps,
-  'data' | 'isLoading' | 'isError' | 'getRowHref' | 'getErrorSegmentHref' | 'LinkComponent'
-> & {
-  hasData: boolean;
+  onTabChange,
+  links,
+}: {
+  data: TracesVolumeData;
   activeTab: VolumeTab;
-  setActiveTab: (tab: VolumeTab) => void;
+  onTabChange: (tab: VolumeTab) => void;
+  links: TracesVolumeLinks;
 }) {
-  if (isLoading) {
-    return <MetricsCard.Loading />;
-  }
-  if (isError) {
-    return <MetricsCard.Error message="Failed to load trace volume data" />;
-  }
   return (
-    <MetricsCard.Content>
-      {!hasData || !data ? (
-        <MetricsCard.NoData message="No trace volume data yet" />
-      ) : (
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          defaultTab="agents"
-          className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
-        >
-          <TabList>
-            <Tab value="agents">Agents</Tab>
-            <Tab value="workflows">Workflows</Tab>
-            <Tab value="tools">Tools</Tab>
-          </TabList>
-          <TabContent value="agents">
-            {data.agentData.length > 0 ? (
-              <VolumeBars
-                data={data.agentData}
-                rowHrefs={getVolumeRowHrefs('agents', getRowHref)}
-                errorHrefs={getVolumeErrorHrefs('agents', getErrorSegmentHref)}
-                LinkComponent={LinkComponent}
-              />
-            ) : (
-              <MetricsCard.NoData message="No agent data yet" />
-            )}
-          </TabContent>
-          <TabContent value="workflows">
-            {data.workflowData.length > 0 ? (
-              <VolumeBars
-                data={data.workflowData}
-                rowHrefs={getVolumeRowHrefs('workflows', getRowHref)}
-                errorHrefs={getVolumeErrorHrefs('workflows', getErrorSegmentHref)}
-                LinkComponent={LinkComponent}
-              />
-            ) : (
-              <MetricsCard.NoData message="No workflow data yet" />
-            )}
-          </TabContent>
-          <TabContent value="tools">
-            {data.toolData.length > 0 ? (
-              <VolumeBars
-                data={data.toolData}
-                rowHrefs={getVolumeRowHrefs('tools', getRowHref)}
-                errorHrefs={getVolumeErrorHrefs('tools', getErrorSegmentHref)}
-                LinkComponent={LinkComponent}
-              />
-            ) : (
-              <MetricsCard.NoData message="No tool data yet" />
-            )}
-          </TabContent>
-        </Tabs>
-      )}
-    </MetricsCard.Content>
+    <Tabs
+      value={activeTab}
+      onValueChange={onTabChange}
+      defaultTab="agents"
+      className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
+    >
+      <TabList>
+        <Tab value="agents">Agents</Tab>
+        <Tab value="workflows">Workflows</Tab>
+        <Tab value="tools">Tools</Tab>
+      </TabList>
+      <TabContent value="agents">
+        {data.agentData.length > 0 ? (
+          <VolumeBars
+            data={data.agentData}
+            rowHrefs={getVolumeRowHrefs('agents', links.getRowHref)}
+            errorHrefs={getVolumeErrorHrefs('agents', links.getErrorSegmentHref)}
+            LinkComponent={links.LinkComponent}
+          />
+        ) : (
+          <MetricsCard.NoData message="No agent data yet" />
+        )}
+      </TabContent>
+      <TabContent value="workflows">
+        {data.workflowData.length > 0 ? (
+          <VolumeBars
+            data={data.workflowData}
+            rowHrefs={getVolumeRowHrefs('workflows', links.getRowHref)}
+            errorHrefs={getVolumeErrorHrefs('workflows', links.getErrorSegmentHref)}
+            LinkComponent={links.LinkComponent}
+          />
+        ) : (
+          <MetricsCard.NoData message="No workflow data yet" />
+        )}
+      </TabContent>
+      <TabContent value="tools">
+        {data.toolData.length > 0 ? (
+          <VolumeBars
+            data={data.toolData}
+            rowHrefs={getVolumeRowHrefs('tools', links.getRowHref)}
+            errorHrefs={getVolumeErrorHrefs('tools', links.getErrorSegmentHref)}
+            LinkComponent={links.LinkComponent}
+          />
+        ) : (
+          <MetricsCard.NoData message="No tool data yet" />
+        )}
+      </TabContent>
+    </Tabs>
   );
 }
 
@@ -193,17 +177,22 @@ export function TracesVolumeCardView({
         {hasData && <MetricsCard.Summary value={formatCompact(total)} label="Total runs" />}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
-      <TracesVolumeCardBody
-        data={data}
-        isLoading={isLoading}
-        isError={isError}
-        hasData={hasData}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        getRowHref={getRowHref}
-        getErrorSegmentHref={getErrorSegmentHref}
-        LinkComponent={LinkComponent}
-      />
+      {isLoading && <MetricsCard.Loading />}
+      {!isLoading && isError && <MetricsCard.Error message="Failed to load trace volume data" />}
+      {!isLoading && !isError && (
+        <MetricsCard.Content>
+          {!hasData || !data ? (
+            <MetricsCard.NoData message="No trace volume data yet" />
+          ) : (
+            <TracesVolumeContent
+              data={data}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              links={{ getRowHref, getErrorSegmentHref, LinkComponent }}
+            />
+          )}
+        </MetricsCard.Content>
+      )}
     </MetricsCard>
   );
 }

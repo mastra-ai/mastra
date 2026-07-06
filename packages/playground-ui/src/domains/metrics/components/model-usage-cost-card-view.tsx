@@ -34,64 +34,51 @@ export interface ModelUsageCostCardViewProps {
   LinkComponent?: LinkComponent;
 }
 
-function ModelUsageCostCardBody({
+function ModelUsageCostTable({
   rows,
-  isLoading,
-  isError,
   getRowHref,
   LinkComponent,
-}: Pick<ModelUsageCostCardViewProps, 'rows' | 'isLoading' | 'isError' | 'getRowHref' | 'LinkComponent'>) {
-  if (isLoading) {
-    return <MetricsCard.Loading />;
-  }
-  if (isError) {
-    return <MetricsCard.Error message="Failed to load model usage data" />;
-  }
-  if (!rows || rows.length === 0) {
-    return (
-      <MetricsCard.Content>
-        <MetricsCard.NoData message="No model usage data yet" />
-      </MetricsCard.Content>
-    );
-  }
+}: {
+  rows: ModelUsageRow[];
+  getRowHref: ModelUsageCostCardViewProps['getRowHref'];
+  LinkComponent: ModelUsageCostCardViewProps['LinkComponent'];
+}) {
   return (
-    <MetricsCard.Content>
-      <DataList columns="auto auto auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
-        <DataList.Top>
-          <DataList.TopCell sticky="start">Model</DataList.TopCell>
-          <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
-          <DataList.TopCell className="justify-end text-right">Output</DataList.TopCell>
-          <DataList.TopCell className="justify-end text-right">Cache Read</DataList.TopCell>
-          <DataList.TopCell className="justify-end text-right">Cache Write</DataList.TopCell>
-          <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
-        </DataList.Top>
-        {rows.map(row => {
-          const href = getRowHref?.(row);
-          const rowCells = (
-            <>
-              <DataList.RowHeaderCell height="compact" className="text-ui-sm">
-                {row.model}
-              </DataList.RowHeaderCell>
-              <DataList.NumberCell>{row.input}</DataList.NumberCell>
-              <DataList.NumberCell>{row.output}</DataList.NumberCell>
-              <DataList.NumberCell>{row.cacheRead}</DataList.NumberCell>
-              <DataList.NumberCell>{row.cacheWrite}</DataList.NumberCell>
-              <DataList.NumberCell highlight>
-                {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
-              </DataList.NumberCell>
-            </>
-          );
+    <DataList columns="auto auto auto auto auto auto" {...METRICS_DATA_LIST_PROPS}>
+      <DataList.Top>
+        <DataList.TopCell sticky="start">Model</DataList.TopCell>
+        <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
+        <DataList.TopCell className="justify-end text-right">Output</DataList.TopCell>
+        <DataList.TopCell className="justify-end text-right">Cache Read</DataList.TopCell>
+        <DataList.TopCell className="justify-end text-right">Cache Write</DataList.TopCell>
+        <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+      </DataList.Top>
+      {rows.map(row => {
+        const href = getRowHref?.(row);
+        const rowCells = (
+          <>
+            <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+              {row.model}
+            </DataList.RowHeaderCell>
+            <DataList.NumberCell>{row.input}</DataList.NumberCell>
+            <DataList.NumberCell>{row.output}</DataList.NumberCell>
+            <DataList.NumberCell>{row.cacheRead}</DataList.NumberCell>
+            <DataList.NumberCell>{row.cacheWrite}</DataList.NumberCell>
+            <DataList.NumberCell highlight>
+              {row.cost != null ? formatCost(row.cost, row.costUnit) : '—'}
+            </DataList.NumberCell>
+          </>
+        );
 
-          return href ? (
-            <DataList.RowLink key={row.model} to={href} LinkComponent={LinkComponent}>
-              {rowCells}
-            </DataList.RowLink>
-          ) : (
-            <DataList.RowStatic key={row.model}>{rowCells}</DataList.RowStatic>
-          );
-        })}
-      </DataList>
-    </MetricsCard.Content>
+        return href ? (
+          <DataList.RowLink key={row.model} to={href} LinkComponent={LinkComponent}>
+            {rowCells}
+          </DataList.RowLink>
+        ) : (
+          <DataList.RowStatic key={row.model}>{rowCells}</DataList.RowStatic>
+        );
+      })}
+    </DataList>
   );
 }
 
@@ -112,13 +99,17 @@ export function ModelUsageCostCardView({
         {totalCostSummary !== undefined && <MetricsCard.Summary value={totalCostSummary} label="Total cost" />}
         {actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
-      <ModelUsageCostCardBody
-        rows={rows}
-        isLoading={isLoading}
-        isError={isError}
-        getRowHref={getRowHref}
-        LinkComponent={LinkComponent}
-      />
+      {isLoading && <MetricsCard.Loading />}
+      {!isLoading && isError && <MetricsCard.Error message="Failed to load model usage data" />}
+      {!isLoading && !isError && (
+        <MetricsCard.Content>
+          {!rows || rows.length === 0 ? (
+            <MetricsCard.NoData message="No model usage data yet" />
+          ) : (
+            <ModelUsageCostTable rows={rows} getRowHref={getRowHref} LinkComponent={LinkComponent} />
+          )}
+        </MetricsCard.Content>
+      )}
     </MetricsCard>
   );
 }

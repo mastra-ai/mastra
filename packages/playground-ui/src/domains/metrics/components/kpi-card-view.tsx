@@ -9,41 +9,61 @@ export interface KpiCardViewProps {
   isError: boolean;
 }
 
-function KpiCardStatus({
-  hasData,
+type KpiCardStatusState =
+  | { kind: 'error' }
+  | { kind: 'loading' }
+  | { kind: 'change'; changePct: number; prevValue: string | undefined }
+  | { kind: 'no-change' }
+  | { kind: 'no-data' };
+
+type KpiCardStatusInput = Pick<KpiCardViewProps, 'value' | 'prevValue' | 'changePct' | 'isLoading' | 'isError'>;
+
+function getKpiCardStatusState({
+  value,
   prevValue,
   changePct,
   isLoading,
   isError,
-}: Pick<KpiCardViewProps, 'prevValue' | 'changePct' | 'isLoading' | 'isError'> & { hasData: boolean }) {
+}: KpiCardStatusInput): KpiCardStatusState {
   if (isError) {
-    return <MetricsKpiCard.Error />;
+    return { kind: 'error' };
   }
   if (isLoading) {
-    return <MetricsKpiCard.Loading />;
+    return { kind: 'loading' };
   }
-  if (hasData) {
+  if (value != null) {
     if (changePct != null) {
-      return <MetricsKpiCard.Change changePct={changePct} prevValue={prevValue} />;
+      return { kind: 'change', changePct, prevValue };
     }
-    return <MetricsKpiCard.NoChange />;
+    return { kind: 'no-change' };
   }
-  return <MetricsKpiCard.NoData />;
+  return { kind: 'no-data' };
+}
+
+function KpiCardStatus({ state }: { state: KpiCardStatusState }) {
+  switch (state.kind) {
+    case 'error':
+      return <MetricsKpiCard.Error />;
+    case 'loading':
+      return <MetricsKpiCard.Loading />;
+    case 'change':
+      return <MetricsKpiCard.Change changePct={state.changePct} prevValue={state.prevValue} />;
+    case 'no-change':
+      return <MetricsKpiCard.NoChange />;
+    case 'no-data':
+      return <MetricsKpiCard.NoData />;
+  }
 }
 
 export function KpiCardView({ label, value, prevValue, changePct, isLoading, isError }: KpiCardViewProps) {
   const hasData = value != null;
+  const status = getKpiCardStatusState({ value, prevValue, changePct, isLoading, isError });
+
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
       <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>{hasData ? value : '—'}</MetricsKpiCard.Value>
-      <KpiCardStatus
-        hasData={hasData}
-        prevValue={prevValue}
-        changePct={changePct}
-        isLoading={isLoading}
-        isError={isError}
-      />
+      <KpiCardStatus state={status} />
     </MetricsKpiCard>
   );
 }

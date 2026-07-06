@@ -61,40 +61,10 @@ export interface SpanDataPanelViewProps {
   isAnchor?: boolean;
 }
 
-function SpanDataPanelBody({
-  span,
-  isLoading,
-  traceId,
-  spanId,
-  activeTab,
-  onTabChange,
-  scoringTabSlot,
-  scoringTabBadge,
-  feedbackTabSlot,
-  feedbackTabBadge,
-  isAnchor,
-}: Omit<SpanDataPanelViewProps, 'onClose' | 'onPrevious' | 'onNext'>) {
-  if (isLoading) {
-    return <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>;
-  }
-  if (!span) {
-    return <DataPanel.NoData>Span not found.</DataPanel.NoData>;
-  }
-  return (
-    <SpanDataPanelContent
-      span={span}
-      traceId={traceId}
-      spanId={spanId}
-      activeTab={activeTab}
-      onTabChange={onTabChange}
-      scoringTabSlot={scoringTabSlot}
-      scoringTabBadge={scoringTabBadge}
-      feedbackTabSlot={feedbackTabSlot}
-      feedbackTabBadge={feedbackTabBadge}
-      isAnchor={isAnchor}
-    />
-  );
-}
+type SpanDataPanelTabSlots = Pick<
+  SpanDataPanelViewProps,
+  'activeTab' | 'onTabChange' | 'scoringTabSlot' | 'scoringTabBadge' | 'feedbackTabSlot' | 'feedbackTabBadge'
+>;
 
 export function SpanDataPanelView({
   traceId,
@@ -112,6 +82,15 @@ export function SpanDataPanelView({
   feedbackTabBadge,
   isAnchor,
 }: SpanDataPanelViewProps) {
+  const tabSlots = {
+    activeTab,
+    onTabChange,
+    scoringTabSlot,
+    scoringTabBadge,
+    feedbackTabSlot,
+    feedbackTabBadge,
+  };
+
   return (
     <DataPanel>
       <DataPanel.Header>
@@ -129,19 +108,11 @@ export function SpanDataPanelView({
         </ButtonsGroup>
       </DataPanel.Header>
 
-      <SpanDataPanelBody
-        span={span}
-        isLoading={isLoading}
-        traceId={traceId}
-        spanId={spanId}
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        scoringTabSlot={scoringTabSlot}
-        scoringTabBadge={scoringTabBadge}
-        feedbackTabSlot={feedbackTabSlot}
-        feedbackTabBadge={feedbackTabBadge}
-        isAnchor={isAnchor}
-      />
+      {isLoading && <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>}
+      {!isLoading && !span && <DataPanel.NoData>Span not found.</DataPanel.NoData>}
+      {!isLoading && span && (
+        <SpanDataPanelContent span={span} traceId={traceId} spanId={spanId} tabSlots={tabSlots} isAnchor={isAnchor} />
+      )}
     </DataPanel>
   );
 }
@@ -150,25 +121,16 @@ function SpanDataPanelContent({
   span,
   traceId,
   spanId,
-  activeTab,
-  onTabChange,
-  scoringTabSlot,
-  scoringTabBadge,
-  feedbackTabSlot,
-  feedbackTabBadge,
+  tabSlots,
   isAnchor,
 }: {
   span: SpanRecord;
   traceId: string;
   spanId: string;
-  activeTab?: string;
-  onTabChange?: (tab: string) => void;
-  scoringTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  scoringTabBadge?: ReactNode;
-  feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  feedbackTabBadge?: ReactNode;
+  tabSlots: SpanDataPanelTabSlots;
   isAnchor?: boolean;
 }) {
+  const { activeTab, onTabChange, scoringTabSlot, scoringTabBadge, feedbackTabSlot, feedbackTabBadge } = tabSlots;
   const durationMs =
     span.startedAt && span.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
   const usage = span.attributes?.usage as TokenUsage | undefined;
