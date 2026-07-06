@@ -160,9 +160,9 @@ describe('external dependency versions', () => {
           outputDir,
           projectRoot: appDir,
           platform: 'node',
-          isDev: true,
+          isDev: false,
           bundlerOptions: {
-            externals: ['typescript'],
+            externals: true,
             enableSourcemap: false,
           },
         },

@@ -537,7 +537,7 @@ export async function analyzeBundle(
 
     const importerId = getLastConcreteModuleId(o.moduleIds);
 
-    for (const i of o.imports) {
+    for (const i of new Set([...o.imports, ...o.dynamicImports])) {
       if (isBuiltinModule(i)) {
         continue;
       }

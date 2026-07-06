@@ -28,8 +28,8 @@ export const mastra = new Mastra({
   bundler: {
     sourcemap: true,
   },
-  // The deployer is linked from the workspace while @mastra/core is pinned to a
-  // published version for Vercel installs.
+  // The deployer and Mastra packages are linked from the workspace so preview
+  // deployments use the current PR branch.
   deployer: new VercelDeployer({
     studio: true,
     maxDuration: 60,
