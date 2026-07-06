@@ -16,13 +16,15 @@ This feature is in beta. Breaking changes may occur without a major version bump
 
 :::
 
-A schedule runs an agent on a cron cadence. On each fire, Mastra sends a prompt to the agent, either as a [signal](/docs/long-running-agents/signals) into a thread or as a threadless `agent.generate()` run. Use schedules for recurring agent work such as daily summaries, periodic checks, or scheduled nudges into a conversation.
+A schedule runs an agent on a cron cadence. On each fire, Mastra sends a prompt to the agent, either as a [signal](/docs/long-running-agents/signals) into a thread or as a threadless [`agent.generate()`](/reference/agents/generate) run. Use schedules for recurring agent work such as daily summaries, periodic checks, or scheduled nudges into a conversation.
 
-Schedules are persisted, so they survive restarts and redeploys. Manage them at runtime through `mastra.schedules`, the canonical create, read, update, and delete (CRUD) surface. The same surface also manages [workflow schedules](/docs/workflows/scheduled-workflows) — pass `workflowId` instead of `agentId` to schedule a workflow.
+Schedules are persisted, so they survive restarts and redeploys. Manage them at runtime through `mastra.schedules`, the canonical create, read, update, and delete (CRUD) surface. The same surface also manages [workflow schedules](/docs/workflows/scheduled-workflows) (pass `workflowId` instead of `agentId` to schedule a workflow).
 
-## Prerequisites
+:::note
 
-Schedules require a [storage](/docs/memory/storage) adapter that implements the schedules domain, for example `@mastra/libsql`. Without one, `mastra.schedules.create()` throws.
+Schedules require a [storage](/docs/memory/storage) adapter that implements the schedules domain. Supported adapters include `@mastra/libsql`, `@mastra/pg`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/spanner`. Without one, `mastra.schedules.create()` throws.
+
+:::
 
 ## Quickstart
 
@@ -58,7 +60,7 @@ Mastra starts the scheduler the first time a schedule is created, then fires the
 
 Schedules fire on a cron expression. The `cron` field accepts a standard 5-, 6-, or 7-part cron expression, and it's validated when you create or update the schedule.
 
-Croner nicknames also work, for example `@hourly`, `@daily`, `@weekly`, `@monthly`, and `@midnight`. For day-and-time combinations, write the cron field directly:
+`croner` nicknames also work, for example `@hourly`, `@daily`, `@weekly`, `@monthly`, and `@midnight`. For day-and-time combinations, write the cron field directly:
 
 ```typescript
 // Every weekday at 9am
@@ -95,7 +97,7 @@ await mastra.schedules.create({
 })
 ```
 
-Threaded schedules accept extra fields that control how the signal behaves. They mirror the options [`agent.sendSignal`](/docs/long-running-agents/signals) accepts and stay JSON-serializable so they persist with the schedule.
+Threaded schedules accept extra fields that control how the signal behaves. They mirror the options [`agent.sendSignal()`](/docs/long-running-agents/signals) accepts and stay JSON-serializable so they persist with the schedule.
 
 - `signalType`: the [signal type](/docs/long-running-agents/signals) to send, for example `notification` or `system-reminder`. Defaults to `notification`.
 - `tagName`: the XML tag the signal renders as. Defaults to `schedule`, so a fire surfaces to the agent as `<schedule>…</schedule>`.
