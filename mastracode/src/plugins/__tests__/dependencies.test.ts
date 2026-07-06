@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -96,6 +97,30 @@ describe('installPluginDependencies', () => {
         stdout: 'ignore',
         stderr: 'ignore',
       }),
+    );
+  });
+
+  it('streams package manager output when requested', async () => {
+    const pluginRoot = makePluginRoot();
+    const stdout = new EventEmitter();
+    const stderr = new EventEmitter();
+    const output: string[] = [];
+    writePackageJson(pluginRoot);
+    execaMock.mockReturnValueOnce(Object.assign(Promise.resolve({}), { stdout, stderr }));
+
+    const install = installPluginDependencies(pluginRoot, pluginRoot, {
+      onOutput: chunk => output.push(chunk.toString()),
+      signal: new AbortController().signal,
+    });
+    stdout.emit('data', 'stdout line\n');
+    stderr.emit('data', 'stderr line\n');
+    await install;
+
+    expect(output).toEqual(['stdout line\n', 'stderr line\n']);
+    expect(execaMock).toHaveBeenCalledWith(
+      'npm',
+      ['install'],
+      expect.objectContaining({ stdout: 'pipe', stderr: 'pipe', cancelSignal: expect.any(AbortSignal) }),
     );
   });
 

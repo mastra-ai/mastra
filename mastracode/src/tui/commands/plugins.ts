@@ -1,4 +1,4 @@
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, SelectList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import type { MastraCodePluginConfigOption, MastraCodePluginConfigValue } from '../../plugin.js';
@@ -15,14 +15,51 @@ const INSTALL_VALUE = '__install__';
 const BACK_VALUE = '__back__';
 
 class PluginInstallProgress extends Box {
-  constructor(specifier: string) {
+  private lines: string[] = [];
+  private _focused = false;
+
+  constructor(
+    private specifier: string,
+    private onCancel: () => void,
+  ) {
     super(4, 2, text => theme.bg('overlayBg', text));
+    this.rebuild();
+  }
+
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  set focused(value: boolean) {
+    this._focused = value;
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, 'escape') || data === '\x03' || data === '\x1b' || data === '\x1b\x1b') {
+      this.onCancel();
+    }
+  }
+
+  addOutput(chunk: Buffer | string): void {
+    const lines = chunk
+      .toString()
+      .split(/\r?\n/)
+      .map(line => line.trimEnd())
+      .filter(Boolean);
+    this.lines = [...this.lines, ...lines].slice(-8);
+    this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.clear();
     this.addChild(new Text(theme.bold(theme.fg('accent', 'Installing GitHub plugin')), 0, 0));
+    this.addChild(new Text(this.specifier, 0, 0));
+    this.addChild(new Text(theme.fg('dim', 'Press Esc or Ctrl-C to cancel.'), 0, 0));
     this.addChild(new Spacer(1));
-    this.addChild(new Text(specifier, 0, 0));
-    this.addChild(new Spacer(1));
-    this.addChild(new Text('Cloning repository and installing dependencies…', 0, 0));
-    this.addChild(new Text(theme.fg('dim', 'This can take a minute for larger plugins.'), 0, 0));
+    const output = this.lines.length > 0 ? this.lines : ['Waiting for clone output...'];
+    for (const line of output) {
+      this.addChild(new Text(line, 0, 0));
+    }
   }
 }
 
@@ -114,12 +151,30 @@ function reportPluginMutationError(ctx: SlashCommandContext, action: string, err
 async function withGithubPluginInstallProgress<T>(
   ctx: SlashCommandContext,
   specifier: string,
-  install: () => Promise<T>,
+  install: (options: { onOutput: (chunk: Buffer | string) => void; signal: AbortSignal }) => Promise<T>,
 ): Promise<T> {
-  const overlay = showModalOverlay(ctx.state.ui, new PluginInstallProgress(specifier), { maxHeight: '50%' });
+  const controller = new AbortController();
+  let rejectCancelled: (error: Error) => void = () => {};
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectCancelled = reject;
+  });
+  const progress = new PluginInstallProgress(specifier, () => {
+    controller.abort();
+    rejectCancelled(new Error('GitHub plugin install cancelled'));
+  });
+  const overlay = showModalOverlay(ctx.state.ui, progress, { maxHeight: '70%' });
+  overlay?.focus?.();
   ctx.state.ui.requestRender?.();
   try {
-    return await install();
+    const installPromise = install({
+      onOutput: chunk => {
+        progress.addOutput(chunk);
+        ctx.state.ui.requestRender?.();
+      },
+      signal: controller.signal,
+    });
+    installPromise.catch(() => undefined);
+    return await Promise.race([installPromise, cancelled]);
   } finally {
     overlay?.hide?.();
     ctx.state.ui.requestRender?.();
@@ -396,10 +451,10 @@ async function installPluginWithOptionalEntryPrompt(
         ? ctx.pluginManager!.installLocal(specifier, scope, { entry })
         : ctx.pluginManager!.installLocal(specifier, scope);
     }
-    return withGithubPluginInstallProgress(ctx, specifier, () =>
+    return withGithubPluginInstallProgress(ctx, specifier, options =>
       entry
-        ? ctx.pluginManager!.installGithub(specifier, scope, { entry })
-        : ctx.pluginManager!.installGithub(specifier, scope),
+        ? ctx.pluginManager!.installGithub(specifier, scope, { entry, ...options })
+        : ctx.pluginManager!.installGithub(specifier, scope, options),
     );
   };
 

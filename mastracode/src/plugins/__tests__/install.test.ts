@@ -177,10 +177,15 @@ describe('installGithubPlugin', () => {
       ['repo', 'clone', 'acme/mastracode-plugin', checkoutDir],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
-    expect(execaMock).toHaveBeenNthCalledWith(4, 'git', ['checkout', 'main'], {
-      cwd: checkoutDir,
-      env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
-    });
+    expect(execaMock).toHaveBeenNthCalledWith(
+      4,
+      'git',
+      ['checkout', 'main'],
+      expect.objectContaining({
+        cwd: checkoutDir,
+        env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
+      }),
+    );
     expect(
       loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins['acme.github'],
     ).toMatchObject({
@@ -213,7 +218,7 @@ describe('installGithubPlugin', () => {
     expect(execaMock).toHaveBeenNthCalledWith(
       3,
       'gh',
-      ['repo', 'clone', 'acme/dep-plugin', checkoutDir],
+      ['repo', 'clone', 'acme/dep-plugin', checkoutDir, '--', '--depth', '1'],
       expect.anything(),
     );
     expect(execaMock).toHaveBeenNthCalledWith(
@@ -311,7 +316,7 @@ describe('installGithubPlugin', () => {
     const nestedPluginDir = path.join(checkoutDir, '.mastracode/plugins/sources/local/alexandria');
     expect(execaMock).toHaveBeenCalledWith(
       'gh',
-      ['repo', 'clone', 'acme/alexandria', checkoutDir],
+      ['repo', 'clone', 'acme/alexandria', checkoutDir, '--', '--depth', '1'],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(execaMock).toHaveBeenCalledWith('npm', ['install'], expect.objectContaining({ cwd: nestedPluginDir }));

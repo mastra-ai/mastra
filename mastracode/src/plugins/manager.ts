@@ -392,7 +392,7 @@ export class PluginManager {
   async installGithub(
     url: string,
     scope: PluginScope,
-    options: Pick<InstallPluginOptions, 'entry' | 'ref'> = {},
+    options: Pick<InstallPluginOptions, 'entry' | 'ref' | 'onOutput' | 'signal'> = {},
   ): Promise<string> {
     const id = await installGithubPlugin(url, scope, { ...this.options, ...options });
     await this.reload();

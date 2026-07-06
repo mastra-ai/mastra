@@ -10,7 +10,16 @@ type InstallCommand = {
   args: string[];
 };
 
-export async function installPluginDependencies(pluginRoot: string, commandRoot = pluginRoot): Promise<boolean> {
+export type PluginInstallExecutionOptions = {
+  onOutput?: (chunk: Buffer | string) => void;
+  signal?: AbortSignal;
+};
+
+export async function installPluginDependencies(
+  pluginRoot: string,
+  commandRoot = pluginRoot,
+  options: PluginInstallExecutionOptions = {},
+): Promise<boolean> {
   const packageJsonPath = path.join(pluginRoot, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
     return false;
@@ -25,18 +34,28 @@ export async function installPluginDependencies(pluginRoot: string, commandRoot 
     typeof commandPackageJson.packageManager === 'string' ? commandPackageJson.packageManager : undefined,
   );
 
-  await execa(installCommand.command, installCommand.args, {
+  const child = execa(installCommand.command, installCommand.args, {
     cwd: pluginRoot,
     env: NON_INTERACTIVE_INSTALL_ENV,
-    stdout: 'ignore',
-    stderr: 'ignore',
+    stdout: options.onOutput ? 'pipe' : 'ignore',
+    stderr: options.onOutput ? 'pipe' : 'ignore',
+    cancelSignal: options.signal,
   });
+  if (options.onOutput) {
+    child.stdout?.on('data', options.onOutput);
+    child.stderr?.on('data', options.onOutput);
+  }
+  await child;
   return true;
 }
 
-export async function installPluginDependenciesForEntry(pluginRoot: string, entry: string): Promise<void> {
+export async function installPluginDependenciesForEntry(
+  pluginRoot: string,
+  entry: string,
+  options: PluginInstallExecutionOptions = {},
+): Promise<void> {
   for (const dependencyRoot of getPluginDependencyRoots(pluginRoot, entry)) {
-    await installPluginDependencies(dependencyRoot, pluginRoot);
+    await installPluginDependencies(dependencyRoot, pluginRoot, options);
   }
 }
 
