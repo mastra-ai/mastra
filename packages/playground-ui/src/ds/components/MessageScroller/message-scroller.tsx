@@ -7,12 +7,15 @@ import {
   DEFAULT_SCROLL_PREVIOUS_ITEM_PEEK,
   DEFAULT_SCROLLABLE,
   DEFAULT_VISIBILITY,
-  MessageScrollerContext,
-  useRequiredMessageScrollerContext,
+  MessageScrollerActionsContext,
+  MessageScrollerScrollableContext,
+  MessageScrollerVisibilityContext,
+  useRequiredMessageScrollerActionsContext,
+  useRequiredMessageScrollerScrollableContext,
 } from './message-scroller-context';
 import type {
+  MessageScrollerActionsContextValue,
   MessageScrollerButtonDirection,
-  MessageScrollerContextValue,
   MessageScrollerDefaultScrollPosition,
   MessageScrollerScrollAlign,
   MessageScrollerScrollOptions,
@@ -397,6 +400,13 @@ export function MessageScrollerProvider({
     viewportElement,
   ]);
 
+  React.useEffect(() => {
+    if (!viewportElement || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(syncAfterScroll);
+    observer.observe(viewportElement);
+    return () => observer.disconnect();
+  }, [syncAfterScroll, viewportElement]);
+
   React.useLayoutEffect(() => {
     updateScrollable();
     updateVisibility();
@@ -435,10 +445,8 @@ export function MessageScrollerProvider({
     scrollToEnd({ behavior: 'auto' });
   }, [autoScroll, itemsVersion, scrollToEnd]);
 
-  const contextValue = React.useMemo<MessageScrollerContextValue>(
+  const actionsContextValue = React.useMemo<MessageScrollerActionsContextValue>(
     () => ({
-      currentAnchorId: visibility.currentAnchorId,
-      end: scrollable.end,
       registerItem,
       scrollToEnd,
       scrollToMessage,
@@ -446,31 +454,43 @@ export function MessageScrollerProvider({
       setContentElement,
       setRootElement,
       setViewportElement,
-      start: scrollable.start,
       syncAfterScroll,
-      visibleMessageIds: visibility.visibleMessageIds,
     }),
-    [
-      registerItem,
-      scrollToEnd,
-      scrollToMessage,
-      scrollToStart,
-      scrollable.end,
-      scrollable.start,
-      syncAfterScroll,
-      visibility.currentAnchorId,
-      visibility.visibleMessageIds,
-    ],
+    [registerItem, scrollToEnd, scrollToMessage, scrollToStart, syncAfterScroll],
   );
 
-  return <MessageScrollerContext.Provider value={contextValue}>{children}</MessageScrollerContext.Provider>;
+  const scrollableContextValue = React.useMemo<MessageScrollerScrollable>(
+    () => ({
+      end: scrollable.end,
+      start: scrollable.start,
+    }),
+    [scrollable.end, scrollable.start],
+  );
+
+  const visibilityContextValue = React.useMemo<MessageScrollerVisibility>(
+    () => ({
+      currentAnchorId: visibility.currentAnchorId,
+      visibleMessageIds: visibility.visibleMessageIds,
+    }),
+    [visibility.currentAnchorId, visibility.visibleMessageIds],
+  );
+
+  return (
+    <MessageScrollerActionsContext.Provider value={actionsContextValue}>
+      <MessageScrollerScrollableContext.Provider value={scrollableContextValue}>
+        <MessageScrollerVisibilityContext.Provider value={visibilityContextValue}>
+          {children}
+        </MessageScrollerVisibilityContext.Provider>
+      </MessageScrollerScrollableContext.Provider>
+    </MessageScrollerActionsContext.Provider>
+  );
 }
 
 export type MessageScrollerProps = React.HTMLAttributes<HTMLDivElement>;
 
 export const MessageScroller = React.forwardRef<HTMLDivElement, MessageScrollerProps>(
   ({ className, ...props }, ref) => {
-    const { setRootElement } = useRequiredMessageScrollerContext('MessageScroller');
+    const { setRootElement } = useRequiredMessageScrollerActionsContext('MessageScroller');
     return (
       <div
         ref={mergeRefs(setRootElement, ref)}
@@ -489,7 +509,7 @@ export type MessageScrollerViewportProps = React.HTMLAttributes<HTMLDivElement> 
 
 export const MessageScrollerViewport = React.forwardRef<HTMLDivElement, MessageScrollerViewportProps>(
   ({ className, onScroll, preserveScrollOnPrepend, role, tabIndex, ...props }, ref) => {
-    const { setViewportElement, syncAfterScroll } = useRequiredMessageScrollerContext('MessageScrollerViewport');
+    const { setViewportElement, syncAfterScroll } = useRequiredMessageScrollerActionsContext('MessageScrollerViewport');
     const viewportRef = React.useMemo(() => mergeRefs(setViewportElement, ref), [ref, setViewportElement]);
 
     return (
@@ -520,7 +540,7 @@ export type MessageScrollerContentProps = React.HTMLAttributes<HTMLDivElement> &
 
 export const MessageScrollerContent = React.forwardRef<HTMLDivElement, MessageScrollerContentProps>(
   ({ children, className, spacerClassName, role, 'aria-relevant': ariaRelevant = 'additions', ...props }, ref) => {
-    const { setContentElement, syncAfterScroll } = useRequiredMessageScrollerContext('MessageScrollerContent');
+    const { setContentElement, syncAfterScroll } = useRequiredMessageScrollerActionsContext('MessageScrollerContent');
     const [contentElement, setLocalContentElement] = React.useState<HTMLDivElement | null>(null);
 
     const contentRef = React.useMemo(
@@ -570,7 +590,7 @@ export type MessageScrollerItemProps = React.HTMLAttributes<HTMLDivElement> & {
 
 export const MessageScrollerItem = React.forwardRef<HTMLDivElement, MessageScrollerItemProps>(
   ({ className, messageId, scrollAnchor = false, ...props }, ref) => {
-    const { registerItem } = useRequiredMessageScrollerContext('MessageScrollerItem');
+    const { registerItem } = useRequiredMessageScrollerActionsContext('MessageScrollerItem');
     const unregisterRef = React.useRef<(() => void) | undefined>(undefined);
     const itemRef = React.useCallback(
       (element: HTMLDivElement | null) => {
@@ -609,7 +629,8 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
     { behavior = 'smooth', direction = 'end', className, children, onClick, tabIndex, type = 'button', ...props },
     ref,
   ) => {
-    const { scrollToEnd, scrollToStart, start, end } = useRequiredMessageScrollerContext('MessageScrollerButton');
+    const { scrollToEnd, scrollToStart } = useRequiredMessageScrollerActionsContext('MessageScrollerButton');
+    const { start, end } = useRequiredMessageScrollerScrollableContext('MessageScrollerButton');
     const active = direction === 'start' ? start : end;
 
     return (

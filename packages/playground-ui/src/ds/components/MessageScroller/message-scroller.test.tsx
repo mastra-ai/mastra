@@ -12,6 +12,10 @@ import {
   MessageScrollerViewport,
 } from './message-scroller';
 
+if (!Element.prototype.getAnimations) {
+  Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
+}
+
 const turns: ThreadRailTurn[] = [
   { key: 'turn-1', messageId: 'message-1', prompt: 'First turn', files: [], hiddenFileCount: 0 },
   { key: 'turn-2', messageId: 'message-2', prompt: 'Second turn', files: [], hiddenFileCount: 0 },
@@ -20,6 +24,10 @@ const turns: ThreadRailTurn[] = [
 type MockIntersectionObserverEntry = {
   target: Element;
   isIntersecting: boolean;
+};
+
+type MockResizeObserverEntry = {
+  target: Element;
 };
 
 class MockIntersectionObserver implements IntersectionObserver {
@@ -57,6 +65,41 @@ class MockIntersectionObserver implements IntersectionObserver {
       intersectionRect: entry.target.getBoundingClientRect(),
       rootBounds: null,
       time: Date.now(),
+    }));
+    this.callback(observerEntries, this);
+  }
+}
+
+class MockResizeObserver implements ResizeObserver {
+  static instances: MockResizeObserver[] = [];
+
+  readonly observed = new Set<Element>();
+  readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    MockResizeObserver.instances.push(this);
+  }
+
+  observe = (element: Element) => {
+    this.observed.add(element);
+  };
+
+  unobserve = (element: Element) => {
+    this.observed.delete(element);
+  };
+
+  disconnect = vi.fn(() => {
+    this.observed.clear();
+  });
+
+  trigger(entries: MockResizeObserverEntry[]) {
+    const observerEntries: ResizeObserverEntry[] = entries.map(entry => ({
+      target: entry.target,
+      contentRect: entry.target.getBoundingClientRect(),
+      borderBoxSize: [],
+      contentBoxSize: [],
+      devicePixelContentBoxSize: [],
     }));
     this.callback(observerEntries, this);
   }
@@ -118,6 +161,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   MockIntersectionObserver.instances = [];
+  MockResizeObserver.instances = [];
 });
 
 describe('MessageScroller', () => {
@@ -198,6 +242,37 @@ describe('MessageScroller', () => {
       });
     } finally {
       vi.stubGlobal('IntersectionObserver', originalIntersectionObserver);
+    }
+  });
+
+  it('updates scrollability when the viewport resizes', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+
+    try {
+      renderScroller();
+
+      const viewport = screen.getByTestId('viewport');
+      Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 0 });
+      Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 80 });
+      Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 200 });
+
+      await waitFor(() => {
+        expect(MockResizeObserver.instances.some(instance => instance.observed.has(viewport))).toBe(true);
+      });
+
+      const viewportObserver = MockResizeObserver.instances.find(instance => instance.observed.has(viewport));
+      if (!viewportObserver) throw new Error('No resize observer registered for viewport');
+
+      await act(async () => {
+        viewportObserver.trigger([{ target: viewport }]);
+      });
+
+      await waitFor(() => {
+        expect(viewport.getAttribute('data-scrollable')).toBe('end');
+      });
+    } finally {
+      vi.stubGlobal('ResizeObserver', originalResizeObserver);
     }
   });
 
