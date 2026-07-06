@@ -503,8 +503,6 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   onError?: LoopConfig<OUTPUT>['onError'];
   /** Callback fired when streaming is aborted */
   onAbort?: LoopConfig<OUTPUT>['onAbort'];
-  /** Callback fired when a thread title is generated and persisted to storage. */
-  onTitleGenerated?: (title: string) => void | Promise<void>;
   /** Tools that are active for this execution */
   activeTools?: LoopOptions['activeTools'];
   /**

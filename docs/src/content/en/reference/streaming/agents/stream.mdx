@@ -513,6 +513,17 @@ const stream = await agent.stream('message for agent')
                   },
                 ],
               },
+              {
+                parameters: [
+                  {
+                    name: 'onTitleGenerated',
+                    type: '(title: string) => void | Promise<void>',
+                    isOptional: true,
+                    description:
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
+                  },
+                ],
+              },
             ],
           },
           {
@@ -527,13 +538,6 @@ const stream = await agent.stream('message for agent')
             isOptional: true,
             description:
               'Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output',
-          },
-          {
-            name: 'onTitleGenerated',
-            type: '(title: string) => void | Promise<void>',
-            isOptional: true,
-            description:
-              'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
           },
           {
             name: 'telemetry',
@@ -988,9 +992,6 @@ const stream = await agent.stream('Tell me a story', {
   },
   onAbort: event => {
     console.log('Stream aborted:', event)
-  },
-  onTitleGenerated: title => {
-    console.log('Thread title generated:', title)
   },
 })
 

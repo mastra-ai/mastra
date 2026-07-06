@@ -910,6 +910,8 @@ export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
   resource?: string;
   options?: MemoryConfigInternal;
+  /** Callback fired when a thread title is generated and persisted to storage. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
 };
 
 /**

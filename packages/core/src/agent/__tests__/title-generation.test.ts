@@ -3020,9 +3020,9 @@ describe('onTitleGenerated callback', () => {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-1', title: '' },
-      },
-      onTitleGenerated: title => {
-        receivedTitle = title;
+        onTitleGenerated: title => {
+          receivedTitle = title;
+        },
       },
     });
 
@@ -3042,9 +3042,9 @@ describe('onTitleGenerated callback', () => {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-2', title: '' },
-      },
-      onTitleGenerated: title => {
-        receivedTitle = title;
+        onTitleGenerated: title => {
+          receivedTitle = title;
+        },
       },
     });
 
@@ -3069,9 +3069,9 @@ describe('onTitleGenerated callback', () => {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-3', title: 'Existing Title' },
-      },
-      onTitleGenerated: () => {
-        callbackFired = true;
+        onTitleGenerated: () => {
+          callbackFired = true;
+        },
       },
     });
 
@@ -3088,9 +3088,9 @@ describe('onTitleGenerated callback', () => {
       memory: {
         resource: 'user-1',
         thread: { id: 'thread-cb-4', title: '' },
-      },
-      onTitleGenerated: () => {
-        throw new Error('Callback error');
+        onTitleGenerated: () => {
+          throw new Error('Callback error');
+        },
       },
     });
 
