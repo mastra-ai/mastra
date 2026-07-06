@@ -685,6 +685,231 @@ describe('AgentChannels', () => {
       );
     });
   });
+
+  describe('per-agent thread scoping', () => {
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    function makeChatThread(adapter: any) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+    }
+
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
+
+    function makeChannels(agentId: string) {
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      channels.__setAgent(createMockAgent(agentId));
+      return channels;
+    }
+
+    async function listChannelThreads(mockMastra: any) {
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'channel-1:thread-1' } },
+        perPage: 100,
+      });
+      return threads;
+    }
+
+    it('two agents on the same external thread get distinct Mastra threads', async () => {
+      const mockMastra = makeMastra();
+      const channelsA = makeChannels('agent-a');
+      const channelsB = makeChannels('agent-b');
+      await channelsA.initialize(mockMastra);
+      await channelsB.initialize(mockMastra);
+
+      await (channelsA as any).processChatMessage(makeChatThread(channelsA.adapters.discord), message, mockMastra);
+      await (channelsB as any).processChatMessage(makeChatThread(channelsB.adapters.discord), message, mockMastra);
+
+      const threads = await listChannelThreads(mockMastra);
+      expect(threads).toHaveLength(2);
+      const agentIds = threads.map((t: any) => t.metadata?.channel_agentId).sort();
+      expect(agentIds).toEqual(['agent-a', 'agent-b']);
+      // Both threads point at the same pure platform thread ID
+      for (const thread of threads) {
+        expect(thread.metadata?.channel_externalThreadId).toBe('channel-1:thread-1');
+      }
+    });
+
+    it('reuses the agent-scoped thread on subsequent messages', async () => {
+      const mockMastra = makeMastra();
+      const channels = makeChannels('agent-a');
+      await channels.initialize(mockMastra);
+
+      await (channels as any).processChatMessage(makeChatThread(channels.adapters.discord), message, mockMastra);
+      await (channels as any).processChatMessage(makeChatThread(channels.adapters.discord), message, mockMastra);
+
+      const threads = await listChannelThreads(mockMastra);
+      expect(threads).toHaveLength(1);
+    });
+
+    it('claims a legacy thread (no channel_agentId) and stamps this agent ID', async () => {
+      const mockMastra = makeMastra();
+      const channels = makeChannels('agent-a');
+      await channels.initialize(mockMastra);
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'legacy-thread',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
+      });
+
+      await (channels as any).processChatMessage(makeChatThread(channels.adapters.discord), message, mockMastra);
+
+      const threads = await listChannelThreads(mockMastra);
+      expect(threads).toHaveLength(1);
+      expect(threads[0].id).toBe('legacy-thread');
+      expect(threads[0].metadata?.channel_agentId).toBe('agent-a');
+      expect(threads[0].resourceId).toBe('original-owner');
+    });
+
+    it('does not steal a thread already claimed by another agent', async () => {
+      const mockMastra = makeMastra();
+      const channels = makeChannels('agent-b');
+      await channels.initialize(mockMastra);
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'claimed-thread',
+          title: 'discord conversation',
+          resourceId: 'agent-a-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+            channel_agentId: 'agent-a',
+          },
+        },
+      });
+
+      await (channels as any).processChatMessage(makeChatThread(channels.adapters.discord), message, mockMastra);
+
+      const threads = await listChannelThreads(mockMastra);
+      expect(threads).toHaveLength(2);
+      const claimed = threads.find((t: any) => t.id === 'claimed-thread');
+      expect(claimed?.metadata?.channel_agentId).toBe('agent-a');
+      const fresh = threads.find((t: any) => t.id !== 'claimed-thread');
+      expect(fresh?.metadata?.channel_agentId).toBe('agent-b');
+    });
+  });
+
+  describe('bot-wake guard (respondToBots)', () => {
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    function makeChatThread(adapter: any) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        post: vi.fn().mockResolvedValue(undefined),
+      } as any;
+    }
+
+    function makeMessage(isBot: unknown) {
+      return {
+        id: 'message-1',
+        text: 'hi',
+        author: { userId: 'user-1', userName: 'other-bot', fullName: 'Other Bot', isBot },
+        attachments: [],
+      } as any;
+    }
+
+    it('ignores bot-authored messages by default', async () => {
+      const agent = createMockAgent();
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      channels.__setAgent(agent);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      await (channels as any).handleChatMessage(
+        makeChatThread(channels.adapters.discord),
+        makeMessage(true),
+        mockMastra,
+      );
+
+      expect(agent.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('wakes on bot messages when respondToBots is true', async () => {
+      const agent = createMockAgent();
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        respondToBots: true,
+      });
+      channels.__setAgent(agent);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      await (channels as any).handleChatMessage(
+        makeChatThread(channels.adapters.discord),
+        makeMessage(true),
+        mockMastra,
+      );
+
+      expect(agent.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([false, 'unknown', undefined])('passes through when isBot is %s', async isBot => {
+      const agent = createMockAgent();
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      channels.__setAgent(agent);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      await (channels as any).handleChatMessage(
+        makeChatThread(channels.adapters.discord),
+        makeMessage(isBot),
+        mockMastra,
+      );
+
+      expect(agent.sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe('matchesDomain', () => {

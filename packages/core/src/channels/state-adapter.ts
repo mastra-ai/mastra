@@ -18,6 +18,7 @@ interface CachedValue<T = unknown> {
  */
 export class MastraStateAdapter implements StateAdapter {
   private memoryStore: MemoryStorage;
+  private agentId?: string;
   private connected = false;
   private connectPromise: Promise<void> | null = null;
 
@@ -27,8 +28,15 @@ export class MastraStateAdapter implements StateAdapter {
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
   private readonly queues = new Map<string, QueueEntry[]>();
 
-  constructor(memoryStore: MemoryStorage) {
+  /**
+   * @param memoryStore Mastra memory storage domain used to persist subscriptions.
+   * @param agentId Scopes thread lookups to threads owned by this agent
+   *   (`channel_agentId` metadata). When omitted, lookups are unscoped —
+   *   matching the pre-scoping behavior for custom constructions.
+   */
+  constructor(memoryStore: MemoryStorage, agentId?: string) {
     this.memoryStore = memoryStore;
+    this.agentId = agentId;
   }
 
   async connect(): Promise<void> {
@@ -231,14 +239,32 @@ export class MastraStateAdapter implements StateAdapter {
   }
 
   /**
-   * Find a Mastra thread by its external (SDK) thread ID.
-   * External thread IDs are stored in `channel_externalThreadId` metadata.
+   * Find a Mastra thread by its external (SDK) thread ID, scoped to this agent.
+   * External thread IDs are stored in `channel_externalThreadId` metadata and
+   * agent scoping in `channel_agentId`.
    */
   private async findThreadByExternalId(externalThreadId: string) {
+    if (!this.agentId) {
+      const { threads } = await this.memoryStore.listThreads({
+        filter: { metadata: { channel_externalThreadId: externalThreadId } },
+        perPage: 1,
+      });
+      return threads[0] ?? null;
+    }
+
     const { threads } = await this.memoryStore.listThreads({
-      filter: { metadata: { channel_externalThreadId: externalThreadId } },
+      filter: { metadata: { channel_externalThreadId: externalThreadId, channel_agentId: this.agentId } },
       perPage: 1,
     });
-    return threads[0] ?? null;
+    if (threads[0]) return threads[0];
+
+    // Legacy fallback: threads created before per-agent scoping have no
+    // channel_agentId. Accept one that no agent has claimed yet; never reuse a
+    // thread claimed by another agent.
+    const { threads: legacyThreads } = await this.memoryStore.listThreads({
+      filter: { metadata: { channel_externalThreadId: externalThreadId } },
+      perPage: 10,
+    });
+    return legacyThreads.find(thread => thread.metadata?.channel_agentId === undefined) ?? null;
   }
 }

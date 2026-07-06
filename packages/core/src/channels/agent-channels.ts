@@ -74,6 +74,8 @@ export class AgentChannels {
   private adapterConfigs: Record<string, ChannelAdapterConfig>;
   /** Handler overrides from config. */
   private handlerOverrides: ChannelHandlers;
+  /** Whether messages authored by other bots wake the agent. */
+  private respondToBots: boolean;
   /** Additional Chat SDK options. */
   private chatOptions: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
   /** Thread context config for fetching prior messages. */
@@ -142,6 +144,7 @@ export class AgentChannels {
     this.adapters = adapters;
     this.adapterConfigs = adapterConfigs;
     this.handlerOverrides = config.handlers ?? {};
+    this.respondToBots = config.respondToBots ?? false;
     this.customState = config.state;
     this.userName = config.userName ?? 'Mastra';
     this.chatOptions = config.chatOptions ?? {};
@@ -241,7 +244,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore);
+        this.stateAdapter = new MastraStateAdapter(memoryStore, this.agent.id);
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -811,6 +814,18 @@ export class AgentChannels {
    * updates the channel message in real-time via edits.
    */
   private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+    // Don't wake the agent for messages authored by other bots (the Chat SDK
+    // already filters this bot's own messages). Prevents bot-to-bot reply
+    // loops when multiple bots share a thread. `isBot: 'unknown'` passes
+    // through so adapters that can't classify authors don't block humans.
+    // Opt back in with `channels: { respondToBots: true }`.
+    if (message.author?.isBot === true && !this.respondToBots) {
+      this.log('debug', `[${chatThread.adapter.name}] Ignoring bot message (respondToBots is disabled)`, {
+        messageId: message.id,
+        authorId: message.author?.userId,
+      });
+      return;
+    }
     try {
       await this.processChatMessage(chatThread, message, mastra);
     } catch (err) {
@@ -1325,10 +1340,14 @@ export class AgentChannels {
       );
     }
 
-    const metadata = {
+    const baseMetadata = {
       channel_platform: platform,
       channel_externalThreadId: externalThreadId,
       channel_externalChannelId: channelId,
+    };
+    const metadata = {
+      ...baseMetadata,
+      channel_agentId: this.agent.id,
     };
 
     const { threads } = await memoryStore.listThreads({
@@ -1338,6 +1357,24 @@ export class AgentChannels {
 
     if (threads.length > 0) {
       return threads[0]!;
+    }
+
+    // Legacy fallback: threads created before per-agent scoping have no
+    // channel_agentId. Claim an unclaimed one by stamping this agent's ID so
+    // existing conversations keep their history. Threads already claimed by
+    // another agent are never reused. A concurrent claim by two agents is
+    // last-writer-wins — a rare one-shot race during migration.
+    const { threads: legacyThreads } = await memoryStore.listThreads({
+      filter: { metadata: baseMetadata },
+      perPage: 10,
+    });
+    const legacyThread = legacyThreads.find(thread => thread.metadata?.channel_agentId === undefined);
+    if (legacyThread) {
+      return memoryStore.updateThread({
+        id: legacyThread.id,
+        title: legacyThread.title ?? `${platform} conversation`,
+        metadata: { ...legacyThread.metadata, channel_agentId: this.agent.id },
+      });
     }
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
