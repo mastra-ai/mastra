@@ -2,6 +2,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMemory } from '../../memory/memory';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../processors';
 import type { InlineSkill, SkillInput } from '../../skills/types';
+import type { DynamicArgument } from '../../types';
 import { Workspace, LocalFilesystem, LocalSandbox } from '../../workspace';
 import type { AnyWorkspace } from '../../workspace';
 import { Agent } from '../agent';
@@ -488,20 +489,20 @@ function createDefaultWorkspace(name: string, basePath: string): AnyWorkspace {
  *   (config processors run first in the pipeline).
  * - If neither source provides processors, returns `undefined`.
  */
-function mergeProcessors(
+function mergeProcessors<T extends InputProcessorOrWorkflow | OutputProcessorOrWorkflow>(
   name: string,
   type: 'input' | 'output',
-  fsProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[],
-  configProcessors: FsAgentConfig['inputProcessors'] | FsAgentConfig['outputProcessors'],
+  fsProcessors: T[],
+  configProcessors: DynamicArgument<T[]> | undefined,
   onWarn: (message: string) => void,
-): (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] | undefined {
+): DynamicArgument<T[]> | undefined {
   if (typeof configProcessors === 'function') {
     if (fsProcessors.length > 0) {
       onWarn(
         `Agent "${name}": config.ts defines dynamic ${type}Processors (function), so discovered ${type} processors under agents/${name}/processors/${type}/ are ignored.`,
       );
     }
-    return configProcessors as any;
+    return configProcessors;
   }
 
   const fromConfig = Array.isArray(configProcessors) ? configProcessors : [];
