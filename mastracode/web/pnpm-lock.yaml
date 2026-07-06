@@ -138,6 +138,9 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+      varlock:
+        specifier: ^1.9.0
+        version: 1.9.0
       vite:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@22.19.21)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.5)
@@ -2032,6 +2035,11 @@ packages:
     peerDependencies:
       browserslist: '>= 4.21.0'
 
+  varlock@1.9.0:
+    resolution: {integrity: sha512-9/V6ov8DGxElKKmhzdXiR0sq3wmMDLf4Gh2kgihzy+wNKZcn6GR8ciuoCTkKWgidup2ntzfvpRY4wHfaxZr9Sw==}
+    engines: {bun: '>=1.3.3', node: '>=22'}
+    hasBin: true
+
   vfile-message@4.0.3:
     resolution: {integrity: sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw==}
 
@@ -3828,6 +3836,8 @@ snapshots:
       browserslist: 4.28.4
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  varlock@1.9.0: {}
 
   vfile-message@4.0.3:
     dependencies:

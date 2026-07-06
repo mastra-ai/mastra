@@ -10,11 +10,11 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "prebuild": "cd ../.. && pnpm turbo build --filter ./mastracode/core --filter ./packages/playground-ui --filter ./client-sdks/client-js --filter ./client-sdks/react --filter ./stores/libsql --filter ./auth/workos --filter ./server-adapters/hono --filter ./workspaces/railway --filter ./packages/cli",
-    "web:dev": "concurrently --kill-others-on-fail --names server,ui \"PORT=4111 mastra dev --dir src/mastra --env src/web/.env\" \"vite --config src/web/vite.config.ts\"",
+    "web:dev": "concurrently --kill-others-on-fail --names server,ui \"PORT=4111 varlock run -p src/web -- mastra dev --dir src/mastra\" \"vite --config src/web/vite.config.ts\"",
     "web:dev:github": "pnpm db:up && pnpm web:dev",
     "web:ui:build": "pnpm run prebuild && vite --config src/web/vite.config.ts build",
     "web:build": "pnpm run web:ui:build && mastra build --dir src/mastra && rm -rf .mastra/output/ui && cp -R dist/web/ui .mastra/output/ui",
-    "web:start": "mastra start --env src/web/.env",
+    "web:start": "varlock run -p src/web -- mastra start",
     "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "web:ui:test": "vitest run --config e2e/web-ui/vitest.config.ts",
     "test": "vitest run --config e2e/web/vitest.config.ts && vitest run --config e2e/web-ui/vitest.config.ts"
@@ -68,6 +68,7 @@
     "tsx": "^4.22.4",
     "tw-animate-css": "^1.4.0",
     "typescript": "^6.0.3",
+    "varlock": "^1.9.0",
     "vite": "^6.0.0",
     "vitest": "4.1.8"
   },
