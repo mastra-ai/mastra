@@ -159,6 +159,7 @@ export async function createPublishedRegistry({
   configPath,
   storageDir,
   publishFilters,
+  publishGroups,
   verdaccioPath = resolveVerdaccioPath(),
 }) {
   if (!rootDir) {
@@ -173,8 +174,10 @@ export async function createPublishedRegistry({
   if (!storageDir) {
     throw new Error('storageDir is required to create a published registry');
   }
-  if (!publishFilters?.length) {
-    throw new Error('publishFilters is required to create a published registry');
+
+  const groups = publishGroups || [{ tag, publishFilters }];
+  if (groups.some(group => !group.tag || !group.publishFilters?.length)) {
+    throw new Error('publishGroups must include a tag and publishFilters');
   }
 
   await mkdir(storageDir, { recursive: true });
@@ -189,9 +192,13 @@ export async function createPublishedRegistry({
   try {
     const { glob: globby } = await import('tinyglobby');
 
-    teardown = await prepareMonorepo(rootDir, globby, tag);
     registry = await startRegistry(verdaccioPath, port, dirname(configPath), configPath);
-    await publishPackages([...new Set(publishFilters)], tag, rootDir, registry);
+    for (const group of groups) {
+      teardown = await prepareMonorepo(rootDir, globby, group.tag);
+      await publishPackages([...new Set(group.publishFilters)], group.tag, rootDir, registry);
+      await teardown();
+      teardown = async () => {};
+    }
   } finally {
     await stopRegistry(registry);
     await teardown();

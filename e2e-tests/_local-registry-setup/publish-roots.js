@@ -151,3 +151,14 @@ export async function getSharedRegistryPublishRoots(rootDir) {
 export async function getSharedRegistryPublishFilters(rootDir) {
   return rootsToFilters(await getSharedRegistryPublishRoots(rootDir));
 }
+
+export async function getSharedRegistryPublishGroups(rootDir) {
+  const groups = [];
+  for (const [suiteName, suite] of Object.entries(SHARED_REGISTRY_SUITES)) {
+    groups.push({
+      tag: suite.tag,
+      publishFilters: await getSuitePublishFilters(rootDir, suiteName),
+    });
+  }
+  return groups;
+}
