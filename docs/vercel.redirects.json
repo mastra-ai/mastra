@@ -909,6 +909,16 @@
       "source": "/guides/build-your-ui/copilotkit",
       "destination": "/guides/build-your-ui/copilotkit/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/tools/overview",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/model-providers",
+      "destination": "/models",
+      "permanent": true
     }
   ]
 }
