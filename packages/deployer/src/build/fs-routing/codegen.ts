@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import type { DiscoveredFsAgent, DiscoveredFsWorkflow } from './discover';
+import type { DiscoveredFsAgent, DiscoveredFsSingleton, DiscoveredFsWorkflow } from './discover';
 
 function sanitizeIdentifier(name: string, prefix: string, index: string): string {
   const cleaned = name.replace(/[^a-zA-Z0-9_$]/g, '_');
@@ -143,9 +143,19 @@ async function emitAgentEntry(
 export async function generateFsAgentsModule(
   userEntry: string,
   agents: DiscoveredFsAgent[],
-  options?: { workflows?: DiscoveredFsWorkflow[] },
+  options?: {
+    workflows?: DiscoveredFsWorkflow[];
+    storage?: DiscoveredFsSingleton;
+    observability?: DiscoveredFsSingleton;
+    server?: DiscoveredFsSingleton;
+    studio?: DiscoveredFsSingleton;
+  },
 ): Promise<string> {
   const workflows = options?.workflows ?? [];
+  const storage = options?.storage;
+  const observability = options?.observability;
+  const server = options?.server;
+  const studio = options?.studio;
   const lines: string[] = [];
 
   const hasInlineSkills = (function check(list: DiscoveredFsAgent[]): boolean {
@@ -168,6 +178,25 @@ export async function generateFsAgentsModule(
   lines.push(`const __bundleDir = __dirname(__fileURLToPath(import.meta.url));`);
   lines.push(`const __workspaceBasePath = name => __join(__bundleDir, 'workspace', ...name.split('/'));`);
   lines.push(``);
+
+  // Singleton imports (storage.ts, observability.ts, etc.).
+  const singletonImports: string[] = [];
+  if (storage) {
+    singletonImports.push(`import __fsStorage from ${JSON.stringify(storage.path)};`);
+  }
+  if (observability) {
+    singletonImports.push(`import __fsObservability from ${JSON.stringify(observability.path)};`);
+  }
+  if (server) {
+    singletonImports.push(`import __fsServer from ${JSON.stringify(server.path)};`);
+  }
+  if (studio) {
+    singletonImports.push(`import __fsStudio from ${JSON.stringify(studio.path)};`);
+  }
+  if (singletonImports.length > 0) {
+    lines.push(...singletonImports);
+    lines.push(``);
+  }
 
   const wfCodegen = workflows.length > 0 ? generateFsWorkflowsCodegen(workflows) : undefined;
 
@@ -200,6 +229,40 @@ export async function generateFsAgentsModule(
   lines.push(`  });`);
   lines.push(`}`);
   lines.push(``);
+
+  // Singleton registration (storage, observability, etc.) MUST run before
+  // agents/workflows. `addMemory`/`addAgent` bind the current store to
+  // storage-dependent primitives at registration time, so the fs singletons
+  // have to be in place first — otherwise fs-discovered agents/workflows would
+  // stay bound to the default InMemoryStore.
+  if (storage) {
+    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsStorage === 'function') {`);
+    lines.push(`  __userEntry.mastra.__registerFsStorage(__fsStorage);`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
+  if (observability) {
+    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsObservability === 'function') {`);
+    lines.push(`  __userEntry.mastra.__registerFsObservability(__fsObservability);`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
+  if (server) {
+    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsServer === 'function') {`);
+    lines.push(`  __userEntry.mastra.__registerFsServer(__fsServer);`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
+  if (studio) {
+    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsStudio === 'function') {`);
+    lines.push(`  __userEntry.mastra.__registerFsStudio(__fsStudio);`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsAgents === 'function') {`);
   lines.push(`  __userEntry.mastra.__registerFsAgents(__fsAgents);`);
   lines.push(`}`);

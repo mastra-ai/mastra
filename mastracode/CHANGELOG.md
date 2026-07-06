@@ -1,5 +1,36 @@
 # mastracode
 
+## 0.29.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`26b593d`](https://github.com/mastra-ai/mastra/commit/26b593de99d5745e069994fab14f1e12f2db8c4c), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`b9b8599`](https://github.com/mastra-ai/mastra/commit/b9b85993050b3cc50b2651d2a372e4f6b96a5927), [`f6e7bb3`](https://github.com/mastra-ai/mastra/commit/f6e7bb3ccffc4cab6ce6ea5c031c8cb528e5f101), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0-alpha.4
+  - @mastra/playground-ui@40.0.0-alpha.4
+  - @mastra/pg@1.15.1-alpha.1
+  - @mastra/client-js@1.31.0-alpha.4
+  - @mastra/react@1.2.3-alpha.4
+  - @mastra/server@1.50.0-alpha.4
+  - @mastra/hono@1.5.5-alpha.4
+
+## 0.29.0-alpha.3
+
+### Patch Changes
+
+- Web UI overhaul: internal refactor plus skeleton loading states. ([#18983](https://github.com/mastra-ai/mastra/pull/18983))
+  - Loading states now render skeleton placeholders instead of loading text or blank screens (settings sections, directory picker, GitHub repo list, sidebar sign-in check, and route auth guards).
+  - Internal refactor with no user-facing behavior changes: prop drilling replaced with dedicated React contexts (project selection, chat session, overlays), the AppLayout/AppContent indirection dissolved into a slotted ChatLayout with chat-domain components (ChatHeader, ChatMessageList, ComposerPanel, ChatOverlays), sidebar sections consume contexts directly, and the relativeTime helper moved to a shared date module backed by date-fns.
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`c606314`](https://github.com/mastra-ai/mastra/commit/c606314119db8ed69eaf20da2ba213a2fb6d6c21), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`82f0f43`](https://github.com/mastra-ai/mastra/commit/82f0f439600871ca2d20ab6fced2c68db1e42536), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`4606ade`](https://github.com/mastra-ai/mastra/commit/4606adee3c79f83a743b2c523c6f8b34be9b3250), [`d889c04`](https://github.com/mastra-ai/mastra/commit/d889c046468a97ba9e90007dbca729b4fecf5db0), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+  - @mastra/playground-ui@40.0.0-alpha.3
+  - @mastra/react@1.2.3-alpha.3
+  - @mastra/server@1.50.0-alpha.3
+  - @mastra/client-js@1.31.0-alpha.3
+  - @mastra/libsql@1.15.1-alpha.0
+  - @mastra/pg@1.15.1-alpha.0
+  - @mastra/hono@1.5.5-alpha.3
+
 ## 0.29.0-alpha.2
 
 ### Patch Changes

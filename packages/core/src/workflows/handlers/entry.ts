@@ -16,6 +16,7 @@ import type {
   StepResult,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  WorkflowRunState,
 } from '../types';
 
 /**
@@ -168,30 +169,32 @@ export async function persistStepUpdate(
 
     const requestContextObj = engine.serializeRequestContext(requestContext);
 
+    const snapshot: WorkflowRunState = {
+      runId,
+      status: workflowStatus,
+      value: executionContext.state,
+      context: stepResults as any,
+      activePaths: executionContext.executionPath,
+      stepExecutionPath: executionContext.stepExecutionPath,
+      activeStepsPath: executionContext.activeStepsPath,
+      serializedStepGraph,
+      suspendedPaths: executionContext.suspendedPaths,
+      waitingPaths: {},
+      resumeLabels: executionContext.resumeLabels,
+      result,
+      error,
+      requestContext: requestContextObj,
+      timestamp: Date.now(),
+      // Persist tracing context for span continuity on resume
+      tracingContext,
+    };
+
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
       resourceId,
-      snapshot: {
-        runId,
-        status: workflowStatus,
-        value: executionContext.state,
-        context: stepResults as any,
-        activePaths: executionContext.executionPath,
-        stepExecutionPath: executionContext.stepExecutionPath,
-        activeStepsPath: executionContext.activeStepsPath,
-        serializedStepGraph,
-        suspendedPaths: executionContext.suspendedPaths,
-        waitingPaths: {},
-        resumeLabels: executionContext.resumeLabels,
-        result,
-        error,
-        requestContext: requestContextObj,
-        timestamp: Date.now(),
-        // Persist tracing context for span continuity on resume
-        tracingContext,
-      },
+      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
     });
   });
 }

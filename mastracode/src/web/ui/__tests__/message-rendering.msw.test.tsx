@@ -128,7 +128,7 @@ describe('MastraCode sidebar auth actions', () => {
   it('given web auth is disabled, when the app renders, then no auth action appears', async () => {
     renderSeededApp(new Response(null, { status: 404 }));
 
-    await waitFor(() => expect(screen.queryByText('Checking sign-in…')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
@@ -136,7 +136,7 @@ describe('MastraCode sidebar auth actions', () => {
   it('given web auth is enabled and unauthenticated, when the app renders, then the sidebar shows no sign-in action', async () => {
     renderSeededApp(HttpResponse.json({ authenticated: false, user: null }));
 
-    await waitFor(() => expect(screen.queryByText('Checking sign-in…')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });

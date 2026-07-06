@@ -466,6 +466,11 @@ const sidebars = {
               id: 'voice/speech-to-speech',
               label: 'Speech to Speech',
             },
+            {
+              type: 'doc',
+              id: 'voice/livekit',
+              label: 'LiveKit',
+            },
           ],
         },
       ],
@@ -502,8 +507,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'long-running-agents/heartbeats',
-          label: 'Heartbeats',
+          id: 'long-running-agents/schedules',
+          label: 'Schedules',
           customProps: {
             tags: ['beta'],
           },

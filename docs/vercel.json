@@ -122,7 +122,12 @@
     },
     {
       "source": "/docs/agents/heartbeats",
-      "destination": "/docs/long-running-agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
       "permanent": true
     },
     {
@@ -1007,7 +1012,12 @@
     },
     {
       "source": "/docs/agents/heartbeats/llms.txt",
-      "destination": "/docs/long-running-agents/heartbeats/llms.txt",
+      "destination": "/docs/long-running-agents/schedules/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/heartbeats/llms.txt",
+      "destination": "/docs/long-running-agents/schedules/llms.txt",
       "permanent": true
     },
     {
