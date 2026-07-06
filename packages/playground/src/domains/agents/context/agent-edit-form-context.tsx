@@ -6,6 +6,38 @@ import type { AgentFormValues } from '../components/agent-edit-page/utils/form-v
 
 export type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
 
+/**
+ * A code-defined agent locks its instructions when the editor config either disables the whole
+ * editor (`editor: false`) or explicitly disowns instructions (`editor.instructions === false`).
+ * Mirror this anywhere instructions are rendered so the UI matches what the server persists on save.
+ */
+export function isInstructionsLocked(
+  isCodeAgentOverride: boolean | undefined,
+  editorConfig: AgentEditorConfig | undefined,
+): boolean {
+  return !!isCodeAgentOverride && (editorConfig === false || editorConfig?.instructions === false);
+}
+
+/** Mirror of {@link isInstructionsLocked} for tools (`editor: false` or `editor.tools === false`). */
+export function isToolsLocked(
+  isCodeAgentOverride: boolean | undefined,
+  editorConfig: AgentEditorConfig | undefined,
+): boolean {
+  return !!isCodeAgentOverride && (editorConfig === false || editorConfig?.tools === false);
+}
+
+/**
+ * A code-agent override exposes only Instructions and Tools as editable surfaces (Variables are
+ * read-only code-defined info). When both are locked, nothing is editable, so the editor is
+ * effectively read-only even though `editor` is not the global `false` kill-switch.
+ */
+export function isEditorEffectivelyReadOnly(
+  isCodeAgentOverride: boolean | undefined,
+  editorConfig: AgentEditorConfig | undefined,
+): boolean {
+  return isInstructionsLocked(isCodeAgentOverride, editorConfig) && isToolsLocked(isCodeAgentOverride, editorConfig);
+}
+
 interface AgentEditFormContextValue {
   form: UseFormReturn<AgentFormValues>;
   mode: 'create' | 'edit';

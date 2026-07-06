@@ -11,7 +11,7 @@ import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils
 import { Braces, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { isInstructionsLocked, useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
 import { ToolsPage } from '../agent-cms-pages/tools-page';
@@ -664,12 +664,16 @@ interface AgentPlaygroundConfigProps {
 }
 
 export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersionId }: AgentPlaygroundConfigProps) {
-  const { form, readOnly } = useAgentEditFormContext();
+  const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
   const tools = form.watch('tools');
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
   const toolCount = tools ? Object.keys(tools).length : 0;
   const [showPreview, setShowPreview] = useState(false);
+
+  // Locked instructions (e.g. `editor: { instructions: false }`) must read like the fully
+  // disabled `editor: false` case: no Edit/Preview toggle, just the read-only system prompt.
+  const instructionsReadOnly = readOnly || isInstructionsLocked(isCodeAgentOverride, editorConfig);
 
   const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
@@ -744,7 +748,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                   </HoverPopover>
                 </Txt>
 
-                {!readOnly && (
+                {!instructionsReadOnly && (
                   <div className="flex items-center justify-between">
                     <button
                       type="button"
@@ -758,7 +762,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 )}
               </div>
 
-              {readOnly || showPreview ? (
+              {instructionsReadOnly || showPreview ? (
                 <ReadOnlyInstructions blocks={instructionBlocks} />
               ) : (
                 <InstructionBlocksPage />

@@ -1,11 +1,13 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Controller } from 'react-hook-form';
 
-import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
+import { isInstructionsLocked, useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { AgentCMSBlocks } from '../agent-cms-blocks';
 
 export function InstructionBlocksPage() {
-  const { form, readOnly } = useAgentEditFormContext();
+  const { form, readOnly, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
+
+  const isReadOnly = readOnly || isInstructionsLocked(isCodeAgentOverride, editorConfig);
 
   const schema = form.watch('variables');
 
@@ -22,7 +24,7 @@ export function InstructionBlocksPage() {
               onChange={field.onChange}
               placeholder="Enter content..."
               schema={schema}
-              readOnly={readOnly}
+              readOnly={isReadOnly}
             />
           )}
         />
