@@ -8,6 +8,7 @@
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/chat`.
  */
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import type { RouteObject } from 'react-router';
 
@@ -15,13 +16,33 @@ import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 
 /**
- * Root layout guard. Renders nothing while the auth state resolves (one
+ * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
+ * of a blank screen on deep links / refreshes.
+ */
+function AuthPendingSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Checking sign-in"
+      className="flex h-dvh w-full items-center justify-center bg-surface1"
+    >
+      <div className="flex w-64 flex-col gap-3">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Root layout guard. Shows a skeleton while the auth state resolves (one
  * cached query, shared with the sidebar identity UI) so the app neither
  * flashes protected content nor bounces through /signin on refresh.
  */
 function RequireAuth() {
   const auth = useWebAuth();
-  if (auth.isPending) return null;
+  if (auth.isPending) return <AuthPendingSkeleton />;
   const state = auth.data;
   if (state?.authEnabled && !state.authenticated) return <Navigate to="/signin" replace />;
   return <Outlet />;
@@ -30,7 +51,7 @@ function RequireAuth() {
 /** Inverse guard for /signin: only unauthenticated (auth-enabled) users stay. */
 function SignInGate() {
   const auth = useWebAuth();
-  if (auth.isPending) return null;
+  if (auth.isPending) return <AuthPendingSkeleton />;
   const state = auth.data;
   if (!state?.authEnabled || state.authenticated) return <Navigate to="/chat" replace />;
   return <SignInPage />;

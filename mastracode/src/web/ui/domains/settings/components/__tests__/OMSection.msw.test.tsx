@@ -1,7 +1,7 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -40,6 +40,25 @@ describe('OMSection', () => {
 
       expect(await screen.findByText(/Open a project to view/)).toBeInTheDocument();
       expect(hit).toBe(false);
+    });
+  });
+
+  describe('while the OM config is loading', () => {
+    it('renders a skeleton placeholder instead of loading text', async () => {
+      server.use(
+        http.get(OM_URL, async () => {
+          await delay(150);
+          return HttpResponse.json({ config: baseConfig });
+        }),
+      );
+
+      renderWithProviders(<OMSection resourceId={RESOURCE_ID} models={models} />);
+
+      expect(await screen.findByRole('status', { name: 'Loading OM settings' })).toBeInTheDocument();
+      expect(screen.queryByText(/Loading OM settings/)).not.toBeInTheDocument();
+
+      expect(await screen.findByDisplayValue('1000')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Loading OM settings' })).not.toBeInTheDocument();
     });
   });
 

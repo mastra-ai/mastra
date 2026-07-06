@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -58,6 +58,23 @@ function renderModal(
 }
 
 describe('GithubConnectModal', () => {
+  it('renders a skeleton placeholder while repositories load', async () => {
+    server.use(
+      http.get(`${ORIGIN}/web/github/repos`, async () => {
+        await delay(150);
+        return HttpResponse.json({ repos: [repo] });
+      }),
+    );
+
+    renderModal();
+
+    expect(await screen.findByRole('status', { name: 'Loading repositories' })).toBeInTheDocument();
+    expect(screen.queryByText(/Loading repositories/)).not.toBeInTheDocument();
+
+    expect(await screen.findByText('mastra-ai/mastra')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading repositories' })).not.toBeInTheDocument();
+  });
+
   it('loads connected repositories and re-queries when filtering', async () => {
     const requestedQueries: Array<string | null> = [];
     server.use(
