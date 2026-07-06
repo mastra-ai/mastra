@@ -1,6 +1,4 @@
 name: Scheduled (Every 2 Hours)
-permissions:
-  contents: none
 
 on:
   schedule:
