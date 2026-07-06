@@ -592,6 +592,65 @@ pre,
   font-family: var(--ifm-font-family-monospace) !important;
 }
 
+[data-theme='dark'] .theme-code-block {
+  --prism-color: #fff !important;
+  --prism-background-color: #171717 !important;
+}
+
+[data-theme='dark'] .theme-code-block,
+[data-theme='dark'] .theme-code-block pre,
+[data-theme='dark'] .theme-code-block code,
+[data-theme='dark'] .theme-code-block .token-line {
+  color: #fff !important;
+  background-color: #171717 !important;
+}
+
+[data-theme='dark'] .theme-code-block .token.comment,
+[data-theme='dark'] .theme-code-block .token.prolog,
+[data-theme='dark'] .theme-code-block .token.doctype,
+[data-theme='dark'] .theme-code-block .token.cdata {
+  color: #939393 !important;
+  font-style: italic !important;
+}
+
+[data-theme='dark'] .theme-code-block .token.namespace {
+  opacity: 0.7;
+}
+
+[data-theme='dark'] .theme-code-block .token.string,
+[data-theme='dark'] .theme-code-block .token.attr-value {
+  color: #46f488 !important;
+}
+
+[data-theme='dark'] .theme-code-block .token.punctuation,
+[data-theme='dark'] .theme-code-block .token.operator,
+[data-theme='dark'] .theme-code-block .token.entity,
+[data-theme='dark'] .theme-code-block .token.url,
+[data-theme='dark'] .theme-code-block .token.symbol,
+[data-theme='dark'] .theme-code-block .token.number,
+[data-theme='dark'] .theme-code-block .token.boolean,
+[data-theme='dark'] .theme-code-block .token.variable,
+[data-theme='dark'] .theme-code-block .token.constant,
+[data-theme='dark'] .theme-code-block .token.property,
+[data-theme='dark'] .theme-code-block .token.regex,
+[data-theme='dark'] .theme-code-block .token.inserted {
+  color: #fff !important;
+}
+
+[data-theme='dark'] .theme-code-block .token.atrule,
+[data-theme='dark'] .theme-code-block .token.keyword,
+[data-theme='dark'] .theme-code-block .token.attr-name,
+[data-theme='dark'] .theme-code-block .token.selector,
+[data-theme='dark'] .theme-code-block .token.tag {
+  color: #fa7b6a !important;
+}
+
+[data-theme='dark'] .theme-code-block .token.function,
+[data-theme='dark'] .theme-code-block .token.deleted,
+[data-theme='dark'] .theme-code-block .token.function-variable {
+  color: #d06bee !important;
+}
+
 /* Pre with title above - remove top border radius */
 div[class*='codeBlockTitle'] + div[class*='codeBlockContent'] pre {
   border-top-left-radius: 0 !important;
