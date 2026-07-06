@@ -562,6 +562,39 @@ describe('MongoDBVector filterFields (#18587)', () => {
     });
   });
 
+  describe('getDeclaredFilterPaths', () => {
+    it('does not cache when the index definition is missing, then hydrates once it is present', async () => {
+      const v = makeVector();
+      let indexes: any[] = []; // index not found yet
+      const listSearchIndexes = vi.fn(() => ({ toArray: async () => indexes }));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ listSearchIndexes });
+
+      // Miss: returns an empty set and leaves nothing cached, so a later call retries.
+      expect(await (v as any).getDeclaredFilterPaths('idx')).toEqual(new Set());
+      expect((v as any).declaredFilterPaths.has('idx')).toBe(false);
+
+      // The index definition becomes available.
+      indexes = [
+        {
+          name: 'idx_vector_index',
+          latestDefinition: {
+            fields: [
+              { type: 'vector', path: 'embedding' },
+              { type: 'filter', path: '_id' },
+              { type: 'filter', path: 'document' },
+              { type: 'filter', path: 'metadata.category' },
+            ],
+          },
+        },
+      ];
+
+      // Now it reads the real declaration (excluding `_id`) and caches it.
+      const paths = await (v as any).getDeclaredFilterPaths('idx');
+      expect(paths).toEqual(new Set(['document', 'metadata.category']));
+      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document', 'metadata.category']));
+    });
+  });
+
   describe('query push-down', () => {
     const makeCursor = (docs: any[]) => ({
       toArray: async () => docs,

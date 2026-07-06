@@ -958,7 +958,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
     }
 
-    this.declaredFilterPaths.set(indexName, paths);
+    // Only cache once the index definition is actually present. If it wasn't
+    // found (e.g. the index isn't ready yet, or a transient read miss), return
+    // the empty set without caching so a later query retries rather than
+    // permanently disabling pushdown for this index.
+    if (indexData) {
+      this.declaredFilterPaths.set(indexName, paths);
+    }
     return paths;
   }
 
