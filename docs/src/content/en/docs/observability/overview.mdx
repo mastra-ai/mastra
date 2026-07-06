@@ -7,13 +7,14 @@ packages:
 
 # Observability overview
 
-Mastra's observability system gives you visibility into every agent run, workflow step, tool call, and model interaction. Agent behavior depends on model responses, prompts, tools, memory, and workflow state, so observability helps you inspect runtime decisions from day one. It captures three complementary signals that work together to help you understand what your application is doing and why.
+Mastra's observability system gives you visibility into every agent run, workflow step, tool call, and model interaction. Agent behavior depends on model responses, prompts, tools, memory, and workflow state, so observability helps you inspect runtime decisions from day one. It captures complementary signals that work together to help you understand what your application is doing and why.
 
-- [**Configuration**](/docs/observability/config): Configure observability once for traces, logs, and metrics.
-- [**Storage**](/docs/observability/storage): Choose storage backends for persisted traces, logs, and metrics aggregation.
+- [**Configuration**](/docs/observability/config): Configure observability once for traces, logs, metrics, and feedback.
+- [**Storage**](/docs/observability/storage): Choose storage backends for persisted traces, logs, metrics aggregation, and feedback queries.
 - [**Tracing**](/docs/observability/tracing/overview): Records every operation as a hierarchical timeline of spans, capturing inputs, outputs, token usage, and timing.
 - [**Logging**](/docs/observability/logging): Forwards structured log entries from your application and Mastra internals to observability storage, correlated to traces automatically.
 - [**Metrics**](/docs/observability/metrics/overview): Extracts duration, token usage, and cost data from traces automatically, with no additional instrumentation required.
+- [**Feedback**](/docs/observability/feedback): Stores ratings, comments, corrections, and other review signals linked to traces and spans.
 - [**Integrations**](/docs/observability/integrations/overview): Choose exporters, bridges, and span processors for Studio, hosted, or external observability workflows.
 
 ## When to use observability
@@ -32,7 +33,9 @@ Metrics are derived from traces automatically. When a span ends, Mastra extracts
 
 Logs are correlated to traces automatically. Every `logger.info()`, `logger.warn()`, or `logger.error()` call within a traced context is tagged with the current trace and span IDs. You can navigate from a log entry directly to the trace that produced it.
 
-All three signals share correlation IDs (trace ID, span ID, entity type, entity name), so you can jump between a metric spike, the traces behind it, and the logs within those traces.
+Feedback records human review signals such as ratings, comments, and corrections. Feedback can be linked to traces and spans, then queried with the same observability store used for metrics.
+
+These signals share correlation IDs (trace ID, span ID, entity type, entity name), so you can jump between a metric spike, the traces behind it, logs within those traces, and related feedback.
 
 ## Quickstart
 
@@ -99,6 +102,7 @@ Not all storage backends support every signal. Traces work with most backends, b
 - [Tracing](/docs/observability/tracing/overview)
 - [Logging](/docs/observability/logging)
 - [Metrics](/docs/observability/metrics/overview)
+- [Feedback](/docs/observability/feedback)
 - [Configuration](/docs/observability/config)
 - [Storage](/docs/observability/storage)
 - [Integrations overview](/docs/observability/integrations/overview)

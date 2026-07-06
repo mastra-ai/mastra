@@ -11,6 +11,7 @@ import {
   useRemoveCustomProvider,
   useSaveCustomProvider,
 } from '../../../../../shared/hooks/use-custom-providers';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 interface DraftState {
   /** id of the provider being edited, or '' for a brand-new one. */
@@ -166,9 +167,7 @@ export function CustomProvidersSection() {
       )}
 
       {loading ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
-          Loading custom providers…
-        </Txt>
+        <SkeletonRows label="Loading custom providers" rows={3} rowClassName="h-9 w-full" />
       ) : providers.length === 0 && !draft ? (
         <Txt as="p" variant="ui-sm" className="text-icon3">
           No custom providers yet. Add one above.

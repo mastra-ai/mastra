@@ -742,6 +742,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
                   __agentId: agentId,
+                  toolCallId: inputData.toolCallId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                 },

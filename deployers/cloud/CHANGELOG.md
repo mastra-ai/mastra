@@ -1,5 +1,23 @@
 # @mastra/deployer-cloud
 
+## 1.50.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`9eb5549`](https://github.com/mastra-ai/mastra/commit/9eb5549da4f5fd72b85cb42b8dbd5e1cef5bef20), [`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/deployer@1.50.0-alpha.4
+  - @mastra/core@1.50.0-alpha.4
+
+## 1.50.0-alpha.3
+
+### Patch Changes
+
+- Update `@mastra/core` peer dependency for the unified schedules API ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`528adbd`](https://github.com/mastra-ai/mastra/commit/528adbd03f1e16192f9a7b675d930ae37205034d), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`2e7b597`](https://github.com/mastra-ai/mastra/commit/2e7b597a600941994ac6ab1269f952bfdbbcfbdc), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+  - @mastra/deployer@1.50.0-alpha.3
+
 ## 1.50.0-alpha.2
 
 ### Patch Changes
