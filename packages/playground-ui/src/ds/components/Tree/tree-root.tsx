@@ -85,11 +85,12 @@ function syncTreeTabStops(root: HTMLElement, selectedId: string | undefined) {
   const items = getTreeItems(root);
   syncTreeItemSetMetadata(root);
 
-  if (items.length === 0) return;
+  const firstItem = items[0];
+  if (!firstItem) return;
 
   const activeItem = getActiveTreeItem(root, items);
   const selectedItem = findSelectedItem(items, selectedId);
-  setTabStops(items, activeItem ?? selectedItem ?? items[0]);
+  setTabStops(items, activeItem ?? selectedItem ?? firstItem);
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

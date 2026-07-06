@@ -98,6 +98,7 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
     let currentPath = '';
     for (let i = 0; i < pathSegments.length; i++) {
       const segment = pathSegments[i];
+      if (segment === undefined) break;
       currentPath = currentPath ? `${currentPath}.${segment}` : segment;
 
       const fieldOption = getFieldOptionAtPath(schema, currentPath);

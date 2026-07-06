@@ -312,7 +312,11 @@ function CombinedRow({
   height = 44,
   onSelectT,
 }: CombinedRowProps) {
-  const areaValueByTime = new Map(areaData.map(point => [point.t, Number(point[areaDataKey] ?? 0)]));
+  const areaValueByTime = new Map<number, number>();
+  for (const point of areaData) {
+    if (point.t === undefined) continue;
+    areaValueByTime.set(point.t, Number(point[areaDataKey] ?? 0));
+  }
   const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>((acc, event) => {
     const bucket = acc.get(event.t);
     if (bucket) {
