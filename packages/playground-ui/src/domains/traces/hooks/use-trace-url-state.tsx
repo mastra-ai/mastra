@@ -167,14 +167,18 @@ export function useTraceUrlState(
    *  while the user navigates between spans inside the panel (which only changes spanIdParam). */
   const anchorSpanIdParam = searchParams.get(TRACE_ANCHOR_SPAN_ID_PARAM) || undefined;
   const tabParam = searchParams.get(TAB_PARAM);
-  const spanTabParam: SpanTab | undefined =
-    tabParam === 'scoring'
-      ? 'scoring'
-      : tabParam === 'feedback'
-        ? 'feedback'
-        : tabParam === 'details'
-          ? 'details'
-          : undefined;
+  const spanTabParam: SpanTab | undefined = (() => {
+    if (tabParam === 'scoring') {
+      return 'scoring';
+    }
+    if (tabParam === 'feedback') {
+      return 'feedback';
+    }
+    if (tabParam === 'details') {
+      return 'details';
+    }
+    return undefined;
+  })();
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
   const listMode = useMemo<TraceListMode>(() => {

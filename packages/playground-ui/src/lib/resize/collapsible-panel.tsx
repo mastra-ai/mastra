@@ -213,7 +213,15 @@ export const CollapsiblePanel = ({
         style={{
           minWidth: 'var(--panel-min-w)',
           opacity: collapsed ? 0 : undefined,
-          translate: collapsed ? (direction === 'left' ? '-100% 0' : '100% 0') : undefined,
+          translate: (() => {
+            if (collapsed) {
+              if (direction === 'left') {
+                return '-100% 0';
+              }
+              return '100% 0';
+            }
+            return undefined;
+          })(),
         }}
         className={cn(
           'absolute inset-y-0 w-full overflow-hidden',

@@ -53,21 +53,25 @@ export function TraceDetailsView({
         <DataDetailsPanel.CloseButton onClick={onClose} />
       </DataDetailsPanel.Header>
 
-      {isLoading ? (
-        <DataDetailsPanel.LoadingData>Loading trace...</DataDetailsPanel.LoadingData>
-      ) : hierarchicalSpans.length === 0 ? (
-        <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>
-      ) : (
-        <DataDetailsPanel.Content>
-          <TraceTimeline
-            hierarchicalSpans={hierarchicalSpans}
-            onSpanClick={handleSpanClick}
-            selectedSpanId={selectedSpanId ?? undefined}
-            expandedSpanIds={expandedSpanIds}
-            setExpandedSpanIds={setExpandedSpanIds}
-          />
-        </DataDetailsPanel.Content>
-      )}
+      {(() => {
+        if (isLoading) {
+          return <DataDetailsPanel.LoadingData>Loading trace...</DataDetailsPanel.LoadingData>;
+        }
+        if (hierarchicalSpans.length === 0) {
+          return <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>;
+        }
+        return (
+          <DataDetailsPanel.Content>
+            <TraceTimeline
+              hierarchicalSpans={hierarchicalSpans}
+              onSpanClick={handleSpanClick}
+              selectedSpanId={selectedSpanId ?? undefined}
+              expandedSpanIds={expandedSpanIds}
+              setExpandedSpanIds={setExpandedSpanIds}
+            />
+          </DataDetailsPanel.Content>
+        );
+      })()}
     </DataDetailsPanel>
   );
 }

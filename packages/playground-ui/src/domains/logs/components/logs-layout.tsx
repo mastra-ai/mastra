@@ -32,17 +32,24 @@ export function LogsLayout({ listSlot, logPanelSlot, tracePanelSlot, spanPanelSl
         <div
           className={cn(
             'grid gap-4 h-full overflow-auto',
-            tracePanelSlot && spanPanelSlot
-              ? logCollapsed
-                ? 'grid-rows-[auto_1fr_1fr]'
-                : 'grid-rows-[1fr_1fr_1fr]'
-              : tracePanelSlot
-                ? logCollapsed
-                  ? 'grid-rows-[auto_1fr]'
-                  : 'grid-rows-[1fr_1fr]'
-                : logCollapsed
-                  ? 'grid-rows-[auto]'
-                  : 'grid-rows-[1fr]',
+            (() => {
+              if (tracePanelSlot && spanPanelSlot) {
+                if (logCollapsed) {
+                  return 'grid-rows-[auto_1fr_1fr]';
+                }
+                return 'grid-rows-[1fr_1fr_1fr]';
+              }
+              if (tracePanelSlot) {
+                if (logCollapsed) {
+                  return 'grid-rows-[auto_1fr]';
+                }
+                return 'grid-rows-[1fr_1fr]';
+              }
+              if (logCollapsed) {
+                return 'grid-rows-[auto]';
+              }
+              return 'grid-rows-[1fr]';
+            })(),
           )}
         >
           {logPanelSlot}

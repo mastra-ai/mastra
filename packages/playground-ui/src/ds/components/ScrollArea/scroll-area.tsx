@@ -268,12 +268,15 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
     // content can grow wider than the viewport (required for horizontal scroll
     // measurement). For vertical-only scroll we override it so children shrink
     // to the viewport width instead of forcing horizontal scroll.
-    const contentStyle: React.CSSProperties | undefined =
-      orientation === 'vertical'
-        ? { minWidth: '0px' }
-        : orientation === 'horizontal'
-          ? { minHeight: '0px' }
-          : undefined;
+    const contentStyle: React.CSSProperties | undefined = (() => {
+      if (orientation === 'vertical') {
+        return { minWidth: '0px' };
+      }
+      if (orientation === 'horizontal') {
+        return { minHeight: '0px' };
+      }
+      return undefined;
+    })();
 
     return (
       <ScrollAreaPrimitive.Root

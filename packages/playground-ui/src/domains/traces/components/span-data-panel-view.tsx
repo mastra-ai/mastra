@@ -94,24 +94,28 @@ export function SpanDataPanelView({
         </ButtonsGroup>
       </DataPanel.Header>
 
-      {isLoading ? (
-        <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>
-      ) : !span ? (
-        <DataPanel.NoData>Span not found.</DataPanel.NoData>
-      ) : (
-        <SpanDataPanelContent
-          span={span}
-          traceId={traceId}
-          spanId={spanId}
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          scoringTabSlot={scoringTabSlot}
-          scoringTabBadge={scoringTabBadge}
-          feedbackTabSlot={feedbackTabSlot}
-          feedbackTabBadge={feedbackTabBadge}
-          isAnchor={isAnchor}
-        />
-      )}
+      {(() => {
+        if (isLoading) {
+          return <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>;
+        }
+        if (!span) {
+          return <DataPanel.NoData>Span not found.</DataPanel.NoData>;
+        }
+        return (
+          <SpanDataPanelContent
+            span={span}
+            traceId={traceId}
+            spanId={spanId}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+            scoringTabSlot={scoringTabSlot}
+            scoringTabBadge={scoringTabBadge}
+            feedbackTabSlot={feedbackTabSlot}
+            feedbackTabBadge={feedbackTabBadge}
+            isAnchor={isAnchor}
+          />
+        );
+      })()}
     </DataPanel>
   );
 }

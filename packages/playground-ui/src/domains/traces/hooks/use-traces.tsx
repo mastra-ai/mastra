@@ -151,12 +151,15 @@ export function refreshPage0Rows(
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
 
-  const refreshedRows =
-    listMode === 'branches' && 'branches' in refreshed
-      ? (refreshed.branches ?? [])
-      : 'spans' in refreshed
-        ? (refreshed.spans ?? [])
-        : [];
+  const refreshedRows = (() => {
+    if (listMode === 'branches' && 'branches' in refreshed) {
+      return refreshed.branches ?? [];
+    }
+    if ('spans' in refreshed) {
+      return refreshed.spans ?? [];
+    }
+    return [];
+  })();
 
   if (refreshedRows.length === 0) return old;
 
@@ -369,12 +372,15 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       mergeDeltaIntoPage0(old, result, listMode),
     );
 
-    const newRows =
-      listMode === 'branches' && 'branches' in result
-        ? (result.branches ?? [])
-        : 'spans' in result
-          ? (result.spans ?? [])
-          : [];
+    const newRows = (() => {
+      if (listMode === 'branches' && 'branches' in result) {
+        return result.branches ?? [];
+      }
+      if ('spans' in result) {
+        return result.spans ?? [];
+      }
+      return [];
+    })();
     if (newRows.length === 0) return;
     const keys = newRows.map(r => `${r.traceId}:${r.spanId ?? ''}`);
     setRecentlyAddedKeys(prev => {

@@ -84,7 +84,15 @@ export const LargeContent: Story = {
           name: 'Data Processing Pipeline',
           steps: Array.from({ length: 20 }, (_, i) => ({
             id: `step-${i + 1}`,
-            type: i % 3 === 0 ? 'transform' : i % 3 === 1 ? 'validate' : 'output',
+            type: (() => {
+              if (i % 3 === 0) {
+                return 'transform';
+              }
+              if (i % 3 === 1) {
+                return 'validate';
+              }
+              return 'output';
+            })(),
             config: { timeout: 5000, retries: 3 },
           })),
           metadata: {

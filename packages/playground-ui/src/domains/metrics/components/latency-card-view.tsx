@@ -29,6 +29,22 @@ const latencySeries = [
 
 export type LatencyTab = 'agents' | 'workflows' | 'tools';
 
+function getInitialLatencyTab(data: LatencyCardViewProps['data']): LatencyTab {
+  if (!data) {
+    return 'agents';
+  }
+  if (data.agentData.length > 0) {
+    return 'agents';
+  }
+  if (data.workflowData.length > 0) {
+    return 'workflows';
+  }
+  if (data.toolData.length > 0) {
+    return 'tools';
+  }
+  return 'agents';
+}
+
 function LatencyChart({ data, onPointClick }: { data: LatencyPoint[]; onPointClick?: (point: LatencyPoint) => void }) {
   if (data.length === 0) {
     return <MetricsCard.NoData message="No latency data yet" />;
@@ -63,15 +79,7 @@ export interface LatencyCardViewProps {
 }
 
 export function LatencyCardView({ data, isLoading, isError, onPointClick, actions }: LatencyCardViewProps) {
-  const initialTab: LatencyTab = !data
-    ? 'agents'
-    : data.agentData.length > 0
-      ? 'agents'
-      : data.workflowData.length > 0
-        ? 'workflows'
-        : data.toolData.length > 0
-          ? 'tools'
-          : 'agents';
+  const initialTab = getInitialLatencyTab(data);
   const [activeTab, setActiveTab] = useState<LatencyTab>(initialTab);
   // Resync to a non-empty tab when async data finishes loading. Without this,
   // a card that mounts before data arrives stays stuck on `agents` even when
@@ -99,6 +107,47 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
   const avgP50 =
     p50Values.length > 0 ? `${Math.round(p50Values.reduce((s, v) => s + v, 0) / p50Values.length)}ms` : '—';
 
+  let cardBody;
+  if (isLoading) {
+    cardBody = <MetricsCard.Loading />;
+  } else if (isError) {
+    cardBody = <MetricsCard.Error message="Failed to load latency data" />;
+  } else {
+    cardBody = (
+      <MetricsCard.Content>
+        {!hasData ? (
+          <MetricsCard.NoData message="No latency data yet" />
+        ) : (
+          <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={initialTab} className="overflow-visible">
+            <TabList>
+              <Tab value="agents">Agents</Tab>
+              <Tab value="workflows">Workflows</Tab>
+              <Tab value="tools">Tools</Tab>
+            </TabList>
+            <TabContent value="agents">
+              <LatencyChart
+                data={data.agentData}
+                onPointClick={onPointClick ? p => onPointClick('agents', p) : undefined}
+              />
+            </TabContent>
+            <TabContent value="workflows">
+              <LatencyChart
+                data={data.workflowData}
+                onPointClick={onPointClick ? p => onPointClick('workflows', p) : undefined}
+              />
+            </TabContent>
+            <TabContent value="tools">
+              <LatencyChart
+                data={data.toolData}
+                onPointClick={onPointClick ? p => onPointClick('tools', p) : undefined}
+              />
+            </TabContent>
+          </Tabs>
+        )}
+      </MetricsCard.Content>
+    );
+  }
+
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
@@ -106,43 +155,7 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
         {hasData && <MetricsCard.Summary value={avgP50} label="Avg p50" />}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
-      {isLoading ? (
-        <MetricsCard.Loading />
-      ) : isError ? (
-        <MetricsCard.Error message="Failed to load latency data" />
-      ) : (
-        <MetricsCard.Content>
-          {!hasData ? (
-            <MetricsCard.NoData message="No latency data yet" />
-          ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={initialTab} className="overflow-visible">
-              <TabList>
-                <Tab value="agents">Agents</Tab>
-                <Tab value="workflows">Workflows</Tab>
-                <Tab value="tools">Tools</Tab>
-              </TabList>
-              <TabContent value="agents">
-                <LatencyChart
-                  data={data.agentData}
-                  onPointClick={onPointClick ? p => onPointClick('agents', p) : undefined}
-                />
-              </TabContent>
-              <TabContent value="workflows">
-                <LatencyChart
-                  data={data.workflowData}
-                  onPointClick={onPointClick ? p => onPointClick('workflows', p) : undefined}
-                />
-              </TabContent>
-              <TabContent value="tools">
-                <LatencyChart
-                  data={data.toolData}
-                  onPointClick={onPointClick ? p => onPointClick('tools', p) : undefined}
-                />
-              </TabContent>
-            </Tabs>
-          )}
-        </MetricsCard.Content>
-      )}
+      {cardBody}
     </MetricsCard>
   );
 }

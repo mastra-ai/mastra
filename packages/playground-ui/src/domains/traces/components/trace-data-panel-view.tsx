@@ -10,6 +10,7 @@ import {
   WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
@@ -161,6 +162,71 @@ export function TraceDataPanelView({
     </Button>
   );
 
+  let panelBody: ReactNode = null;
+  if (!collapsed) {
+    if (isLoading) {
+      panelBody = <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>;
+    } else if (hierarchicalSpans.length === 0) {
+      panelBody = <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>;
+    } else {
+      panelBody = (
+        <DataPanel.Content ref={contentRef}>
+          {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
+
+          {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
+            <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+              {onEvaluateTrace && (
+                <Button size="sm" onClick={onEvaluateTrace}>
+                  <Icon>
+                    <CircleGaugeIcon />
+                  </Icon>
+                  Evaluate Trace
+                </Button>
+              )}
+              {onSaveAsDatasetItem && (
+                <Button size="sm" onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
+                  <Icon>
+                    <SaveIcon />
+                  </Icon>
+                  Save as Dataset Item
+                </Button>
+              )}
+              {onAddTraceMocksToItem && (
+                <Button size="sm" onClick={() => onAddTraceMocksToItem({ traceId })}>
+                  <Icon>
+                    <WrenchIcon />
+                  </Icon>
+                  Add tool mocks to item
+                </Button>
+              )}
+            </div>
+          )}
+
+          {!isOnTracePage &&
+            !onEvaluateTrace &&
+            !onSaveAsDatasetItem &&
+            !onAddTraceMocksToItem &&
+            showUnavailableFeaturesMsg && (
+              <Notice variant="info" className="mb-6">
+                <Notice.Message>
+                  Evaluating traces and saving them as dataset items is available in Mastra Studio (local or deployed).
+                </Notice.Message>
+              </Notice>
+            )}
+
+          <TraceTimeline
+            hierarchicalSpans={hierarchicalSpans}
+            onSpanClick={handleSpanClick}
+            selectedSpanId={selectedSpanId}
+            expandedSpanIds={expandedSpanIds}
+            setExpandedSpanIds={setExpandedSpanIds}
+            chartWidth={timelineChartWidth}
+          />
+        </DataPanel.Content>
+      );
+    }
+  }
+
   return (
     <DataPanel collapsed={collapsed}>
       <DataPanel.Header>
@@ -210,67 +276,7 @@ export function TraceDataPanelView({
         )}
       </DataPanel.Header>
 
-      {!collapsed &&
-        (isLoading ? (
-          <DataPanel.LoadingData>Loading trace...</DataPanel.LoadingData>
-        ) : hierarchicalSpans.length === 0 ? (
-          <DataPanel.NoData>No spans found for this trace.</DataPanel.NoData>
-        ) : (
-          <DataPanel.Content ref={contentRef}>
-            {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
-
-            {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
-              <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
-                {onEvaluateTrace && (
-                  <Button size="sm" onClick={onEvaluateTrace}>
-                    <Icon>
-                      <CircleGaugeIcon />
-                    </Icon>
-                    Evaluate Trace
-                  </Button>
-                )}
-                {onSaveAsDatasetItem && (
-                  <Button size="sm" onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
-                    <Icon>
-                      <SaveIcon />
-                    </Icon>
-                    Save as Dataset Item
-                  </Button>
-                )}
-                {onAddTraceMocksToItem && (
-                  <Button size="sm" onClick={() => onAddTraceMocksToItem({ traceId })}>
-                    <Icon>
-                      <WrenchIcon />
-                    </Icon>
-                    Add tool mocks to item
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {!isOnTracePage &&
-              !onEvaluateTrace &&
-              !onSaveAsDatasetItem &&
-              !onAddTraceMocksToItem &&
-              showUnavailableFeaturesMsg && (
-                <Notice variant="info" className="mb-6">
-                  <Notice.Message>
-                    Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                    deployed).
-                  </Notice.Message>
-                </Notice>
-              )}
-
-            <TraceTimeline
-              hierarchicalSpans={hierarchicalSpans}
-              onSpanClick={handleSpanClick}
-              selectedSpanId={selectedSpanId}
-              expandedSpanIds={expandedSpanIds}
-              setExpandedSpanIds={setExpandedSpanIds}
-              chartWidth={timelineChartWidth}
-            />
-          </DataPanel.Content>
-        ))}
+      {panelBody}
     </DataPanel>
   );
 }

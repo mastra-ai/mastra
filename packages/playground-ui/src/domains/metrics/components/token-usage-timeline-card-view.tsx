@@ -84,41 +84,45 @@ export function TokenUsageTimelineCardView({
           ))}
         {hasData && actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
-      {isLoading ? (
-        <MetricsCard.Loading />
-      ) : isError ? (
-        <MetricsCard.Error message="Failed to load token usage timeline" />
-      ) : (
-        <MetricsCard.Content>
-          {!hasData ? (
-            <MetricsCard.NoData message="No token usage data yet" />
-          ) : (
-            <Tabs
-              defaultTab="tokens"
-              value={activeTab}
-              onValueChange={value => {
-                if (isTokenUsageTimelineTab(value)) setActiveTab(value);
-              }}
-              className="overflow-visible"
-            >
-              <TabList>
-                <Tab value="tokens">Tokens</Tab>
-                <Tab value="cost">Cost</Tab>
-              </TabList>
-              <TabContent value="tokens">
-                <MetricsLineChart data={chartPoints} series={tokenSeries} />
-              </TabContent>
-              <TabContent value="cost">
-                {hasCostData ? (
-                  <MetricsLineChart data={costChartPoints} series={costSeries} />
-                ) : (
-                  <MetricsCard.NoData message="No cost data yet" />
-                )}
-              </TabContent>
-            </Tabs>
-          )}
-        </MetricsCard.Content>
-      )}
+      {(() => {
+        if (isLoading) {
+          return <MetricsCard.Loading />;
+        }
+        if (isError) {
+          return <MetricsCard.Error message="Failed to load token usage timeline" />;
+        }
+        return (
+          <MetricsCard.Content>
+            {!hasData ? (
+              <MetricsCard.NoData message="No token usage data yet" />
+            ) : (
+              <Tabs
+                defaultTab="tokens"
+                value={activeTab}
+                onValueChange={value => {
+                  if (isTokenUsageTimelineTab(value)) setActiveTab(value);
+                }}
+                className="overflow-visible"
+              >
+                <TabList>
+                  <Tab value="tokens">Tokens</Tab>
+                  <Tab value="cost">Cost</Tab>
+                </TabList>
+                <TabContent value="tokens">
+                  <MetricsLineChart data={chartPoints} series={tokenSeries} />
+                </TabContent>
+                <TabContent value="cost">
+                  {hasCostData ? (
+                    <MetricsLineChart data={costChartPoints} series={costSeries} />
+                  ) : (
+                    <MetricsCard.NoData message="No cost data yet" />
+                  )}
+                </TabContent>
+              </Tabs>
+            )}
+          </MetricsCard.Content>
+        );
+      })()}
     </MetricsCard>
   );
 }

@@ -245,7 +245,15 @@ export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
+      {(() => {
+        if (date) {
+          if (isToday(date)) {
+            return 'Today';
+          }
+          return format(date, 'MMM dd');
+        }
+        return null;
+      })()}
     </DataListCell>
   );
 }

@@ -343,18 +343,24 @@ export function ObservationDetailView({
         )}
 
         <div data-testid="observation-detail-body" className="flex-1 overflow-y-auto p-4">
-          {showDiff && previousRecord ? (
-            <CodeDiff
-              codeA={typeof previousRecord.activeObservations === 'string' ? previousRecord.activeObservations : ''}
-              codeB={activeObservations}
-            />
-          ) : activeObservations ? (
-            <ObservationContent observations={activeObservations} />
-          ) : (
-            <p className="italic text-xs text-icon3">
-              {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
-            </p>
-          )}
+          {(() => {
+            if (showDiff && previousRecord) {
+              return (
+                <CodeDiff
+                  codeA={typeof previousRecord.activeObservations === 'string' ? previousRecord.activeObservations : ''}
+                  codeB={activeObservations}
+                />
+              );
+            }
+            if (activeObservations) {
+              return <ObservationContent observations={activeObservations} />;
+            }
+            return (
+              <p className="italic text-xs text-icon3">
+                {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
+              </p>
+            );
+          })()}
         </div>
       </div>
 

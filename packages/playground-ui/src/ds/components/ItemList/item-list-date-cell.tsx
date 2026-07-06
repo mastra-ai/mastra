@@ -12,7 +12,15 @@ export type ItemListDateCellProps = {
 export function ItemListDateCell({ date, className, withTime = false }: ItemListDateCellProps) {
   const isThisYearDate = date ? isThisYear(new Date(date)) : false;
 
-  const displayDayAndMonth = date ? (isToday(new Date(date)) ? 'Today' : format(new Date(date), 'MMM dd')) : '';
+  const displayDayAndMonth = (() => {
+    if (date) {
+      if (isToday(new Date(date))) {
+        return 'Today';
+      }
+      return format(new Date(date), 'MMM dd');
+    }
+    return '';
+  })();
   const displayYear = date && !isThisYearDate ? format(new Date(date), 'yyyy') : '';
   const displayTime = date && withTime ? `${format(new Date(date), "'at' h:mm aaa")}` : '';
 

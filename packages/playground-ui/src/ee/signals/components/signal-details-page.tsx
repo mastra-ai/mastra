@@ -198,12 +198,14 @@ export function SignalTraceListTab({
           </DataList.TopCells>
         </DataList.Top>
 
-        {loading ? (
-          <SignalTraceListSkeleton />
-        ) : visible.length === 0 ? (
-          <DataList.NoMatch message="No traces match this subtopic." />
-        ) : (
-          visible.map(example => (
+        {(() => {
+          if (loading) {
+            return <SignalTraceListSkeleton />;
+          }
+          if (visible.length === 0) {
+            return <DataList.NoMatch message="No traces match this subtopic." />;
+          }
+          return visible.map(example => (
             <DataList.RowButton
               key={example.exampleId}
               featured={selectedTraceId === example.traceId}
@@ -212,8 +214,8 @@ export function SignalTraceListTab({
             >
               <DataList.TextCell>{example.signalText}</DataList.TextCell>
             </DataList.RowButton>
-          ))
-        )}
+          ));
+        })()}
       </DataList>
 
       {hasMore && !loading ? (

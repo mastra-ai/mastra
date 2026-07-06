@@ -33,7 +33,15 @@ export function TraceKeysAndValues({ rootSpan, numOfCol = 2, className }: TraceK
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
   const status = computeTraceStatus(rootSpan);
-  const statusLabel = status === TraceStatus.ERROR ? 'ERROR' : status === TraceStatus.RUNNING ? 'RUNNING' : 'SUCCESS';
+  const statusLabel = (() => {
+    if (status === TraceStatus.ERROR) {
+      return 'ERROR';
+    }
+    if (status === TraceStatus.RUNNING) {
+      return 'RUNNING';
+    }
+    return 'SUCCESS';
+  })();
 
   return (
     <DataKeysAndValues numOfCol={numOfCol} className={className}>

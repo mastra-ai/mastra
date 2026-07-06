@@ -71,38 +71,42 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                 '[&>a>svg]:w-[1em] [&>a>svg]:h-[1em] [&>a>svg]:text-neutral3 [&>a>svg]:ml-[-0.5em]',
               )}
             >
-              {isLoading ? (
-                <span
-                  className={cn('bg-surface4 rounded-e-lg w-full')}
-                  style={{ width: `${Math.floor(Math.random() * (90 - 30 + 1)) + 50}%` }}
-                >
-                  &nbsp;
-                </span>
-              ) : isValueItemArray ? (
-                value?.map(item => {
-                  if (item.path && Link) {
-                    return (
-                      <RelationWrapper description={item.description} key={item.id}>
-                        <Link href={item.path}>
-                          {item?.name} <ChevronRightIcon />
-                        </Link>
-                      </RelationWrapper>
-                    );
-                  }
-                  if (item.path) {
-                    return (
-                      <RelationWrapper description={item.description} key={item.id}>
-                        <a href={item.path}>
-                          {item?.name} <ChevronRightIcon />
-                        </a>
-                      </RelationWrapper>
-                    );
-                  }
-                  return <span key={item.id}>{item?.name}</span>;
-                })
-              ) : (
-                <>{value ? value : <span className="text-neutral3 text-ui-sm">n/a</span>}</>
-              )}
+              {(() => {
+                if (isLoading) {
+                  return (
+                    <span
+                      className={cn('bg-surface4 rounded-e-lg w-full')}
+                      style={{ width: `${Math.floor(Math.random() * (90 - 30 + 1)) + 50}%` }}
+                    >
+                      &nbsp;
+                    </span>
+                  );
+                }
+                if (isValueItemArray) {
+                  return value?.map(item => {
+                    if (item.path && Link) {
+                      return (
+                        <RelationWrapper description={item.description} key={item.id}>
+                          <Link href={item.path}>
+                            {item?.name} <ChevronRightIcon />
+                          </Link>
+                        </RelationWrapper>
+                      );
+                    }
+                    if (item.path) {
+                      return (
+                        <RelationWrapper description={item.description} key={item.id}>
+                          <a href={item.path}>
+                            {item?.name} <ChevronRightIcon />
+                          </a>
+                        </RelationWrapper>
+                      );
+                    }
+                    return <span key={item.id}>{item?.name}</span>;
+                  });
+                }
+                return <>{value ? value : <span className="text-neutral3 text-ui-sm">n/a</span>}</>;
+              })()}
             </dd>
           </React.Fragment>
         );

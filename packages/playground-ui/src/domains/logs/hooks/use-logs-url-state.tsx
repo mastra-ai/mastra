@@ -131,7 +131,15 @@ export function useLogsUrlState(
         prev => {
           const next = new URLSearchParams(prev);
           for (const [field, value] of Object.entries(ids)) {
-            const param = field === 'logId' ? LOG_PARAM : field === 'traceId' ? TRACE_PARAM : SPAN_PARAM;
+            const param = (() => {
+              if (field === 'logId') {
+                return LOG_PARAM;
+              }
+              if (field === 'traceId') {
+                return TRACE_PARAM;
+              }
+              return SPAN_PARAM;
+            })();
             if (value) {
               next.set(param, value);
             } else {

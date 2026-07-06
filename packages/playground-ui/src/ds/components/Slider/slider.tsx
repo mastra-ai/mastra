@@ -24,7 +24,15 @@ const Slider = ({
   onValueCommitted,
   ...props
 }: SliderProps) => {
-  const values = Array.isArray(value) ? value : Array.isArray(defaultValue) ? defaultValue : [min];
+  const values = (() => {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (Array.isArray(defaultValue)) {
+      return defaultValue;
+    }
+    return [min];
+  })();
 
   return (
     <SliderPrimitive.Root

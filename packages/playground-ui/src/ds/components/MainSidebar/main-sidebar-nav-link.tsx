@@ -105,7 +105,15 @@ export function MainSidebarNavLink({
         <Tooltip>
           <TooltipTrigger render={interactiveEl} />
           <TooltipContent side="right" align="center" sideOffset={16}>
-            {link.tooltipMsg ? (isCollapsed ? `${link.name} | ${link.tooltipMsg}` : link.tooltipMsg) : link.name}
+            {(() => {
+              if (link.tooltipMsg) {
+                if (isCollapsed) {
+                  return `${link.name} | ${link.tooltipMsg}`;
+                }
+                return link.tooltipMsg;
+              }
+              return link.name;
+            })()}
           </TooltipContent>
         </Tooltip>
       ) : (

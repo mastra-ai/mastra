@@ -22,7 +22,15 @@ export function ScoresDataListDateCell({ timestamp }: ScoresDataListDateCellProp
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
+      {(() => {
+        if (date) {
+          if (isToday(date)) {
+            return 'Today';
+          }
+          return format(date, 'MMM dd');
+        }
+        return '-';
+      })()}
     </DataListCell>
   );
 }
@@ -87,7 +95,15 @@ export interface ScoresDataListScoreCellProps {
 }
 
 export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps) {
-  const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
+  const display = (() => {
+    if (score == null) {
+      return '-';
+    }
+    if (typeof score === 'object') {
+      return JSON.stringify(score);
+    }
+    return String(score);
+  })();
   return (
     <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
       {display}

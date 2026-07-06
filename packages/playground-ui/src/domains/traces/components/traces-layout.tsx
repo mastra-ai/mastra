@@ -40,17 +40,24 @@ export function TracesLayout({
         <div
           className={cn(
             'grid gap-4 max-h-full overflow-auto',
-            scorePanelSlot
-              ? traceCollapsed
-                ? 'grid-rows-[auto_3fr_3fr]'
-                : 'grid-rows-[2fr_3fr_3fr]'
-              : spanPanelSlot
-                ? traceCollapsed
-                  ? 'grid-rows-[auto_3fr]'
-                  : 'grid-rows-[2fr_3fr]'
-                : traceCollapsed
-                  ? 'grid-rows-[auto]'
-                  : 'grid-rows-[1fr]',
+            (() => {
+              if (scorePanelSlot) {
+                if (traceCollapsed) {
+                  return 'grid-rows-[auto_3fr_3fr]';
+                }
+                return 'grid-rows-[2fr_3fr_3fr]';
+              }
+              if (spanPanelSlot) {
+                if (traceCollapsed) {
+                  return 'grid-rows-[auto_3fr]';
+                }
+                return 'grid-rows-[2fr_3fr]';
+              }
+              if (traceCollapsed) {
+                return 'grid-rows-[auto]';
+              }
+              return 'grid-rows-[1fr]';
+            })(),
           )}
         >
           {tracePanelSlot}

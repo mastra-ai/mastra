@@ -37,12 +37,15 @@ export function NestedFields({ className, children }: JSONSchemaFormNestedFields
 
   // For objects, show properties directly
   // For arrays, show the items schema's properties (items is always an object)
-  const nestedFields =
-    field.type === 'object'
-      ? field.properties || []
-      : field.type === 'array' && field.items
-        ? field.items.properties || []
-        : [];
+  const nestedFields = (() => {
+    if (field.type === 'object') {
+      return field.properties || [];
+    }
+    if (field.type === 'array' && field.items) {
+      return field.items.properties || [];
+    }
+    return [];
+  })();
 
   return (
     <JSONSchemaFormNestedProvider value={{ parentPath: nestedPath, depth: nestedDepth, fields: nestedFields }}>
