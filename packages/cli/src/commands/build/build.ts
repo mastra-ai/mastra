@@ -1,8 +1,8 @@
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
 import { prepareFsAgentsEntry, writeFsAgentsEntry, mirrorFsAgentWorkspaces } from '@mastra/deployer/build';
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
+import { findMastraEntryFile } from '../../utils/find-mastra-entry';
 import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
@@ -35,8 +35,7 @@ export async function build({
     // Look for the user's mastra entry file. When it doesn't exist (fully
     // file-based project), prepareFsAgentsEntry auto-constructs a Mastra
     // instance from discovered primitives.
-    const candidateEntries = [join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')];
-    const mastraEntryFile = candidateEntries.find(f => existsSync(f));
+    const mastraEntryFile = findMastraEntryFile(mastraDir);
 
     // Discover fs-routed agents under agents/* and, if any exist, wrap the entry
     // so they are registered onto the user's mastra instance during the build.

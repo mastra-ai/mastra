@@ -78,9 +78,9 @@ export async function prepareFsAgentsEntry(
   const hasFsPrimitives =
     agents.length > 0 || workflows.length > 0 || !!storage || !!observability || !!server || !!studio;
 
-  if (!hasFsPrimitives && !standalone) {
+  if (!hasFsPrimitives && entryFile !== undefined) {
     return {
-      entryFile: entryFile!,
+      entryFile,
       standalone: false,
       toolPaths: [],
       agentCount: 0,

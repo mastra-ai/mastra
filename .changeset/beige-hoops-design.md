@@ -3,4 +3,24 @@
 'mastra': patch
 ---
 
-When no index.ts exists in the mastra directory and file-based primitives are found, the bundler auto-constructs a Mastra instance from discovered agents, workflows, storage, observability, server, and studio files. Users can now fully embrace the file-based paradigm without writing any boilerplate.
+Auto-construct a Mastra instance when no `index.ts` exists. If your `src/mastra`
+directory has file-based primitives but no entry file, `mastra dev` and
+`mastra build` now build and run the project without any boilerplate — no
+`new Mastra({...})` required.
+
+```
+src/mastra/
+  storage.ts          // export default new LibSQLStore({ url: 'file:./mastra.db' })
+  observability.ts    // export default new Observability({ ... })
+  server.ts           // export default { port: 4111 }
+  studio.ts           // export default { ... }
+  agents/weather/     // file-based agent
+  workflows/report.ts // export default createWorkflow({ ... })
+```
+
+```sh
+# No src/mastra/index.ts needed:
+mastra dev
+```
+
+Projects that already export a `mastra` instance from `index.ts` are unaffected.

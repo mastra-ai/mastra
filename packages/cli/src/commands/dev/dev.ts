@@ -1,5 +1,4 @@
 import type { ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import process from 'node:process';
@@ -18,6 +17,7 @@ import { getAnalytics } from '../../analytics/index.js';
 import { checkMastraPeerDeps, getUpdateCommand, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
 import type { PeerDepMismatch } from '../../utils/check-peer-deps.js';
 import { devLogger } from '../../utils/dev-logger.js';
+import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
 import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
@@ -444,8 +444,7 @@ export async function dev({
 
   // Look for the user's mastra entry file. When it doesn't exist (fully
   // file-based project), prepareFsAgentsEntry auto-constructs a Mastra instance.
-  const candidateEntries = [join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')];
-  const userEntryFile = candidateEntries.find(f => existsSync(f));
+  const userEntryFile = findMastraEntryFile(mastraDir);
 
   const bundler = new DevBundler(env);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
