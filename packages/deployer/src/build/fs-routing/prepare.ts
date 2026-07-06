@@ -10,8 +10,11 @@ export interface PrepareFsAgentsEntryResult {
    * primitives (agents, workflows, storage, observability, server, studio) are
    * found this is a generated wrapper module that registers them onto the
    * user's mastra instance; otherwise it is the original entry unchanged.
+   * When auto-constructing (no user entry), this is always the generated module.
    */
   entryFile: string;
+  /** Whether a standalone Mastra instance was auto-constructed (no index.ts). */
+  standalone: boolean;
   /**
    * Glob tool paths for tools defined under `agents/*\/tools` so they are
    * bundled alongside the top-level `tools/` directory.
@@ -50,12 +53,16 @@ export interface PrepareFsAgentsEntryResult {
  * the result after `bundler.prepare()` so the generated file is not wiped when
  * the output directory is emptied.
  *
+ * When `entryFile` is `undefined` (no `index.ts`/`index.js`) and fs-routed
+ * primitives are found, a standalone Mastra instance is auto-constructed from
+ * them — no user code required.
+ *
  * When no fs-routed primitives are present the original entry is returned
  * unchanged, so existing code-only projects are completely unaffected.
  */
 export async function prepareFsAgentsEntry(
   mastraDir: string,
-  entryFile: string,
+  entryFile: string | undefined,
   outputDirectory: string,
 ): Promise<PrepareFsAgentsEntryResult> {
   const [agents, workflows, storage, observability, server, studio] = await Promise.all([
@@ -67,9 +74,14 @@ export async function prepareFsAgentsEntry(
     discoverFsSingleton(mastraDir, 'studio'),
   ]);
 
-  if (agents.length === 0 && workflows.length === 0 && !storage && !observability && !server && !studio) {
+  const standalone = entryFile === undefined;
+  const hasFsPrimitives =
+    agents.length > 0 || workflows.length > 0 || !!storage || !!observability || !!server || !!studio;
+
+  if (!hasFsPrimitives && entryFile !== undefined) {
     return {
       entryFile,
+      standalone: false,
       toolPaths: [],
       agentCount: 0,
       workflowCount: 0,
@@ -80,7 +92,14 @@ export async function prepareFsAgentsEntry(
     };
   }
 
-  const moduleSource = await generateFsAgentsModule(slash(entryFile), agents, {
+  if (!hasFsPrimitives && standalone) {
+    throw new Error(
+      'No index.ts and no file-based primitives found. ' +
+        'Create src/mastra/index.ts with a Mastra instance, or add file-based agents/workflows/storage.',
+    );
+  }
+
+  const moduleSource = await generateFsAgentsModule(entryFile ? slash(entryFile) : undefined, agents, {
     workflows,
     storage,
     observability,
@@ -101,6 +120,7 @@ export async function prepareFsAgentsEntry(
 
   return {
     entryFile: generatedEntry,
+    standalone,
     toolPaths,
     agentCount: agents.length,
     workflowCount: workflows.length,

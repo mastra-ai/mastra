@@ -423,7 +423,7 @@ describe('generateFsAgentsModule', () => {
     // tool key preserved.
     expect(source).toContain(`key: "get_weather"`);
     expect(source).toContain(`mastra.__registerFsAgents`);
-    expect(source).toContain(`export const mastra = __userEntry.mastra;`);
+    expect(source).toContain(`export const mastra = __mastra;`);
   });
 
   it('omits instructionsMd when there is no markdown file', async () => {
@@ -539,6 +539,7 @@ describe('prepareFsAgentsEntry', () => {
     const result = await prepareFsAgentsEntry(dir, '/project/index.ts', out);
     expect(result).toEqual({
       entryFile: '/project/index.ts',
+      standalone: false,
       toolPaths: [],
       agentCount: 0,
       workflowCount: 0,
@@ -589,6 +590,57 @@ describe('prepareFsAgentsEntry', () => {
     const out = join(dir, '.mastra');
     const result = await prepareFsAgentsEntry(dir, '/project/index.ts', out);
     await expect(writeFsAgentsEntry(result)).resolves.toBeUndefined();
+  });
+});
+
+describe('standalone auto-construction (no index.ts)', () => {
+  it('auto-constructs a Mastra instance when entryFile is undefined and primitives exist', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, undefined, out);
+    expect(result.standalone).toBe(true);
+    expect(result.agentCount).toBe(1);
+    expect(result.moduleSource).toBeTruthy();
+    expect(result.moduleSource).toContain(`import { Mastra } from '@mastra/core'`);
+    expect(result.moduleSource).toContain(`new Mastra({})`);
+    expect(result.moduleSource).not.toContain('__userEntry');
+  });
+
+  it('throws when no index.ts and no fs primitives exist', async () => {
+    const out = join(dir, '.mastra');
+    await expect(prepareFsAgentsEntry(dir, undefined, out)).rejects.toThrow(
+      /No index\.ts and no file-based primitives/,
+    );
+  });
+
+  it('standalone module registers discovered singletons', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    await writeFile(join(dir, 'storage.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, undefined, out);
+    expect(result.standalone).toBe(true);
+    expect(result.hasStorage).toBe(true);
+    expect(result.moduleSource).toContain('__registerFsStorage');
+    expect(result.moduleSource).toContain(`new Mastra({})`);
+  });
+
+  it('standalone module includes workflow registration', async () => {
+    await mkdir(join(dir, 'workflows'), { recursive: true });
+    await writeFile(join(dir, 'workflows', 'pipeline.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, undefined, out);
+    expect(result.standalone).toBe(true);
+    expect(result.workflowCount).toBe(1);
+    expect(result.moduleSource).toContain('__registerFsWorkflows');
   });
 });
 
@@ -757,7 +809,7 @@ describe('generateFsAgentsModule with workflows', () => {
 
     expect(source).toContain(`import workflow_0_onboarding from`);
     expect(source).toContain(`__registerFsWorkflows`);
-    expect(source).toContain(`export const mastra = __userEntry.mastra;`);
+    expect(source).toContain(`export const mastra = __mastra;`);
     // Agent registration still present but with empty entries
     expect(source).toContain('__registerFsAgents');
   });
@@ -1076,6 +1128,94 @@ describe('prepareFsAgentsEntry with studio', () => {
     expect(result.moduleSource).toContain('__registerFsStorage');
     expect(result.moduleSource).toContain('__registerFsObservability');
     expect(result.moduleSource).toContain('__registerFsStudio');
+  });
+});
+
+describe('agent processors discovery', () => {
+  it('discovers input and output processors under agents/*/processors/', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    const procDir = join(dir, 'agents', 'weather', 'processors');
+    await mkdir(join(procDir, 'input'), { recursive: true });
+    await mkdir(join(procDir, 'output'), { recursive: true });
+    await writeFile(join(procDir, 'input', 'sanitize.ts'), `export default {};`);
+    await writeFile(join(procDir, 'output', 'format.ts'), `export default {};`);
+
+    const agents = await discoverFsAgents(dir);
+    expect(agents).toHaveLength(1);
+    const agent = agents[0]!;
+    expect(agent.inputProcessors).toHaveLength(1);
+    expect(agent.inputProcessors[0]!.key).toBe('sanitize');
+    expect(agent.outputProcessors).toHaveLength(1);
+    expect(agent.outputProcessors[0]!.key).toBe('format');
+  });
+
+  it('returns empty arrays when no processors directory exists', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+
+    const agents = await discoverFsAgents(dir);
+    const agent = agents[0]!;
+    expect(agent.inputProcessors).toEqual([]);
+    expect(agent.outputProcessors).toEqual([]);
+  });
+
+  it('skips test files in processor directories', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    const procDir = join(dir, 'agents', 'weather', 'processors');
+    await mkdir(join(procDir, 'input'), { recursive: true });
+    await writeFile(join(procDir, 'input', 'sanitize.ts'), `export default {};`);
+    await writeFile(join(procDir, 'input', 'sanitize.test.ts'), `test('noop', () => {});`);
+    await writeFile(join(procDir, 'input', 'sanitize.spec.ts'), `test('noop', () => {});`);
+
+    const agents = await discoverFsAgents(dir);
+    expect(agents[0]!.inputProcessors).toHaveLength(1);
+    expect(agents[0]!.inputProcessors[0]!.key).toBe('sanitize');
+  });
+});
+
+describe('generateFsAgentsModule with processors', () => {
+  it('includes processor imports and entry fields when provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [
+      {
+        name: 'weather',
+        dir: '/project/agents/weather',
+        configPath: '/project/agents/weather/config.ts',
+        tools: [],
+        inputProcessors: [{ key: 'sanitize', path: '/project/agents/weather/processors/input/sanitize.ts' }],
+        outputProcessors: [{ key: 'format', path: '/project/agents/weather/processors/output/format.ts' }],
+        skills: [],
+        subagents: [],
+      },
+    ]);
+    expect(source).toContain('inputProc');
+    expect(source).toContain('outputProc');
+    expect(source).toContain('inputProcessors:');
+    expect(source).toContain('outputProcessors:');
+  });
+
+  it('omits processor fields when none are discovered', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [
+      {
+        name: 'weather',
+        dir: '/project/agents/weather',
+        configPath: '/project/agents/weather/config.ts',
+        tools: [],
+        inputProcessors: [],
+        outputProcessors: [],
+        skills: [],
+        subagents: [],
+      },
+    ]);
+    expect(source).not.toContain('inputProcessors');
+    expect(source).not.toContain('outputProcessors');
   });
 });
 describe('subagents', () => {
