@@ -2,19 +2,17 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
+import { TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { commitChanges, createWorktree, openPullRequest, pushBranch } from '../../services/github';
 import type { GitOpError } from '../../services/github';
 
-/**
- * The GitHub git-op helpers use raw relative `fetch('/api/web/github/...')`
- * (not the injected ApiConfig base), so jsdom resolves them against its default
- * origin. Match handlers against that origin.
- */
-const ORIGIN = 'http://localhost:3000';
+// The git-op helpers take the ApiConfig base URL explicitly, so handlers match
+// against the same base the app injects (`TEST_BASE_URL` in the jsdom suite).
+const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'proj-1';
 
 function gitOpUrl(action: string): string {
-  return `${ORIGIN}/api/web/github/projects/${PROJECT}/${action}`;
+  return `${ORIGIN}/web/github/projects/${PROJECT}/${action}`;
 }
 
 describe('github git-op helpers', () => {
@@ -32,7 +30,7 @@ describe('github git-op helpers', () => {
       }),
     );
 
-    const result = await createWorktree(PROJECT, 'feat-x', 'main');
+    const result = await createWorktree(TEST_BASE_URL, PROJECT, 'feat-x', 'main');
 
     expect(received).toEqual({ branch: 'feat-x', baseBranch: 'main' });
     expect(result.worktreePath).toBe('/workspace/worktrees/feat-x');
@@ -42,7 +40,7 @@ describe('github git-op helpers', () => {
 
   it('commitChanges reports committed=false when nothing changed', async () => {
     server.use(http.post(gitOpUrl('commit'), () => HttpResponse.json({ committed: false })));
-    const result = await commitChanges(PROJECT, 'msg', '/workspace/worktrees/feat-x');
+    const result = await commitChanges(TEST_BASE_URL, PROJECT, 'msg', '/workspace/worktrees/feat-x');
     expect(result.committed).toBe(false);
   });
 
@@ -54,14 +52,14 @@ describe('github git-op helpers', () => {
         return HttpResponse.json({ pushed: true, branch: 'feat-x' });
       }),
     );
-    const result = await pushBranch(PROJECT, 'feat-x', '/workspace/worktrees/feat-x');
+    const result = await pushBranch(TEST_BASE_URL, PROJECT, 'feat-x', '/workspace/worktrees/feat-x');
     expect(received).toEqual({ branch: 'feat-x', worktreePath: '/workspace/worktrees/feat-x' });
     expect(result.pushed).toBe(true);
   });
 
   it('openPullRequest returns the PR url', async () => {
     server.use(http.post(gitOpUrl('pr'), () => HttpResponse.json({ url: 'https://github.com/o/r/pull/7' })));
-    const result = await openPullRequest(PROJECT, { branch: 'feat-x', title: 'My PR' });
+    const result = await openPullRequest(TEST_BASE_URL, PROJECT, { branch: 'feat-x', title: 'My PR' });
     expect(result.url).toBe('https://github.com/o/r/pull/7');
   });
 
@@ -71,7 +69,7 @@ describe('github git-op helpers', () => {
         HttpResponse.json({ error: 'Invalid branch', message: 'branch name is invalid' }, { status: 400 }),
       ),
     );
-    await expect(createWorktree(PROJECT, 'bad ref')).rejects.toMatchObject({
+    await expect(createWorktree(TEST_BASE_URL, PROJECT, 'bad ref')).rejects.toMatchObject({
       code: 'Invalid branch',
       message: 'branch name is invalid',
       status: 400,
@@ -82,7 +80,7 @@ describe('github git-op helpers', () => {
     server.use(http.post(gitOpUrl('push'), () => new HttpResponse(null, { status: 401 })));
     let caught: GitOpError | undefined;
     try {
-      await pushBranch(PROJECT, 'feat-x');
+      await pushBranch(TEST_BASE_URL, PROJECT, 'feat-x');
     } catch (e) {
       caught = e as GitOpError;
     }

@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web
 import type { ProviderInfo } from '../../../../../../shared/api/types';
 import { ProvidersSection } from '../ProvidersSection';
 
-const PROVIDERS_URL = `${TEST_BASE_URL}/api/web/config/providers`;
+const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 const keyUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/key`;
 
 function providersResponse(providers: ProviderInfo[]) {
@@ -20,6 +20,25 @@ function rowFor(name: string): HTMLElement {
 }
 
 describe('ProvidersSection', () => {
+  describe('while providers are loading', () => {
+    it('renders a skeleton placeholder instead of loading text', async () => {
+      server.use(
+        http.get(PROVIDERS_URL, async () => {
+          await delay(150);
+          return providersResponse([{ provider: 'openai', source: 'stored' }]);
+        }),
+      );
+
+      renderWithProviders(<ProvidersSection />);
+
+      expect(await screen.findByRole('status', { name: 'Loading providers' })).toBeInTheDocument();
+      expect(screen.queryByText(/Loading providers/)).not.toBeInTheDocument();
+
+      expect(await screen.findByText('openai')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Loading providers' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('when providers load', () => {
     it('renders the configured providers', async () => {
       server.use(

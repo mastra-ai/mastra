@@ -8,8 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import App from '../App';
 import { loginUrl, logoutUrl } from '../domains/auth';
+import Chat from '../domains/chat/Chat';
 import type { Project } from '../domains/workspaces';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -96,7 +96,7 @@ function useAgentControllerHandlers({
     ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get('/auth/me', () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
@@ -107,14 +107,14 @@ function useAgentControllerHandlers({
 }
 
 function useAuthMe(response: Response) {
-  server.use(http.get('/auth/me', () => response));
+  server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => response));
 }
 
 function renderSeededApp(authResponse: Response = new Response(null, { status: 404 })) {
   seedProject();
   useAgentControllerHandlers();
   useAuthMe(authResponse);
-  return renderWithProviders(<App />);
+  return renderWithProviders(<Chat />);
 }
 
 /** Locate a migrated tool card by its accessible group label ("Tool: <name>"). */
@@ -128,15 +128,16 @@ describe('MastraCode sidebar auth actions', () => {
   it('given web auth is disabled, when the app renders, then no auth action appears', async () => {
     renderSeededApp(new Response(null, { status: 404 }));
 
-    await waitFor(() => expect(screen.queryByText('Checking sign-in…')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given web auth is enabled and unauthenticated, when the app renders, then the sidebar shows Sign in', async () => {
+  it('given web auth is enabled and unauthenticated, when the app renders, then the sidebar shows no sign-in action', async () => {
     renderSeededApp(HttpResponse.json({ authenticated: false, user: null }));
 
-    expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
@@ -153,11 +154,19 @@ describe('MastraCode sidebar auth actions', () => {
   it('given an unauthenticated user, when the login URL is generated, then it preserves the current route', () => {
     window.history.replaceState(null, '', '/projects?thread=abc');
 
-    expect(loginUrl()).toBe('/auth/login?returnTo=%2Fprojects%3Fthread%3Dabc');
+    expect(loginUrl(TEST_BASE_URL)).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fprojects%3Fthread%3Dabc`);
+  });
+
+  it('given an explicit returnTo, when the login URL is generated, then it targets that destination', () => {
+    expect(loginUrl(TEST_BASE_URL, '/chat')).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fchat`);
+  });
+
+  it('given a same-origin deployment, when the login URL is generated with an empty base, then it stays relative', () => {
+    expect(loginUrl('', '/chat')).toBe('/auth/login?returnTo=%2Fchat');
   });
 
   it('given an authenticated user, when the logout URL is generated, then it targets the logout route', () => {
-    expect(logoutUrl()).toBe('/auth/logout');
+    expect(logoutUrl(TEST_BASE_URL)).toBe(`${TEST_BASE_URL}/auth/logout`);
   });
 });
 
@@ -191,7 +200,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<Chat />);
 
     expect(await screen.findByText('Hello')).toBeInTheDocument();
     expect(screen.getByText('from hydrate')).toBeInTheDocument();
@@ -217,7 +226,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<Chat />);
 
     const first = await findToolCard('view');
     const last = await findToolCard('search');
@@ -243,7 +252,7 @@ describe('MastraCode message rendering', () => {
     useAgentControllerHandlers();
     server.use(http.get(`${SESSION}/stream`, () => stream.response));
 
-    renderWithProviders(<App />);
+    renderWithProviders(<Chat />);
 
     expect(await screen.findByText('Ready')).toBeInTheDocument();
     await stream.emit();
@@ -268,7 +277,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<Chat />);
 
     const card = await findToolCard('execute_command');
     expect(within(card).getByText('Done')).toBeInTheDocument();
@@ -287,7 +296,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<Chat />);
 
     expect(await screen.findByText('Thread title updated: Better title')).toBeInTheDocument();
     expect(screen.queryByText(/om_thread_title_updated/)).not.toBeInTheDocument();
@@ -309,7 +318,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const card = await findToolCard('view');
       await userEvent.click(within(card).getByText('view'));
@@ -327,7 +336,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const card = await screen.findByRole('group', { name: 'Tool approval for edit' });
       expect(within(card).getByRole('button', { name: 'Approve edit' })).toBeInTheDocument();
@@ -350,7 +359,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const card = await screen.findByRole('group', { name: 'Plan approval' });
       expect(within(card).getByText('Plan: Ship the migration')).toBeInTheDocument();
@@ -374,7 +383,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const card = await screen.findByRole('group', { name: 'Access request' });
       expect(within(card).getByRole('button', { name: 'Allow access to /etc/hosts' })).toBeInTheDocument();
@@ -397,7 +406,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const card = await screen.findByRole('group', { name: 'Question from the agent' });
       expect(within(card).getByText('Which database?')).toBeInTheDocument();
@@ -421,7 +430,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       expect(await screen.findByText('Run the migration')).toBeInTheDocument();
     });
@@ -439,7 +448,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       expect(await screen.findByText('Migrate the UI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
@@ -453,7 +462,7 @@ describe('MastraCode message rendering', () => {
         events: [{ type: 'info', message: "I'm in **plan mode** — run `/mode build`" }],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const bold = await screen.findByText('plan mode');
       expect(bold.tagName).toBe('STRONG');
@@ -475,7 +484,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const code = await screen.findByText(/const/);
       expect(code.closest('pre')).toHaveClass('font-mono');
@@ -511,7 +520,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<Chat />);
 
     const card = await findToolCard('string_replace');
     await userEvent.click(within(card).getByRole('button'));
@@ -546,7 +555,7 @@ describe('App mode + theme controls', () => {
     it('renders the mode switcher below the composer, not in the header', async () => {
       seedMultiMode();
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const buildButton = await screen.findByRole('button', { name: 'Build' });
       const planButton = screen.getByRole('button', { name: 'Plan' });
@@ -565,7 +574,7 @@ describe('App mode + theme controls', () => {
     it('marks the active mode as selected', async () => {
       seedMultiMode();
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       const buildButton = await screen.findByRole('button', { name: 'Build' });
       const planButton = screen.getByRole('button', { name: 'Plan' });
@@ -577,7 +586,7 @@ describe('App mode + theme controls', () => {
     it('does not render a theme toggle in the header', async () => {
       seedMultiMode();
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       await screen.findByRole('button', { name: 'Build' });
 
@@ -587,7 +596,7 @@ describe('App mode + theme controls', () => {
     it('does not render a project switcher in the header', async () => {
       seedMultiMode();
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       await screen.findByRole('button', { name: 'Build' });
 
@@ -608,7 +617,7 @@ describe('App mode + theme controls', () => {
     it('renders the ready status above settings in the sidebar', async () => {
       seedMultiMode();
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       await screen.findByRole('button', { name: 'Build' });
 
@@ -625,7 +634,7 @@ describe('App mode + theme controls', () => {
     it('does not duplicate the project name in the status line', async () => {
       seedMultiMode();
 
-      renderWithProviders(<App />);
+      renderWithProviders(<Chat />);
 
       await screen.findByRole('button', { name: 'Build' });
 

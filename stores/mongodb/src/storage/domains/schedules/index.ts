@@ -11,7 +11,12 @@ import type {
   ScheduleUpdate,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import { SchedulesStorage, TABLE_SCHEDULES, TABLE_SCHEDULE_TRIGGERS } from '@mastra/core/storage';
+import {
+  normalizeScheduleTarget,
+  SchedulesStorage,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+} from '@mastra/core/storage';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import { resolveTargets, runPrune } from '../../retention';
@@ -42,7 +47,7 @@ function docToSchedule(doc: Record<string, any>): Schedule {
   }
   const schedule: Schedule = {
     id: String(doc.id),
-    target,
+    target: normalizeScheduleTarget(target),
     cron: String(doc.cron),
     status: String(doc.status) as ScheduleStatus,
     nextFireAt: Number(doc.next_fire_at),

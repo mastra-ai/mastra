@@ -9,6 +9,18 @@ import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import type { StreamTransport } from '../../../stream/types';
 import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
 
+/**
+ * Per-model provider override sourced from a models.dev model's `provider` block.
+ * Lets a single provider serve individual models over a different endpoint / request
+ * shape / SDK than the provider default (e.g. a model served over the OpenAI
+ * Responses API while the provider default is chat-completions).
+ */
+export interface ModelProviderOverride {
+  api?: string; // Base API URL for this model (may contain ${ENV} templates)
+  shape?: 'responses' | 'completions'; // Request shape to use for this model
+  npm?: string; // SDK package to use for this model
+}
+
 export interface ProviderConfig {
   url?: string;
   apiKeyHeader?: string;
@@ -18,6 +30,9 @@ export interface ProviderConfig {
   docUrl?: string; // Optional documentation URL
   gateway: string;
   npm?: string; // NPM package name from models.dev (e.g., "@ai-sdk/anthropic")
+  // Per-model overrides (endpoint/shape/SDK) keyed by model id, when a provider
+  // serves some models differently than its default (models.dev model `provider`).
+  modelOverrides?: Record<string, ModelProviderOverride>;
 }
 
 /**

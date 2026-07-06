@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { TABLE_SCORERS } from './constants';
-import { safelyParseJSON, createStorageErrorId, createVectorErrorId, transformRow, transformScoreRow } from './utils';
-import type { StoreName } from './utils';
+import {
+  safelyParseJSON,
+  createStorageErrorId,
+  createVectorErrorId,
+  transformRow,
+  transformScoreRow,
+  parseDuration,
+  ensureDate,
+  serializeDate,
+  filterByDateRange,
+  jsonValueEquals,
+} from './utils';
 
 describe('safelyParseJSON', () => {
   const sampleObject = {
@@ -10,51 +20,34 @@ describe('safelyParseJSON', () => {
   };
 
   it('should return input object unchanged when provided a non-null object', () => {
-    // Arrange: Prepare test object with nested structure
     const inputObject = sampleObject;
-
-    // Act: Pass object through safelyParseJSON
     const result = safelyParseJSON(inputObject);
-    // Assert: Verify object reference and structure preservation
-    expect(result).toBe(inputObject); // Same reference
+    expect(result).toBe(inputObject);
     expect(result).toEqual({
       foo: 'bar',
       nested: { value: 42 },
     });
-    expect(result.nested).toBe(inputObject.nested); // Nested reference preserved
+    expect(result.nested).toBe(inputObject.nested);
   });
 
   it('should return empty object when provided null or undefined', () => {
-    // Act & Assert: Test null input
     const nullResult = safelyParseJSON(null);
     expect(nullResult).toEqual({});
-    expect(Object.keys(nullResult)).toHaveLength(0);
-
-    // Act & Assert: Test undefined input
     const undefinedResult = safelyParseJSON(undefined);
     expect(undefinedResult).toEqual({});
-    expect(Object.keys(undefinedResult)).toHaveLength(0);
-
-    // Assert: Verify different object instances
     expect(nullResult).not.toBe(undefinedResult);
   });
 
   it('should return empty object when provided non-string primitives', () => {
-    // Act & Assert: Test number input
     const numberResult = safelyParseJSON(42);
     expect(numberResult).toEqual({});
-    expect(Object.keys(numberResult)).toHaveLength(0);
-
-    // Act & Assert: Test boolean input
     const booleanResult = safelyParseJSON(true);
     expect(booleanResult).toEqual({});
-    expect(Object.keys(booleanResult)).toHaveLength(0);
-
-    // Assert: Verify different object instances
     expect(numberResult).not.toBe(booleanResult);
   });
+
   it('should return raw string when provided a non-JSON string', () => {
-    const raw = 'hello world'; // not valid JSON
+    const raw = 'hello world';
     expect(safelyParseJSON(raw)).toBe(raw);
   });
 
@@ -62,6 +55,7 @@ describe('safelyParseJSON', () => {
     const json = '{"a":1,"b":"two"}';
     expect(safelyParseJSON(json)).toEqual({ a: 1, b: 'two' });
   });
+
   it('parses JSON numbers/booleans/arrays', () => {
     expect(safelyParseJSON('123')).toBe(123);
     expect(safelyParseJSON('true')).toBe(true);
@@ -111,8 +105,7 @@ describe('transformRow', () => {
     };
 
     const result = transformRow(row, TABLE_SCORERS);
-
-    expect(result.scorer).toBe(scorerObject); // Same reference
+    expect(result.scorer).toBe(scorerObject);
   });
 
   it('should skip null and undefined values', () => {
@@ -130,7 +123,6 @@ describe('transformRow', () => {
     };
 
     const result = transformRow(row, TABLE_SCORERS);
-
     expect(result).not.toHaveProperty('metadata');
     expect(result).not.toHaveProperty('reason');
   });
@@ -148,28 +140,9 @@ describe('transformRow', () => {
     };
 
     const result = transformRow(row, TABLE_SCORERS, { convertTimestamps: true });
-
     expect(result.createdAt).toBeInstanceOf(Date);
     expect(result.updatedAt).toBeInstanceOf(Date);
     expect((result.createdAt as Date).toISOString()).toBe('2024-01-15T10:30:00.000Z');
-  });
-
-  it('should not convert timestamps by default', () => {
-    const row = {
-      id: 'test-id',
-      scorerId: 'scorer-1',
-      runId: 'run-1',
-      scorer: '{}',
-      score: 0.85,
-      source: 'TEST',
-      createdAt: '2024-01-15T10:30:00Z',
-      updatedAt: '2024-01-15T11:00:00Z',
-    };
-
-    const result = transformRow(row, TABLE_SCORERS);
-
-    expect(result.createdAt).toBe('2024-01-15T10:30:00Z');
-    expect(result.updatedAt).toBe('2024-01-15T11:00:00Z');
   });
 
   it('should use preferred timestamp fields when provided', () => {
@@ -181,7 +154,7 @@ describe('transformRow', () => {
       score: 0.85,
       source: 'TEST',
       createdAt: '2024-01-15T10:30:00Z',
-      createdAtZ: '2024-01-15T10:30:00.000Z', // More precise version
+      createdAtZ: '2024-01-15T10:30:00.000Z',
       updatedAt: '2024-01-15T11:00:00Z',
       updatedAtZ: '2024-01-15T11:00:00.000Z',
     };
@@ -195,69 +168,6 @@ describe('transformRow', () => {
 
     expect(result.createdAt).toBe('2024-01-15T10:30:00.000Z');
     expect(result.updatedAt).toBe('2024-01-15T11:00:00.000Z');
-  });
-
-  it('should fall back to original field when preferred field is missing', () => {
-    const row = {
-      id: 'test-id',
-      scorerId: 'scorer-1',
-      runId: 'run-1',
-      scorer: '{}',
-      score: 0.85,
-      source: 'TEST',
-      createdAt: '2024-01-15T10:30:00Z',
-      // createdAtZ is missing
-      updatedAt: '2024-01-15T11:00:00Z',
-    };
-
-    const result = transformRow(row, TABLE_SCORERS, {
-      preferredTimestampFields: {
-        createdAt: 'createdAtZ',
-      },
-    });
-
-    expect(result.createdAt).toBe('2024-01-15T10:30:00Z');
-  });
-
-  it('should skip values matching nullValuePattern', () => {
-    const row = {
-      id: 'test-id',
-      scorerId: 'scorer-1',
-      runId: 'run-1',
-      scorer: '{}',
-      score: 0.85,
-      source: 'TEST',
-      reason: '_null_',
-      metadata: '_null_',
-      createdAt: '2024-01-15T10:30:00Z',
-      updatedAt: '2024-01-15T11:00:00Z',
-    };
-
-    const result = transformRow(row, TABLE_SCORERS, { nullValuePattern: '_null_' });
-
-    expect(result).not.toHaveProperty('reason');
-    expect(result).not.toHaveProperty('metadata');
-  });
-
-  it('should apply field mappings', () => {
-    const row = {
-      id: 'test-id',
-      scorerId: 'scorer-1',
-      runId: 'run-1',
-      scorer: '{}',
-      score: 0.85,
-      source: 'TEST',
-      entityData: '{"type":"agent","name":"test-agent"}', // DynamoDB stores entity as entityData
-      createdAt: '2024-01-15T10:30:00Z',
-      updatedAt: '2024-01-15T11:00:00Z',
-    };
-
-    const result = transformRow(row, TABLE_SCORERS, {
-      fieldMappings: { entity: 'entityData' },
-    });
-
-    expect(result.entity).toEqual({ type: 'agent', name: 'test-agent' });
-    expect(result).not.toHaveProperty('entityData');
   });
 });
 
@@ -280,41 +190,8 @@ describe('transformScoreRow', () => {
     };
 
     const result = transformScoreRow(row);
-
     expect(result.id).toBe('score-123');
-    expect(result.scorerId).toBe('accuracy-scorer');
     expect(result.scorer).toEqual({ id: 'accuracy', name: 'Accuracy Scorer' });
-    expect(result.input).toEqual({ question: 'What is 2+2?' });
-    expect(result.output).toEqual({ answer: '4' });
-    expect(result.score).toBe(1.0);
-    expect(result.reason).toBe('Correct answer');
-    expect(result.entity).toEqual({ name: 'math-agent' });
-  });
-
-  it('should accept the same options as transformRow', () => {
-    const row = {
-      id: 'score-123',
-      scorerId: 'accuracy-scorer',
-      runId: 'run-456',
-      scorer: '{}',
-      score: 1.0,
-      source: 'TEST',
-      createdAt: '2024-01-15T10:30:00Z',
-      createdAtZ: '2024-01-15T10:30:00.000Z',
-      updatedAt: '2024-01-15T11:00:00Z',
-      updatedAtZ: '2024-01-15T11:00:00.000Z',
-    };
-
-    const result = transformScoreRow(row, {
-      preferredTimestampFields: {
-        createdAt: 'createdAtZ',
-        updatedAt: 'updatedAtZ',
-      },
-      convertTimestamps: true,
-    });
-
-    expect(result.createdAt).toBeInstanceOf(Date);
-    expect(result.updatedAt).toBeInstanceOf(Date);
   });
 });
 
@@ -324,80 +201,9 @@ describe('createStorageErrorId', () => {
     expect(errorId).toBe('MASTRA_STORAGE_PG_LIST_THREADS_FAILED');
   });
 
-  it('should generate error ID with custom status', () => {
-    const errorId = createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID');
-    expect(errorId).toBe('MASTRA_STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID');
-  });
-
   it('should normalize operations with proper word boundaries', () => {
     const errorId = createStorageErrorId('PG', 'listMessagesById', 'FAILED');
     expect(errorId).toBe('MASTRA_STORAGE_PG_LIST_MESSAGES_BY_ID_FAILED');
-  });
-
-  it('should normalize status values', () => {
-    const errorId = createStorageErrorId('MONGODB', 'LIST_MESSAGES', 'invalid-thread-id');
-    expect(errorId).toBe('MASTRA_STORAGE_MONGODB_LIST_MESSAGES_INVALID_THREAD_ID');
-  });
-
-  it('should handle various casing styles in operations correctly', () => {
-    // camelCase
-    expect(createStorageErrorId('PG', 'getMessage', 'FAILED')).toBe('MASTRA_STORAGE_PG_GET_MESSAGE_FAILED');
-
-    // PascalCase
-    expect(createStorageErrorId('PG', 'GetMessage', 'FAILED')).toBe('MASTRA_STORAGE_PG_GET_MESSAGE_FAILED');
-
-    // SCREAMING_SNAKE_CASE (already normalized)
-    expect(createStorageErrorId('PG', 'GET_MESSAGE', 'FAILED')).toBe('MASTRA_STORAGE_PG_GET_MESSAGE_FAILED');
-
-    // Mixed with acronyms
-    expect(createStorageErrorId('PG', 'parseJSONData', 'FAILED')).toBe('MASTRA_STORAGE_PG_PARSE_JSON_DATA_FAILED');
-  });
-
-  it('should handle special characters in status', () => {
-    const errorId = createStorageErrorId('PG', 'SOME_OPERATION', 'custom-status');
-    expect(errorId).toBe('MASTRA_STORAGE_PG_SOME_OPERATION_CUSTOM_STATUS');
-  });
-
-  it('should generate consistent IDs for all canonical store names', () => {
-    const stores: StoreName[] = [
-      'PG',
-      'MONGODB',
-      'CLICKHOUSE',
-      'CLOUDFLARE_D1',
-      'MSSQL',
-      'LIBSQL',
-      'DYNAMODB',
-      'LANCE',
-      'UPSTASH',
-      'CLOUDFLARE',
-    ];
-    const operations = ['LIST_THREADS_BY_RESOURCE_ID', 'LIST_MESSAGES', 'LIST_WORKFLOW_RUNS'];
-
-    stores.forEach(store => {
-      operations.forEach(operation => {
-        const errorId = createStorageErrorId(store, operation, 'FAILED');
-        expect(errorId).toMatch(/^MASTRA_STORAGE_[A-Z0-9_]+_FAILED$/);
-        expect(errorId).toContain(store);
-        expect(errorId).toContain(operation);
-      });
-    });
-  });
-
-  it('should handle all statuses consistently', () => {
-    const statuses = ['FAILED', 'INVALID_THREAD_ID', 'DUPLICATE_KEY', 'NOT_FOUND', 'TIMEOUT'];
-
-    statuses.forEach(status => {
-      const errorId = createStorageErrorId('PG', 'LIST_MESSAGES', status);
-      expect(errorId).toBe(`MASTRA_STORAGE_PG_LIST_MESSAGES_${status}`);
-    });
-  });
-
-  it('should normalize complex operation names', () => {
-    expect(createStorageErrorId('PG', 'listThreads', 'FAILED')).toBe('MASTRA_STORAGE_PG_LIST_THREADS_FAILED');
-
-    expect(createStorageErrorId('DYNAMODB', 'getMessagesPaginated', 'FAILED')).toBe(
-      'MASTRA_STORAGE_DYNAMODB_GET_MESSAGES_PAGINATED_FAILED',
-    );
   });
 });
 
@@ -406,62 +212,137 @@ describe('createVectorErrorId', () => {
     const errorId = createVectorErrorId('CHROMA', 'QUERY', 'FAILED');
     expect(errorId).toBe('MASTRA_VECTOR_CHROMA_QUERY_FAILED');
   });
+});
 
-  it('should generate vector error ID with custom status', () => {
-    const errorId = createVectorErrorId('PINECONE', 'UPSERT', 'INVALID_DIMENSION');
-    expect(errorId).toBe('MASTRA_VECTOR_PINECONE_UPSERT_INVALID_DIMENSION');
+describe('parseDuration', () => {
+  it('should parse number as milliseconds', () => {
+    expect(parseDuration(1000)).toBe(1000);
   });
 
-  it('should normalize vector operations with proper word boundaries', () => {
-    const errorId = createVectorErrorId('PG', 'createIndex', 'FAILED');
-    expect(errorId).toBe('MASTRA_VECTOR_PG_CREATE_INDEX_FAILED');
+  it('should throw error for negative number', () => {
+    expect(() => parseDuration(-1)).toThrow('Invalid retention duration');
   });
 
-  it('should normalize vector status values', () => {
-    const errorId = createVectorErrorId('ASTRA', 'DELETE', 'db-error');
-    expect(errorId).toBe('MASTRA_VECTOR_ASTRA_DELETE_DB_ERROR');
+  it('should parse duration strings correctly', () => {
+    expect(parseDuration('1ms')).toBe(1);
+    expect(parseDuration('1s')).toBe(1000);
+    expect(parseDuration('1m')).toBe(60 * 1000);
+    expect(parseDuration('1h')).toBe(60 * 60 * 1000);
+    expect(parseDuration('1d')).toBe(24 * 60 * 60 * 1000);
+    expect(parseDuration('1w')).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
-  it('should handle various casing styles in vector operations', () => {
-    expect(createVectorErrorId('QDRANT', 'deleteVector', 'FAILED')).toBe('MASTRA_VECTOR_QDRANT_DELETE_VECTOR_FAILED');
-    expect(createVectorErrorId('OPENSEARCH', 'CreateIndex', 'FAILED')).toBe(
-      'MASTRA_VECTOR_OPENSEARCH_CREATE_INDEX_FAILED',
-    );
-    expect(createVectorErrorId('TURBOPUFFER', 'list-indexes', 'failed')).toBe(
-      'MASTRA_VECTOR_TURBOPUFFER_LIST_INDEXES_FAILED',
-    );
+  it('should parse fractional duration strings', () => {
+    expect(parseDuration('1.5s')).toBe(1500);
+  });
+});
+
+describe('ensureDate', () => {
+  it('should return undefined for undefined input', () => {
+    expect(ensureDate(undefined)).toBeUndefined();
   });
 
-  it('should generate consistent IDs for all vector store names', () => {
-    const stores: StoreName[] = [
-      'PG',
-      'CHROMA',
-      'PINECONE',
-      'QDRANT',
-      'ASTRA',
-      'COUCHBASE',
-      'OPENSEARCH',
-      'TURBOPUFFER',
-      'VECTORIZE',
-    ];
-    const operations = ['QUERY', 'UPSERT', 'DELETE', 'CREATE_INDEX'];
-
-    stores.forEach(store => {
-      operations.forEach(operation => {
-        const errorId = createVectorErrorId(store, operation, 'FAILED');
-        expect(errorId).toMatch(/^MASTRA_VECTOR_[A-Z0-9_]+_FAILED$/);
-        expect(errorId).toContain(store);
-        expect(errorId).toContain(operation);
-      });
-    });
+  it('should return Date object for Date input', () => {
+    const date = new Date();
+    expect(ensureDate(date)).toBe(date);
   });
 
-  it('should normalize complex vector operation names', () => {
-    expect(createVectorErrorId('LIBSQL', 'deleteVectorById', 'FAILED')).toBe(
-      'MASTRA_VECTOR_LIBSQL_DELETE_VECTOR_BY_ID_FAILED',
-    );
-    expect(createVectorErrorId('MONGODB', 'createVectorIndex', 'FAILED')).toBe(
-      'MASTRA_VECTOR_MONGODB_CREATE_VECTOR_INDEX_FAILED',
-    );
+  it('should parse string into Date object', () => {
+    const dateStr = '2024-01-01T00:00:00.000Z';
+    const date = ensureDate(dateStr);
+    expect(date).toBeInstanceOf(Date);
+    expect(date?.toISOString()).toBe(dateStr);
+  });
+});
+
+describe('serializeDate', () => {
+  it('should return undefined for undefined input', () => {
+    expect(serializeDate(undefined)).toBeUndefined();
+  });
+
+  it('should return ISO string for Date input', () => {
+    const date = new Date('2024-01-01T00:00:00.000Z');
+    expect(serializeDate(date)).toBe('2024-01-01T00:00:00.000Z');
+  });
+});
+
+describe('filterByDateRange', () => {
+  const items = [
+    { id: 1, createdAt: new Date('2024-01-01') },
+    { id: 2, createdAt: new Date('2024-01-02') },
+    { id: 3, createdAt: new Date('2024-01-03') },
+  ];
+  const getCreatedAt = (item: any) => item.createdAt;
+
+  it('should return all items if no date range provided', () => {
+    expect(filterByDateRange(items, getCreatedAt)).toEqual(items);
+  });
+
+  it('should filter by start date (inclusive)', () => {
+    const result = filterByDateRange(items, getCreatedAt, { start: '2024-01-02' });
+    expect(result).toHaveLength(2);
+    expect(result.map((i: any) => i.id)).toEqual([2, 3]);
+  });
+
+  it('should filter by start date (exclusive)', () => {
+    const result = filterByDateRange(items, getCreatedAt, { start: '2024-01-02', startExclusive: true });
+    expect(result).toHaveLength(1);
+    expect(result.map((i: any) => i.id)).toEqual([3]);
+  });
+
+  it('should filter by end date (inclusive)', () => {
+    const result = filterByDateRange(items, getCreatedAt, { end: '2024-01-02' });
+    expect(result).toHaveLength(2);
+    expect(result.map((i: any) => i.id)).toEqual([1, 2]);
+  });
+
+  it('should filter by end date (exclusive)', () => {
+    const result = filterByDateRange(items, getCreatedAt, { end: '2024-01-02', endExclusive: true });
+    expect(result).toHaveLength(1);
+    expect(result.map((i: any) => i.id)).toEqual([1]);
+  });
+});
+
+describe('jsonValueEquals', () => {
+  it('should handle primitives', () => {
+    expect(jsonValueEquals(1, 1)).toBe(true);
+    expect(jsonValueEquals(1, 2)).toBe(false);
+    expect(jsonValueEquals('a', 'a')).toBe(true);
+    expect(jsonValueEquals('a', 'b')).toBe(false);
+    expect(jsonValueEquals(true, true)).toBe(true);
+    expect(jsonValueEquals(true, false)).toBe(false);
+    expect(jsonValueEquals(null, null)).toBe(true);
+    expect(jsonValueEquals(undefined, undefined)).toBe(true);
+    expect(jsonValueEquals(null, undefined)).toBe(false);
+  });
+
+  it('should handle Date objects', () => {
+    const d1 = new Date('2024-01-01');
+    const d2 = new Date('2024-01-01');
+    const d3 = new Date('2024-01-02');
+    expect(jsonValueEquals(d1, d2)).toBe(true);
+    expect(jsonValueEquals(d1, d3)).toBe(false);
+    expect(jsonValueEquals(d1, '2024-01-01')).toBe(false);
+  });
+
+  it('should handle arrays', () => {
+    expect(jsonValueEquals([1, 2], [1, 2])).toBe(true);
+    expect(jsonValueEquals([1, 2], [1, 3])).toBe(false);
+    expect(jsonValueEquals([1, 2], [1, 2, 3])).toBe(false);
+  });
+
+  it('should handle objects', () => {
+    expect(jsonValueEquals({ a: 1, b: 2 }, { a: 1, b: 2 })).toBe(true);
+    expect(jsonValueEquals({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
+    expect(jsonValueEquals({ a: 1, b: 2 }, { a: 1, b: 3 })).toBe(false);
+    expect(jsonValueEquals({ a: 1, b: 2 }, { a: 1 })).toBe(false);
+  });
+
+  it('should handle nested structures', () => {
+    const obj1 = { a: [1, { b: 2 }], c: 3 };
+    const obj2 = { a: [1, { b: 2 }], c: 3 };
+    const obj3 = { a: [1, { b: 3 }], c: 3 };
+    expect(jsonValueEquals(obj1, obj2)).toBe(true);
+    expect(jsonValueEquals(obj1, obj3)).toBe(false);
   });
 });

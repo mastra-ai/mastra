@@ -96,8 +96,10 @@ interface ResolvedProject {
  * Ask the server for the TUI-compatible resourceId (and canonical name/branch)
  * for an absolute path.
  */
-export async function resolveProjectPath(path: string): Promise<ResolvedProject> {
-  const res = await fetch(`/api/web/project/resolve?path=${encodeURIComponent(path)}`);
+export async function resolveProjectPath(baseUrl: string, path: string): Promise<ResolvedProject> {
+  const res = await fetch(`${baseUrl}/web/project/resolve?path=${encodeURIComponent(path)}`, {
+    credentials: 'include',
+  });
   if (!res.ok) throw new Error(`Failed to resolve project (${res.status})`);
   return (await res.json()) as ResolvedProject;
 }
@@ -132,8 +134,8 @@ export function saveProjects(projects: Project[]): void {
  * lines up with the TUI; the picker-supplied name is kept if given, otherwise
  * the server's canonical project name is used.
  */
-export async function addProject(name: string, path: string): Promise<Project> {
-  const resolved = await resolveProjectPath(path);
+export async function addProject(baseUrl: string, name: string, path: string): Promise<Project> {
+  const resolved = await resolveProjectPath(baseUrl, path);
   const projects = loadProjects();
   const project: Project = {
     id: crypto.randomUUID(),
@@ -231,10 +233,10 @@ export function selectWorktree(project: Project, worktreePath: string): Project 
  * if a legacy project predates the field. The session resourceId always comes
  * from the server so it matches the TUI.
  */
-export async function ensureResourceId(project: Project): Promise<Project> {
+export async function ensureResourceId(baseUrl: string, project: Project): Promise<Project> {
   if (project.resourceId) return project;
   if (!project.path) throw new Error('Cannot resolve a resourceId for a project without a path');
-  const resolved = await resolveProjectPath(project.path);
+  const resolved = await resolveProjectPath(baseUrl, project.path);
   const updated: Project = { ...project, resourceId: resolved.resourceId, gitBranch: resolved.gitBranch };
   const projects = loadProjects().map(p => (p.id === project.id ? updated : p));
   saveProjects(projects);

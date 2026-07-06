@@ -6324,7 +6324,7 @@ export class Agent<
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
-          toolCallId: payload.toolCallId,
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, key),
           toolName: payload.toolName,
           requiresApproval: false,
           suspendPayload: payload.toolCallSuspended,
@@ -6333,6 +6333,18 @@ export class Agent<
     }
 
     return toolCalls;
+  }
+
+  /**
+   * Suspend payloads persisted before they carried `toolCallId` only hold the
+   * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
+   * Recover it when exactly one label points at the suspended step.
+   */
+  #findResumeLabelForStep(existingSnapshot: WorkflowRunState | null | undefined, stepId: string): string | undefined {
+    const labels = Object.entries(existingSnapshot?.resumeLabels ?? {}).filter(
+      ([, target]) => target.stepId === stepId,
+    );
+    return labels.length === 1 ? labels[0]![0] : undefined;
   }
 
   #getSuspendedToolInfo(

@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web
 import type { DirectoryListing } from '../../../../../../shared/api/types';
 import { DirectoryBrowser } from '../DirectoryPicker';
 
-const FS_URL = `${TEST_BASE_URL}/api/web/fs/list`;
+const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
 
 const rootListing: DirectoryListing = {
   root: '/projects',
@@ -33,6 +33,25 @@ function listingFor(path: string | null): DirectoryListing {
 }
 
 describe('DirectoryBrowser', () => {
+  describe('while the listing is loading', () => {
+    it('renders a skeleton placeholder instead of loading text', async () => {
+      server.use(
+        http.get(FS_URL, async () => {
+          await delay(150);
+          return HttpResponse.json(rootListing);
+        }),
+      );
+
+      renderWithProviders(<DirectoryBrowser onPick={vi.fn()} onCancel={vi.fn()} />);
+
+      expect(await screen.findByRole('status', { name: 'Loading folders' })).toBeInTheDocument();
+      expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
+
+      expect(await screen.findByText('alpha')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Loading folders' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('when it opens', () => {
     it('lists the server root', async () => {
       server.use(

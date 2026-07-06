@@ -1,5 +1,25 @@
 # @mastra/deployer-vercel
 
+## 1.2.5-alpha.2
+
+### Patch Changes
+
+- Update `@mastra/core` peer dependency for the unified schedules API ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`528adbd`](https://github.com/mastra-ai/mastra/commit/528adbd03f1e16192f9a7b675d930ae37205034d), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`2e7b597`](https://github.com/mastra-ai/mastra/commit/2e7b597a600941994ac6ab1269f952bfdbbcfbdc), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+  - @mastra/deployer@1.50.0-alpha.3
+
+## 1.2.5-alpha.1
+
+### Patch Changes
+
+- Fixed Studio HTML config injection so platform environment values are escaped before they are embedded in served or deployed `index.html` files. This keeps organization IDs, project IDs, observability endpoints and telemetry flags intact when they contain quotes, angle brackets, newlines or `$` sequences, and exposes `escapeStudioHtmlValue` from `@mastra/deployer/build` for the shared injection paths. ([#18812](https://github.com/mastra-ai/mastra/pull/18812))
+
+- Updated dependencies [[`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`259c1ac`](https://github.com/mastra-ai/mastra/commit/259c1acb9e8fc7bc0058a2a1942b2466bf20ed59), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964)]:
+  - @mastra/core@1.50.0-alpha.1
+  - @mastra/deployer@1.50.0-alpha.1
+
 ## 1.2.5-alpha.0
 
 ### Patch Changes

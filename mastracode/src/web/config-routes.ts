@@ -1,4 +1,5 @@
-import type { Hono } from 'hono';
+import { registerApiRoute } from '@mastra/core/server';
+import type { ApiRoute } from '@mastra/core/server';
 
 import type { AuthStorage } from '../auth/storage.js';
 import { getAvailableModePacks } from '../onboarding/packs.js';
@@ -323,301 +324,356 @@ function persistOmRoleOverride(
 }
 
 /**
- * Mount the web config routes on the given Hono app:
- *   - `GET    /api/web/config/providers`              — list providers + key source
- *   - `PUT    /api/web/config/providers/:provider/key` — set/update a provider's API key
- *   - `DELETE /api/web/config/providers/:provider/key` — remove a stored API key
- *   - `GET    /api/web/config/custom-providers`        — list custom OpenAI-compatible providers
- *   - `POST   /api/web/config/custom-providers`        — create/update a custom provider
- *   - `DELETE /api/web/config/custom-providers/:id`    — remove a custom provider
- *   - `GET    /api/web/config/om`                      — read OM models/thresholds/observe-attachments
- *   - `PUT    /api/web/config/om/:role/model`          — switch observer/reflector model
- *   - `PUT    /api/web/config/om/thresholds`           — set observation/reflection thresholds
- *   - `PUT    /api/web/config/om/observe-attachments`  — set observe-attachments (auto/on/off)
+ * Build the web config routes as Mastra `apiRoutes`:
+ *   - `GET    /web/config/providers`              — list providers + key source
+ *   - `PUT    /web/config/providers/:provider/key` — set/update a provider's API key
+ *   - `DELETE /web/config/providers/:provider/key` — remove a stored API key
+ *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
+ *   - `POST   /web/config/custom-providers`        — create/update a custom provider
+ *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
+ *   - `GET    /web/config/om`                      — read OM models/thresholds/observe-attachments
+ *   - `PUT    /web/config/om/:role/model`          — switch observer/reflector model
+ *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
+ *   - `PUT    /web/config/om/observe-attachments`  — set observe-attachments (auto/on/off)
  */
-export function mountConfigRoutes(
-  app: Hono<any>,
-  options: { controller: ModelCatalog; authStorage?: AuthStorage },
-): void {
+export function buildConfigRoutes(options: { controller: ModelCatalog; authStorage?: AuthStorage }): ApiRoute[] {
   const { controller, authStorage } = options;
 
-  app.get('/api/web/config/providers', async c => {
-    try {
-      return c.json({ providers: await listProviders(controller, authStorage) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+  return [
+    registerApiRoute('/web/config/providers', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        try {
+          return c.json({ providers: await listProviders(controller, authStorage) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.put('/api/web/config/providers/:provider/key', async c => {
-    if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-    const provider = c.req.param('provider');
-    let body: { key?: unknown; envVar?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    const key = typeof body.key === 'string' ? body.key.trim() : '';
-    if (!key) return c.json({ error: 'Missing required field: key' }, 400);
-    const envVar = typeof body.envVar === 'string' ? body.envVar : undefined;
-    try {
-      authStorage.setStoredApiKey(provider, key, envVar);
-      const providers = await listProviders(controller, authStorage);
-      return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/providers/:provider/key', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        let body: { key?: unknown; envVar?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const key = typeof body.key === 'string' ? body.key.trim() : '';
+        if (!key) return c.json({ error: 'Missing required field: key' }, 400);
+        const envVar = typeof body.envVar === 'string' ? body.envVar : undefined;
+        try {
+          authStorage.setStoredApiKey(provider, key, envVar);
+          const providers = await listProviders(controller, authStorage);
+          return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.delete('/api/web/config/providers/:provider/key', async c => {
-    if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
-    const provider = c.req.param('provider');
-    try {
-      authStorage.remove(`apikey:${provider}`);
-      const providers = await listProviders(controller, authStorage);
-      return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/providers/:provider/key', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        try {
+          authStorage.remove(`apikey:${provider}`);
+          const providers = await listProviders(controller, authStorage);
+          return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  // ── Custom providers (OpenAI-compatible endpoints) ──────────────────────
-  // Mirrors the TUI's /custom-providers command. Backed by GlobalSettings
-  // (settings.json), not session state — these are user-global definitions.
+    // ── Custom providers (OpenAI-compatible endpoints) ──────────────────────
+    // Mirrors the TUI's /custom-providers command. Backed by GlobalSettings
+    // (settings.json), not session state — these are user-global definitions.
 
-  app.get('/api/web/config/custom-providers', c => {
-    try {
-      return c.json({ providers: listCustomProviders() });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/custom-providers', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => {
+        try {
+          return c.json({ providers: listCustomProviders() });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.post('/api/web/config/custom-providers', async c => {
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    const parsed = parseCustomProviderBody(body);
-    if ('error' in parsed) return c.json({ error: parsed.error }, 400);
-    // `previousId` lets a rename remove the old entry as well as any name clash.
-    const previousId =
-      body && typeof body === 'object' && typeof (body as Record<string, unknown>).previousId === 'string'
-        ? ((body as Record<string, unknown>).previousId as string)
-        : undefined;
-    try {
-      const settings = loadSettings();
-      upsertCustomProviderInSettings(settings, parsed, previousId);
-      saveSettings(settings);
-      const id = getCustomProviderId(parsed.name);
-      return c.json({ ok: true, provider: listCustomProviders().find(p => p.id === id) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/custom-providers', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        let body: unknown;
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const parsed = parseCustomProviderBody(body);
+        if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+        // `previousId` lets a rename remove the old entry as well as any name clash.
+        const previousId =
+          body && typeof body === 'object' && typeof (body as Record<string, unknown>).previousId === 'string'
+            ? ((body as Record<string, unknown>).previousId as string)
+            : undefined;
+        try {
+          const settings = loadSettings();
+          upsertCustomProviderInSettings(settings, parsed, previousId);
+          saveSettings(settings);
+          const id = getCustomProviderId(parsed.name);
+          return c.json({ ok: true, provider: listCustomProviders().find(p => p.id === id) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.delete('/api/web/config/custom-providers/:id', c => {
-    const id = c.req.param('id');
-    try {
-      const settings = loadSettings();
-      removeCustomProviderFromSettings(settings, id);
-      saveSettings(settings);
-      return c.json({ ok: true });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/custom-providers/:id', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: c => {
+        const id = c.req.param('id');
+        try {
+          const settings = loadSettings();
+          removeCustomProviderFromSettings(settings, id);
+          saveSettings(settings);
+          return c.json({ ok: true });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  // ── Model packs ─────────────────────────────────────────────────────────
-  // Mirrors the TUI's /models-pack command. Listing + custom-pack CRUD are
-  // global-settings state; activation is session-scoped and resolves the
-  // session from the controller registry by resourceId.
+    // ── Model packs ─────────────────────────────────────────────────────────
+    // Mirrors the TUI's /models-pack command. Listing + custom-pack CRUD are
+    // global-settings state; activation is session-scoped and resolves the
+    // session from the controller registry by resourceId.
 
-  app.get('/api/web/config/model-packs', async c => {
-    const resourceId = c.req.query('resourceId');
-    try {
-      const session = resourceId ? await controller.getSessionByResource?.(resourceId) : undefined;
-      const activePackId = await resolveActivePackId(session);
-      return c.json({ packs: await listModelPacks(controller, authStorage, activePackId), activePackId });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/model-packs', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resourceId = c.req.query('resourceId');
+        try {
+          const session = resourceId ? await controller.getSessionByResource?.(resourceId) : undefined;
+          const activePackId = await resolveActivePackId(session);
+          return c.json({ packs: await listModelPacks(controller, authStorage, activePackId), activePackId });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.post('/api/web/config/model-packs', async c => {
-    let body: { name?: unknown; models?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    const name = typeof body.name === 'string' ? body.name.trim() : '';
-    if (!name) return c.json({ error: 'Missing required field: name' }, 400);
-    const m = (body.models ?? {}) as Record<string, unknown>;
-    const build = typeof m.build === 'string' ? m.build.trim() : '';
-    const plan = typeof m.plan === 'string' ? m.plan.trim() : '';
-    const fast = typeof m.fast === 'string' ? m.fast.trim() : '';
-    if (!build || !plan || !fast) {
-      return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
-    }
-    try {
-      const settings = loadSettings();
-      const entry = { name, models: { build, plan, fast }, createdAt: new Date().toISOString() };
-      const idx = settings.customModelPacks.findIndex(p => p.name === name);
-      if (idx >= 0) settings.customModelPacks[idx] = entry;
-      else settings.customModelPacks.push(entry);
-      saveSettings(settings);
-      return c.json({ ok: true, pack: { id: `custom:${name}`, name, models: { build, plan, fast } } });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/model-packs', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        let body: { name?: unknown; models?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const name = typeof body.name === 'string' ? body.name.trim() : '';
+        if (!name) return c.json({ error: 'Missing required field: name' }, 400);
+        const m = (body.models ?? {}) as Record<string, unknown>;
+        const build = typeof m.build === 'string' ? m.build.trim() : '';
+        const plan = typeof m.plan === 'string' ? m.plan.trim() : '';
+        const fast = typeof m.fast === 'string' ? m.fast.trim() : '';
+        if (!build || !plan || !fast) {
+          return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
+        }
+        try {
+          const settings = loadSettings();
+          const entry = { name, models: { build, plan, fast }, createdAt: new Date().toISOString() };
+          const idx = settings.customModelPacks.findIndex(p => p.name === name);
+          if (idx >= 0) settings.customModelPacks[idx] = entry;
+          else settings.customModelPacks.push(entry);
+          saveSettings(settings);
+          return c.json({ ok: true, pack: { id: `custom:${name}`, name, models: { build, plan, fast } } });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.delete('/api/web/config/model-packs/:id', c => {
-    const id = decodeURIComponent(c.req.param('id'));
-    try {
-      const settings = loadSettings();
-      removeCustomPackFromSettings(settings, id);
-      saveSettings(settings);
-      return c.json({ ok: true });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/model-packs/:id', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: c => {
+        const id = decodeURIComponent(c.req.param('id'));
+        try {
+          const settings = loadSettings();
+          removeCustomPackFromSettings(settings, id);
+          saveSettings(settings);
+          return c.json({ ok: true });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.post('/api/web/config/model-packs/:id/activate', async c => {
-    const id = decodeURIComponent(c.req.param('id'));
-    let body: { resourceId?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
-    if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
-    try {
-      const session = await controller.getSessionByResource?.(resourceId);
-      if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-      const packs = await listModelPacks(controller, authStorage);
-      const pack = packs.find(p => p.id === id);
-      if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
-      await applyPackToSession(controller, session, pack);
-      return c.json({ ok: true, activePackId: pack.id });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/model-packs/:id/activate', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const id = decodeURIComponent(c.req.param('id'));
+        let body: { resourceId?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
+        try {
+          const session = await controller.getSessionByResource?.(resourceId);
+          if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+          const packs = await listModelPacks(controller, authStorage);
+          const pack = packs.find(p => p.id === id);
+          if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
+          await applyPackToSession(controller, session, pack);
+          return c.json({ ok: true, activePackId: pack.id });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  // ── Observational memory ──────────────────────────────────────────────────
-  // Mirrors the TUI's /om command. All five knobs are session-scoped (resolved
-  // from the session, persisted to its state + thread setting) plus written to
-  // GlobalSettings so the choice survives restarts and stays in sync with the TUI.
+    // ── Observational memory ──────────────────────────────────────────────────
+    // Mirrors the TUI's /om command. All five knobs are session-scoped (resolved
+    // from the session, persisted to its state + thread setting) plus written to
+    // GlobalSettings so the choice survives restarts and stays in sync with the TUI.
 
-  app.get('/api/web/config/om', async c => {
-    const resourceId = c.req.query('resourceId');
-    if (!resourceId) return c.json({ error: 'Missing required query param: resourceId' }, 400);
-    try {
-      const session = await controller.getSessionByResource?.(resourceId);
-      if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-      return c.json({ config: readOMConfig(session) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/om', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resourceId = c.req.query('resourceId');
+        if (!resourceId) return c.json({ error: 'Missing required query param: resourceId' }, 400);
+        try {
+          const session = await controller.getSessionByResource?.(resourceId);
+          if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+          return c.json({ config: readOMConfig(session) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.put('/api/web/config/om/:role/model', async c => {
-    const role = c.req.param('role');
-    if (role !== 'observer' && role !== 'reflector') {
-      return c.json({ error: `Unknown OM role "${role}"` }, 400);
-    }
-    let body: { resourceId?: unknown; modelId?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
-    const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
-    if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
-    if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
-    try {
-      const session = await controller.getSessionByResource?.(resourceId);
-      if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-      const otherRole = role === 'observer' ? session.om.reflector : session.om.observer;
-      const otherRoleCurrentModelId = otherRole.modelId() ?? null;
-      await session.om[role].switchModel({ modelId });
-      persistOmRoleOverride(role, modelId, otherRoleCurrentModelId);
-      return c.json({ ok: true, config: readOMConfig(session) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/om/:role/model', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const role = c.req.param('role');
+        if (role !== 'observer' && role !== 'reflector') {
+          return c.json({ error: `Unknown OM role "${role}"` }, 400);
+        }
+        let body: { resourceId?: unknown; modelId?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
+        if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
+        if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
+        try {
+          const session = await controller.getSessionByResource?.(resourceId);
+          if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+          const otherRole = role === 'observer' ? session.om.reflector : session.om.observer;
+          const otherRoleCurrentModelId = otherRole.modelId() ?? null;
+          await session.om[role].switchModel({ modelId });
+          persistOmRoleOverride(role, modelId, otherRoleCurrentModelId);
+          return c.json({ ok: true, config: readOMConfig(session) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.put('/api/web/config/om/thresholds', async c => {
-    let body: { resourceId?: unknown; observationThreshold?: unknown; reflectionThreshold?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
-    if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
-    const observation =
-      typeof body.observationThreshold === 'number' && body.observationThreshold > 0
-        ? Math.round(body.observationThreshold)
-        : undefined;
-    const reflection =
-      typeof body.reflectionThreshold === 'number' && body.reflectionThreshold > 0
-        ? Math.round(body.reflectionThreshold)
-        : undefined;
-    if (observation === undefined && reflection === undefined) {
-      return c.json({ error: 'Provide observationThreshold and/or reflectionThreshold (positive numbers)' }, 400);
-    }
-    try {
-      const session = await controller.getSessionByResource?.(resourceId);
-      if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-      if (observation !== undefined) {
-        await session.state.set({ observationThreshold: observation });
-        await session.thread.setSetting({ key: 'observationThreshold', value: observation });
-        persistOmThreshold('observation', observation);
-      }
-      if (reflection !== undefined) {
-        await session.state.set({ reflectionThreshold: reflection });
-        await session.thread.setSetting({ key: 'reflectionThreshold', value: reflection });
-        persistOmThreshold('reflection', reflection);
-      }
-      return c.json({ ok: true, config: readOMConfig(session) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/om/thresholds', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        let body: { resourceId?: unknown; observationThreshold?: unknown; reflectionThreshold?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
+        const observation =
+          typeof body.observationThreshold === 'number' && body.observationThreshold > 0
+            ? Math.round(body.observationThreshold)
+            : undefined;
+        const reflection =
+          typeof body.reflectionThreshold === 'number' && body.reflectionThreshold > 0
+            ? Math.round(body.reflectionThreshold)
+            : undefined;
+        if (observation === undefined && reflection === undefined) {
+          return c.json({ error: 'Provide observationThreshold and/or reflectionThreshold (positive numbers)' }, 400);
+        }
+        try {
+          const session = await controller.getSessionByResource?.(resourceId);
+          if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+          if (observation !== undefined) {
+            await session.state.set({ observationThreshold: observation });
+            await session.thread.setSetting({ key: 'observationThreshold', value: observation });
+            persistOmThreshold('observation', observation);
+          }
+          if (reflection !== undefined) {
+            await session.state.set({ reflectionThreshold: reflection });
+            await session.thread.setSetting({ key: 'reflectionThreshold', value: reflection });
+            persistOmThreshold('reflection', reflection);
+          }
+          return c.json({ ok: true, config: readOMConfig(session) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
 
-  app.put('/api/web/config/om/observe-attachments', async c => {
-    let body: { resourceId?: unknown; value?: unknown };
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'Invalid JSON body' }, 400);
-    }
-    const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
-    if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
-    const raw = body.value;
-    const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
-    if (raw !== 'auto' && raw !== true && raw !== false) {
-      return c.json({ error: "value must be 'auto', true, or false" }, 400);
-    }
-    try {
-      const session = await controller.getSessionByResource?.(resourceId);
-      if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-      await session.state.set({ observeAttachments: value });
-      await session.thread.setSetting({ key: 'observeAttachments', value });
-      persistOmObserveAttachments(value);
-      return c.json({ ok: true, config: readOMConfig(session) });
-    } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-    }
-  });
+    registerApiRoute('/web/config/om/observe-attachments', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        let body: { resourceId?: unknown; value?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
+        if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
+        const raw = body.value;
+        const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
+        if (raw !== 'auto' && raw !== true && raw !== false) {
+          return c.json({ error: "value must be 'auto', true, or false" }, 400);
+        }
+        try {
+          const session = await controller.getSessionByResource?.(resourceId);
+          if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+          await session.state.set({ observeAttachments: value });
+          await session.thread.setSetting({ key: 'observeAttachments', value });
+          persistOmObserveAttachments(value);
+          return c.json({ ok: true, config: readOMConfig(session) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+  ];
 }

@@ -7,7 +7,7 @@ import { TEST_BASE_URL, renderHookWithProviders } from '../../../../e2e/web-ui/r
 import { useDirectoryListing } from '../use-fs';
 import { listing } from './fixtures/fs';
 
-const URL = `${TEST_BASE_URL}/api/web/fs/list`;
+const URL = `${TEST_BASE_URL}/web/fs/list`;
 
 describe('useDirectoryListing', () => {
   describe('when no path is provided', () => {

@@ -1,7 +1,7 @@
 import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -9,7 +9,7 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web
 import type { ModelPackInfo } from '../../../../../../shared/api/types';
 import { ModelPacksSection } from '../ModelPacksSection';
 
-const PACKS_URL = `${TEST_BASE_URL}/api/web/config/model-packs`;
+const PACKS_URL = `${TEST_BASE_URL}/web/config/model-packs`;
 const activateUrl = (id: string) => `${PACKS_URL}/${encodeURIComponent(id)}/activate`;
 const itemUrl = (id: string) => `${PACKS_URL}/${encodeURIComponent(id)}`;
 
@@ -34,6 +34,25 @@ const builtinPack: ModelPackInfo = {
 };
 
 describe('ModelPacksSection', () => {
+  describe('while packs are loading', () => {
+    it('renders a skeleton placeholder instead of loading text', async () => {
+      server.use(
+        http.get(PACKS_URL, async () => {
+          await delay(150);
+          return packsResponse([builtinPack]);
+        }),
+      );
+
+      renderWithProviders(<ModelPacksSection resourceId={RESOURCE_ID} models={models} />);
+
+      expect(await screen.findByRole('status', { name: 'Loading model packs' })).toBeInTheDocument();
+      expect(screen.queryByText(/Loading model packs/)).not.toBeInTheDocument();
+
+      expect(await screen.findByText('Builtin Pack')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Loading model packs' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('when packs load', () => {
     it('renders the available packs', async () => {
       server.use(http.get(PACKS_URL, () => packsResponse([builtinPack])));

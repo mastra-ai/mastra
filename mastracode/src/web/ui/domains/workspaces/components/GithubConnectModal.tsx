@@ -1,7 +1,9 @@
 import { useState } from 'react';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon, FolderIcon, LogoMark, SearchIcon } from '../../../ui/icons';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useGithubReposQuery } from '../hooks/useGithubRepos';
 import { useCreateGithubProjectMutation } from '../hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../services/github';
@@ -24,6 +26,7 @@ interface GithubConnectModalProps {
  * No clone happens here — the repo is materialized into its sandbox on open.
  */
 export function GithubConnectModal({ status, onProjectCreated, onClose }: GithubConnectModalProps) {
+  const { baseUrl } = useApiConfig();
   const connected = status.connected;
   const [query, setQuery] = useState('');
   const reposQuery = useGithubReposQuery(query || undefined, connected);
@@ -76,7 +79,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
             </p>
             <button
               className="inline-flex items-center justify-center rounded-lg bg-accent1 px-4 py-2 text-ui-sm font-medium text-black hover:bg-accent1/90"
-              onClick={connectGithub}
+              onClick={() => connectGithub(baseUrl)}
             >
               <span>Connect GitHub</span>
             </button>
@@ -102,7 +105,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               {loading ? (
-                <p className="m-0 text-ui-sm text-icon3">Loading repositories…</p>
+                <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-12 w-full rounded-xl" />
               ) : repos.length === 0 ? (
                 <p className="m-0 text-ui-sm text-icon3">No repositories found.</p>
               ) : (

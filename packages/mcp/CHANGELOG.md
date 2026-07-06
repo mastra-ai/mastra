@@ -1,5 +1,25 @@
 # @mastra/mcp
 
+## 1.13.1-alpha.0
+
+### Patch Changes
+
+- Fixed MCP client tools missing output schemas in tool listings. Fixes #18850. ([#18854](https://github.com/mastra-ai/mastra/pull/18854))
+
+  MCP tools that declare an `outputSchema` now expose that schema on the Mastra tool wrapper, so Studio and other consumers can document expected tool outputs.
+
+  Mastra does not re-validate MCP tool results. The MCP SDK still validates `structuredContent` via AJV. This keeps full `CallToolResult` envelopes and extra fields intact while making output shapes visible again.
+
+  ```typescript
+  const tools = await mcp.listTools();
+  const outputSchema = tools['weather_getForecast'].outputSchema?.['~standard'].jsonSchema.output({
+    target: 'draft-07',
+  });
+  ```
+
+- Updated dependencies [[`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964)]:
+  - @mastra/core@1.50.0-alpha.1
+
 ## 1.13.0
 
 ### Minor Changes

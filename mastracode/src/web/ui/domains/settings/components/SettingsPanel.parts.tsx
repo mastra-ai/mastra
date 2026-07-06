@@ -221,17 +221,19 @@ function ModelPicker({
     });
   }, [models, query]);
 
-  useEffect(() => {
-    if (open) {
-      setQuery('');
-      setActive(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
-
-  useEffect(() => {
+  // Open/close is an event, not a synchronization: reset search state in the
+  // handlers that trigger it instead of reacting via effects.
+  const openPicker = () => {
+    setQuery('');
     setActive(0);
-  }, [query]);
+    setOpen(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const updateQuery = (next: string) => {
+    setQuery(next);
+    setActive(0);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -281,7 +283,7 @@ function ModelPicker({
         className="w-full justify-between"
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => (open ? setOpen(false) : openPicker())}
       >
         <span className="truncate">{currentLabel}</span>
         <span aria-hidden>▾</span>
@@ -298,7 +300,7 @@ function ModelPicker({
               ref={inputRef}
               placeholder="Search models or providers…"
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={e => updateQuery(e.target.value)}
               onKeyDown={onKeyDown}
               aria-label="Search models"
             />

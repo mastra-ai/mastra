@@ -408,6 +408,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/longcat',
+          label: 'LongCat',
+        },
+        {
+          type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
         },

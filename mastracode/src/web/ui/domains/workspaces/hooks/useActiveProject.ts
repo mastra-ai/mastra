@@ -7,17 +7,15 @@ import { useEnsureResourceIdMutation, useProjectsQuery } from './useProjects';
 export function useActiveProject() {
   const { data: projects } = useProjectsQuery();
   const ensureResourceId = useEnsureResourceIdMutation();
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => loadActiveProjectId());
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => loadActiveProjectId());
+  // Derived: a selection pointing at a deleted project counts as no selection.
+  const activeProjectId =
+    selectedProjectId && projects.some(p => p.id === selectedProjectId) ? selectedProjectId : null;
   const activeProject = projects.find(p => p.id === activeProjectId) ?? null;
   const resourceId = activeProject?.resourceId ?? DEFAULT_RESOURCE_ID;
   const sessionEnabled = !!activeProject?.resourceId;
 
-  useEffect(() => {
-    if (activeProjectId && !projects.some(p => p.id === activeProjectId)) {
-      setActiveProjectId(null);
-    }
-  }, [activeProjectId, projects]);
-
+  // Persisting to localStorage is external-system sync; keep as an effect.
   useEffect(() => {
     saveActiveProjectId(activeProjectId);
   }, [activeProjectId]);
@@ -32,26 +30,25 @@ export function useActiveProject() {
 
   const selectProject = async (project: Project | null) => {
     if (!project) {
-      setActiveProjectId(null);
+      setSelectedProjectId(null);
       return;
     }
 
     if (!project.resourceId) {
       try {
         const filled = await ensureResourceId.mutateAsync(project);
-        setActiveProjectId(filled.id);
+        setSelectedProjectId(filled.id);
         return;
       } catch {
         // Resolution failed (path gone?); activate anyway with default scope.
       }
     }
-    setActiveProjectId(project.id);
+    setSelectedProjectId(project.id);
   };
 
   return {
     projects,
     activeProject,
-    activeProjectId,
     resourceId,
     sessionEnabled,
     selectProject,
