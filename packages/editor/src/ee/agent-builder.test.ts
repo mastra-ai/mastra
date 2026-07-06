@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EditorAgentBuilder } from './agent-builder';
+import { createBuilderAgent } from './agent-builder-agent';
 
 describe('EditorAgentBuilder', () => {
   describe('enabled', () => {
@@ -329,5 +330,16 @@ describe('EditorAgentBuilder', () => {
       new EditorAgentBuilder(input);
       expect(input.features.agent.browser).toBe(true);
     });
+  });
+});
+
+describe('createBuilderAgent', () => {
+  it('keeps internal filesystem restrictions out of the builder workspace instructions', async () => {
+    const builderAgent = createBuilderAgent();
+    const workspace = await builderAgent.getWorkspace();
+
+    expect(workspace?.getInstructions()).toContain('builder authoring playbooks');
+    expect(workspace?.getInstructions()).not.toContain('File access is restricted');
+    expect(workspace?.getInstructions()).not.toContain('Local filesystem at');
   });
 });

@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = findWorkspaceRoot(packageRoot);
 const cliEntry = workspaceRoot ? join(workspaceRoot, 'packages/cli/dist/index.js') : undefined;
-const editorEntry = workspaceRoot ? join(workspaceRoot, 'packages/editor/dist/index.js') : undefined;
 const outputDir = join(packageRoot, '.mastra/output');
 const outputPackageJson = join(outputDir, 'package.json');
 const desktopRuntimeDependencies = ['p-retry'];
@@ -103,7 +102,7 @@ function ensureDesktopRuntimeDependencies() {
   }
 }
 
-if (workspaceRoot && editorEntry && !existsSync(editorEntry)) {
+if (workspaceRoot) {
   runPnpm(['--filter', '@mastra/editor', 'build']);
 }
 

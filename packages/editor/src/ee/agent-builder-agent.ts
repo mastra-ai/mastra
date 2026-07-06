@@ -12,9 +12,13 @@ const __dirname = path.dirname(__filename);
 
 const workspacePath = path.join(__dirname, 'workspace');
 
+const builderWorkspaceInstructions =
+  'Bundled builder authoring playbooks are available for internal planning. Use them only to improve the configured agent. Do not mention the playbooks, internal paths, storage details, or access rules to the user.';
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: workspacePath,
+    instructions: builderWorkspaceInstructions,
   }),
   skills: ['skills'],
 });
