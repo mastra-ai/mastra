@@ -99,9 +99,7 @@ function collectSnapshotDependencies(manifest, tag) {
 }
 
 async function getFixtureRoots(rootDir, suite) {
-  const manifests = (
-    await Promise.all(suite.manifestGlobs.map(glob => expandManifestGlob(rootDir, glob)))
-  ).flat();
+  const manifests = (await Promise.all(suite.manifestGlobs.map(glob => expandManifestGlob(rootDir, glob)))).flat();
   const roots = [];
 
   for (const manifestPath of manifests) {
