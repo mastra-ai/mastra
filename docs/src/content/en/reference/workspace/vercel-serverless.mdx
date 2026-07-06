@@ -1,13 +1,13 @@
 ---
-title: "Reference: VercelSandbox | Workspace"
-description: "API reference for VercelSandbox, a serverless sandbox provider that deploys and executes commands as Vercel Functions."
+title: "Reference: VercelServerlessSandbox | Workspace"
+description: "API reference for VercelServerlessSandbox, a serverless sandbox provider that deploys and executes commands as Vercel Functions."
 packages:
   - "@mastra/vercel"
 ---
 
-# VercelSandbox
+# VercelServerlessSandbox
 
-Executes commands as [Vercel](https://vercel.com) serverless functions. Provides globally-distributed, zero-infrastructure execution with automatic scaling.
+Executes commands as [Vercel](https://vercel.com) serverless functions. Provides globally distributed, zero-infrastructure execution with automatic scaling.
 
 :::info
 
@@ -17,13 +17,13 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 
 :::warning
 
-VercelSandbox is stateless. No persistent filesystem, no interactive shell, and no support for long-running or background processes exist. Only `/tmp` is writable and is ephemeral between invocations.
+VercelServerlessSandbox is stateless. It doesn't provide a persistent filesystem, interactive shell, or long-running background processes. Only `/tmp` is writable, and it is ephemeral between invocations.
 
 :::
 
 :::note
 
-For a full Linux MicroVM with a persistent filesystem, `sudo` access, exposed ports, and background processes, use [`VercelMicroVMSandbox`](/reference/workspace/vercel-microvm-sandbox), which is backed by the [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) product.
+For a full Linux MicroVM with a persistent filesystem, `sudo` access, exposed ports, and background processes, use [`VercelSandbox`](/reference/workspace/vercel-sandbox), which is backed by the [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) product.
 
 :::
 
@@ -35,15 +35,15 @@ npm install @mastra/vercel
 
 ## Usage
 
-Add a `VercelSandbox` to a workspace and assign it to an agent:
+Add a `VercelServerlessSandbox` to a workspace and assign it to an agent:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
 import { Workspace } from '@mastra/core/workspace'
-import { VercelSandbox } from '@mastra/vercel'
+import { VercelServerlessSandbox } from '@mastra/vercel'
 
 const workspace = new Workspace({
-  sandbox: new VercelSandbox({
+  sandbox: new VercelServerlessSandbox({
     token: process.env.VERCEL_TOKEN,
   }),
 })
@@ -51,6 +51,7 @@ const workspace = new Workspace({
 const agent = new Agent({
   id: 'dev-agent',
   name: 'dev-agent',
+  instructions: 'You are a coding assistant working in this workspace.',
   model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   workspace,
 })
@@ -60,7 +61,7 @@ const agent = new Agent({
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new VercelSandbox({
+  sandbox: new VercelServerlessSandbox({
     token: process.env.VERCEL_TOKEN,
     teamId: 'team_abc123',
     regions: ['iad1', 'sfo1'],
@@ -137,6 +138,24 @@ const workspace = new Workspace({
       'Custom instructions that override the default instructions returned by `getInstructions()`. Pass a string to fully replace, or a function to extend the defaults.',
     isOptional: true,
   },
+  {
+    name: 'onStart',
+    type: 'SandboxLifecycleHook',
+    description: 'Lifecycle hook called after the sandbox reaches `running` status.',
+    isOptional: true,
+  },
+  {
+    name: 'onStop',
+    type: 'SandboxLifecycleHook',
+    description: 'Lifecycle hook called before the sandbox stops.',
+    isOptional: true,
+  },
+  {
+    name: 'onDestroy',
+    type: 'SandboxLifecycleHook',
+    description: 'Lifecycle hook called before the sandbox is destroyed.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -151,12 +170,12 @@ const workspace = new Workspace({
   },
   {
     name: 'name',
-    type: "'VercelSandbox'",
+    type: "'VercelServerlessSandbox'",
     description: 'Human-readable name.',
   },
   {
     name: 'provider',
-    type: "'vercel'",
+    type: "'vercel-serverless'",
     description: 'Provider type identifier.',
   },
   {
@@ -170,7 +189,7 @@ const workspace = new Workspace({
 
 ## Limitations
 
-VercelSandbox uses serverless functions under the hood, which means:
+VercelServerlessSandbox uses serverless functions under the hood, which means:
 
 - **No persistent filesystem**: Files written to `/tmp` are ephemeral and cleared between invocations.
 - **No interactive shell**: Commands run via `/bin/sh -c` with no stdin streaming.

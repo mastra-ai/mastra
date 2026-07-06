@@ -5,6 +5,10 @@
  * routes, which are behind the WorkOS auth gate and scoped to the logged-in
  * user. The browser never sees installation tokens — those live only inside the
  * server and the cloud sandbox.
+ *
+ * Every helper takes the API base URL injected by `ApiConfigProvider` (empty
+ * string when served same-origin) so a frontend dev server on another port
+ * still reaches the Mastra server — same pattern as the shared API client.
  */
 
 import type { Project } from './projects';
@@ -44,9 +48,12 @@ export interface GithubRepo {
  * feature. A 401 is reported distinctly via `authRequired` so the SPA can prompt
  * re-login instead of treating the feature as disabled.
  */
-export async function fetchGithubStatus(): Promise<GithubStatus> {
+export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> {
   try {
-    const res = await fetch('/web/github/status', { headers: { Accept: 'application/json' }, credentials: 'include' });
+    const res = await fetch(`${baseUrl}/web/github/status`, {
+      headers: { Accept: 'application/json' },
+      credentials: 'include',
+    });
     if (res.status === 401) {
       return { enabled: false, connected: false, installations: [], authRequired: true };
     }
@@ -58,13 +65,13 @@ export async function fetchGithubStatus(): Promise<GithubStatus> {
 }
 
 /** Begin the GitHub App install/connect flow (full-page redirect). */
-export function connectGithub(): void {
-  window.location.assign('/auth/github/connect');
+export function connectGithub(baseUrl: string): void {
+  window.location.assign(`${baseUrl}/auth/github/connect`);
 }
 
 /** List repos across the user's installations, optionally filtered by query. */
-export async function listGithubRepos(query?: string): Promise<GithubRepo[]> {
-  const url = query ? `/web/github/repos?q=${encodeURIComponent(query)}` : '/web/github/repos';
+export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
+  const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;
   const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (!res.ok) throw new Error(`Failed to list repos (${res.status})`);
   const body = (await res.json()) as { repos: GithubRepo[] };
@@ -75,8 +82,8 @@ export async function listGithubRepos(query?: string): Promise<GithubRepo[]> {
  * Create a project from a repo. The server persists a `github_projects` row
  * (no sandbox, no clone yet) and returns a `Project` payload of `source: github`.
  */
-export async function createProjectFromRepo(repo: GithubRepo): Promise<Project> {
-  const res = await fetch('/web/github/projects', {
+export async function createProjectFromRepo(baseUrl: string, repo: GithubRepo): Promise<Project> {
+  const res = await fetch(`${baseUrl}/web/github/projects`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json' },
@@ -114,10 +121,11 @@ export interface PrepareProgress {
  * "sandbox not configured" distinctly.
  */
 export async function ensureRepoMaterialized(
+  baseUrl: string,
   githubProjectId: string,
   onProgress?: (event: PrepareProgress) => void,
 ): Promise<MaterializeResult> {
-  const res = await fetch(`/web/github/projects/${encodeURIComponent(githubProjectId)}/ensure`, {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/ensure`, {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'text/event-stream' },
@@ -220,8 +228,13 @@ export interface GitOpError extends Error {
  * surfacing `error`/`message` codes on failure (and `authRequired` for 401) so
  * callers can react without re-implementing the parsing dance each time.
  */
-async function postProjectGitOp<T>(githubProjectId: string, action: string, payload: unknown): Promise<T> {
-  const res = await fetch(`/web/github/projects/${encodeURIComponent(githubProjectId)}/${action}`, {
+async function postProjectGitOp<T>(
+  baseUrl: string,
+  githubProjectId: string,
+  action: string,
+  payload: unknown,
+): Promise<T> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/${action}`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
@@ -260,11 +273,12 @@ export interface WorktreeResult {
  * branch server-side when omitted.
  */
 export async function createWorktree(
+  baseUrl: string,
   githubProjectId: string,
   branch: string,
   baseBranch?: string,
 ): Promise<WorktreeResult> {
-  return postProjectGitOp<WorktreeResult>(githubProjectId, 'worktree', { branch, baseBranch });
+  return postProjectGitOp<WorktreeResult>(baseUrl, githubProjectId, 'worktree', { branch, baseBranch });
 }
 
 export interface CommitResult {
@@ -277,11 +291,12 @@ export interface CommitResult {
  * base checkout. Resolves with `committed: false` when there was nothing to commit.
  */
 export async function commitChanges(
+  baseUrl: string,
   githubProjectId: string,
   message: string,
   worktreePath?: string,
 ): Promise<CommitResult> {
-  return postProjectGitOp<CommitResult>(githubProjectId, 'commit', { message, worktreePath });
+  return postProjectGitOp<CommitResult>(baseUrl, githubProjectId, 'commit', { message, worktreePath });
 }
 
 export interface PushResult {
@@ -290,8 +305,13 @@ export interface PushResult {
 }
 
 /** Push a branch back to GitHub from inside the sandbox (token minted server-side). */
-export async function pushBranch(githubProjectId: string, branch: string, worktreePath?: string): Promise<PushResult> {
-  return postProjectGitOp<PushResult>(githubProjectId, 'push', { branch, worktreePath });
+export async function pushBranch(
+  baseUrl: string,
+  githubProjectId: string,
+  branch: string,
+  worktreePath?: string,
+): Promise<PushResult> {
+  return postProjectGitOp<PushResult>(baseUrl, githubProjectId, 'push', { branch, worktreePath });
 }
 
 export interface PullRequestResult {
@@ -300,8 +320,9 @@ export interface PullRequestResult {
 
 /** Open a pull request via the sandbox `gh` CLI. `base` defaults to the project default branch. */
 export async function openPullRequest(
+  baseUrl: string,
   githubProjectId: string,
   args: { branch: string; title: string; body?: string; base?: string; worktreePath?: string },
 ): Promise<PullRequestResult> {
-  return postProjectGitOp<PullRequestResult>(githubProjectId, 'pr', args);
+  return postProjectGitOp<PullRequestResult>(baseUrl, githubProjectId, 'pr', args);
 }

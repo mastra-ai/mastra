@@ -386,3 +386,61 @@ export async function discoverFsAgents(
 
   return discovered;
 }
+
+/**
+ * A file-system routed workflow file discovered under `<mastraDir>/workflows/`.
+ * All paths are absolute and slash-normalized so they can be embedded into
+ * generated module source on any platform.
+ */
+export interface DiscoveredFsWorkflow {
+  /** Workflow key derived from the filename (without extension). */
+  key: string;
+  /** Absolute, slash-normalized path to the workflow module. */
+  path: string;
+}
+
+/**
+ * Scan `<mastraDir>/workflows/` for file-system routed workflow modules. Only
+ * files whose source contains an `export default` are treated as fs-routed
+ * workflows — this convention distinguishes them from workflow files that are
+ * manually imported and registered programmatically. Returns descriptors with
+ * absolute, slash-normalized paths ready for codegen. Performs no module
+ * evaluation — only filesystem and source-text inspection.
+ */
+export async function discoverFsWorkflows(mastraDir: string): Promise<DiscoveredFsWorkflow[]> {
+  const workflowsDir = join(mastraDir, 'workflows');
+  if (!(await exists(workflowsDir))) {
+    return [];
+  }
+
+  let entries: string[];
+  try {
+    entries = await readdir(workflowsDir);
+  } catch {
+    return [];
+  }
+
+  const discovered: DiscoveredFsWorkflow[] = [];
+  for (const basename of entries.sort()) {
+    if (isTestFile(basename)) {
+      continue;
+    }
+    if (!TOOL_EXTENSIONS.some(ext => basename.endsWith(ext))) {
+      continue;
+    }
+    const path = join(workflowsDir, basename);
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink() || stats.isDirectory()) {
+      continue;
+    }
+    // Convention: only files with `export default` are fs-routed workflows.
+    // Files using named exports are assumed to be manually imported.
+    const source = await readFile(path, 'utf-8');
+    if (!/\bexport\s+default\b/.test(source)) {
+      continue;
+    }
+    discovered.push({ key: toolKey(basename), path: slash(path) });
+  }
+
+  return discovered;
+}

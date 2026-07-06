@@ -5,8 +5,14 @@
  * - `fetchAuthState()` reads `/auth/me` to decide whether to show the splash
  *   (unauthenticated) or the app, and to render identity / sign-out. Degrades
  *   gracefully to "auth disabled" when the route is absent.
- * - `redirectToLogin()` / `loginUrl()` send the user to the hosted WorkOS login.
+ * - `loginUrl()` / `redirectToLogin()` build/navigate to the hosted WorkOS
+ *   login URL (used by the /signin page).
  * - `redirectToLogout()` / `logoutUrl()` send the user through the server logout route.
+ *
+ * Every helper takes the API base URL injected by `ApiConfigProvider` (empty
+ * string when the app is served same-origin) so the frontend dev server on a
+ * different port still reaches the Mastra server — same pattern as the shared
+ * API client and `use-fs`.
  */
 
 export interface WebAuthState {
@@ -17,37 +23,37 @@ export interface WebAuthState {
 }
 
 /**
- * Build the hosted-login URL, preserving the current location so the user is
- * returned here after authenticating. Used by the splash "Sign in" button.
+ * Build the hosted-login URL. `returnTo` is where the server sends the user
+ * after authenticating; it defaults to the current location so contexts that
+ * are not `/signin` (which would loop back to itself) round-trip in place.
  */
-export function loginUrl(): string {
-  const returnTo = window.location.pathname + window.location.search;
-  return `/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
+export function loginUrl(
+  baseUrl: string,
+  returnTo: string = window.location.pathname + window.location.search,
+): string {
+  return `${baseUrl}/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
-/**
- * Redirect the browser to the hosted login. Called from the splash screen when
- * the user clicks "Sign in".
- */
-export function redirectToLogin(): void {
-  window.location.assign(loginUrl());
+/** Full-page navigation to the hosted login (see `loginUrl` for `returnTo`). */
+export function redirectToLogin(baseUrl: string, returnTo?: string): void {
+  window.location.assign(loginUrl(baseUrl, returnTo));
 }
 
-export function logoutUrl(): string {
-  return '/auth/logout';
+export function logoutUrl(baseUrl: string): string {
+  return `${baseUrl}/auth/logout`;
 }
 
-export function redirectToLogout(): void {
-  window.location.assign(logoutUrl());
+export function redirectToLogout(baseUrl: string): void {
+  window.location.assign(logoutUrl(baseUrl));
 }
 
 /**
  * Fetch the current auth state from `/auth/me`. When the route is missing (auth
  * disabled), reports `authEnabled: false` so the UI hides all auth affordances.
  */
-export async function fetchAuthState(): Promise<WebAuthState> {
+export async function fetchAuthState(baseUrl: string): Promise<WebAuthState> {
   try {
-    const res = await fetch('/auth/me', { headers: { Accept: 'application/json' }, credentials: 'include' });
+    const res = await fetch(`${baseUrl}/auth/me`, { headers: { Accept: 'application/json' }, credentials: 'include' });
     if (res.status === 404) {
       return { authEnabled: false, authenticated: false };
     }

@@ -1,5 +1,36 @@
 # @mastra/deployer
 
+## 1.50.0-alpha.2
+
+### Minor Changes
+
+- Added file-system-routed workflows support. Workflows placed in `workflows/*.ts` under the mastra directory are now auto-discovered and registered during `mastra dev` / `mastra build`, matching the existing file-based agents convention. Code-registered workflows win on name collisions. ([#18883](https://github.com/mastra-ai/mastra/pull/18883))
+
+  ```ts
+  // src/mastra/workflows/onboarding.ts
+  import { createWorkflow } from '@mastra/core/workflows';
+
+  export default createWorkflow({ id: 'onboarding' /* ...steps */ });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e)]:
+  - @mastra/core@1.50.0-alpha.2
+  - @mastra/server@1.50.0-alpha.2
+
+## 1.50.0-alpha.1
+
+### Patch Changes
+
+- Fixed Studio HTML config injection so platform environment values are escaped before they are embedded in served or deployed `index.html` files. This keeps organization IDs, project IDs, observability endpoints and telemetry flags intact when they contain quotes, angle brackets, newlines or `$` sequences, and exposes `escapeStudioHtmlValue` from `@mastra/deployer/build` for the shared injection paths. ([#18812](https://github.com/mastra-ai/mastra/pull/18812))
+
+- Hardened several string-parsing code paths against regular-expression denial of service (ReDoS). Path normalization, URL trimming, LLM token stripping, and observation parsing now use linear-time string scanning instead of regexes that could back-track polynomially on adversarial input. No behavior changes. ([#18801](https://github.com/mastra-ai/mastra/pull/18801))
+
+- Updated dependencies [[`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964)]:
+  - @mastra/core@1.50.0-alpha.1
+  - @mastra/server@1.50.0-alpha.1
+
 ## 1.50.0-alpha.0
 
 ### Patch Changes
