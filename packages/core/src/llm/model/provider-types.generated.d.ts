@@ -245,12 +245,12 @@ export type ProviderModelsMap = {
   readonly stackit: readonly [
     'Qwen/Qwen3-VL-235B-A22B-Instruct-FP8',
     'Qwen/Qwen3-VL-Embedding-8B',
+    'Qwen/Qwen3.6-27B',
     'cortecs/Llama-3.3-70B-Instruct-FP8-Dynamic',
     'google/gemma-3-27b-it',
     'intfloat/e5-mistral-7b-instruct',
-    'neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8',
-    'neuralmagic/Mistral-Nemo-Instruct-2407-FP8',
     'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
   ];
   readonly vercel: readonly [
     'alibaba/qwen-3-14b',
