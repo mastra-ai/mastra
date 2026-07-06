@@ -60,7 +60,10 @@ const getPartKey = (part: RuntimePart, index: number): string => {
     case 'text':
       // Intrinsic cast: the `'text'`-narrowed member is `(v4 text part) | MastraTextPart`;
       // only `MastraTextPart` carries `textId`, so this is an optional structural read.
-      return (part as { textId?: string }).textId ?? `text-${index}`;
+      // Include index so two segments with the same textId (e.g. DeepSeek reuses txt-0)
+      // get distinct keys after interleaved tool calls.
+      const textId = (part as { textId?: string }).textId;
+      return textId ? `${textId}-${index}` : `text-${index}`;
     case 'reasoning':
       // Intrinsic cast: same as `textId` — only the Mastra reasoning member has `reasoningId`.
       return (part as { reasoningId?: string }).reasoningId ?? `reasoning-${index}`;
