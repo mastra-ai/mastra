@@ -51,13 +51,21 @@ const parts: MastraDBMessage['content']['parts'] = [{ type: 'data-signal', data 
 return { ...message, role: 'assistant', content: { ...message.content, parts } };
 
 // Tests: typed factory, query generics, guards, and `implements`
-const signalMessage = (id: string, type: string): MastraDBMessage => ({ id, role: 'signal', type, createdAt: new Date(), content: { format: 2, parts: [] } });
+const signalMessage = (id: string, type: string): MastraDBMessage => ({
+  id,
+  role: 'signal',
+  type,
+  createdAt: new Date(),
+  content: { format: 2, parts: [] },
+});
 const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Message');
 const el = document.querySelector<HTMLElement>('[data-x]');
 if (!el) throw new Error('missing element');
-class MockIO implements IntersectionObserver { /* real members */ }
+class MockIO implements IntersectionObserver {
+  /* real members */
+}
 ```
 
-**Reviewer smell:** any ` as ` in a diff (except `as const`). A cast in a test is not
+**Reviewer smell:** any `as` in a diff (except `as const`). A cast in a test is not
 a shortcut — it is the same defect as a cast in production, in the one place no one
 looks.
