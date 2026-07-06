@@ -1,5 +1,7 @@
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
+import { dataListStickyStartStyles } from './shared';
+import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
@@ -12,21 +14,29 @@ export type DataListTopCellProps = {
    * when the cell wraps a labelable control (e.g. a select-all Checkbox).
    */
   as?: ElementType;
+  /** Pins the top cell to the horizontal start edge while the list scrolls sideways. */
+  sticky?: DataListSticky;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className' | 'ref'>;
 
 export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(
-  ({ children, className, as, ...rest }, ref) => {
+  ({ children, className, as, sticky, ...rest }, ref) => {
     const Component = as || 'span';
+    const isText = typeof children === 'string' || typeof children === 'number';
     return (
       <Component
         ref={ref}
         className={cn(
-          'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
+          'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center whitespace-nowrap text-neutral2 font-semibold tracking-tight text-ui-sm',
+          sticky === 'start' && dataListStickyStartStyles,
+          sticky === 'start' && '-ml-5 -mr-4 w-auto max-w-none rounded-tl-xl rounded-bl-md pl-5 pr-4',
+          sticky === 'start' && 'z-20 bg-[var(--data-list-sticky-header-background)]',
           className,
         )}
         {...rest}
       >
-        {children}
+        {/* Plain string/number titles truncate with an ellipsis; element children
+            (icons, smart long/short labels, checkboxes) render as-is. */}
+        {isText ? <span className="min-w-0 truncate">{children}</span> : children}
       </Component>
     );
   },
@@ -57,7 +67,7 @@ export type DataListTopCellSmartProps = {
   className?: string;
 };
 
-const breakpointClasses: Record<string, { show: string; hide: string }> = {
+const breakpointClasses: Record<'sm' | 'md' | 'lg' | 'xl' | '2xl', { show: string; hide: string }> = {
   sm: { show: 'hidden sm:inline-flex', hide: 'inline-flex sm:hidden' },
   md: { show: 'hidden md:inline-flex', hide: 'inline-flex md:hidden' },
   lg: { show: 'hidden lg:inline-flex', hide: 'inline-flex lg:hidden' },

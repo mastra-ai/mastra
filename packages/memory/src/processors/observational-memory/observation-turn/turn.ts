@@ -58,6 +58,9 @@ export class ObservationTurn {
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
 
+  /** Optional agent that owns this processor turn. */
+  agent?: ProcessorContext['agent'];
+
   /** Optional signal sender for processor-originated notifications. */
   sendSignal?: (
     signal: Parameters<NonNullable<ProcessorContext['sendSignal']>>[0],
@@ -74,6 +77,7 @@ export class ObservationTurn {
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    agent?: ProcessorContext['agent'];
     sendSignal?: ProcessorContext['sendSignal'];
     requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
@@ -83,6 +87,7 @@ export class ObservationTurn {
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
+    this.agent = opts.agent;
     this.sendSignal = opts.sendSignal;
     this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
@@ -207,6 +212,7 @@ export class ObservationTurn {
             messages: unobservedMessages,
             record,
             writer: this.writer,
+            agent: this.agent,
             sendSignal: this.sendSignal,
             requestContext: this.requestContext,
             currentModel: this.actorModelContext,

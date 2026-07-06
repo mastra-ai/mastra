@@ -1,11 +1,8 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "33.0.0",
+  "version": "39.0.1-alpha.2",
   "description": "Mastra Playground components",
-  "main": "dist/index.umd.js",
-  "module": "dist/index.es.js",
-  "types": "dist/index.d.ts",
   "sideEffects": [
     "**/*.css"
   ],
@@ -15,13 +12,7 @@
     "CHANGELOG.md"
   ],
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.es.js"
-      }
-    },
-    "./style.css": "./dist/index.css",
+    "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
@@ -33,14 +24,76 @@
         "default": "./dist/tokens.cjs.js"
       }
     },
-    "./utils": {
+    "./utils/*": {
       "import": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.es.js"
+        "types": "./dist/utils/*.d.ts",
+        "default": "./dist/utils/*.es.js"
       },
       "require": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.cjs.js"
+        "types": "./dist/utils/*.d.ts",
+        "default": "./dist/utils/*.cjs.js"
+      }
+    },
+    "./domains/*": {
+      "import": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.es.js"
+      },
+      "require": {
+        "types": "./dist/domains/*.d.ts",
+        "default": "./dist/domains/*.cjs.js"
+      }
+    },
+    "./ee/*": {
+      "import": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.es.js"
+      },
+      "require": {
+        "types": "./dist/ee/*.d.ts",
+        "default": "./dist/ee/*.cjs.js"
+      }
+    },
+    "./primitives/*": {
+      "import": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.es.js"
+      },
+      "require": {
+        "types": "./dist/primitives/*.d.ts",
+        "default": "./dist/primitives/*.cjs.js"
+      }
+    },
+    "./resize/*": {
+      "import": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.es.js"
+      },
+      "require": {
+        "types": "./dist/resize/*.d.ts",
+        "default": "./dist/resize/*.cjs.js"
+      }
+    },
+    "./store/*": {
+      "import": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.es.js"
+      },
+      "require": {
+        "types": "./dist/store/*.d.ts",
+        "default": "./dist/store/*.cjs.js"
+      }
+    },
+    "./hooks/*": {
+      "import": {
+        "types": "./dist/hooks/*.d.ts",
+        "default": "./dist/hooks/*.es.js"
+      }
+    },
+    "./icons/*": {
+      "import": {
+        "types": "./dist/icons/*.d.ts",
+        "default": "./dist/icons/*.es.js"
       }
     },
     "./components/*": {
@@ -103,6 +156,7 @@
   "peerDependencies": {
     "@mastra/client-js": "workspace:^",
     "@mastra/core": ">=1.7.1-0 <2.0.0-0",
+    "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "lucide-react": "^0.474.0",
@@ -114,6 +168,7 @@
     "@internal/lint": "workspace:*",
     "@mastra/client-js": "workspace:^",
     "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
     "@storybook/addon-a11y": "^10.4.1",
     "@storybook/addon-docs": "^10.4.1",

@@ -1,6 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { CallSettings, StepResult, ToolChoice } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
@@ -13,7 +14,7 @@ import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
-import type { DataChunkType, LanguageModelUsage, LLMStepResult } from '../stream/types';
+import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
@@ -58,6 +59,8 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
+  /** Real agent instance when processors are running inside an agent execution. Processor-only workflow contexts may omit it. */
+  agent?: Agent<any, any, any, any>;
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
@@ -484,6 +487,13 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   stepNumber: number;
   /** The finish reason from the LLM (stop, tool-use, length, etc.) */
   finishReason?: string;
+  /**
+   * Provider-specific metadata for the step that just finished (e.g. AWS
+   * Bedrock guardrail trace under `providerMetadata.bedrock.trace.guardrail`).
+   * Present whenever the underlying model step produced it — including
+   * `content-filter` blocks, for which `steps` is empty.
+   */
+  providerMetadata?: ProviderMetadata;
   /** Tool calls made in this step (if any) */
   toolCalls?: ToolCallInfo[];
   /** Generated text from this step */
@@ -829,13 +839,18 @@ export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
 export {
+  isBadRequestError,
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
+  type StreamErrorRetryDelayMs,
   type StreamErrorRetryMatcher,
+  type StreamErrorRetryMatcherConfig,
+  type StreamErrorRetryMatcherEntry,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
-export { ProcessorState, ProcessorRunner, createProcessorSendSignal } from './runner';
+export { ProcessorState, ProcessorRunner } from './runner';
+export { createProcessorSendSignal } from './send-signal';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {

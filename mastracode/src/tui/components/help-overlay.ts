@@ -5,7 +5,7 @@
 import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
 
 export interface HelpTextOptions {
-  /** Number of available harness modes (mode commands shown when > 1) */
+  /** Number of available controller modes (mode commands shown when > 1) */
   modes: number;
   /** User-defined custom slash commands */
   customSlashCommands: SlashCommandMetadata[];
@@ -50,6 +50,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
     { key: '/api-keys', description: 'Manage provider API keys' },
+    { key: '/plugins', description: 'Manage Mastra Code plugins' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },

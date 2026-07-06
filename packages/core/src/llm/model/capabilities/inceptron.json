@@ -1,3 +1,10 @@
 {
-  "attachment": ["moonshotai/Kimi-K2.6", "nvidia/llama-3.3-70b-instruct-fp8"]
+  "attachment": ["moonshotai/Kimi-K2.6", "moonshotai/Kimi-K2.6-Fast", "moonshotai/Kimi-K2.7-Code"],
+  "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.6-Fast",
+    "zai-org/GLM-5.1-FP8",
+    "zai-org/GLM-5.2"
+  ]
 }

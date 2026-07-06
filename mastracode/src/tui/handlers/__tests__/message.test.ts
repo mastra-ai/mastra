@@ -1,5 +1,5 @@
 import { Container, Text } from '@earendil-works/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
@@ -8,6 +8,7 @@ import { NotificationSummaryComponent } from '../../components/notification-summ
 import { NotificationComponent } from '../../components/notification.js';
 import { ReactiveSignalComponent } from '../../components/reactive-signal.js';
 import { StateSignalComponent } from '../../components/state-signal.js';
+import { SubagentExecutionComponent } from '../../components/subagent-execution.js';
 import { SystemReminderComponent } from '../../components/system-reminder.js';
 import { TemporalGapComponent } from '../../components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from '../../components/tool-execution-enhanced.js';
@@ -21,12 +22,12 @@ function visibleChildren(state: TUIState) {
   return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
 }
 
-function createAssistantMessage(content: HarnessMessage['content']): HarnessMessage {
+function createAssistantMessage(content: AgentControllerMessage['content']): AgentControllerMessage {
   return {
     id: 'msg-1',
     role: 'assistant',
     content,
-  } as HarnessMessage;
+  } as AgentControllerMessage;
 }
 
 describe('handleMessageUpdate system reminders', () => {
@@ -51,9 +52,8 @@ describe('handleMessageUpdate system reminders', () => {
       hideThinkingBlock: false,
       toolOutputExpanded: false,
       pendingSignalMessageComponentsById: new Map(),
-      harness: {
-        getDisplayState: () => ({ isRunning: true }),
-      },
+      session: { displayState: { get: () => ({ isRunning: true }) } },
+      controller: { session: { displayState: { get: () => ({ isRunning: true }) } } },
     } as unknown as TUIState;
 
     ctx = {
@@ -69,7 +69,7 @@ describe('handleMessageUpdate system reminders', () => {
       id: 'user-1',
       role: 'user',
       content: [{ type: 'text', text: 'hello' }],
-    } as HarnessMessage);
+    } as AgentControllerMessage);
 
     handleMessageUpdate(ctx, createAssistantMessage([{ type: 'text', text: 'assistant text' }]));
 
@@ -141,7 +141,7 @@ describe('handleMessageUpdate system reminders', () => {
       id: 'user-1',
       role: 'user',
       content: [{ type: 'text', text: 'hello' }],
-    } as HarnessMessage);
+    } as AgentControllerMessage);
     state.streamingComponent = new AssistantMessageComponent(undefined, false);
     state.chatContainer.addChild(state.streamingComponent);
 
@@ -170,7 +170,7 @@ describe('handleMessageUpdate system reminders', () => {
       id: 'user-1',
       role: 'user',
       content: [{ type: 'text', text: 'open the browser' }],
-    } as HarnessMessage);
+    } as AgentControllerMessage);
     state.streamingComponent = new AssistantMessageComponent(undefined, false);
     state.chatContainer.addChild(state.streamingComponent);
 
@@ -311,6 +311,38 @@ describe('handleMessageUpdate system reminders', () => {
     expect(Math.max(...renderedLines.map(line => line.length))).toBeLessThanOrEqual(80);
   });
 
+  it('splits parent assistant text around static plugin subagent renderers', () => {
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        { type: 'text', text: 'before plugin' },
+        {
+          type: 'tool_call',
+          id: 'tool-1',
+          name: 'mastra_expert',
+          args: { question: 'Explain the agent loop' },
+        } as never,
+        { type: 'text', text: 'after plugin' },
+      ]),
+    );
+
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(3);
+    expect(children[0]).toBeInstanceOf(AssistantMessageComponent);
+    expect(children[1]).toBeInstanceOf(SubagentExecutionComponent);
+    expect(children[2]).toBeInstanceOf(AssistantMessageComponent);
+    expect(stripAnsi((children[0] as AssistantMessageComponent).render(100).join('\n'))).toContain('before plugin');
+    expect(stripAnsi((children[1] as SubagentExecutionComponent).render(100).join('\n'))).toContain(
+      'Explain the agent loop',
+    );
+    expect(stripAnsi((children[2] as AssistantMessageComponent).render(100).join('\n'))).toContain('after plugin');
+    expect(state.streamingComponent).toBe(children[2]);
+  });
+
   it('deduplicates repeated streamed reminders within the same assistant run', () => {
     const message = createAssistantMessage([
       {
@@ -355,7 +387,7 @@ describe('handleMessageUpdate system reminders', () => {
     const secondMessage = {
       ...firstMessage,
       id: 'msg-2',
-    } as HarnessMessage;
+    } as AgentControllerMessage;
 
     handleMessageUpdate(ctx, firstMessage);
     expect(state.chatContainer.children).toHaveLength(1);
@@ -379,7 +411,7 @@ describe('handleMessageUpdate system reminders', () => {
       id: 'signal-1',
       role: 'user',
       content: [{ type: 'text', text: 'follow up' }],
-    } as HarnessMessage);
+    } as AgentControllerMessage);
 
     let children = visibleChildren(state);
     expect(children[0]).toBe(streamingMessage);
@@ -515,7 +547,7 @@ describe('handleMessageUpdate system reminders', () => {
       stopReason: 'error',
       errorMessage: 'Tool execution failed: permission denied',
       createdAt: new Date(),
-    } as HarnessMessage);
+    } as AgentControllerMessage);
 
     expect(state.pendingTools.size).toBe(0);
     const output = stripAnsi((tool as ToolExecutionComponentEnhanced).render(100).join('\n'));

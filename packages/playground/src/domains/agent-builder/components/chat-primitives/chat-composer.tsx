@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowUpIcon, Loader2 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef } from 'react';

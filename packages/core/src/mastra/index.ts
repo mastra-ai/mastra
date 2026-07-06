@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
+import type { AgentController } from '../agent-controller';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
@@ -18,11 +19,12 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
-import { AvailableHooks, registerHook } from '../hooks';
+import type { Harness } from '../harness';
+import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
-import { defaultGateways } from '../llm/model/router';
+import { defaultGateways } from '../llm/model/gateways/defaults';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -41,6 +43,8 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
+import { Schedules } from '../schedules/schedules';
+import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
@@ -63,9 +67,11 @@ import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
 import { computeNextFireAt } from '../workflows/scheduler';
-import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
+import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import type { RunScope } from './run-scope';
+import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**
@@ -270,6 +276,26 @@ export interface Config<
   workflows?: TWorkflows;
 
   /**
+   * AgentControllers to host on this Mastra instance, keyed by id. Each
+   * registered AgentController uses this Mastra (its storage, agents, gateways,
+   * and observability) instead of building its own internal one, and is
+   * reachable via {@link Mastra.getAgentController} /
+   * {@link Mastra.listAgentControllers}. This is how a server exposes multiple
+   * AgentControllers' sessions over HTTP.
+   */
+  agentControllers?: Record<string, AgentController<any>>;
+
+  /**
+   * Harnesses to host on this Mastra instance, keyed by id.
+   *
+   * @deprecated Use {@link MastraConfig.agentControllers} instead. `harnesses`
+   * is retained as a backwards-compatible alias and will be removed in a future
+   * major. Entries from both keys are merged, with `agentControllers` taking
+   * precedence on key collisions.
+   */
+  harnesses?: Record<string, Harness<any>>;
+
+  /**
    * Text-to-speech providers for voice synthesis capabilities.
    */
   tts?: TTTS;
@@ -463,7 +489,7 @@ export interface Config<
    * `schedule` config or when `scheduler.enabled` is true. It requires a
    * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
    */
-  scheduler?: WorkflowSchedulerConfig;
+  scheduler?: SchedulerConfig;
 
   /**
    * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
@@ -471,6 +497,17 @@ export interface Config<
   notifications?: {
     dispatch?: NotificationDispatchConfig;
   };
+
+  /**
+   * Schedules runtime configuration. A single lifecycle-hook bundle runs for
+   * every agent-schedule fire and is invoked by the agent-schedule worker
+   * around schedule-driven agent runs; hooks branch per agent via the
+   * `agentId` on each context. Configuring hooks here (rather than on the
+   * Agent) lets both code-defined and stored agents share the same hook
+   * surface, since stored agents cannot define functions in their serialized
+   * config.
+   */
+  schedules?: SchedulesConfig<Mastra>;
 
   /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
@@ -580,8 +617,10 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
+  #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -590,6 +629,7 @@ export class Mastra<
   }> = [];
 
   #storage?: MastraCompositeStore;
+  #storageExplicit = false;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
@@ -607,7 +647,7 @@ export class Mastra<
   #pubsub: PubSub;
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
-  #schedulerConfig?: WorkflowSchedulerConfig;
+  #schedulerConfig?: SchedulerConfig;
   #notificationDispatchConfig?: NotificationDispatchConfig;
   /**
    * Tracks whether any registered workflow has declared a `schedule` config.
@@ -617,10 +657,40 @@ export class Mastra<
   #hasScheduledWorkflow = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
+  #schedules?: Schedules;
+  #schedulesConfig?: SchedulesConfig<Mastra>;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
+  /**
+   * Set when the user (or `MASTRA_WORKERS=false`) explicitly disabled all event
+   * processing in this instance via `workers: false`. Gates lazy scheduler /
+   * agent-schedule worker injection so runtime triggers (e.g.
+   * `schedules.create()`) don't resurrect workers the user opted out of.
+   */
+  #workersDisabled = false;
+  /**
+   * Tracks whether `startWorkers()` has already run. Used to decide whether
+   * lazy scheduler injection (e.g. from `mastra.schedules.create()` after boot)
+   * needs to also `init`/`start` the worker, or whether the normal
+   * `startWorkers()` path will pick it up.
+   */
+  #workersStarted = false;
+  /**
+   * Set when something has signalled that the scheduler is needed at runtime
+   * (e.g. an agent schedule was registered via `__ensureScheduleRuntimeReady()`).
+   * Causes `#shouldEnableScheduler()` to return `true` even when there are no
+   * declarative scheduled workflows, unless the user explicitly set
+   * `scheduler: { enabled: false }`.
+   */
+  #schedulerRequested = false;
+  /**
+   * In-flight promise for `#ensureSchedulingWorkersStarted()`. Serializes
+   * concurrent startup requests so two callers can't both pass the
+   * worker-existence checks and double-subscribe to the scheduling topics.
+   */
+  #schedulingWorkersStartPromise?: Promise<void>;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -644,7 +714,16 @@ export class Mastra<
   // Tracks registration timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
   // resumed. Unscoped (singleton) entries are not tracked — they live forever.
-  #runScopedWorkflowTimestamps: Map<string, number> = new Map();
+  #runScopedWorkflowTimestamps: Map<string, { registeredAt: number; runId: string }> = new Map();
+  // Per-run bag of non-serializable runtime state (SaveQueueManager,
+  // BackgroundTaskManager, MessageList, abort controllers, dynamic tool sets…)
+  // shared across step factories within a single run. Never persisted, never
+  // published. Lifecycle is refcounted against `__registerInternalWorkflow`
+  // calls for the same runId so multiple workflows sharing a run (e.g. an
+  // agentic-loop wrapping an agentic-execution) keep the scope alive until the
+  // last unregisters. See `./run-scope.ts`.
+  #runScopes: Map<string, RunScope> = new Map();
+  #runScopeRefcounts: Map<string, number> = new Map();
   // Run-scoped internal workflows older than this TTL (ms) are evicted during
   // the lazy sweep that runs on each new registration.
   static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -764,10 +843,14 @@ export class Mastra<
    * or undefined if the scheduler is not enabled / not yet started.
    *
    * The scheduler is created when `startWorkers()` initializes the
-   * SchedulerWorker (guarded by `#shouldEnableScheduler()`). Use it
-   * to create, pause, resume, or delete schedules imperatively.
+   * SchedulerWorker (guarded by `#shouldEnableScheduler()`).
+   *
+   * This is runtime plumbing (the cron tick loop). To create, list, pause,
+   * resume, or delete schedules use `mastra.schedules` instead.
+   *
+   * @internal
    */
-  get scheduler(): WorkflowScheduler | undefined {
+  get scheduler(): Scheduler | undefined {
     return this.#findSchedulerWorker()?.scheduler;
   }
 
@@ -839,6 +922,46 @@ export class Mastra<
    */
   public get channels(): TChannels {
     return (this.#channels ?? {}) as TChannels;
+  }
+
+  /**
+   * Canonical entrypoint for schedules — recurring agent or workflow runs
+   * persisted as schedule rows discriminated by `target.type` (`'agent'` or
+   * `'workflow'`). Use to create, list, update, pause/resume, manually fire,
+   * or inspect trigger history for schedules across any agent or workflow.
+   *
+   * Lazily constructed. Operates against `getStorage()?.getStore('schedules')`.
+   *
+   * @example
+   * ```ts
+   * const schedule = await mastra.schedules.create({
+   *   agentId: 'pinger',
+   *   name: 'morning-checkin',
+   *   cron: '0 9 * * *',
+   *   prompt: 'good morning, anything to report?',
+   *   threadId: 't1',
+   *   resourceId: 'u1',
+   * });
+   * await mastra.schedules.list({ agentId: 'pinger' });
+   * ```
+   */
+  public get schedules(): Schedules {
+    this.#schedules ??= new Schedules(this as unknown as Mastra);
+    return this.#schedules;
+  }
+
+  /**
+   * Returns the schedule lifecycle hook bundle configured via
+   * `new Mastra({ schedules: { ... } })`, if any. A single bundle runs for
+   * every agent-schedule fire; hooks branch per agent via the `agentId` on
+   * each context. Internal: consumed by the {@link AgentScheduleWorker} to
+   * invoke `prepare`, `onFinish`, `onError`, and `onAbort` around
+   * schedule-driven runs.
+   *
+   * @internal
+   */
+  __getScheduleHooks(): ScheduleHooks<Mastra> | undefined {
+    return this.#schedulesConfig;
   }
 
   /**
@@ -962,6 +1085,28 @@ export class Mastra<
    */
   public setServer(server: ServerConfig): void {
     this.#server = server;
+  }
+
+  /**
+   * Sets the studio configuration for this Mastra instance.
+   *
+   * The studio configuration controls authentication and authorization for Studio UI,
+   * separate from the server configuration. This enables dual auth patterns where
+   * Studio users (e.g., internal team) use different auth than API consumers.
+   *
+   * @param studio - The studio configuration object
+   *
+   * @example
+   * ```typescript
+   * // Set studio auth separately from server auth
+   * mastra.setStudio({
+   *   auth: new MastraAuthStudio(),
+   *   rbac: new MastraRBACStudio({ roleMapping: { admin: ['*'] } }),
+   * });
+   * ```
+   */
+  public setStudio(studio: StudioConfig): void {
+    this.#studio = studio;
   }
 
   /**
@@ -1096,7 +1241,10 @@ export class Mastra<
 
     if (workersOption === false) {
       // Explicitly disabled — no event processing in this instance.
-      // PubSub still exists for publishing events.
+      // PubSub still exists for publishing events. Record the opt-out so
+      // runtime triggers (e.g. schedules.create()) don't lazily inject
+      // scheduler / agent-schedule workers behind the user's back.
+      this.#workersDisabled = true;
     } else if (Array.isArray(workersOption)) {
       this.#workers = workersOption;
       for (const w of this.#workers) {
@@ -1150,6 +1298,7 @@ export class Mastra<
     let storage: MastraCompositeStore;
     if (config?.storage) {
       storage = config.storage;
+      this.#storageExplicit = true;
     } else {
       storage = new InMemoryStore();
       this.#logger?.warn(
@@ -1244,6 +1393,7 @@ export class Mastra<
 
     this.#schedulerConfig = config?.scheduler;
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
+    this.#schedulesConfig = config?.schedules;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -1409,7 +1559,23 @@ export class Mastra<
       });
     }
 
-    registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
+    // `harnesses` is the deprecated alias of `agentControllers`; merge both,
+    // letting `agentControllers` win on key collisions.
+    const agentControllerEntries = {
+      ...(config?.harnesses ?? {}),
+      ...(config?.agentControllers ?? {}),
+    };
+    for (const [key, agentController] of Object.entries(agentControllerEntries)) {
+      this.#harnesses[key] = agentController;
+      agentController.__registerMastra(this);
+    }
+
+    // `registerHook` adds to a module-level emitter that never drops handlers on
+    // its own. Keep the reference so short-lived internal/ephemeral Mastras can
+    // release it on teardown (see `__unregisterHooks`); otherwise their handler
+    // fires on every scorer run for the lifetime of the process.
+    this.#onScorerHook = createOnScorerHook(this);
+    registerHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
 
     /*
       Initialize observability with Mastra context (after storage configured)
@@ -1516,9 +1682,15 @@ export class Mastra<
   }
 
   #shouldEnableScheduler(): boolean {
+    // Honour an explicit `workers: false` opt-out — the user disabled all
+    // event processing in this instance, so never auto-inject scheduler /
+    // agent-schedule workers (even when scheduler.enabled is true or a
+    // schedule is created at runtime). Standalone workers are expected to
+    // run the scheduler separately.
+    if (this.#workersDisabled) return false;
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
-    return this.#hasScheduledWorkflow;
+    return this.#hasScheduledWorkflow || this.#schedulerRequested;
   }
 
   /**
@@ -1526,6 +1698,13 @@ export class Mastra<
    */
   #findSchedulerWorker(): SchedulerWorker | undefined {
     return this.#workers.find((w): w is SchedulerWorker => w.name === 'scheduler') as SchedulerWorker | undefined;
+  }
+
+  /**
+   * Find the AgentScheduleWorker from the workers list (if present).
+   */
+  #findAgentScheduleWorker(): MastraWorker | undefined {
+    return this.#workers.find(w => w.name === 'agent-schedule');
   }
 
   /**
@@ -1860,6 +2039,78 @@ export class Mastra<
   }
 
   /**
+   * Get an AgentController hosted on this Mastra instance by its registration
+   * key (the key it was registered under in `new Mastra({ agentControllers })`).
+   * Returns `undefined` when none is registered under that key. Server route
+   * handlers use this to create and drive sessions over HTTP.
+   *
+   * @example
+   * ```typescript
+   * const code = new AgentController({ id: 'code-controller', modes });
+   * const mastra = new Mastra({ agentControllers: { code } });
+   *
+   * mastra.getAgentController('code'); // → the AgentController (by key)
+   * ```
+   */
+  public getAgentController(key: string): AgentController<any> | undefined {
+    return this.#harnesses[key];
+  }
+
+  /**
+   * Get an AgentController hosted on this Mastra instance by its unique `id`
+   * (the `id` passed to the `AgentController` constructor). Falls back to a
+   * registration-key lookup when none matches by id, mirroring
+   * {@link getAgentById}. Returns `undefined` when none is found.
+   *
+   * @example
+   * ```typescript
+   * const code = new AgentController({ id: 'code-controller', modes });
+   * const mastra = new Mastra({ agentControllers: { code } });
+   *
+   * mastra.getAgentControllerById('code-controller'); // → by id
+   * ```
+   */
+  public getAgentControllerById(id: string): AgentController<any> | undefined {
+    return Object.values(this.#harnesses).find(controller => controller.id === id) ?? this.#harnesses[id];
+  }
+
+  /**
+   * List all AgentControllers hosted on this Mastra instance, keyed by their
+   * registration key.
+   */
+  public listAgentControllers(): Record<string, AgentController<any>> {
+    return this.#harnesses;
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its registration key.
+   *
+   * @deprecated Use {@link Mastra.getAgentController} instead.
+   */
+  public getHarness(key: string): Harness<any> | undefined {
+    return this.getAgentController(key);
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its unique `id`.
+   *
+   * @deprecated Use {@link Mastra.getAgentControllerById} instead.
+   */
+  public getHarnessById(id: string): Harness<any> | undefined {
+    return this.getAgentControllerById(id);
+  }
+
+  /**
+   * List all Harnesses hosted on this Mastra instance, keyed by their
+   * registration key.
+   *
+   * @deprecated Use {@link Mastra.listAgentControllers} instead.
+   */
+  public listHarnesses(): Record<string, Harness<any>> {
+    return this.listAgentControllers();
+  }
+
+  /**
    * Adds a new agent to the Mastra instance.
    *
    * This method allows dynamic registration of agents after the Mastra instance
@@ -1911,6 +2162,14 @@ export class Mastra<
       // Set the Mastra instance on the durable agent for observability
       durableAgent.__setMastra?.(this);
 
+      // Propagate the definition source (e.g. 'fs') onto both the wrapper and
+      // the underlying agent. The durable branch returns early below, so it
+      // never reaches the shared `options?.source` handling.
+      if (options?.source) {
+        (durableAgent as unknown as Agent<any>).source = options.source;
+        underlyingAgent.source = options.source;
+      }
+
       // Initialize the underlying agent (needed for tools, memory, etc.)
       underlyingAgent.__setLogger(this.#logger);
       underlyingAgent.__registerMastra(this);
@@ -1933,6 +2192,19 @@ export class Mastra<
       for (const workflow of durableWorkflows) {
         this.addWorkflow(workflow, workflow.id);
       }
+
+      // Register scorers from the underlying agent so durable runs can resolve
+      // them via mastra.getScorer()/getScorerById() at workflow time.
+      underlyingAgent
+        .listScorers()
+        .then(scorers => {
+          for (const [, entry] of Object.entries(scorers || {})) {
+            this.addScorer(entry.scorer, undefined, { source: 'code' });
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
+        });
 
       return;
     }
@@ -2025,8 +2297,104 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannelsInstance.initialize(this);
+      agentChannelsInstance.initialize(this).catch(err => {
+        this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
+      });
     }
+  }
+
+  /**
+   * Registers a map of file-system routed agents (discovered from
+   * `agents/<name>/` directories) into this Mastra instance.
+   *
+   * Code-registered agents win on name collisions: if an agent with the same
+   * key already exists, the file-system agent is skipped and a warning is
+   * logged. Otherwise each agent is added via {@link addAgent} with
+   * `source: 'fs'`.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsAgents(fsAgents: Record<string, Agent | ToolLoopAgentLike | DurableAgentLike>): void {
+    if (!fsAgents) {
+      return;
+    }
+
+    const agents = this.#agents as Record<string, Agent<any>>;
+    for (const [key, agent] of Object.entries(fsAgents)) {
+      if (agent == null) {
+        continue;
+      }
+      if (agents[key]) {
+        this.getLogger().warn(
+          `File-system routed agent "${key}" conflicts with a code-registered agent of the same name. Keeping the code-registered agent.`,
+        );
+        continue;
+      }
+      this.addAgent(agent, key, { source: 'fs' });
+    }
+  }
+
+  /**
+   * Registers a map of file-system routed workflows (discovered from
+   * `workflows/*.ts` files) into this Mastra instance.
+   *
+   * Code-registered workflows win on name collisions: if a workflow with the
+   * same key already exists, the file-system workflow is skipped and a warning
+   * is logged. Otherwise each workflow is added via {@link addWorkflow} with
+   * its key.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsWorkflows(fsWorkflows: Record<string, AnyWorkflow>): void {
+    if (!fsWorkflows) {
+      return;
+    }
+
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    for (const [key, workflow] of Object.entries(fsWorkflows)) {
+      if (workflow == null) {
+        continue;
+      }
+      if (workflows[key]) {
+        this.getLogger().warn(
+          `File-system routed workflow "${key}" conflicts with a code-registered workflow of the same name. Keeping the code-registered workflow.`,
+        );
+        continue;
+      }
+      this.addWorkflow(workflow, key);
+    }
+  }
+
+  /**
+   * Registers a file-system routed storage instance (discovered from
+   * `storage.ts`) into this Mastra instance.
+   *
+   * Code-registered storage wins: if the user already passed `storage` to the
+   * `new Mastra({storage})` constructor, the file-system storage is skipped
+   * and a warning is logged. Otherwise the fs-provided storage replaces the
+   * default InMemoryStore via {@link setStorage}.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsStorage(fsStorage: MastraCompositeStore): void {
+    if (!fsStorage) {
+      return;
+    }
+
+    if (this.#storageExplicit) {
+      this.getLogger().warn(
+        `File-system routed storage conflicts with a code-registered storage. Keeping the code-registered storage.`,
+      );
+      return;
+    }
+
+    this.setStorage(fsStorage);
   }
 
   /**
@@ -2489,8 +2857,18 @@ export class Mastra<
     });
     if (runId) {
       const key = `${workflow.id}:${runId}`;
+      const isNewRegistration = !this.#internalMastraWorkflows[key];
       this.#internalMastraWorkflows[key] = workflow;
-      this.#runScopedWorkflowTimestamps.set(key, Date.now());
+      this.#runScopedWorkflowTimestamps.set(key, { registeredAt: Date.now(), runId });
+      // Pair the registration with a runScope. Multiple workflows can share a
+      // runId (parent + nested); we refcount so the scope outlives the first
+      // unregister and dies with the last.
+      if (isNewRegistration) {
+        this.#runScopeRefcounts.set(runId, (this.#runScopeRefcounts.get(runId) ?? 0) + 1);
+        if (!this.#runScopes.has(runId)) {
+          this.#runScopes.set(runId, createRunScope());
+        }
+      }
       this.#sweepStaleRunScopedWorkflows();
     } else {
       this.#internalMastraWorkflows[workflow.id] = workflow;
@@ -2500,11 +2878,66 @@ export class Mastra<
   /**
    * Remove a runId-scoped registration. The unscoped `${id}` entry is left intact
    * so single-instance callers (background tasks, score-traces) continue to resolve.
+   *
+   * Decrements the refcount for the runScope tied to this runId; when the
+   * count hits zero the scope is dropped along with every reference it held.
    */
   __unregisterInternalWorkflow(id: string, runId: string) {
     const key = `${id}:${runId}`;
+    const wasRegistered = !!this.#internalMastraWorkflows[key];
     delete this.#internalMastraWorkflows[key];
     this.#runScopedWorkflowTimestamps.delete(key);
+    if (wasRegistered) {
+      this.#releaseRunScope(runId);
+    }
+  }
+
+  /**
+   * Get the existing runScope for a runId without creating one.
+   * Returns undefined when no internal workflow has been registered against
+   * the runId — callers should treat this as the run not yet being bootstrapped.
+   */
+  __getRunScope(runId: string): RunScope | undefined {
+    return this.#runScopes.get(runId);
+  }
+
+  /**
+   * Idempotently allocate a runScope for a runId. Used by call sites (like
+   * `loop()`) that need to populate the scope *before* the internal workflow
+   * registration lands. The scope is held until the matching internal-workflow
+   * registration is released or the TTL sweep evicts it.
+   *
+   * Bumps the refcount so the scope cannot be freed before the caller is done
+   * with it; callers MUST pair this with `__releaseRunScope(runId)`.
+   */
+  __createRunScope(runId: string): RunScope {
+    let scope = this.#runScopes.get(runId);
+    if (!scope) {
+      scope = createRunScope();
+      this.#runScopes.set(runId, scope);
+    }
+    this.#runScopeRefcounts.set(runId, (this.#runScopeRefcounts.get(runId) ?? 0) + 1);
+    return scope;
+  }
+
+  /**
+   * Decrement the runScope refcount; drops the scope when the count reaches
+   * zero. Public so callers that called `__createRunScope` directly (e.g.,
+   * `loop()` hydration) can release their hold without unregistering a
+   * workflow.
+   */
+  __releaseRunScope(runId: string): void {
+    this.#releaseRunScope(runId);
+  }
+
+  #releaseRunScope(runId: string): void {
+    const next = (this.#runScopeRefcounts.get(runId) ?? 0) - 1;
+    if (next <= 0) {
+      this.#runScopeRefcounts.delete(runId);
+      this.#runScopes.delete(runId);
+    } else {
+      this.#runScopeRefcounts.set(runId, next);
+    }
   }
 
   __hasInternalWorkflow(id: string, runId?: string): boolean {
@@ -2601,10 +3034,23 @@ export class Mastra<
    */
   #sweepStaleRunScopedWorkflows() {
     const now = Date.now();
-    for (const [key, registeredAt] of this.#runScopedWorkflowTimestamps) {
-      if (now - registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+    for (const [key, entry] of this.#runScopedWorkflowTimestamps) {
+      if (now - entry.registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
         delete this.#internalMastraWorkflows[key];
         this.#runScopedWorkflowTimestamps.delete(key);
+        // Release the matching scope using the runId we stored at registration
+        // time — never parse it back out of the composite key, since callers
+        // can pass runIds that contain ':'.
+        this.#releaseRunScope(entry.runId);
+        // Surface the eviction so operators can investigate long-suspended
+        // runs that never resumed. The refcounted lifecycle in
+        // `__createRunScope`/`__releaseRunScope` covers the happy path; this
+        // branch only fires when a registration was abandoned past the TTL.
+        this.#logger.warn('Evicted stale run-scoped workflow after TTL expired', {
+          runId: entry.runId,
+          ageMs: now - entry.registeredAt,
+          ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
+        });
       }
     }
   }
@@ -3612,6 +4058,94 @@ export class Mastra<
     }
   }
 
+  /**
+   * Signal that a schedule has been registered imperatively at runtime
+   * (e.g. `mastra.schedules.create()` after `startWorkers()`). Flips the
+   * scheduler-requested flag and, if workers are already running,
+   * lazily injects + starts both the scheduler and agent-schedule workers.
+   *
+   * @internal
+   */
+  async __ensureScheduleRuntimeReady(): Promise<void> {
+    this.#schedulerRequested = true;
+    if (this.#workersStarted) {
+      await this.#ensureSchedulingWorkersStarted();
+    }
+  }
+
+  /**
+   * Lazily inject and start the SchedulerWorker (and AgentScheduleWorker when
+   * needed) after `startWorkers()` has already run. Used by features that
+   * surface a need for the scheduler at runtime (e.g.
+   * `mastra.schedules.create()`). No-op when the scheduler is disabled, no
+   * storage is configured, or the workers are already present.
+   *
+   * @internal
+   */
+  async #ensureSchedulingWorkersStarted(): Promise<void> {
+    // Memoize the in-flight startup so concurrent callers can't both pass the
+    // worker-existence checks and start duplicate workers (which would
+    // double-subscribe to the scheduling topics on push-based pubsubs).
+    if (!this.#schedulingWorkersStartPromise) {
+      this.#schedulingWorkersStartPromise = this.#startSchedulingWorkers().finally(() => {
+        this.#schedulingWorkersStartPromise = undefined;
+      });
+    }
+    await this.#schedulingWorkersStartPromise;
+  }
+
+  async #startSchedulingWorkers(): Promise<void> {
+    if (!this.#shouldEnableScheduler()) return;
+    if (!this.#storage) return;
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+
+    if (!this.#findSchedulerWorker()) {
+      const sw = new SchedulerWorker(this.#schedulerConfig);
+      sw.__registerMastra(this);
+      this.#workers.push(sw);
+      await sw.init(deps);
+      await sw.start();
+    }
+
+    if (!this.#findAgentScheduleWorker()) {
+      const { AgentScheduleWorker } = await import('../schedules/worker');
+      const asw = new AgentScheduleWorker();
+      asw.__registerMastra(this);
+      this.#workers.push(asw);
+      await asw.init(deps);
+      await asw.start();
+    }
+  }
+
+  /**
+   * Detect agent-schedule rows in storage on boot. Used by
+   * `#shouldEnableScheduler` to flip the scheduler-requested flag when
+   * imperative agent schedules persisted from a previous process exist —
+   * without this, a fresh boot with only DB-side agent schedules would skip
+   * starting the scheduler and agent-schedule workers entirely.
+   *
+   * @internal
+   */
+  async #detectExistingAgentSchedules(): Promise<void> {
+    if (this.#schedulerRequested) return;
+    if (!this.#storage) return;
+    try {
+      const schedulesStore = await this.#storage.getStore('schedules');
+      if (!schedulesStore) return;
+      const existing = await schedulesStore.listSchedules({ ownerType: 'agent' });
+      if (existing.length === 0) return;
+      this.#schedulerRequested = true;
+    } catch (err) {
+      this.#logger?.warn?.('Failed to detect existing agent schedules on boot', err as any);
+    }
+  }
+
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
     for (const step of Object.values(workflow.steps ?? {})) {
       const scorers = step.scorers;
@@ -4272,14 +4806,42 @@ export class Mastra<
    * user-defined event listeners.
    */
   public async startWorkers(name?: string): Promise<void> {
-    // Lazily inject the SchedulerWorker if the scheduler should be enabled
-    // and no scheduler worker is registered yet. This runs after all
-    // workflows have been registered (unlike the constructor's default-workers
-    // block), so #hasScheduledWorkflow is accurate.
-    if (!name && this.#shouldEnableScheduler() && this.#storage && !this.#findSchedulerWorker()) {
-      const sw = new SchedulerWorker(this.#schedulerConfig);
-      sw.__registerMastra(this);
-      this.#workers.push(sw);
+    // Initialize storage before any read so adapters that open/create their
+    // stores in init() are ready. The scheduler warm-up tick also persists a
+    // workflow snapshot on start(), which can race a lazy init() that creates
+    // `mastra_workflow_snapshot` ("no such table" on SQL stores, see #17905).
+    // init() is idempotent and a no-op when disabled.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
+    // Flip the scheduler-requested flag if any agent-schedule rows
+    // exist in storage from a previous boot. Without this, a process
+    // that boots with only DB-side agent schedules (no in-code declarative
+    // schedules and no imperative `schedules.create()` calls yet) would
+    // skip injecting the scheduler + agent-schedule workers entirely. This
+    // reads the schedules store, so it must run after storage.init() above.
+    if (!name) {
+      await this.#detectExistingAgentSchedules();
+    }
+
+    // Lazily inject the SchedulerWorker + AgentScheduleWorker if the
+    // scheduler should be enabled and they're not already registered.
+    // This runs after all workflows have been registered (unlike the
+    // constructor's default-workers block), so #hasScheduledWorkflow is
+    // accurate.
+    if (!name && this.#shouldEnableScheduler() && this.#storage) {
+      if (!this.#findSchedulerWorker()) {
+        const sw = new SchedulerWorker(this.#schedulerConfig);
+        sw.__registerMastra(this);
+        this.#workers.push(sw);
+      }
+      if (!this.#findAgentScheduleWorker()) {
+        const { AgentScheduleWorker } = await import('../schedules/worker');
+        const asw = new AgentScheduleWorker();
+        asw.__registerMastra(this);
+        this.#workers.push(asw);
+      }
     }
 
     const deps: WorkerDeps = {
@@ -4304,17 +4866,6 @@ export class Mastra<
       }
     } else {
       targets = this.#workers;
-    }
-
-    // Ensure storage is fully initialized before any worker starts. The
-    // scheduler worker runs an immediate warm-up tick on start(), which can
-    // dispatch an internal scheduled workflow (e.g. the notification
-    // dispatcher) and persist a workflow snapshot. Without awaiting init here,
-    // that write can race the lazy storage.init() that creates
-    // `mastra_workflow_snapshot`, producing "no such table" errors on SQL
-    // stores (see #17905). init() is idempotent and a no-op when disabled.
-    if (this.#storage) {
-      await this.#storage.init();
     }
 
     for (const worker of targets) {
@@ -4413,6 +4964,11 @@ export class Mastra<
         }
       }
     }
+
+    // Track that the boot path has executed at least once so subsequent
+    // runtime signals (e.g. `mastra.schedules.create()`) know whether they need
+    // to lazily inject + start additional workers themselves.
+    this.#workersStarted = true;
   }
 
   /**
@@ -4441,6 +4997,22 @@ export class Mastra<
     this.#userEventSubscriptions = [];
 
     await this.#pubsub.flush();
+    this.#workersStarted = false;
+  }
+
+  /**
+   * Release the module-level hooks this instance registered in its constructor.
+   * The scorer hook is added to a shared emitter that never drops handlers on
+   * its own, so short-lived internal/ephemeral Mastras must call this on teardown
+   * or their handler keeps firing (and failing to resolve the scorer) on every
+   * scorer run for the rest of the process. Idempotent.
+   * @internal
+   */
+  __unregisterHooks(): void {
+    if (this.#onScorerHook) {
+      deregisterHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
+      this.#onScorerHook = undefined;
+    }
   }
 
   /**
@@ -4739,6 +5311,19 @@ export class Mastra<
       if (result.status === 'rejected') {
         this.#logger?.error('Failed to destroy workspace during shutdown', {
           workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    // Tear down hosted Harnesses (interval handlers, workspaces) before closing storage,
+    // since teardown may still flush to the shared store.
+    const harnessKeys = Object.keys(this.#harnesses);
+    const harnessTeardown = await Promise.allSettled(harnessKeys.map(key => this.#harnesses[key]!.destroy()));
+    harnessTeardown.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy harness during shutdown', {
+          harnessKey: harnessKeys[index],
           error: result.reason,
         });
       }

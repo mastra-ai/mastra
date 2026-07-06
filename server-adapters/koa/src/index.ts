@@ -12,6 +12,7 @@ import {
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
@@ -469,7 +470,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // from route path/method unless explicitly set or route is public
     const requestContext = ctx.state.requestContext;
     // Check if any auth is configured (studio or server) for RBAC
-    const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+    const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
     if (hasAuth) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
@@ -503,11 +504,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const result = await route.handler(handlerParams);
       await this.sendResponse(route, ctx, result, prefix);
     } catch (error) {
-      this.mastra.getLogger()?.error('Error calling handler', {
-        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-        path: route.path,
-        method: route.method,
-      });
+      const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+      const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+      if (!isClientError) {
+        this.mastra.getLogger()?.error('Error calling handler', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          path: route.path,
+          method: route.method,
+        });
+      }
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
         if (!('status' in error)) {
@@ -577,10 +582,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+          // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+          const serialized = serializeStreamChunk(outputValue);
+          if (!serialized.ok) {
+            this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+              path: route.path,
+              chunkType: (outputValue as { type?: string })?.type,
+              error: serialized.error.message,
+            });
+            continue;
+          }
           if (streamFormat === 'sse') {
-            ctx.res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+            ctx.res.write(`data: ${serialized.json}\n\n`);
           } else {
-            ctx.res.write(JSON.stringify(outputValue) + '\x1E');
+            ctx.res.write(serialized.json + '\x1E');
           }
         }
       }
@@ -930,7 +945,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
           const requestContext = ctx.state.requestContext;
           // Check if any auth is configured (studio or server) for RBAC
-          const hasAuth = server.mastra.getStudio()?.auth || server.mastra.getServer()?.auth;
+          const hasAuth = server.mastra.getStudio?.()?.auth || server.mastra.getServer()?.auth;
           if (hasAuth) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {

@@ -242,6 +242,8 @@ export const weatherTool = createTool({
 })
 ```
 
+`toModelOutput` also works on client-side tools passed through `clientTools`. The mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result.
+
 ## Transform tool payloads for UI and transcripts
 
 Use `transform` when a tool returns raw data your application needs, but browser-facing streams or user-visible transcript messages should receive a smaller or safer shape. `transform` is separate from `toModelOutput`: `toModelOutput` shapes the payload sent back to the model, while `transform` shapes tool input, output, errors, approval payloads, and suspension payloads for `display` and `transcript` targets.
@@ -258,6 +260,7 @@ Use `hooks` to run custom logic before and after every tool call an agent makes.
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   instructions: 'Help users with their questions.',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -278,6 +281,7 @@ export const supportAgent = new Agent({
 
 ```typescript
 const guardedAgent = new Agent({
+  id: 'guarded-agent',
   name: 'guarded-agent',
   instructions: 'Run shell commands for the user.',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -309,6 +313,58 @@ await supportAgent.generate('Look up the order status', {
 ```
 
 Agent-level and per-execution hooks merge per key: passing only `beforeToolCall` at execution time keeps the agent-level `afterToolCall`.
+
+## Streaming
+
+Tools support lifecycle hooks that allow you to monitor different stages of tool execution during streaming. These hooks are particularly useful for logging or analytics.
+
+For generic `writer` API usage, see [Streaming](/guides/concepts/streaming#writer-api).
+
+### Available Hooks
+
+- **onInputStart**: Called when tool call input streaming begins
+- **onInputDelta**: Called for each chunk of input as it streams in
+- **onInputAvailable**: Called when complete input is parsed and validated
+- **onOutput**: Called after the tool successfully executes with the output
+
+For detailed documentation on all lifecycle hooks, see the [createTool() reference](/reference/tools/create-tool#tool-lifecycle-hooks).
+
+### Example: Using `onInputAvailable` and `onOutput`
+
+```typescript
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Get weather information',
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  // Called when the complete input is available
+  onInputAvailable: ({ input, toolCallId }) => {
+    console.log(`Weather requested for: ${input.city}`)
+  },
+  execute: async input => {
+    const weather = await fetchWeather(input.city)
+    return weather
+  },
+  // Called after successful execution
+  onOutput: ({ output, toolName }) => {
+    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`)
+  },
+})
+```
+
+### Streaming tool input in UIs
+
+When a model generates a tool call, the arguments arrive incrementally as `tool-call-delta` stream chunks before the final `tool-call` chunk. UIs can listen for the corresponding `tool_input_start`, `tool_input_delta`, and `tool_input_end` events to render tool arguments as they stream in — for example, showing a file path or command immediately rather than waiting for the complete tool call.
+
+Using a partial JSON parser on the accumulated `argsTextDelta` fragments lets you extract usable argument values before the JSON is complete. This enables features like live diff previews for edit tools, streaming file content for write tools, and instant display of search patterns or file paths.
 
 ## Control tool selection
 
@@ -362,6 +418,7 @@ Subagents and workflows follow the same pattern. They're converted to tools with
 
 ```typescript
 const orchestrator = new Agent({
+  id: 'orchestrator',
   agents: {
     weather: weatherAgent, // toolName: "agent-weather"
   },
@@ -380,7 +437,7 @@ Note that for subagents, you'll see two different identifiers in stream response
 
 - [`createTool` reference](/reference/tools/create-tool)
 - [`Agent.generate()` reference](/reference/agents/generate): Runtime options for tool selection, steps, and callbacks
-- [Background tasks](/docs/agents/background-tasks): Run long-running tools without blocking the agent loop
+- [Background tasks](/docs/long-running-agents/background-tasks): Run long-running tools without blocking the agent loop
 - [MCP overview](/docs/mcp/overview)
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries
 - [Tools with structured output](/docs/agents/structured-output#combine-tools-and-structured-output): Model compatibility when combining tools and structured output

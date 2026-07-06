@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { TaskItem } from '@mastra/core/signals';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
@@ -818,6 +819,76 @@ describe('useChat forwards clientTools', () => {
     expect(threadSubscriptionUnsubscribeMock).toHaveBeenCalledTimes(1);
   });
 
+  // Regression test for https://github.com/mastra-ai/mastra/issues/18768:
+  // an aborted mount-time subscribe used to stay cached (so no send ever
+  // retried the subscribe fetch) and the rejection escaped stream() uncaught,
+  // leaving isRunning stuck true until a full reload.
+  it('retries an aborted thread subscription on send and never leaves isRunning stuck', async () => {
+    const abortError = Object.assign(new Error('signal is aborted without reason'), { name: 'AbortError' });
+    // Reject both the mount-time subscribe AND the send-time retry so we
+    // exercise the retry and the isRunning cleanup on failure.
+    subscribeToThreadMock.mockRejectedValueOnce(abortError).mockRejectedValueOnce(abortError);
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    // Mount-time subscription attempt fails and is swallowed (isAbortError).
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+    expect(result.current.isRunning).toBe(false);
+
+    let sendError: unknown;
+    await act(async () => {
+      try {
+        await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+      } catch (error) {
+        sendError = error;
+      }
+    });
+
+    // The send path released the dead cached rejection and retried the
+    // subscribe fetch instead of re-awaiting the stale promise.
+    expect(subscribeToThreadMock).toHaveBeenCalledTimes(2);
+    expect((sendError as Error | undefined)?.name).toBe('AbortError');
+    expect(result.current.isRunning).toBe(false);
+  });
+
+  it('resets isRunning when the signal send request itself fails', async () => {
+    sendMessageMock.mockRejectedValueOnce(new Error('network down'));
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(subscribeToThreadMock).toHaveBeenCalledTimes(1));
+
+    let sendError: unknown;
+    await act(async () => {
+      try {
+        await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+      } catch (error) {
+        sendError = error;
+      }
+    });
+
+    expect((sendError as Error | undefined)?.message).toBe('network down');
+    expect(result.current.isRunning).toBe(false);
+  });
+
   it('uses the legacy stream path when thread signals are explicitly disabled', async () => {
     const { result } = renderHook(
       () =>
@@ -1212,5 +1283,219 @@ describe('useChat optimistic pending user message', () => {
     const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
     expect(metadata?.status).toBeUndefined();
     expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+  });
+});
+
+describe('useChat task state', () => {
+  beforeEach(() => {
+    sendSignalMock.mockClear();
+    sendMessageMock.mockClear();
+    streamMock.mockClear();
+    subscribeToThreadMock.mockClear();
+    threadSubscriptionAbortMock.mockClear();
+    threadSubscriptionUnsubscribeMock.mockClear();
+    nextSubscribeChunks = [];
+    keepSubscriptionOpen = false;
+    omitThreadSubscriptionUnsubscribe = false;
+  });
+
+  const firstTask: TaskItem = {
+    id: 'task-plan-menu',
+    content: 'Plan menu',
+    status: 'in_progress',
+    activeForm: 'Planning menu',
+  };
+  const secondTask: TaskItem = {
+    id: 'task-shop',
+    content: 'Create shopping list',
+    status: 'pending',
+    activeForm: 'Creating shopping list',
+  };
+
+  const taskSignalChunk = (tasks: TaskItem[], tagName = 'current-task-list') => ({
+    type: 'data-signal',
+    runId: 'run-tasks',
+    from: 'AGENT',
+    data: {
+      id: 'tasks',
+      type: 'state',
+      tagName,
+      metadata: { value: { tasks } },
+    },
+  });
+
+  it('returns an empty tasks array initially', () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.tasks).toEqual([]);
+  });
+
+  it('updates tasks when a data-signal snapshot chunk arrives', async () => {
+    nextSubscribeChunks = [taskSignalChunk([firstTask])];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([firstTask]));
+  });
+
+  it('updates tasks when a data-signal delta chunk arrives', async () => {
+    const updatedFirstTask = { ...firstTask, status: 'completed' as const, activeForm: 'Planning menu' };
+    nextSubscribeChunks = [
+      taskSignalChunk([firstTask]),
+      taskSignalChunk([updatedFirstTask, secondTask], 'task-list-update'),
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([updatedFirstTask, secondTask]));
+  });
+
+  it('updates tasks when a task tool-result chunk arrives', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'tool-result',
+        runId: 'run-tasks',
+        from: 'AGENT',
+        payload: {
+          toolCallId: 'tool-call-task-write',
+          toolName: 'task_write',
+          result: { tasks: [firstTask, secondTask] },
+        },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([firstTask, secondTask]));
+  });
+
+  it('clears tasks when task_write emits an empty task list', async () => {
+    nextSubscribeChunks = [taskSignalChunk([firstTask]), taskSignalChunk([])];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.tasks).toEqual([]));
+  });
+
+  it('seeds tasks from initialMessages on thread load', () => {
+    const initialMessages: MastraDBMessage[] = [
+      {
+        id: 'msg-task-signal',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-signal',
+              data: {
+                id: 'tasks',
+                type: 'state',
+                tagName: 'current-task-list',
+                metadata: { value: { tasks: [firstTask] } },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.tasks).toEqual([firstTask]);
+  });
+
+  it('resets tasks when initialMessages changes', () => {
+    const initialMessages: MastraDBMessage[] = [
+      {
+        id: 'msg-task-signal',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-signal',
+              data: {
+                id: 'tasks',
+                type: 'state',
+                tagName: 'current-task-list',
+                metadata: { value: { tasks: [firstTask] } },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const { result, rerender } = renderHook(
+      ({ messages }) =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages: messages,
+        }),
+      { wrapper, initialProps: { messages: initialMessages } },
+    );
+
+    expect(result.current.tasks).toEqual([firstTask]);
+
+    rerender({ messages: [] });
+
+    expect(result.current.tasks).toEqual([]);
   });
 });

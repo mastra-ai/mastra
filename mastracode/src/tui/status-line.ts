@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
+import { formatStatusDuration } from './status-duration.js';
 import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
@@ -71,7 +72,7 @@ export function updateStatusLine(state: TUIState): void {
   const SEP = '  '; // double-space separator between parts
 
   // --- Determine if we're showing observer/reflector instead of main mode ---
-  const omStatus = state.harness.getDisplayState().omProgress.status;
+  const omStatus = state.session.displayState.get().omProgress.status;
   const isJudging = Boolean(state.activeGoalJudge);
   const isObserving = omStatus === 'observing';
   const isReflecting = omStatus === 'reflecting';
@@ -80,8 +81,8 @@ export function updateStatusLine(state: TUIState): void {
   // --- Mode badge ---
   let modeBadge = '';
   let modeBadgeWidth = 0;
-  const modes = state.harness.listModes();
-  const currentMode = modes.length > 1 ? state.harness.getCurrentMode() : undefined;
+  const modes = state.controller.listModes();
+  const currentMode = modes.length > 1 ? state.session.mode.resolve() : undefined;
   const judgeModeColor = mastra.blue;
   // Use judge color for goal judge activity, OM color for OM activity, otherwise mode color
   const currentModeColor = currentMode?.metadata?.color;
@@ -141,9 +142,9 @@ export function updateStatusLine(state: TUIState): void {
       ? state.activeGoalJudge?.modelId
       : showOMMode
         ? isObserving
-          ? state.harness.getObserverModelId()
-          : state.harness.getReflectorModelId()
-        : state.harness.getFullModelId()) ?? '';
+          ? state.session.om.observer.modelId()
+          : state.session.om.reflector.modelId()
+        : state.session.model.get()) ?? '';
   // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
   let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')
     ? 'fireworks/' + rawModelId.slice('fireworks-ai/accounts/fireworks/models/'.length)
@@ -178,7 +179,7 @@ export function updateStatusLine(state: TUIState): void {
     displayPath = '~' + displayPath.slice(homedir.length);
   }
   const branch = state.projectInfo.gitBranch;
-  const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
+  const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
@@ -271,6 +272,27 @@ export function updateStatusLine(state: TUIState): void {
     shortModeBadgeWidth = shortName.length + 2;
   }
 
+  const now = Date.now();
+  const activeTimingLabel =
+    state.agentRunStartedAt !== undefined
+      ? formatStatusDuration(now - state.agentRunStartedAt, { includeSeconds: true })
+      : '';
+  const activeTimingIsStale =
+    state.agentRunStartedAt !== undefined &&
+    state.agentRunLastStreamPartAt !== undefined &&
+    now - state.agentRunLastStreamPartAt > 3 * 60_000;
+  const completedTimingLabel =
+    !activeTimingLabel && state.lastAgentRunDurationMs !== undefined
+      ? formatStatusDuration(state.lastAgentRunDurationMs, { includeSeconds: true })
+      : '';
+  const completedTimingIcon =
+    state.lastAgentRunEndReason === 'error'
+      ? '×'
+      : completedTimingLabel && state.lastAgentRunEndReason !== 'aborted'
+        ? '✓'
+        : '';
+  const timingLabel = activeTimingLabel || completedTimingLabel;
+
   const buildLine = (opts: {
     modelId: string;
     memCompact?: 'percentOnly' | 'noBuffer' | 'full';
@@ -283,14 +305,35 @@ export function updateStatusLine(state: TUIState): void {
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
+    const timingPlain = timingLabel ? ` ${timingLabel}${completedTimingIcon ? ` ${completedTimingIcon}` : ''}` : '';
+    const timingColor = activeTimingIsStale
+      ? theme.fg('error', timingLabel)
+      : activeTimingLabel
+        ? modeColor
+          ? chalk.hex(modeColor)(timingLabel)
+          : theme.fg('dim', timingLabel)
+        : state.lastAgentRunEndReason === 'aborted'
+          ? theme.fg('warning', timingLabel)
+          : state.lastAgentRunEndReason === 'error'
+            ? theme.fg('error', timingLabel)
+            : theme.fg('success', timingLabel);
+    const timingIconColor =
+      state.lastAgentRunEndReason === 'aborted'
+        ? 'warning'
+        : state.lastAgentRunEndReason === 'error'
+          ? 'error'
+          : 'success';
+    const timingStyled = timingLabel
+      ? ` ${timingColor}${completedTimingIcon ? ` ${theme.fg(timingIconColor, completedTimingIcon)}` : ''}`
+      : '';
     parts.push({
-      plain: `${opts.modelId}${tintBg ? ' ' : ''}`,
-      styled: styleModelId(opts.modelId),
+      plain: `${opts.modelId}${tintBg ? ' ' : ''}${timingPlain}`,
+      styled: styleModelId(opts.modelId) + timingStyled,
     });
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     // Memory info — animate label text when buffering is active
-    const ds = state.harness.getDisplayState();
+    const ds = state.session.displayState.get();
     const msgLabelStyler =
       ds.bufferingMessages && state.gradientAnimator?.isRunning()
         ? (label: string) =>
@@ -311,7 +354,7 @@ export function updateStatusLine(state: TUIState): void {
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
-    const omProg = state.harness.getDisplayState().omProgress;
+    const omProg = state.session.displayState.get().omProgress;
     const obs = isJudging ? '' : formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
     const ref = isJudging ? '' : formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
     if (obs) {
@@ -319,6 +362,13 @@ export function updateStatusLine(state: TUIState): void {
     }
     if (ref) {
       parts.push({ plain: ref, styled: ref });
+    }
+    if (state.tokensPerSec > 0) {
+      const tpsLabel = `${state.tokensPerSec} tok/s`;
+      parts.push({
+        plain: tpsLabel,
+        styled: theme.fg('dim', tpsLabel),
+      });
     }
     if (opts.showQueue && queuedLabel) {
       parts.push({

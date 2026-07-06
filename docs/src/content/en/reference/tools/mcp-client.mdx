@@ -1,5 +1,5 @@
 ---
-title: "Reference: MCPClient | Tools & MCP"
+title: "Reference: MCPClient | Tools and MCP"
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
 packages:
   - "@mastra/core"
@@ -270,6 +270,17 @@ Intended to be passed onto an Agent definition.
 
 ```ts
 new Agent({ id: 'agent', tools: await mcp.listTools() })
+```
+
+### `listToolsWithErrors()`
+
+Retrieves all tools from all configured servers, with tool names namespaced by their server name. Also returns per-server errors for servers that failed to connect or list tools.
+
+```typescript
+const { tools, errors } = await mcp.listToolsWithErrors()
+
+new Agent({ id: 'agent', tools })
+console.log(errors)
 ```
 
 ### `listToolsets()`
@@ -1157,6 +1168,7 @@ const mcpClient = new MCPClient({
 
 // Use with an agent — requestContext is automatically forwarded
 const agent = new Agent({
+  id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant.',
   model: openai('gpt-5.4'),

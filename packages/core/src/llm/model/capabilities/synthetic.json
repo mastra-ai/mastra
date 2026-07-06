@@ -1,7 +1,11 @@
 {
-  "attachment": [
-    "hf:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-    "hf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    "hf:moonshotai/Kimi-K2.6"
+  "attachment": ["hf:MiniMaxAI/MiniMax-M3", "hf:Qwen/Qwen3.6-27B", "hf:moonshotai/Kimi-K2.7-Code"],
+  "temperature": [
+    "hf:MiniMaxAI/MiniMax-M3",
+    "hf:Qwen/Qwen3.6-27B",
+    "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4",
+    "hf:openai/gpt-oss-120b",
+    "hf:zai-org/GLM-4.7-Flash",
+    "hf:zai-org/GLM-5.2"
   ]
 }

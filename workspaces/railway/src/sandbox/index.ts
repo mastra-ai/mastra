@@ -17,7 +17,7 @@ import type {
   SandboxInfo,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
-import { Sandbox } from 'railway';
+import { Sandbox, SandboxFailedError, SandboxNotFoundError, SandboxTimeoutError } from 'railway';
 import type { SandboxNetworkIsolation, SandboxTemplate } from 'railway';
 import { shellQuote } from '../utils/shell-quote';
 import { LOG_PREFIX, RailwayProcessManager } from './process-manager';
@@ -42,6 +42,12 @@ export interface RailwaySandboxOptions extends Omit<MastraSandboxOptions, 'proce
    */
   sandboxId?: string;
   /**
+   * Reuse a saved Railway sandbox checkpoint as the baseline filesystem for
+   * new sandboxes. When the named checkpoint is missing, the sandbox is created
+   * normally and a checkpoint is captured after setup succeeds.
+   */
+  checkpointName?: string;
+  /**
    * How long the sandbox can sit idle (no `exec` interaction) before Railway
    * destroys it automatically. Range depends on plan (1–120 minutes on
    * Hobby/Pro, 1–5 on Trial/Free). Defaults to the plan default when omitted.
@@ -61,13 +67,13 @@ export interface RailwaySandboxOptions extends Omit<MastraSandboxOptions, 'proce
    * every sandbox created from it starts ready.
    *
    * - Builder callback — receives the base `Sandbox.template()` and returns the
-   *   configured template. The template is built (`.build()`) on first
-   *   `start()` if not already built.
+   *   configured template. Railway builds the template when `Sandbox.create()`
+   *   runs during `start()`.
    *   ```ts
    *   template: t => t.withPackages('git', 'curl').run('npm i -g pnpm')
    *   ```
-   * - Pre-built `SandboxTemplate` — pass a template you built yourself to reuse
-   *   it across sandboxes without rebuilding.
+   * - Pre-built `SandboxTemplate` — pass a template to reuse it across
+   *   sandboxes. Railway still builds the image during sandbox creation.
    *
    * Ignored when `sandboxId` is set (reattach) or when forking.
    */
@@ -134,10 +140,13 @@ export class RailwaySandbox extends MastraSandbox {
 
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
+  private _checkpointRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private _checkpointRefreshInFlight: Promise<void> | null = null;
 
   private readonly _token?: string;
   private readonly _environmentId?: string;
   private readonly _sandboxId?: string;
+  private readonly _checkpointName?: string;
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: SandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
@@ -156,6 +165,7 @@ export class RailwaySandbox extends MastraSandbox {
     this._token = options.token ?? process.env.RAILWAY_API_TOKEN;
     this._environmentId = options.environmentId ?? process.env.RAILWAY_ENVIRONMENT_ID;
     this._sandboxId = options.sandboxId;
+    this._checkpointName = options.checkpointName;
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
@@ -195,32 +205,305 @@ export class RailwaySandbox extends MastraSandbox {
       return;
     }
 
-    const clientConfig = {
+    await this._startRailwaySandbox({ reconnectSandboxId: this._sandboxId, fallbackToCreate: false });
+  }
+
+  async restart(): Promise<void> {
+    const reconnectSandboxId = this._sandbox?.id ?? this._sandboxId;
+    this._cancelCheckpointRefresh();
+    await this._checkpointRefreshInFlight?.catch(error => {
+      this.logger.warn(`${LOG_PREFIX} Failed to flush in-flight checkpoint before restart:`, error);
+    });
+    this._sandbox = null;
+    this._createdAt = null;
+    this.status = 'starting';
+
+    try {
+      await this._startRailwaySandbox({ reconnectSandboxId, fallbackToCreate: true });
+      this.status = 'running';
+    } catch (error) {
+      this.status = 'error';
+      throw error;
+    }
+  }
+
+  async withRestartRetry<T>(operation: () => Promise<T>): Promise<T> {
+    await this.ensureRunning();
+    try {
+      return await operation();
+    } catch (error) {
+      if (!this.isSandboxUnavailableError(error)) {
+        throw error;
+      }
+
+      await this.restart();
+      return await operation();
+    } finally {
+      this._scheduleCheckpointRefresh();
+    }
+  }
+
+  private async _startRailwaySandbox({
+    reconnectSandboxId,
+    fallbackToCreate,
+  }: {
+    reconnectSandboxId?: string;
+    fallbackToCreate: boolean;
+  }): Promise<void> {
+    const clientConfig = this._clientConfig();
+    const createOptions = this._createOptions(clientConfig);
+
+    this._sandbox = reconnectSandboxId
+      ? await this._reconnectSandbox(reconnectSandboxId, fallbackToCreate, clientConfig, createOptions)
+      : await this._createNewSandbox(createOptions);
+
+    this._createdAt = this._sandbox.createdAt ? new Date(this._sandbox.createdAt) : new Date();
+    this.logger.debug(`${LOG_PREFIX} Railway sandbox ${this._sandbox.id} ready for logical ID: ${this.id}`);
+    this._scheduleCheckpointRefresh();
+  }
+
+  /**
+   * Reconnect to an existing Railway sandbox, creating a fresh one when
+   * `fallbackToCreate` is set and the sandbox is unavailable or not running.
+   */
+  private async _reconnectSandbox(
+    reconnectSandboxId: string,
+    fallbackToCreate: boolean,
+    clientConfig: { token?: string; environmentId?: string },
+    createOptions: ReturnType<RailwaySandbox['_createOptions']>,
+  ): Promise<Sandbox> {
+    this.logger.debug(`${LOG_PREFIX} Reconnecting to Railway sandbox ${reconnectSandboxId}...`);
+
+    let connectedSandbox: Sandbox;
+    try {
+      connectedSandbox = await Sandbox.connect(reconnectSandboxId, clientConfig);
+    } catch (error) {
+      if (!fallbackToCreate || !this.isSandboxUnavailableError(error)) {
+        throw error;
+      }
+      return this._createNewSandbox(createOptions);
+    }
+
+    if (connectedSandbox.status === 'RUNNING') {
+      return connectedSandbox;
+    }
+
+    if (!fallbackToCreate) {
+      throw new Error(`Railway sandbox ${reconnectSandboxId} is not running (status: ${connectedSandbox.status})`);
+    }
+
+    return this._createNewSandbox(createOptions);
+  }
+
+  private _clientConfig(): { token?: string; environmentId?: string } {
+    return {
       ...(this._token !== undefined && { token: this._token }),
       ...(this._environmentId !== undefined && { environmentId: this._environmentId }),
     };
+  }
 
-    const createOptions = {
+  private _createOptions(clientConfig: { token?: string; environmentId?: string }) {
+    return {
       ...clientConfig,
       ...(this._idleTimeoutMinutes !== undefined && { idleTimeoutMinutes: this._idleTimeoutMinutes }),
       ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
       ...(Object.keys(this._env).length > 0 && { env: this._env }),
     };
+  }
 
-    if (this._sandboxId) {
-      this.logger.debug(`${LOG_PREFIX} Reconnecting to Railway sandbox ${this._sandboxId}...`);
-      this._sandbox = await Sandbox.connect(this._sandboxId, clientConfig);
-    } else if (this._templateOption) {
-      const template = await this._resolveTemplate(clientConfig);
-      this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox from template for: ${this.id}`);
-      this._sandbox = await Sandbox.create(template, createOptions);
-    } else {
-      this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox for: ${this.id}`);
-      this._sandbox = await Sandbox.create(createOptions);
+  private async _createNewSandbox(createOptions: ReturnType<RailwaySandbox['_createOptions']>): Promise<Sandbox> {
+    const checkpointSandbox = await this._tryCreateFromCheckpoint(createOptions);
+    if (checkpointSandbox) {
+      return checkpointSandbox;
     }
 
-    this._createdAt = this._sandbox.createdAt ? new Date(this._sandbox.createdAt) : new Date();
-    this.logger.debug(`${LOG_PREFIX} Railway sandbox ${this._sandbox.id} ready for logical ID: ${this.id}`);
+    if (this._templateOption) {
+      const template = this._resolveTemplate();
+      this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox from template for: ${this.id}`);
+      const sandbox = await Sandbox.create(template, createOptions);
+      await this._checkpointSandbox(sandbox);
+      return sandbox;
+    }
+
+    this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox for: ${this.id}`);
+    const sandbox = await Sandbox.create(createOptions);
+    await this._checkpointSandbox(sandbox);
+    return sandbox;
+  }
+
+  private async _tryCreateFromCheckpoint(
+    createOptions: ReturnType<RailwaySandbox['_createOptions']>,
+  ): Promise<Sandbox | undefined> {
+    if (!this._checkpointName) {
+      return undefined;
+    }
+
+    this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox from checkpoint ${this._checkpointName} for: ${this.id}`);
+
+    try {
+      const sandbox = await Sandbox.create(this._checkpointName, createOptions);
+      return sandbox;
+    } catch (error) {
+      if (!this.isCheckpointUnavailableError(error)) {
+        throw error;
+      }
+      return undefined;
+    }
+  }
+
+  private async _checkpointSandbox(sandbox: Sandbox): Promise<void> {
+    if (!this._checkpointName) {
+      return;
+    }
+
+    try {
+      this.logger.debug(`${LOG_PREFIX} Capturing Railway sandbox checkpoint ${this._checkpointName} for: ${this.id}`);
+      await sandbox.checkpoint(this._checkpointName);
+    } catch (error) {
+      if (!this.isCheckpointAlreadyExistsError(error)) {
+        throw error;
+      }
+
+      await this._deleteCheckpointByName(this._checkpointName);
+      await sandbox.checkpoint(this._checkpointName);
+    }
+  }
+
+  private async _deleteCheckpointByName(name: string): Promise<void> {
+    try {
+      const checkpoint = (await Sandbox.checkpoints(this._clientConfig())).find(checkpoint => checkpoint.key === name);
+      if (!checkpoint) {
+        return;
+      }
+
+      await Sandbox.deleteCheckpoint(checkpoint.id, this._clientConfig());
+    } catch (error) {
+      if (!this.isCheckpointUnavailableError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private _scheduleCheckpointRefresh(): void {
+    if (!this._checkpointName || !this._sandbox) {
+      return;
+    }
+
+    const idleTimeoutMinutes = this._idleTimeoutMinutes ?? this._sandbox.idleTimeoutMinutes;
+    if (!idleTimeoutMinutes) {
+      return;
+    }
+
+    if (this._checkpointRefreshTimer) {
+      clearTimeout(this._checkpointRefreshTimer);
+    }
+
+    const delayMs = Math.max(1_000, idleTimeoutMinutes * 60_000 - 10_000);
+    this._checkpointRefreshTimer = setTimeout(() => {
+      this._checkpointRefreshTimer = null;
+      const sandbox = this._sandbox;
+      if (!sandbox) {
+        return;
+      }
+
+      const refresh = this._checkpointSandbox(sandbox).finally(() => {
+        if (this._checkpointRefreshInFlight === refresh) {
+          this._checkpointRefreshInFlight = null;
+        }
+      });
+      this._checkpointRefreshInFlight = refresh;
+      this._checkpointRefreshInFlight.catch(error => {
+        this.logger.warn(`${LOG_PREFIX} Failed to refresh Railway sandbox checkpoint ${this._checkpointName}:`, error);
+      });
+    }, delayMs);
+    this._checkpointRefreshTimer.unref?.();
+  }
+
+  private _cancelCheckpointRefresh(): void {
+    if (this._checkpointRefreshTimer) {
+      clearTimeout(this._checkpointRefreshTimer);
+      this._checkpointRefreshTimer = null;
+    }
+  }
+
+  private async _flushCheckpointRefresh(): Promise<void> {
+    this._cancelCheckpointRefresh();
+
+    if (this._checkpointRefreshInFlight) {
+      await this._checkpointRefreshInFlight;
+      return;
+    }
+
+    if (this._sandbox) {
+      await this._checkpointSandbox(this._sandbox);
+    }
+  }
+
+  private isCheckpointUnavailableError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('checkpoint') &&
+      ['not found', 'does not exist', 'missing', 'unknown', 'no checkpoint'].some(phrase => message.includes(phrase))
+    );
+  }
+
+  private isCheckpointAlreadyExistsError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('checkpoint') &&
+      (['already exists', 'must be unused', 'unique'].some(phrase => message.includes(phrase)) ||
+        (message.includes('name') && message.includes('used')))
+    );
+  }
+
+  private isSandboxUnavailableError(error: unknown, seen = new Set<unknown>()): boolean {
+    if (error && typeof error === 'object') {
+      if (seen.has(error)) return false;
+      seen.add(error);
+    }
+
+    if (
+      error instanceof SandboxNotFoundError ||
+      error instanceof SandboxFailedError ||
+      (error instanceof SandboxTimeoutError && error.resource === 'sandbox')
+    ) {
+      return true;
+    }
+
+    if (error && typeof error === 'object') {
+      const errorLike = error as { name?: unknown; message?: unknown; resource?: unknown; cause?: unknown };
+      const name = typeof errorLike.name === 'string' ? errorLike.name : '';
+      const message = typeof errorLike.message === 'string' ? errorLike.message.toLowerCase() : '';
+
+      if (
+        name === 'SandboxNotFoundError' ||
+        name === 'SandboxFailedError' ||
+        (name === 'SandboxTimeoutError' && errorLike.resource === 'sandbox')
+      ) {
+        return true;
+      }
+
+      if (
+        message.includes('sandbox') &&
+        ['not found', 'destroyed', 'failed', 'not running', 'unavailable'].some(phrase => message.includes(phrase))
+      ) {
+        return true;
+      }
+
+      if (errorLike.cause !== undefined) {
+        return this.isSandboxUnavailableError(errorLike.cause, seen);
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -242,9 +525,15 @@ export class RailwaySandbox extends MastraSandbox {
 
   private async _teardown(): Promise<void> {
     if (!this._sandbox) {
+      this._cancelCheckpointRefresh();
       return;
     }
     const sandbox = this._sandbox;
+    try {
+      await this._flushCheckpointRefresh();
+    } catch (error) {
+      this.logger.warn(`${LOG_PREFIX} Failed to flush checkpoint before teardown:`, error);
+    }
     this._sandbox = null;
     try {
       await sandbox.destroy();
@@ -254,15 +543,13 @@ export class RailwaySandbox extends MastraSandbox {
   }
 
   /**
-   * Build the configured template into a ready-to-use base. Accepts either a
-   * pre-built `SandboxTemplate` or a builder callback over `Sandbox.template()`.
-   * Calls `.build()` so the recipe is materialised before `Sandbox.create()`.
+   * Resolve the configured template into a `SandboxTemplate` that Railway
+   * builds during `Sandbox.create()`. Accepts either a pre-built
+   * `SandboxTemplate` or a builder callback over `Sandbox.template()`.
    */
-  private async _resolveTemplate(buildOptions: { token?: string; environmentId?: string }): Promise<SandboxTemplate> {
+  private _resolveTemplate(): SandboxTemplate {
     const option = this._templateOption!;
-    const template = typeof option === 'function' ? option(Sandbox.template()) : option;
-    this.logger.debug(`${LOG_PREFIX} Building Railway sandbox template for: ${this.id}`);
-    return template.build(buildOptions);
+    return typeof option === 'function' ? option(Sandbox.template()) : option;
   }
 
   /**
@@ -369,14 +656,31 @@ export class RailwaySandbox extends MastraSandbox {
     args: string[] = [],
     options: ExecuteCommandOptions = {},
   ): Promise<CommandResult> {
-    await this.ensureRunning();
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
-    const effectiveOptions: ExecuteCommandOptions = {
-      ...options,
-      timeout: options.timeout ?? this._timeout,
-    };
-    const handle = await this.processes.spawn(fullCommand, effectiveOptions);
-    const result = await handle.wait();
-    return { ...result, command, args };
+    return this.withRestartRetry(async () => {
+      const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+      const timeout = options.timeout ?? this._timeout;
+      const env = options.env
+        ? Object.fromEntries(
+            Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+          )
+        : undefined;
+      const startedAt = Date.now();
+      const result = await this.railway.exec(fullCommand, {
+        ...(timeout !== undefined && { timeoutSec: Math.ceil(timeout / 1000) }),
+        ...(options.cwd !== undefined && { cwd: options.cwd }),
+        ...(env !== undefined && { env }),
+      });
+      const exitCode = result.exitCode ?? -1;
+      return {
+        success: exitCode === 0,
+        exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        executionTimeMs: Date.now() - startedAt,
+        command,
+        args,
+        timedOut: result.timedOut,
+      };
+    });
   }
 }

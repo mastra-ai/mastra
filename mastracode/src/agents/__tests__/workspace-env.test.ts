@@ -17,12 +17,18 @@ const originalEnv = { ...process.env };
 
 function createRequestContext(projectPath: string) {
   const requestContext = new RequestContext();
-  requestContext.set('harness', {
+  const getState = () => ({
+    projectPath,
+    sandboxAllowedPaths: [],
+  });
+  requestContext.set('controller', {
     modeId: 'build',
-    getState: () => ({
-      projectPath,
-      sandboxAllowedPaths: [],
-    }),
+    getState,
+    session: {
+      state: {
+        get: getState,
+      },
+    },
   });
   return requestContext;
 }
@@ -50,7 +56,7 @@ describe('mastracode workspace sandbox environment', () => {
     try {
       process.env.MASTRACODE_TEST_ENV = 'works';
       const { getDynamicWorkspace } = await import('../workspace.js');
-      const workspace = getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
+      const workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
 
       const result = await workspace.sandbox!.executeCommand!('node -e "console.log(process.env.MASTRACODE_TEST_ENV)"');
 
@@ -74,7 +80,7 @@ describe('mastracode workspace sandbox environment', () => {
       };
       let callCount = 0;
       await fs.writeFile(path.join(tempDir, 'hooked.txt'), 'original');
-      const workspace = getDynamicWorkspace({ requestContext });
+      const workspace = await getDynamicWorkspace({ requestContext });
       const agent = new Agent({
         id: 'mc-workspace-hook-agent',
         name: 'MC Workspace Hook Agent',

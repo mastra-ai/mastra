@@ -6,8 +6,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: read
 
 jobs:
   label-linked-issues:
@@ -15,11 +13,11 @@ jobs:
       github.repository == 'mastra-ai/mastra' &&
       github.event.pull_request.merged == true &&
       github.event.pull_request.base.ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -28,12 +26,14 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Generate GitHub App token
-        id: app_token
+        id: app-auth
         uses: ./.github/actions/app-auth
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
-          app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: read
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -51,7 +51,7 @@ jobs:
         working-directory: scripts/release-issue-notification
         env:
           MODE: pending-release
-          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

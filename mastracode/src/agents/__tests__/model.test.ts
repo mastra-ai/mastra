@@ -82,6 +82,25 @@ vi.mock('@ai-sdk/openai-compatible', () => ({
   })),
 }));
 
+// Mock @ai-sdk/amazon-bedrock
+vi.mock('@ai-sdk/amazon-bedrock', () => ({
+  createAmazonBedrock: vi.fn((opts: Record<string, unknown>) => {
+    return (modelId: string) => ({
+      __provider: 'amazon-bedrock',
+      modelId,
+      region: opts.region,
+      credentialProvider: opts.credentialProvider,
+      headers: opts.headers,
+    });
+  }),
+}));
+
+// Mock @aws-sdk/credential-providers
+const mockCredentialProvider = vi.hoisted(() => vi.fn());
+vi.mock('@aws-sdk/credential-providers', () => ({
+  fromNodeProviderChain: vi.fn(() => mockCredentialProvider),
+}));
+
 // Mock ai SDK's wrapLanguageModel to pass through with a marker
 vi.mock('ai', () => ({
   wrapLanguageModel: vi.fn(({ model }: { model: Record<string, unknown> }) => ({
@@ -160,11 +179,14 @@ vi.mock('../../onboarding/settings.js', () => ({
   MEMORY_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
 }));
 
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MODEL_TOKENS } from '../../../../docs/src/plugins/remark-model-tokens/models';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import {
@@ -183,7 +205,7 @@ function makeRequestContext({ threadId, resourceId }: { threadId?: string; resou
     get: (key: string) => values.get(key),
     set: (key: string, value: unknown) => values.set(key, value),
   } as any;
-  requestContext.set('harness', {
+  requestContext.set('controller', {
     threadId,
     resourceId,
   });
@@ -337,7 +359,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
     });
 
-    it('passes harness headers to the Anthropic OAuth provider', () => {
+    it('passes controller headers to the Anthropic OAuth provider', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'oauth-access-token',
@@ -417,7 +439,7 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('model-router');
     });
 
-    it('passes harness headers to the OpenAI OAuth provider', () => {
+    it('passes controller headers to the OpenAI OAuth provider', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'openai-oauth-access-token',
@@ -451,9 +473,9 @@ describe('resolveModel', () => {
         get: (key: string) => values.get(key),
         set: (key: string, value: unknown) => values.set(key, value),
       } as any;
-      requestContext.set('harness', {
+      requestContext.set('controller', {
+        session: { modelId: 'openai/gpt-5.2' },
         state: {
-          currentModelId: 'openai/gpt-5.2',
           thinkingLevel: 'high',
         },
       });
@@ -487,7 +509,7 @@ describe('resolveModel', () => {
       expect(auth).toEqual({ apiKey: 'msk_gateway_key_123', source: 'gateway' });
     });
 
-    it('passes harness headers to model router providers', () => {
+    it('passes controller headers to model router providers', () => {
       const result = resolveModel('google/gemini-2.0-flash', {
         requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
       }) as Record<string, unknown>;
@@ -499,7 +521,7 @@ describe('resolveModel', () => {
       });
     });
 
-    it('passes harness headers to custom providers', () => {
+    it('passes controller headers to custom providers', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [
           {
@@ -519,6 +541,48 @@ describe('resolveModel', () => {
       expect(result.modelId).toBe('reasoner-v1');
       expect(result.url).toBe('https://llm.acme.dev/v1');
       expect(result.apiKey).toBe('acme-secret');
+      expect(result.headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
+    });
+  });
+
+  describe('amazon-bedrock/* models', () => {
+    it('resolves Bedrock models through the AWS SDK with the credential chain', () => {
+      process.env.AWS_REGION = 'us-west-2';
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__);
+      expect(result.region).toBe('us-west-2');
+      expect(result.credentialProvider).toBe(mockCredentialProvider);
+      expect(fromNodeProviderChain).toHaveBeenCalled();
+      expect(createAmazonBedrock).toHaveBeenCalled();
+    });
+
+    it('falls back to us-east-1 when no AWS region is configured', () => {
+      delete process.env.AWS_REGION;
+      delete process.env.AWS_DEFAULT_REGION;
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
+
+      expect(result.region).toBe('us-east-1');
+    });
+
+    it('preserves a colon-bearing Bedrock model id', () => {
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_SONNET__) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__);
+    });
+
+    it('passes harness headers to the Bedrock provider', () => {
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      }) as Record<string, unknown>;
+
       expect(result.headers).toEqual({
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
@@ -710,7 +774,7 @@ describe('resolveModel', () => {
       });
     });
 
-    it('passes harness headers to the gateway-resolved model', () => {
+    it('passes controller headers to the gateway-resolved model', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
       const result = resolveModel('mastra/anthropic/claude-sonnet-4', {

@@ -28,7 +28,7 @@ function createContext() {
   const browserInstance = { id: 'browser-instance' };
   const staticAgent = { setBrowser: vi.fn() };
   const dynamicAgent = { setBrowser: vi.fn() };
-  const harnessState = { mode: 'review' };
+  const controllerState = { mode: 'review' };
   const setState = vi.fn();
   const settings = {
     browser: {
@@ -40,25 +40,32 @@ function createContext() {
       stagehand: { env: 'LOCAL' as const },
     },
   };
+  const session = {
+    state: {
+      get: vi.fn(() => controllerState),
+      set: setState,
+    },
+  };
+  const controller = {
+    session,
+    listModes: vi.fn(() => [
+      { id: 'build', agent: staticAgent },
+      { id: 'review', agent: vi.fn(() => dynamicAgent) },
+    ]),
+  };
   const ctx = {
     state: {
-      harness: {
-        getState: vi.fn(() => harnessState),
-      },
+      session,
+      controller,
       ui: {},
     },
-    harness: {
-      listModes: vi.fn(() => [
-        { id: 'build', agent: staticAgent },
-        { id: 'review', agent: vi.fn(() => dynamicAgent) },
-      ]),
-      setState,
-    },
+    session,
+    controller,
     showInfo: vi.fn(),
     showError: vi.fn(),
   } as unknown as SlashCommandContext;
 
-  return { ctx, settings, browserInstance, staticAgent, dynamicAgent, harnessState, setState };
+  return { ctx, settings, browserInstance, staticAgent, dynamicAgent, controllerState, setState };
 }
 
 describe('handleBrowserCommand', () => {
@@ -72,7 +79,7 @@ describe('handleBrowserCommand', () => {
   });
 
   it('enables browser settings, attaches the browser to all mode agents, and records active settings', async () => {
-    const { ctx, settings, browserInstance, staticAgent, dynamicAgent, harnessState, setState } = createContext();
+    const { ctx, settings, browserInstance, staticAgent, dynamicAgent, controllerState, setState } = createContext();
     browserMocks.loadSettings.mockReturnValue(settings);
     browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
     browserMocks.createBrowserFromSettings.mockResolvedValue(browserInstance);
@@ -84,12 +91,12 @@ describe('handleBrowserCommand', () => {
       enabled: true,
     };
     expect(browserMocks.createBrowserFromSettings).toHaveBeenCalledWith(enabledSettings);
-    expect(ctx.harness.listModes).toHaveBeenCalledOnce();
-    expect(ctx.state.harness.getState).toHaveBeenCalledOnce();
+    expect(ctx.controller.listModes).toHaveBeenCalledOnce();
+    expect(ctx.state.session.state.get).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
     expect(dynamicAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
-    const dynamicMode = (ctx.harness.listModes as ReturnType<typeof vi.fn>).mock.results[0]?.value[1];
-    expect(dynamicMode.agent).toHaveBeenCalledWith(harnessState);
+    const dynamicMode = (ctx.controller.listModes as ReturnType<typeof vi.fn>).mock.results[0]?.value[1];
+    expect(dynamicMode.agent).toHaveBeenCalledWith(controllerState);
     expect(setState).toHaveBeenCalledWith({ activeBrowserSettings: enabledSettings });
     expect(browserMocks.setProfileProvider).toHaveBeenCalledWith('/tmp/mastracode-browser-profile', 'stagehand');
     expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);

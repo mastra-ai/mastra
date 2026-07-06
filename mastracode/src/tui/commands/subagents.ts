@@ -30,14 +30,14 @@ async function showSubagentModelListForScope(
   agentType: string,
   agentTypeLabel: string,
 ): Promise<void> {
-  const availableModels = await ctx.state.harness.listAvailableModels();
+  const availableModels = await ctx.state.controller.listAvailableModels();
 
   if (availableModels.length === 0) {
     ctx.showInfo('No models available. Check your Mastra configuration.');
     return;
   }
 
-  const currentSubagentModel = ctx.state.harness.getSubagentModelId({ agentType });
+  const currentSubagentModel = ctx.state.session.subagents.model.get({ agentType });
   const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
   return new Promise(resolve => {
@@ -50,7 +50,7 @@ async function showSubagentModelListForScope(
         ctx.state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         try {
-          await ctx.state.harness.setSubagentModelId({ modelId: model.id, agentType });
+          await ctx.state.session.subagents.model.set({ modelId: model.id, agentType });
           if (scope === 'global') {
             const settings = loadSettings();
             settings.models.subagentModels[agentType] = model.id;
@@ -112,12 +112,12 @@ async function showSubagentScopeThenList(
 function getConfiguredSubagentTypes(
   ctx: SlashCommandContext,
 ): Array<{ id: string; label: string; description: string }> {
-  const harnessWithConfig = ctx.state.harness as unknown as {
+  const controllerWithConfig = ctx.state.controller as unknown as {
     config?: {
       subagents?: Array<{ id: string; name: string; description: string }>;
     };
   };
-  const configuredSubagents = harnessWithConfig.config?.subagents;
+  const configuredSubagents = controllerWithConfig.config?.subagents;
 
   return configuredSubagents && configuredSubagents.length > 0
     ? configuredSubagents.map(subagent => ({

@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.13.0",
+  "version": "1.18.1-alpha.2",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -12,7 +12,6 @@
   "exports": {
     ".": "./dist/index.js",
     "./package.json": "./package.json",
-    "./telemetry-loader": "./dist/commands/dev/telemetry-loader.js",
     "./dist/*": [
       "./dist/*",
       "./dist/*.js"
@@ -53,11 +52,11 @@
   "dependencies": {
     "@babel/parser": "^7.29.7",
     "@babel/types": "^7.29.7",
-    "@clack/prompts": "^1.1.0",
+    "@clack/prompts": "^1.7.0",
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
@@ -81,7 +80,7 @@
     "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/archiver": "^7.0.0",
+    "@types/archiver": "^8.0.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.19.21",
     "@types/semver": "^7.7.1",
@@ -100,7 +99,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.50.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {
