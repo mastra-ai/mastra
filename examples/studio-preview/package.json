@@ -4,38 +4,26 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
-    "build": "pnpm build:linked-workspace-deps && pnpm mastra:build",
-    "build:linked-workspace-deps": "turbo --cwd ../.. build --filter mastra --filter @mastra/deployer-vercel",
-    "dev": "pnpm build:linked-workspace-deps && pnpm mastra:dev",
+    "build": "pnpm mastra:build",
+    "dev": "pnpm mastra:dev",
     "mastra:build": "node ../../packages/cli/dist/index.js build",
     "mastra:dev": "node ../../packages/cli/dist/index.js dev",
-    "typecheck": "pnpm build:linked-workspace-deps && tsc --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.25",
-    "@mastra/core": "latest",
-    "@mastra/deployer-vercel": "latest",
-    "@mastra/editor": "latest",
-    "@mastra/memory": "latest",
+    "@mastra/core": "workspace:*",
+    "@mastra/deployer-vercel": "workspace:*",
+    "@mastra/editor": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "hono": "^4.12.8",
     "zod": "^4.4.3",
     "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
-    "mastra": "latest",
-    "turbo": "^2.9.12",
+    "mastra": "workspace:*",
     "typescript": "^6.0.3"
   },
-  "pnpm": {
-    "overrides": {
-      "@mastra/core": "1.49.0",
-      "@mastra/editor": "0.13.4",
-      "@mastra/memory": "1.22.1",
-      "@mastra/deployer-vercel": "link:../../deployers/vercel",
-      "mastra": "link:../../packages/cli"
-    }
-  },
-  "license": "Apache-2.0",
-  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+  "license": "Apache-2.0"
 }

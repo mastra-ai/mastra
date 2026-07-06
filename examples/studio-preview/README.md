@@ -23,18 +23,18 @@ The data is deterministic and free to produce (no model calls, no provider key n
 
 ## Local usage
 
-From the repository root:
+This example is managed by the root pnpm workspace so PR previews use the Mastra packages from the current branch. From the repository root:
 
 ```bash
-corepack pnpm@10.29.3 --dir examples/studio-preview install --frozen-lockfile --ignore-workspace
-corepack pnpm@10.29.3 --dir examples/studio-preview build
+pnpm install --frozen-lockfile
+MASTRA_AGENT_SIGNALS=false pnpm build:studio-preview
 ```
 
 For local Studio development:
 
 ```bash
 cp examples/studio-preview/.env.example examples/studio-preview/.env
-pnpm --dir examples/studio-preview dev
+pnpm turbo run dev --filter examples-studio-preview
 ```
 
 ## Vercel project setup
@@ -42,8 +42,8 @@ pnpm --dir examples/studio-preview dev
 Create one Vercel project for the repository and point it at this example.
 
 - Root Directory: `examples/studio-preview`
-- Build Command: `pnpm build`
-- Install Command: `pnpm install --frozen-lockfile --ignore-workspace`
+- Build Command: `MASTRA_AGENT_SIGNALS=false pnpm --dir ../.. build:studio-preview`
+- Install Command: `cd ../.. && pnpm install --frozen-lockfile`
 - Output Directory: leave empty
 - Node.js Version: 22.x
 - Root Directory setting: enable source files outside the root directory
@@ -65,7 +65,7 @@ ANTHROPIC_API_KEY=...
 If both `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are configured, Studio can show both connected providers in its model controls.
 The preview agent uses OpenAI by default when it is configured, then falls back to Anthropic. To override the default agent model, set `MASTRA_PREVIEW_MODEL` to a placeholder token such as `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or to a concrete `provider/model` ID.
 
-The build compiles the linked CLI and Vercel deployer workspace packages so the preview uses Studio assets from the current branch. The sample API uses a published `@mastra/core` version so Vercel does not depend on unpublished monorepo package versions. Vercel still deploys only the generated output for this example, not the full repository.
+The build runs through the root workspace, so Turbo builds the Mastra packages needed by this preview from the current branch before generating the example output. Vercel still deploys only the generated output for this example, not the full repository.
 
 Vercel will use the generated `.vercel/output` folder. Studio is served at `/`, and the Mastra API is served under `/api/*`.
 

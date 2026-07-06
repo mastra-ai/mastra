@@ -19,6 +19,7 @@ packages:
   - client-sdks/*
   - integrations/*
   - auth/*
+  - examples/studio-preview
   - observability/*
   - channels/*
   - explorations/longmemeval

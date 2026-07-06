@@ -1,10 +1,11 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { join, dirname } from 'path';
 
 // Find all package.json files in examples directory
 const packageJsonFiles = await globby(['examples/**/package.json', '!**/node_modules/**', '!./examples/dane/**']);
+const workspaceManagedExamples = new Set(['examples-studio-preview']);
 
 let hasWorkspaceDependencies = false;
 let hasMissingOverrides = false;
@@ -13,6 +14,12 @@ const errors = [];
 
 for (const packageJsonPath of packageJsonFiles) {
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  const isWorkspaceManagedExample = workspaceManagedExamples.has(packageJson.name);
+
+  if (isWorkspaceManagedExample) {
+    console.log(`Skipping isolated example validation for workspace-managed ${packageJson.name}`);
+    continue;
+  }
 
   // Check regular and dev dependencies for workspace: references
   hasWorkspaceDependencies = checkWorkspaceDependencies(packageJson, packageJsonPath) || hasWorkspaceDependencies;
@@ -43,7 +50,7 @@ if (!hasLockFile) {
 }
 
 console.log(
-  'All examples validated successfully - no workspace dependencies found and all mastra packages have correct overrides',
+  'All examples validated successfully - no workspace dependencies found outside allowlisted workspace-managed examples and all mastra packages have correct overrides',
 );
 
 function checkWorkspaceDependencies(packageJson, packageJsonPath) {

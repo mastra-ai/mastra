@@ -54,6 +54,7 @@
     "build:auth": "pnpm turbo build --filter \"./auth/*\" --filter \"./packages/auth\" --filter \"./server-adapters/*\"",
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
     "build:workspaces": "pnpm turbo build --filter \"./workspaces/*\"",
+    "build:studio-preview": "pnpm turbo build --filter examples-studio-preview",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
     "generate:integration": "tsx ./integration-generator/index.ts",
     "test": "vitest run",
