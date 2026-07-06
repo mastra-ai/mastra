@@ -23,7 +23,7 @@ const turns = buildThreadRailTurns(messages);
       <MessageScrollerContent>
         {messages.map(message => (
           <MessageScrollerItem key={message.id} messageId={message.id}>
-            {() => <MessageRow message={message} />}
+            <MessageRow message={message} />
           </MessageScrollerItem>
         ))}
       </MessageScrollerContent>

@@ -245,12 +245,12 @@ describe('Thread', () => {
     });
 
     it('scrolls to the selected user message', async () => {
-      const scrollIntoView = vi.fn();
-      const originalDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
-      Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      const scrollTo = vi.fn();
+      const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+      Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
         configurable: true,
         writable: true,
-        value: scrollIntoView,
+        value: scrollTo,
       });
       server.use(...baseHandlers());
 
@@ -263,16 +263,50 @@ describe('Thread', () => {
           ]);
         });
 
+        const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+        if (!viewport) throw new Error('missing message scroller viewport');
+        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 20 });
+        Object.defineProperty(viewport, 'getBoundingClientRect', {
+          configurable: true,
+          value: vi.fn(() => ({
+            top: 0,
+            bottom: 40,
+            left: 0,
+            right: 100,
+            width: 100,
+            height: 40,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          })),
+        });
+        const firstMessage = document.querySelector<HTMLElement>('[data-message-id="m-first question"]');
+        if (!firstMessage) throw new Error('missing first message scroller item');
+        Object.defineProperty(firstMessage, 'getBoundingClientRect', {
+          configurable: true,
+          value: vi.fn(() => ({
+            top: -20,
+            bottom: 20,
+            left: 0,
+            right: 100,
+            width: 100,
+            height: 40,
+            x: 0,
+            y: -20,
+            toJSON: () => ({}),
+          })),
+        });
+
         await act(async () => {
           fireEvent.click(screen.getByRole('button', { name: 'Jump to first question' }));
         });
 
-        expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
       } finally {
         if (originalDescriptor) {
-          Object.defineProperty(Element.prototype, 'scrollIntoView', originalDescriptor);
+          Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalDescriptor);
         } else {
-          delete Element.prototype.scrollIntoView;
+          delete HTMLElement.prototype.scrollTo;
         }
       }
     });

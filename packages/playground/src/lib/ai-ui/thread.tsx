@@ -166,16 +166,13 @@ export const Thread = ({
                           messageId={message.id}
                           scrollAnchor={threadRailAnchorIds.has(message.id)}
                         >
-                          {itemProps => (
-                            <MessageRow
-                              {...itemProps}
-                              message={message}
-                              hasModelList={hasModelList}
-                              isSpeaking={isSpeaking}
-                              onReadAloud={readAloud}
-                              onStopSpeaking={stopSpeaking}
-                            />
-                          )}
+                          <MessageRow
+                            message={message}
+                            hasModelList={hasModelList}
+                            isSpeaking={isSpeaking}
+                            onReadAloud={readAloud}
+                            onStopSpeaking={stopSpeaking}
+                          />
                         </MessageScrollerItem>
                       );
                     })}

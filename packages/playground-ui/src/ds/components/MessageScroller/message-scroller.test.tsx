@@ -2,8 +2,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { MessageScrollerContent, MessageScrollerItem, MessageScrollerViewport } from './message-scroller';
-import { MessageScrollerProvider } from './message-scroller-context';
+import {
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from './message-scroller';
 import { ThreadRail } from './thread-rail';
 import type { ThreadRailTurn } from './thread-rail-turns';
 
@@ -63,10 +67,10 @@ const renderScroller = () =>
       <MessageScrollerViewport data-testid="viewport">
         <MessageScrollerContent>
           <MessageScrollerItem messageId="message-1" scrollAnchor>
-            {itemProps => <div {...itemProps}>First message</div>}
+            <div>First message</div>
           </MessageScrollerItem>
           <MessageScrollerItem messageId="message-2" scrollAnchor>
-            {itemProps => <div {...itemProps}>Second message</div>}
+            <div>Second message</div>
           </MessageScrollerItem>
         </MessageScrollerContent>
       </MessageScrollerViewport>
@@ -87,7 +91,7 @@ const createRect = ({ top = 0, height = 40, width = 100 }: { top?: number; heigh
 });
 
 const getItem = (messageId: string): HTMLElement => {
-  const element = document.querySelector<HTMLElement>(`[data-message-scroller-id="${messageId}"]`);
+  const element = document.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
   if (!element) throw new Error(`No scroller item for ${messageId}`);
   return element;
 };
@@ -118,13 +122,13 @@ afterEach(() => {
 describe('MessageScroller', () => {
   it('falls back to the latest anchor and scrolls to a clicked rail turn', async () => {
     const originalIntersectionObserver = globalThis.IntersectionObserver;
-    const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
-    const scrollIntoView = vi.fn();
+    const originalScrollTo = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+    const scrollTo = vi.fn();
     vi.stubGlobal('IntersectionObserver', undefined);
-    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
       configurable: true,
       writable: true,
-      value: scrollIntoView,
+      value: scrollTo,
     });
 
     try {
@@ -138,15 +142,20 @@ describe('MessageScroller', () => {
         );
       });
 
+      const viewport = screen.getByTestId('viewport');
+      Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 20 });
+      setTop(viewport, 0);
+      setTop(getItem('message-1'), -20);
+
       fireEvent.click(screen.getByRole('button', { name: 'Jump to First turn' }));
 
-      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
     } finally {
       vi.stubGlobal('IntersectionObserver', originalIntersectionObserver);
-      if (originalScrollIntoView) {
-        Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView);
+      if (originalScrollTo) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalScrollTo);
       } else {
-        delete Element.prototype.scrollIntoView;
+        delete HTMLElement.prototype.scrollTo;
       }
     }
   });
@@ -164,7 +173,7 @@ describe('MessageScroller', () => {
 
       setTop(viewport, 100);
       setTop(firstMessage, 90);
-      setTop(secondMessage, 140);
+      setTop(secondMessage, 180);
 
       await waitFor(() => {
         expect(MockIntersectionObserver.instances[0]?.observed.size).toBe(2);

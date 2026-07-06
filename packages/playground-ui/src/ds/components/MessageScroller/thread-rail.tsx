@@ -1,8 +1,7 @@
 import { FileText } from 'lucide-react';
 import * as React from 'react';
 
-import { MessageScrollerButton } from './message-scroller';
-import { useOptionalMessageScrollerVisibility } from './message-scroller-context';
+import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from './message-scroller-hooks';
 import type { ThreadRailTurn } from './thread-rail-turns';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -56,6 +55,7 @@ export function ThreadRail({
   const railRef = React.useRef<HTMLElement>(null);
   const previewId = React.useId();
   const [previewState, setPreviewState] = React.useState<ThreadRailPreviewState>(DEFAULT_PREVIEW_STATE);
+  const messageScroller = useOptionalMessageScroller();
   const scrollerVisibility = useOptionalMessageScrollerVisibility();
 
   const fallbackMessageId = turns.at(-1)?.messageId;
@@ -65,6 +65,17 @@ export function ThreadRail({
   const visibleMessageIdSet = new Set(resolvedVisibleMessageIds);
   const previewHoverActive = previewState.phase === 'entering' || previewState.phase === 'visible';
   const hoveredIndex = previewHoverActive ? previewState.index : null;
+  const selectTurn = React.useCallback(
+    (turn: ThreadRailTurn) => {
+      if (onSelect) {
+        onSelect(turn);
+        return;
+      }
+
+      messageScroller?.scrollToMessage(turn.messageId, { behavior: 'smooth', align: 'start' });
+    },
+    [messageScroller, onSelect],
+  );
 
   const showPreview = (index: number, element: HTMLElement) => {
     const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
@@ -193,7 +204,7 @@ export function ThreadRail({
                 inView={inView}
                 previewId={previewActive ? previewId : undefined}
                 onHoverChange={showPreview}
-                onSelect={onSelect}
+                onSelect={selectTurn}
               />
             );
           })}
@@ -221,7 +232,7 @@ interface ThreadRailItemProps {
   inView: boolean;
   previewId?: string;
   onHoverChange: (index: number, element: HTMLElement) => void;
-  onSelect?: (turn: ThreadRailTurn) => void;
+  onSelect: (turn: ThreadRailTurn) => void;
 }
 
 /** Width of a rail tick: widest at the hovered item, tapering to neighbours. */
@@ -262,17 +273,14 @@ function ThreadRailItem({
       data-active={active ? 'true' : undefined}
       className="group/thread-rail-item relative flex items-center"
     >
-      <MessageScrollerButton
-        messageId={turn.messageId}
+      <button
+        type="button"
         aria-label={`Jump to ${turn.prompt}`}
         aria-current={active ? 'location' : undefined}
         aria-describedby={previewId}
         data-in-view={inView ? 'true' : undefined}
         data-active={active ? 'true' : undefined}
-        onClick={event => {
-          onSelect?.(turn);
-          if (onSelect) event.preventDefault();
-        }}
+        onClick={() => onSelect(turn)}
         onMouseEnter={event => onHoverChange(index, event.currentTarget)}
         onFocus={event => onHoverChange(index, event.currentTarget)}
         className={cn(
