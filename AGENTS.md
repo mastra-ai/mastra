@@ -7,14 +7,11 @@ packages use strict TypeScript
 vitest tests are colocated with source
 When adding a model name or ID to changesets or comments, use a literal value from docs/src/plugins/remark-model-tokens/models.ts (do not use placeholder tokens, remark does not replace them in changesets/comments)
 
-Prefer narrowest build test lint typecheck for packages
-when package splits unit integration or E2E coverage run narrowest suite first
-From root prefer specific scripts like pnpm build:core or pnpm --filter ./packages/name script
-Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
-Don't run pnpm build directly (slow, builds everything); build individual packages from root like pnpm build:core or pnpm build:memory, or generically pnpm turbo build --filter ./packages/<name> — turbo builds only the workspace dependency graph that package needs
-Fresh worktree/clone: pnpm install, then build the packages you'll work in (command above)
-Unresolvable @internal/* or workspace package imports in tests mean deps aren't built — build them (command above); never restructure tests to tolerate an unbuilt environment
-Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
+Prefer narrowest package build/test/lint/typecheck; start with unit/integration before E2E
+Use specific root scripts like pnpm build:core, pnpm --filter ./packages/name script, or pnpm turbo build --filter ./packages/<name>
+Avoid pnpm setup/build/build:packages unless package-local options are insufficient
+Fresh clone: pnpm install, then build relevant packages
+Unresolvable internal/workspace imports means deps aren't built
 some integration tests need pnpm i --ignore-workspace
 
 features and new packages need related docs updates
