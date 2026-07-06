@@ -2417,7 +2417,10 @@ export class Mastra<
     }
 
     this.#observability = fsObservability;
-    this.#observability.setLogger({ logger: this.getLogger() as any });
+    // Pass the raw logger (not the DualLogger) to observability to avoid
+    // circular forwarding, mirroring setLogger().
+    const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
+    this.#observability.setLogger({ logger: rawLogger as any });
     this.#observability.setMastraContext({ mastra: this as any });
   }
 
