@@ -1,42 +1,42 @@
-import type { Event, EventCallback } from '../../events/types';
-import type { Mastra } from '../../mastra';
-import { RequestContext } from '../../request-context';
-import type { ScheduleTarget } from '../../storage/domains/schedules/base';
-import { PullTransport } from '../../worker/transport/pull-transport';
-import type { WorkerTransport } from '../../worker/transport/transport';
-import { MastraWorker } from '../../worker/worker';
-import type { WorkerDeps } from '../../worker/worker';
-import type { AgentSignalIfIdleOptions } from '../types';
+import type { AgentSignalIfIdleOptions } from '../agent/types';
+import type { Event, EventCallback } from '../events/types';
+import type { Mastra } from '../mastra';
+import { RequestContext } from '../request-context';
+import type { ScheduleTarget } from '../storage/domains/schedules/base';
+import { PullTransport } from '../worker/transport/pull-transport';
+import type { WorkerTransport } from '../worker/transport/transport';
+import { MastraWorker } from '../worker/worker';
+import type { WorkerDeps } from '../worker/worker';
 import type {
-  HeartbeatEffective,
-  HeartbeatHooks,
-  HeartbeatIfIdle,
-  HeartbeatPrepareContext,
-  HeartbeatPrepareResult,
-  HeartbeatRunStatus,
-  HeartbeatTriggerInfo,
+  ScheduleEffective,
+  ScheduleHooks,
+  ScheduleIfIdle,
+  SchedulePrepareContext,
+  SchedulePrepareResult,
+  ScheduleRunStatus,
+  ScheduleTriggerInfo,
 } from './types';
 
-/** PubSub topic on which the scheduler publishes `heartbeat.fire` events. */
-export const TOPIC_HEARTBEATS = 'heartbeats';
+/** PubSub topic on which the scheduler publishes `agent-schedule.fire` events. */
+export const TOPIC_AGENT_SCHEDULES = 'agent-schedules';
 
-const DEFAULT_GROUP = 'mastra-heartbeats';
+const DEFAULT_GROUP = 'mastra-agent-schedules';
 
-export interface HeartbeatWorkerConfig {
+export interface AgentScheduleWorkerConfig {
   group?: string;
 }
 
-export interface HeartbeatFireEventData {
+export interface AgentScheduleFireEventData {
   scheduleId: string;
   claimId: string;
   scheduledFireAt: number;
-  target: Extract<ScheduleTarget, { type: 'heartbeat' }>;
+  target: Extract<ScheduleTarget, { type: 'agent' }>;
   /** Defaults to `'schedule-fire'`. `'manual'` for fire-now invocations. */
   triggerKind?: 'schedule-fire' | 'manual';
 }
 
 /**
- * Consumes `heartbeat.fire` events published by the scheduler and runs
+ * Consumes `agent-schedule.fire` events published by the scheduler and runs
  * the configured agent — either by `sendSignal` (threaded) or
  * `agent.generate` (threadless). Mirrors `OrchestrationWorker`'s
  * subscribe-on-start / unsubscribe-on-stop lifecycle.
@@ -45,15 +45,15 @@ export interface HeartbeatFireEventData {
  * carries the agent's runId (not just the scheduler's claim id),
  * letting the UI link triggers to real agent runs.
  */
-export class HeartbeatWorker extends MastraWorker {
-  readonly name = 'heartbeat';
+export class AgentScheduleWorker extends MastraWorker {
+  readonly name = 'agent-schedule';
 
-  #config: HeartbeatWorkerConfig;
+  #config: AgentScheduleWorkerConfig;
   #transport?: WorkerTransport;
   #pushCb?: EventCallback;
   #running = false;
 
-  constructor(config: HeartbeatWorkerConfig = {}) {
+  constructor(config: AgentScheduleWorkerConfig = {}) {
     super();
     this.#config = config;
   }
@@ -62,13 +62,13 @@ export class HeartbeatWorker extends MastraWorker {
     await super.init(deps);
 
     if (!deps.mastra) {
-      throw new Error('HeartbeatWorker requires Mastra instance');
+      throw new Error('AgentScheduleWorker requires Mastra instance');
     }
   }
 
   async start(): Promise<void> {
     if (this.#running) return;
-    if (!this.deps) throw new Error('HeartbeatWorker: call init() before start()');
+    if (!this.deps) throw new Error('AgentScheduleWorker: call init() before start()');
 
     // Push-only pubsubs (EventEmitter, UnixSocketPubSub) don't support the
     // grouped pull subscription a PullTransport requires. They deliver every
@@ -81,7 +81,7 @@ export class HeartbeatWorker extends MastraWorker {
         void this.#handleEvent(event, ack, nack);
       };
       this.#pushCb = cb;
-      await this.deps.pubsub.subscribe(TOPIC_HEARTBEATS, cb);
+      await this.deps.pubsub.subscribe(TOPIC_AGENT_SCHEDULES, cb);
       this.#running = true;
       return;
     }
@@ -90,7 +90,7 @@ export class HeartbeatWorker extends MastraWorker {
     this.#transport = new PullTransport({
       pubsub: this.deps.pubsub,
       group,
-      topic: TOPIC_HEARTBEATS,
+      topic: TOPIC_AGENT_SCHEDULES,
       logger: this.deps.logger,
     });
 
@@ -109,7 +109,7 @@ export class HeartbeatWorker extends MastraWorker {
         this.#transport = undefined;
       }
       if (this.#pushCb && this.deps) {
-        await this.deps.pubsub.unsubscribe(TOPIC_HEARTBEATS, this.#pushCb);
+        await this.deps.pubsub.unsubscribe(TOPIC_AGENT_SCHEDULES, this.#pushCb);
         this.#pushCb = undefined;
       }
     } finally {
@@ -122,19 +122,19 @@ export class HeartbeatWorker extends MastraWorker {
   }
 
   async #handleEvent(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>): Promise<void> {
-    if (event.type !== 'heartbeat.fire') {
+    if (event.type !== 'agent-schedule.fire') {
       // Not ours — ack and ignore.
       await ack?.();
       return;
     }
 
     const mastra = this.mastra!;
-    const payload = event.data as HeartbeatFireEventData;
+    const payload = event.data as AgentScheduleFireEventData;
     try {
       await this.#dispatch(mastra, payload);
       await ack?.();
     } catch (err) {
-      this.deps?.logger?.error('HeartbeatWorker: error processing heartbeat.fire', {
+      this.deps?.logger?.error('AgentScheduleWorker: error processing agent-schedule.fire', {
         scheduleId: payload?.scheduleId,
         claimId: payload?.claimId,
         error: err,
@@ -143,11 +143,11 @@ export class HeartbeatWorker extends MastraWorker {
     }
   }
 
-  async #dispatch(mastra: Mastra, data: HeartbeatFireEventData): Promise<void> {
+  async #dispatch(mastra: Mastra, data: AgentScheduleFireEventData): Promise<void> {
     const { scheduleId, claimId, scheduledFireAt, target } = data;
     const actualFireAt = Date.now();
 
-    const result = await executeHeartbeat(mastra, scheduleId, target, {
+    const result = await executeAgentSchedule(mastra, scheduleId, target, {
       triggerKind: data.triggerKind ?? 'schedule-fire',
       firedAt: new Date(actualFireAt),
       logger: this.deps?.logger,
@@ -170,7 +170,7 @@ export class HeartbeatWorker extends MastraWorker {
     claimId: string;
     scheduledFireAt: number;
     actualFireAt: number;
-    outcome: HeartbeatTriggerOutcome;
+    outcome: ScheduleTriggerOutcome;
     runId?: string;
     error?: string;
     triggerKind: 'schedule-fire' | 'manual';
@@ -188,7 +188,7 @@ export class HeartbeatWorker extends MastraWorker {
         triggerKind: args.triggerKind,
       });
     } catch (err) {
-      this.deps?.logger?.error('HeartbeatWorker: failed to record trigger', {
+      this.deps?.logger?.error('AgentScheduleWorker: failed to record trigger', {
         scheduleId: args.scheduleId,
         claimId: args.claimId,
         error: err,
@@ -197,8 +197,8 @@ export class HeartbeatWorker extends MastraWorker {
   }
 }
 
-/** Outcome union written to the schedule trigger row for a heartbeat fire. */
-export type HeartbeatTriggerOutcome =
+/** Outcome union written to the schedule trigger row for an agent-schedule fire. */
+export type ScheduleTriggerOutcome =
   | 'succeeded'
   | 'delivered'
   | 'persisted'
@@ -209,7 +209,7 @@ export type HeartbeatTriggerOutcome =
 
 /**
  * Best-effort delete of the schedule row. Self-clean is best-effort —
- * an explicit `heartbeats.delete()` may have raced us. Swallow errors.
+ * an explicit `schedules.delete()` may have raced us. Swallow errors.
  */
 async function selfClean(mastra: Mastra, scheduleId: string): Promise<void> {
   try {
@@ -217,14 +217,17 @@ async function selfClean(mastra: Mastra, scheduleId: string): Promise<void> {
     if (!store) return;
     await store.deleteSchedule(scheduleId);
   } catch (error) {
-    mastra.getLogger?.()?.debug?.('heartbeat self-clean failed', { scheduleId, error });
+    mastra.getLogger?.()?.debug?.('agent-schedule self-clean failed', { scheduleId, error });
   }
 }
 
-type LooseLogger = { error?: (message: string, ...args: any[]) => void };
+type LooseLogger = {
+  error?: (message: string, ...args: any[]) => void;
+  debug?: (message: string, ...args: any[]) => void;
+};
 
-/** Optional context the `HeartbeatWorker` passes to `executeHeartbeat`. */
-export interface ExecuteHeartbeatContext {
+/** Optional context the `AgentScheduleWorker` passes to `executeAgentSchedule`. */
+export interface ExecuteAgentScheduleContext {
   triggerKind?: 'schedule-fire' | 'manual';
   firedAt?: Date;
   logger?: LooseLogger;
@@ -241,14 +244,14 @@ export interface ExecuteHeartbeatContext {
  * also the one that drove the `onFinish`/`onError`/`onAbort` hook
  * selection. `status` is retained for back-compat with existing tests.
  */
-export async function executeHeartbeat(
+export async function executeAgentSchedule(
   mastra: Mastra,
   scheduleId: string,
-  target: Extract<ScheduleTarget, { type: 'heartbeat' }>,
-  ctx: ExecuteHeartbeatContext = {},
-): Promise<{ status: HeartbeatRunStatus; outcome: HeartbeatTriggerOutcome; reason?: string; runId?: string }> {
+  target: Extract<ScheduleTarget, { type: 'agent' }>,
+  ctx: ExecuteAgentScheduleContext = {},
+): Promise<{ status: ScheduleRunStatus; outcome: ScheduleTriggerOutcome; reason?: string; runId?: string }> {
   const { agentId } = target;
-  const trigger: HeartbeatTriggerInfo = {
+  const trigger: ScheduleTriggerInfo = {
     kind: ctx.triggerKind === 'manual' ? 'manual' : 'cron',
     firedAt: ctx.firedAt ?? new Date(),
   };
@@ -273,25 +276,29 @@ export async function executeHeartbeat(
   const hooks =
     (
       mastra as unknown as {
-        __getHeartbeatHooks?: () => HeartbeatHooks | null | undefined;
+        __getScheduleHooks?: () => ScheduleHooks | null | undefined;
       }
-    ).__getHeartbeatHooks?.() ?? undefined;
+    ).__getScheduleHooks?.() ?? undefined;
 
-  // Build a partial `Heartbeat` view for hook contexts. Best-effort —
-  // pulls from the live schedule row when available, otherwise from the
-  // event target. Either way the hook gets `id`, `agentId`, and `name`.
-  const heartbeatRef = await loadHeartbeatRef(mastra, scheduleId, target);
+  // Build a partial `AgentSchedule` view for hook contexts. Best-effort —
+  // pulls from the live schedule row when hooks are configured (so they see
+  // fresh fields), otherwise a cheap projection from the event target. The
+  // ref is only ever passed to hooks, so hookless fires skip the extra
+  // storage round-trip entirely.
+  const scheduleRef = hooks
+    ? await loadScheduleRef(mastra, scheduleId, target, log)
+    : scheduleRefFromTarget(scheduleId, target);
 
-  const rowDefaults: HeartbeatEffective = buildEffectiveFromTarget(target);
+  const rowDefaults: ScheduleEffective = buildEffectiveFromTarget(target);
 
   // 1. prepare hook
-  let prepared: HeartbeatPrepareResult | null | undefined;
+  let prepared: SchedulePrepareResult | null | undefined;
   if (hooks?.prepare) {
     try {
-      const prepareCtx: HeartbeatPrepareContext = {
+      const prepareCtx: SchedulePrepareContext = {
         mastra,
         agentId,
-        heartbeat: heartbeatRef,
+        schedule: scheduleRef,
         trigger,
       };
       prepared = await hooks.prepare(prepareCtx);
@@ -300,7 +307,7 @@ export async function executeHeartbeat(
         hooks.onError?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           phase: 'prepare',
           error: err instanceof Error ? err : new Error(String(err)),
@@ -321,7 +328,7 @@ export async function executeHeartbeat(
       hooks?.onFinish?.({
         mastra,
         agentId,
-        heartbeat: heartbeatRef,
+        schedule: scheduleRef,
         trigger,
         outcome: 'skipped',
         effective: rowDefaults,
@@ -330,12 +337,12 @@ export async function executeHeartbeat(
     return { status: 'fired', outcome: 'skipped' };
   }
 
-  const effective: HeartbeatEffective = mergeEffective(rowDefaults, prepared);
+  const effective: ScheduleEffective = mergeEffective(rowDefaults, prepared);
 
   // Run-level marker carried on the signal / agent run so consumers
   // (typing status, UI badges) can detect that this run was
-  // heartbeat-driven.
-  const heartbeatRunMeta = {
+  // schedule-driven.
+  const scheduleRunMeta = {
     scheduleId,
     ...(effective.threadId ? { threadId: effective.threadId } : {}),
   };
@@ -348,7 +355,7 @@ export async function executeHeartbeat(
         hooks?.onError?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           phase: 'run',
           error: new Error(reason),
@@ -368,7 +375,7 @@ export async function executeHeartbeat(
           hooks?.onError?.({
             mastra,
             agentId,
-            heartbeat: heartbeatRef,
+            schedule: scheduleRef,
             trigger,
             phase: 'run',
             error: new Error(reason),
@@ -384,10 +391,10 @@ export async function executeHeartbeat(
       signalResult = agent.sendSignal(
         {
           type: effective.signalType ?? 'notification',
-          tagName: effective.tagName ?? 'heartbeat',
+          tagName: effective.tagName ?? 'schedule',
           contents: effective.prompt,
           ...(effective.attributes ? { attributes: effective.attributes } : {}),
-          providerOptions: mergeProviderOptions(effective.providerOptions, heartbeatRunMeta),
+          providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
         },
         {
           resourceId: effective.resourceId,
@@ -402,7 +409,7 @@ export async function executeHeartbeat(
         hooks?.onError?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           phase: 'run',
           error,
@@ -425,7 +432,7 @@ export async function executeHeartbeat(
         hooks?.onError?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           phase: 'run',
           error,
@@ -445,7 +452,7 @@ export async function executeHeartbeat(
         hooks?.onFinish?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           outcome: 'delivered',
           runId,
@@ -468,7 +475,7 @@ export async function executeHeartbeat(
         hooks?.onFinish?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           outcome: 'persisted',
           runId,
@@ -482,7 +489,7 @@ export async function executeHeartbeat(
         hooks?.onFinish?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           outcome: 'discarded',
           runId,
@@ -499,7 +506,7 @@ export async function executeHeartbeat(
         hooks?.onFinish?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           outcome: 'skipped',
           runId,
@@ -512,12 +519,12 @@ export async function executeHeartbeat(
     // action === 'wake' — a new run was started for this signal. The thread-stream
     // runtime drives the run's stream to completion on its own (so the active-run
     // record and thread lease release without requiring a consumer here); the
-    // heartbeat is fire-and-forget for trigger-row purposes.
+    // schedule fire is fire-and-forget for trigger-row purposes.
     await safeHookCall(log, () =>
       hooks?.onFinish?.({
         mastra,
         agentId,
-        heartbeat: heartbeatRef,
+        schedule: scheduleRef,
         trigger,
         outcome: 'succeeded',
         runId,
@@ -530,14 +537,14 @@ export async function executeHeartbeat(
   // 4. threadless path: agent.generate
   try {
     const result = await agent.generate(effective.prompt, {
-      providerOptions: mergeProviderOptions(effective.providerOptions, heartbeatRunMeta),
+      providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
     });
     const runId = extractRunId(result);
     await safeHookCall(log, () =>
       hooks?.onFinish?.({
         mastra,
         agentId,
-        heartbeat: heartbeatRef,
+        schedule: scheduleRef,
         trigger,
         outcome: 'succeeded',
         runId,
@@ -553,7 +560,7 @@ export async function executeHeartbeat(
         hooks?.onAbort?.({
           mastra,
           agentId,
-          heartbeat: heartbeatRef,
+          schedule: scheduleRef,
           trigger,
           runId: extractRunId(error) ?? scheduleId,
           effective,
@@ -565,7 +572,7 @@ export async function executeHeartbeat(
       hooks?.onError?.({
         mastra,
         agentId,
-        heartbeat: heartbeatRef,
+        schedule: scheduleRef,
         trigger,
         phase: 'run',
         error,
@@ -576,7 +583,7 @@ export async function executeHeartbeat(
   }
 }
 
-function buildEffectiveFromTarget(target: Extract<ScheduleTarget, { type: 'heartbeat' }>): HeartbeatEffective {
+function buildEffectiveFromTarget(target: Extract<ScheduleTarget, { type: 'agent' }>): ScheduleEffective {
   return {
     threadId: target.threadId,
     resourceId: target.resourceId,
@@ -595,7 +602,7 @@ function buildEffectiveFromTarget(target: Extract<ScheduleTarget, { type: 'heart
  * `AgentSignalIfIdleOptions`, rehydrating the plain `streamOptions.requestContext`
  * object into a live `RequestContext` before the wake signal runs.
  */
-function buildIfIdleOptions(ifIdle: HeartbeatIfIdle): AgentSignalIfIdleOptions {
+function buildIfIdleOptions(ifIdle: ScheduleIfIdle): AgentSignalIfIdleOptions {
   const requestContext = ifIdle.streamOptions?.requestContext;
   return {
     ...(ifIdle.behavior ? { behavior: ifIdle.behavior } : {}),
@@ -606,7 +613,7 @@ function buildIfIdleOptions(ifIdle: HeartbeatIfIdle): AgentSignalIfIdleOptions {
   };
 }
 
-function mergeEffective(base: HeartbeatEffective, overrides: HeartbeatPrepareResult | undefined): HeartbeatEffective {
+function mergeEffective(base: ScheduleEffective, overrides: SchedulePrepareResult | undefined): ScheduleEffective {
   if (!overrides) return base;
   return {
     ...base,
@@ -616,7 +623,7 @@ function mergeEffective(base: HeartbeatEffective, overrides: HeartbeatPrepareRes
 
 function mergeProviderOptions(
   fromHook: Record<string, unknown> | undefined,
-  heartbeatRunMeta: Record<string, unknown>,
+  scheduleRunMeta: Record<string, unknown>,
 ): Record<string, any> {
   const base = (fromHook ?? {}) as Record<string, any>;
   const baseMastra = (base.mastra ?? {}) as Record<string, unknown>;
@@ -624,22 +631,33 @@ function mergeProviderOptions(
     ...base,
     mastra: {
       ...baseMastra,
-      heartbeat: heartbeatRunMeta,
+      schedule: scheduleRunMeta,
     },
   };
 }
 
-async function loadHeartbeatRef(
+async function loadScheduleRef(
   mastra: Mastra,
   scheduleId: string,
-  target: Extract<ScheduleTarget, { type: 'heartbeat' }>,
+  target: Extract<ScheduleTarget, { type: 'agent' }>,
+  logger?: LooseLogger,
 ): Promise<{ id: string; agentId: string; name?: string; [key: string]: unknown }> {
   try {
-    const hb = await mastra.heartbeats.get(scheduleId);
-    if (hb) return { ...hb };
-  } catch {
-    // ignore — fall back to a minimal projection from the event target
+    const schedule = await mastra.schedules.get(scheduleId);
+    if (schedule && schedule.agentId !== undefined) return { ...schedule, agentId: schedule.agentId };
+  } catch (err) {
+    // Fall back to a minimal projection from the event target, but surface
+    // the failure so a persistently-broken schedules store isn't invisible.
+    logger?.debug?.('AgentScheduleWorker: failed to load schedule row for hook context', { scheduleId, error: err });
   }
+  return scheduleRefFromTarget(scheduleId, target);
+}
+
+/** Minimal hook-context projection built from the fire event's target. */
+function scheduleRefFromTarget(
+  scheduleId: string,
+  target: Extract<ScheduleTarget, { type: 'agent' }>,
+): { id: string; agentId: string; name?: string } {
   return {
     id: scheduleId,
     agentId: target.agentId,
@@ -651,7 +669,7 @@ async function safeHookCall(logger: LooseLogger | undefined, fn: () => unknown):
   try {
     await fn();
   } catch (err) {
-    logger?.error?.('HeartbeatWorker: hook threw, ignoring', { error: err });
+    logger?.error?.('AgentScheduleWorker: hook threw, ignoring', { error: err });
   }
 }
 

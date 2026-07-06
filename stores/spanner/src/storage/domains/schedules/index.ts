@@ -3,6 +3,7 @@ import type { Database } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  normalizeScheduleTarget,
   SchedulesStorage,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
@@ -31,7 +32,7 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   }
   const schedule: Schedule = {
     id: String(transformed.id),
-    target,
+    target: normalizeScheduleTarget(target),
     cron: String(transformed.cron),
     status: String(transformed.status) as ScheduleStatus,
     nextFireAt: Number(transformed.next_fire_at),

@@ -1,8 +1,8 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Mastra } from '../../mastra';
-import { MockStore } from '../../storage/mock';
-import { Agent } from '../agent';
+import { Agent } from '../agent/agent';
+import { Mastra } from '../mastra';
+import { MockStore } from '../storage/mock';
 
 // Track every Mastra instance created in a test so it is always shut down,
 // even if an assertion throws before the test reaches its own shutdown call.
@@ -51,7 +51,7 @@ function makeAgent(id: string): Agent {
   });
 }
 
-describe('Agent heartbeats — scheduler integration', () => {
+describe('Agent schedules — scheduler integration', () => {
   it('auto-enables the scheduler when create() is called before startWorkers()', async () => {
     const agent = makeAgent('beat');
     const storage = new MockStore();
@@ -59,9 +59,9 @@ describe('Agent heartbeats — scheduler integration', () => {
       logger: false,
       storage,
       agents: { beat: agent },
-      // Heartbeats are imperative — there is no declarative scheduled
+      // Schedules are imperative — there is no declarative scheduled
       // workflow here. The scheduler should still come up because
-      // creating a heartbeat signals that the scheduler is needed.
+      // creating a schedule signals that the scheduler is needed.
       // Disable the built-in notification dispatcher so the scheduler is
       // not enabled by an unrelated internal scheduled workflow.
       notifications: { dispatch: { enabled: false } },
@@ -69,7 +69,7 @@ describe('Agent heartbeats — scheduler integration', () => {
     });
     track(mastra);
 
-    const hb = await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+    const hb = await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
     await mastra.startWorkers();
     await waitForScheduler(mastra);
 
@@ -80,7 +80,7 @@ describe('Agent heartbeats — scheduler integration', () => {
       const current = await schedulesStore.getSchedule(hb.id);
       return !!current && current.nextFireAt !== initial.nextFireAt;
     });
-    // HeartbeatWorker records the trigger after the agent dispatch
+    // AgentScheduleWorker records the trigger after the agent dispatch
     // completes, which races with nextFireAt advancement in the scheduler.
     await waitUntil(async () => {
       const t = await schedulesStore.listTriggers(hb.id);
@@ -106,13 +106,13 @@ describe('Agent heartbeats — scheduler integration', () => {
 
     await mastra.startWorkers();
     // No scheduler should be running yet — no declarative scheduled
-    // workflows, no heartbeats, no explicit enabled flag.
+    // workflows, no agent schedules, no explicit enabled flag.
     expect(mastra.scheduler).toBeUndefined();
 
-    const hb = await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+    const hb = await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
 
     // create() should have lazily injected + started the scheduler
-    // and heartbeat workers via __ensureHeartbeatRuntimeReady().
+    // and agent-schedule workers via __ensureScheduleRuntimeReady().
     await waitForScheduler(mastra);
 
     const schedulesStore = (await storage.getStore('schedules'))!;
@@ -132,11 +132,40 @@ describe('Agent heartbeats — scheduler integration', () => {
     expect(triggers[0]!.outcome).toBe('succeeded');
   }, 10_000);
 
-  it('auto-starts the scheduler and heartbeat worker on boot when heartbeat schedule rows already exist in storage', async () => {
+  it('does not start duplicate scheduling workers when create() is called concurrently after startWorkers()', async () => {
+    const agent = makeAgent('beat-concurrent');
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-concurrent': agent },
+      notifications: { dispatch: { enabled: false } },
+      scheduler: { tickIntervalMs: 50 },
+    });
+    track(mastra);
+
+    await mastra.startWorkers();
+    expect(mastra.scheduler).toBeUndefined();
+
+    // Both create() calls race through __ensureScheduleRuntimeReady(); the
+    // in-flight startup promise must serialize them so only one scheduler
+    // and one agent-schedule worker are ever injected.
+    await Promise.all([
+      mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id }),
+      mastra.schedules.create({ cron: '* * * * * *', prompt: 'pong', agentId: agent.id }),
+    ]);
+
+    await waitForScheduler(mastra);
+
+    expect(mastra.workers.filter(w => w.name === 'scheduler')).toHaveLength(1);
+    expect(mastra.workers.filter(w => w.name === 'agent-schedule')).toHaveLength(1);
+  }, 10_000);
+
+  it('auto-starts the scheduler and agent-schedule worker on boot when agent-schedule rows already exist in storage', async () => {
     const storage = new MockStore();
 
-    // Boot 1: create a heartbeat, then shut down without clearing it. This
-    // simulates a previous process that left a heartbeat row in storage.
+    // Boot 1: create a schedule, then shut down without clearing it. This
+    // simulates a previous process that left a schedule row in storage.
     {
       const agent = makeAgent('beat-rehydrate');
       const mastra = new Mastra({
@@ -147,15 +176,15 @@ describe('Agent heartbeats — scheduler integration', () => {
         scheduler: { tickIntervalMs: 50 },
       });
       track(mastra);
-      await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+      await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
       await mastra.startWorkers();
       await waitForScheduler(mastra);
       await mastra.shutdown();
     }
 
     // Boot 2: fresh Mastra instance reusing the same storage. The scheduler
-    // and heartbeat worker must start automatically because storage already
-    // has a heartbeat row, without anyone calling create() again.
+    // and agent-schedule worker must start automatically because storage already
+    // has a schedule row, without anyone calling create() again.
     const agent2 = makeAgent('beat-rehydrate');
     const mastra2 = new Mastra({
       logger: false,
@@ -168,7 +197,7 @@ describe('Agent heartbeats — scheduler integration', () => {
 
     await mastra2.startWorkers();
 
-    // Scheduler should be running because storage has a heartbeat target.
+    // Scheduler should be running because storage has an agent-schedule target.
     await waitForScheduler(mastra2);
   }, 10_000);
 
@@ -185,14 +214,14 @@ describe('Agent heartbeats — scheduler integration', () => {
     track(mastra);
 
     await mastra.startWorkers();
-    await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+    await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
 
     // Scheduler stays off because the user explicitly disabled it,
     // even though create() would normally signal "scheduler needed".
     expect(mastra.scheduler).toBeUndefined();
   });
 
-  it('does not inject heartbeat/scheduler workers when workers are explicitly disabled', async () => {
+  it('does not inject agent-schedule/scheduler workers when workers are explicitly disabled', async () => {
     const agent = makeAgent('beat-no-workers');
     const storage = new MockStore();
     const mastra = new Mastra({
@@ -207,9 +236,9 @@ describe('Agent heartbeats — scheduler integration', () => {
     track(mastra);
 
     await mastra.startWorkers();
-    // create() still persists the heartbeat row so a standalone worker
+    // create() still persists the schedule row so a standalone worker
     // can pick it up, but it must not lazily resurrect the scheduler here.
-    await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+    await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
 
     expect(mastra.scheduler).toBeUndefined();
   });
