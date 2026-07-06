@@ -478,3 +478,124 @@ createVectorTestSuite({
   supportsEmptyLogicalOperators: false,
   supportsStrictOperatorValidation: false,
 });
+
+// Tests for GitHub issue #18587 - filterFields index-level filter hints
+// https://github.com/mastra-ai/mastra/issues/18587
+// These run without a live MongoDB by mocking the collection handle, mirroring
+// the constructor unit tests above.
+describe('MongoDBVector filterFields (#18587)', () => {
+  const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
+
+  describe('createIndex', () => {
+    const stubCreateIndex = (v: MongoDBVector) => {
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      // Collection already exists so createIndex skips db.createCollection.
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      return createSearchIndex;
+    };
+    const filterPathsOf = (createSearchIndex: ReturnType<typeof vi.fn>) =>
+      createSearchIndex.mock.calls[0][0].definition.fields
+        .filter((f: any) => f.type === 'filter')
+        .map((f: any) => f.path);
+
+    it('registers each filterFields entry as a metadata.<field> filter field', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'idx', dimension: 4, filterFields: ['category', 'tenant_id'] });
+
+      const filterPaths = filterPathsOf(createSearchIndex);
+      expect(filterPaths).toEqual(['_id', 'document', 'metadata.category', 'metadata.tenant_id']);
+      expect((v as any).declaredFilterPaths.get('idx')).toEqual(
+        new Set(['document', 'metadata.category', 'metadata.tenant_id']),
+      );
+    });
+
+    it('declares only _id and document when filterFields is omitted', async () => {
+      const v = makeVector();
+      const createSearchIndex = stubCreateIndex(v);
+
+      await v.createIndex({ indexName: 'idx', dimension: 4 });
+
+      expect(filterPathsOf(createSearchIndex)).toEqual(['_id', 'document']);
+      expect((v as any).declaredFilterPaths.get('idx')).toEqual(new Set(['document']));
+    });
+  });
+
+  describe('buildDeclaredMetadataPaths', () => {
+    it('prefixes bare names, dedupes, drops blanks, and preserves an existing metadata. prefix', () => {
+      const v = makeVector();
+      expect(
+        (v as any).buildDeclaredMetadataPaths(['category', 'category', 'metadata.tenant', '', '  spaced  ']),
+      ).toEqual(['metadata.category', 'metadata.tenant', 'metadata.spaced']);
+    });
+
+    it('returns an empty array for undefined or empty input', () => {
+      const v = makeVector();
+      expect((v as any).buildDeclaredMetadataPaths(undefined)).toEqual([]);
+      expect((v as any).buildDeclaredMetadataPaths([])).toEqual([]);
+    });
+  });
+
+  describe('canPushDownFilter', () => {
+    const v = makeVector();
+    const declared = new Set(['metadata.category', 'document']);
+    const can = (f: any) => (v as any).canPushDownFilter(f, declared);
+
+    it('allows declared fields combined with supported operators', () => {
+      expect(can({ 'metadata.category': 'x' })).toBe(true);
+      expect(can({ 'metadata.category': { $in: ['a', 'b'] } })).toBe(true);
+      expect(can({ 'metadata.category': { $gte: 1, $lt: 10 } })).toBe(true);
+      expect(can({ $and: [{ 'metadata.category': 'a' }, { document: 'd' }] })).toBe(true);
+    });
+
+    it('rejects filters that reference an undeclared field', () => {
+      expect(can({ 'metadata.other': 'x' })).toBe(false);
+      expect(can({ $or: [{ 'metadata.category': 'a' }, { 'metadata.other': 'b' }] })).toBe(false);
+    });
+
+    it('rejects operators that $vectorSearch.filter does not support', () => {
+      expect(can({ 'metadata.category': { $regex: 'x' } })).toBe(false);
+      expect(can({ 'metadata.category': { $exists: true } })).toBe(false);
+      expect(can({ 'metadata.category': { $size: 2 } })).toBe(false);
+    });
+  });
+
+  describe('query push-down', () => {
+    const makeCursor = (docs: any[]) => ({
+      toArray: async () => docs,
+      map: (cb: (d: any) => any) => ({ toArray: async () => docs.map(cb) }),
+    });
+
+    it('passes the metadata filter straight to $vectorSearch when every field is declared', async () => {
+      const v = makeVector();
+      const aggregate = vi.fn().mockReturnValue(makeCursor([]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set(['metadata.category', 'document']));
+
+      await v.query({ indexName: 'idx', queryVector: [0.1, 0.2], filter: { category: 'news' } });
+
+      // Only the final search pipeline runs — no $match materialisation.
+      expect(aggregate).toHaveBeenCalledTimes(1);
+      expect(aggregate.mock.calls[0][0][0].$vectorSearch.filter).toEqual({ 'metadata.category': 'news' });
+    });
+
+    it('materialises candidate _ids via $match when a field is not declared', async () => {
+      const v = makeVector();
+      const aggregate = vi.fn().mockReturnValue(makeCursor([{ _id: 'a' }]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set(['document']));
+
+      await v.query({ indexName: 'idx', queryVector: [0.1, 0.2], filter: { category: 'news' } });
+
+      // First aggregate materialises _ids via $match, second runs the search.
+      expect(aggregate).toHaveBeenCalledTimes(2);
+      expect(aggregate.mock.calls[0][0]).toEqual([
+        { $match: { 'metadata.category': 'news' } },
+        { $project: { _id: 1 } },
+      ]);
+      expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['a'] } });
+    });
+  });
+});
