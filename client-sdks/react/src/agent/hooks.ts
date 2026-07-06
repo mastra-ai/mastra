@@ -460,6 +460,16 @@ export const useChat = ({
       _threadSubscriptionAbortRef.current = subscriptionAbort;
       _threadSubscriptionKeyRef.current = subscriptionKey;
 
+      // Release the cached subscription state, but only while this attempt
+      // still owns it — a newer attempt cleans up after itself.
+      const releaseSubscriptionRefs = () => {
+        if (_threadSubscriptionAbortRef.current !== subscriptionAbort) return;
+        _threadSubscriptionRef.current = null;
+        _threadSubscriptionAbortRef.current = null;
+        _threadSubscriptionKeyRef.current = undefined;
+        _threadSubscriptionPromiseRef.current = null;
+      };
+
       const clientWithAbort = new MastraClient({
         ...baseClient!.options,
         abortSignal: subscriptionAbort.signal,
@@ -490,35 +500,23 @@ export const useChat = ({
               if (_threadSubscriptionRef.current === subscription) {
                 _threadSubscriptionRef.current = null;
               }
-              if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-                _threadSubscriptionAbortRef.current = null;
-                _threadSubscriptionKeyRef.current = undefined;
-                _threadSubscriptionPromiseRef.current = null;
-              }
+              releaseSubscriptionRefs();
             });
         })
         .catch(error => {
-          const unsupported = isThreadSignalUnsupportedError(error);
-          if (unsupported) {
+          // Release on every failure so the next call retries with a fresh
+          // fetch instead of re-awaiting this rejected promise. Without this,
+          // an aborted mount-time subscribe strands the channel and the reply
+          // never arrives until reload (issue #18768).
+          releaseSubscriptionRefs();
+
+          if (isThreadSignalUnsupportedError(error)) {
             markThreadSignalsUnsupported();
-          } else if (!isAbortError(error)) {
+            return;
+          }
+          if (!isAbortError(error)) {
             console.error('[useChat] Thread subscription failed', error);
             setIsRunning(false);
-          }
-
-          // Always release the cached subscription state so the next call
-          // retries with a fresh fetch instead of re-awaiting this rejected
-          // promise. Without this, an aborted mount-time subscribe strands the
-          // channel and the reply never arrives until reload (issue #18768).
-          if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-            _threadSubscriptionRef.current = null;
-            _threadSubscriptionAbortRef.current = null;
-            _threadSubscriptionKeyRef.current = undefined;
-            _threadSubscriptionPromiseRef.current = null;
-          }
-
-          if (unsupported) {
-            return;
           }
           throw error;
         });
@@ -743,15 +741,7 @@ export const useChat = ({
 
     _onChunk.current = onChunk;
 
-    try {
-      await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
-    } catch (error) {
-      // Establishing the subscription failed (e.g. an aborted retry). Clear the
-      // running flag so the chat is not stranded in a "pending" state until a
-      // reload (issue #18768) before surfacing the error.
-      setIsRunning(false);
-      throw error;
-    }
+    await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
 
     if (_threadSignalsUnsupportedRef.current) {
       await streamWithLegacyRoute();
@@ -1165,12 +1155,19 @@ export const useChat = ({
       setMessages(s => [...s, dbUserMessage]);
     }
 
-    if (mode === 'generate') {
-      await generate({ ...args, coreUserMessages });
-    } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages, signalId, clientMessageId });
-    } else if (mode === 'network') {
-      await network({ ...args, coreUserMessages });
+    try {
+      if (mode === 'generate') {
+        await generate({ ...args, coreUserMessages });
+      } else if (mode === 'stream') {
+        await stream({ ...args, coreUserMessages, signalId, clientMessageId });
+      } else if (mode === 'network') {
+        await network({ ...args, coreUserMessages });
+      }
+    } catch (error) {
+      // A failed send (subscription setup, request, or stream) must not leave
+      // the chat stranded in a "running" state until reload (issue #18768).
+      setIsRunning(false);
+      throw error;
     }
   };
 
