@@ -166,8 +166,27 @@
     "@mastra/vercel": "1.2.0"
   },
   "changesets": [
+    "agent-browser-dangling-navigation",
+    "agent-utils-tests",
     "automated-provider-registry-20260703-005802",
+    "big-kings-run",
+    "clear-cups-pay",
+    "fancy-bees-search",
+    "fix-observability-flush-docs",
+    "four-pigs-itch",
+    "full-foxes-notice",
     "green-birds-knock",
-    "metal-hoops-punch"
+    "lucky-plums-arrive",
+    "metal-hoops-punch",
+    "proud-mugs-appear",
+    "quick-readers-thank",
+    "sharp-tips-watch",
+    "six-bars-stand",
+    "storage-utils-tests",
+    "tasty-impalas-give",
+    "tired-dancers-begin",
+    "tired-vans-worry",
+    "unified-deploy",
+    "warm-otters-run"
   ]
 }

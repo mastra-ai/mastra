@@ -150,6 +150,7 @@ export function refreshPage0Rows(
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
+  if (!firstPage) return old;
 
   const refreshedRows =
     listMode === 'branches' && 'branches' in refreshed
@@ -209,6 +210,7 @@ export function mergeDeltaIntoPage0(
 ): InfiniteData<TracesPageResponse> | undefined {
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
+  if (!firstPage) return old;
   const nextCursor = delta.deltaCursor ?? firstPage.deltaCursor;
 
   let updatedFirst: TracesPageResponse;

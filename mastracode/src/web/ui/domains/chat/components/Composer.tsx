@@ -55,12 +55,15 @@ export function Composer({
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
 
-  useEffect(() => {
+  // Reset the highlighted suggestion whenever the draft changes, in the same
+  // event that changes it (no effect — avoids a second render pass).
+  const updateDraft = (next: string) => {
+    setDraft(next);
     setActiveSuggestion(0);
-  }, [draft]);
+  };
 
   const applyCommand = (name: string) => {
-    setDraft(`/${name} `);
+    updateDraft(`/${name} `);
     inputRef.current?.focus();
   };
 
@@ -76,7 +79,7 @@ export function Composer({
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    setDraft('');
+    updateDraft('');
     void handleInput(text);
   };
 
@@ -108,7 +111,7 @@ export function Composer({
         return;
       } else if (e.key === 'Escape') {
         e.preventDefault();
-        setDraft('');
+        updateDraft('');
         return;
       }
     }
@@ -238,7 +241,7 @@ export function Composer({
         ref={inputRef}
         className="max-h-52 min-h-10 resize-none"
         value={draft}
-        onChange={e => setDraft(e.target.value)}
+        onChange={e => updateDraft(e.target.value)}
         onKeyDown={onComposerKeyDown}
         placeholder="Message the agent · / for commands · Shift+Enter for newline"
         rows={1}

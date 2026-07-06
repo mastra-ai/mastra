@@ -1,5 +1,51 @@
 # @mastra/core
 
+## 1.50.0-alpha.2
+
+### Minor Changes
+
+- Added file-system-routed workflows support. Workflows placed in `workflows/*.ts` under the mastra directory are now auto-discovered and registered during `mastra dev` / `mastra build`, matching the existing file-based agents convention. Code-registered workflows win on name collisions. ([#18883](https://github.com/mastra-ai/mastra/pull/18883))
+
+  ```ts
+  // src/mastra/workflows/onboarding.ts
+  import { createWorkflow } from '@mastra/core/workflows';
+
+  export default createWorkflow({ id: 'onboarding' /* ...steps */ });
+  ```
+
+### Patch Changes
+
+- Fixed message hydration to backfill resource IDs when thread IDs are already present. ([#18931](https://github.com/mastra-ai/mastra/pull/18931))
+
+## 1.50.0-alpha.1
+
+### Patch Changes
+
+- Add unit test coverage for agent utility functions in `packages/core/src/agent/utils.ts`. ([#18896](https://github.com/mastra-ai/mastra/pull/18896))
+
+- Added `flush()` to `ObservabilityEntrypoint` so `mastra.observability.flush()` works directly in serverless environments. ([#18873](https://github.com/mastra-ai/mastra/pull/18873))
+
+  Previously, `flush()` only existed on individual `ObservabilityInstance` objects, requiring users to call `mastra.observability.getDefaultInstance()?.flush()`. The entrypoint-level `flush()` delegates to all registered instances, matching the existing `shutdown()` pattern.
+
+  ```ts
+  // Before (broken — getObservability() didn't exist, flush() wasn't on the entrypoint)
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  // After
+  await mastra.observability.flush();
+  ```
+
+  Fixed the serverless flush docs in the observability config guide and Vercel deployment guide to use the correct API.
+
+- Fixed durable agent parity gaps for structured output, output processors, callbacks, error processors, suspend/resume, and tool lifecycle hooks. Durable agents now support structured output schemas, per-chunk output processor streaming, onStepFinish/onFinish/onError callbacks, error processor retry loops, tool context.writer chunks, and suspend/resume with proper data flow. These fixes bring durable agent scenario test coverage from 43% to over 90%. ([#18857](https://github.com/mastra-ai/mastra/pull/18857))
+
+- Add unit test coverage for storage utility functions in `packages/core/src/storage/utils.ts`. ([#18895](https://github.com/mastra-ai/mastra/pull/18895))
+
+- Fixed an issue where writes to a shared RequestContext inside tools were lost because the tool received a cloned context instead of the original. Tool writes are now preserved by reusing the shared context instance. ([#18872](https://github.com/mastra-ai/mastra/pull/18872))
+
+- Hardened several string-parsing code paths against regular-expression denial of service (ReDoS). Path normalization, URL trimming, LLM token stripping, and observation parsing now use linear-time string scanning instead of regexes that could back-track polynomially on adversarial input. No behavior changes. ([#18801](https://github.com/mastra-ai/mastra/pull/18801))
+
 ## 1.50.0-alpha.0
 
 ### Minor Changes

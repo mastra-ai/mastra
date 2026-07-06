@@ -2323,6 +2323,39 @@ export class Mastra<
   }
 
   /**
+   * Registers a map of file-system routed workflows (discovered from
+   * `workflows/*.ts` files) into this Mastra instance.
+   *
+   * Code-registered workflows win on name collisions: if a workflow with the
+   * same key already exists, the file-system workflow is skipped and a warning
+   * is logged. Otherwise each workflow is added via {@link addWorkflow} with
+   * its key.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsWorkflows(fsWorkflows: Record<string, AnyWorkflow>): void {
+    if (!fsWorkflows) {
+      return;
+    }
+
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    for (const [key, workflow] of Object.entries(fsWorkflows)) {
+      if (workflow == null) {
+        continue;
+      }
+      if (workflows[key]) {
+        this.getLogger().warn(
+          `File-system routed workflow "${key}" conflicts with a code-registered workflow of the same name. Keeping the code-registered workflow.`,
+        );
+        continue;
+      }
+      this.addWorkflow(workflow, key);
+    }
+  }
+
+  /**
    * Removes an agent from the Mastra instance by its key or ID.
    * Used when stored agents are updated/deleted to allow fresh data to be loaded.
    *
